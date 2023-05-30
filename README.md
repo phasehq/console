@@ -7,32 +7,19 @@
       <td>
         Phase Console
       </td>
-      <td>
-          <a href="https://phase.dev"> Website <a>
-          <br>
-          <a href="https://docs.phase.dev"> Docs <a>
-          <br>
-          <a href="https://phase.dev"> Security <a>
-      </td>
     </tr>
   </table>
+    <h4 align="center">
+  <a href="https://phase.dev">Website</a> |
+    <a href="https://join.slack.com/t/infisical-users/shared_invite/zt-1kdbk07ro-RtoyEt_9E~fyzGo_xQYP6g">Slack</a> |
+    <a href="https://phase.dev">Security</a> |
+  <a href="https://docs.phase.dev">Docs</a>
+
+  <h4>
 </h1>
 <p align="center">
   <p align="center">Open-source all in one encryption and key management platform for developers.</p>
 </p>
-
-<h4 align="center">
-  <a href="https://github.com/phasehq/console/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="Phase is released under the MIT license." />
-  </a>
-  <a href="https://github.com/phasehq/console/blob/main/CONTRIBUTING.md">
-    <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen" alt="PRs welcome!" />
-  </a>
-  </a>
-  <a href="https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg">
-    <img src="https://img.shields.io/badge/chat-on%20Slack-blueviolet" alt="Slack community channel" />
-  </a>
-</h4>
 
 <img src="img/console-home.png" width="100%" alt="Phase Console" />
 <div style="display: flex; justify-content: space-between;">
@@ -40,11 +27,13 @@
     <img src="img/vscode-demo.png" width="50%" alt="Phase Console" style="flex: 1; margin-left: 5px;"/>
 </div>
 
+<br>
+
 ## TL;DR
 
-1. 🔒 Crypto - Encrypt / decrypt data in your web apps with just 2 lines of code
-2. 🔑 Key management - Easily create, deploy and maintain control of your keys
-3. 📋 Observability - Monitor key usage with logs
+- 🔒 Crypto - Encrypt / decrypt data in your web apps with just 2 lines of code
+- 🔑 Key management - Easily create, deploy and maintain control of your keys
+- 📋 Observability - Monitor key usage with logs
 
 Encrypt the signal, store the noise.
 
