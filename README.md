@@ -1,5 +1,5 @@
 <h1>
-  <table border="0">
+  <table align="center" border="0">
     <tr>
       <td>
         <img height="100" width="100" src="img/phase-logo.png" alt="Phase">
