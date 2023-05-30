@@ -7,6 +7,13 @@
       <td>
         Phase Console
       </td>
+      <td>
+          <a href="https://phase.dev"> Website <a>
+          <br>
+          <a href="https://docs.phase.dev"> Docs <a>
+          <br>
+          <a href="https://phase.dev"> Security <a>
+      </td>
     </tr>
   </table>
 </h1>
@@ -33,9 +40,11 @@
     <img src="img/vscode-demo.png" width="50%" alt="Phase Console" style="flex: 1; margin-left: 5px;"/>
 </div>
 
-## Introduction
+## TL;DR
 
-**[Phase Console](https://phase.dev)** is an open source, end-to-end encrypted secret management platform that teams use to centralize their secrets like API keys, database credentials, and configurations.
+1. 🔒 Crypto - Encrypt / decrypt data in your web apps with just 2 lines of code
+2. 🔑 Key management - Easily create, deploy and maintain control of your keys
+3. 📋 Observability - Monitor key usage with logs
 
 Encrypt the signal, store the noise.
 
