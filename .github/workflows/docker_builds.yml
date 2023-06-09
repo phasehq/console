@@ -36,7 +36,7 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:$(git rev-parse --short HEAD), ghcr.io/${{ github.repository }}/frontend:$(git rev-parse --short HEAD)
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.sha }}, ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -46,7 +46,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:$(git rev-parse --short HEAD), ghcr.io/${{ github.repository }}/backend:$(git rev-parse --short HEAD)
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.sha }}, ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
