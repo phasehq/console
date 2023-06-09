@@ -18,7 +18,7 @@
   <h4>
 </h1>
 <p align="center">
-  <p align="center">Open-source all in one encryption and key management platform for developers.</p>
+  <p align="center">Open Source, end-to-end encrypted key management platform for developers to encrypt data in their apps.</p>
 </p>
 
 <img src="img/console-home.png" width="100%" alt="Phase Console" />
@@ -29,27 +29,43 @@
 
 <br>
 
-## TL;DR
+[Phase Console](https://phase.dev) is an open source, end-to-end encrypted key management solution for developers to seamlessly encrypt production data in their apps.
 
-- 🔒 Crypto - Encrypt / decrypt data in your web apps with just 2 lines of code
-- 🔑 Key management - Easily create, deploy and maintain control of your keys
-- 📋 Observability - Monitor key usage with logs
-
-Encrypt the signal, store the noise.
+We're on a mission to make strong encryption accessible to all developers not just security teams. That means redesigning the entire developer experience from the ground up.
 
 ## Features
 
-- **[Phase Console](https://console.phase.dev)**: Seamlessly create, manage and monitor keys securely to all your apps.
-- **[Phase KMS](https://phase.dev)**: Securely deploy keys closer where your your apps run with [secret sharing](https://en.wikipedia.org/wiki/Secret_sharing).
-- **[Client SDKs](https://docs.phase.dev/sdks)**: Encrypt data directly in the browsers of our users with 3 lines of code. [Live Demo](https://phase.dev/#use-cases)
-- **[Server SDKs](https://docs.phase.dev/sdks)**: Securely decrypt and process data in memory only when you need to with 3 lines of code.
-- **[Phase I/O]()**: Self-hosted EaaS (Encryption as a Service) and a transparent proxy encryption. (Coming Soon)
+- **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, rotating and monitoring key usage
+- **[Phase KMS](https://phase.dev)**: A zero knowledge key management service
+  the browsers of your users without any external API or sensitive keys. [Live Demo](https://phase.dev/#use-cases)
+- **[Dual-Key Model](https://docs.phase.dev/security#dual-key-model)**: Decentralized private key deployment via [secret sharing schemes](https://en.wikipedia.org/wiki/Secret_sharing)
+- **[Hold your keys](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your keys with 24 word mnemonic phrase
+- **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure
+- **[Client SDKs](https://docs.phase.dev/sdks)**: Asynchronously encrypt data in
+- **[Server SDKs](https://docs.phase.dev/sdks)**: Securely decrypt and process data in memory only when you need to with 3 lines of code
+- **[Phase I/O]()**: Self-hosted EaaS (Encryption as a Service) and a transparent proxy encryption (Coming Soon)
+
+And much more.
+
+---
+
+## What about SSE?
+
+Relying on automatic database, disk or bucket level encryption has its limitations, since the data is automatically decrypted when retrieved and the keys typically belong to the hosting provider. A breach is a single SQL or a IAM misconfiguration away.
+
+See:
+
+- [OWAP - Cryptographic Failures](https://owasp.org/Top10/A02_2021-Cryptographic_Failures/#example-attack-scenarios)
+- [IAM misconfiguration](https://github.com/nagwww/s3-leaks)
+- [Problems with S3 encryption](https://www.secwale.com/p/encryption)
+
+---
 
 ## Getting started
 
 Check out the [Quickstart](https://docs.phase.dev/quickstart) Guides
 
-### Use Phase Console Cloud
+### Use Phase Cloud
 
 The quickest and most reliable way to get started is making a new free account on the [Phase Console](https://console.phase.dev/).
 
@@ -57,9 +73,7 @@ The quickest and most reliable way to get started is making a new free account o
 
 Deployment options: WIP: [Docker]()
 
-### Run Phase Console locally
-
-** Insert instructions here **
+---
 
 ### SDKs
 
@@ -71,8 +85,7 @@ Deployment options: WIP: [Docker]()
 
 More coming soon!
 
-Try the [demos](/demo/)
-without setting up keys
+Example:
 
 ```js
 // Import & initialize
@@ -88,9 +101,13 @@ console.log(ciphertext)
 $ hello world
 ```
 
-## Open-source vs. paid
+---
 
-This repo available under the [MIT expat license](https://github.com/phasehq/console/blob/main/LICENSE), with the exception of the `ee` directory which will contain premium Pro or Enterprise features requiring a Phase license in the future.
+## Community vs Enterprise edition
+
+This repo available under the [MIT expat license](/LICENSE), with the exception of the `ee` directory which will contain premium Pro or Enterprise features requiring a Phase license in the future.
+
+---
 
 ## Security
 
@@ -100,11 +117,15 @@ Please do not file GitHub issues or post on our public forum for security vulner
 
 For more information see: [SECURITY.md](/SECURITY.md)
 
+---
+
 ## Contributing
 
 Whether it's big or small, we love contributions. See [CONTRIBUTING.md](/CONTRIBUTING.md)
 
 You can join our [Slack](https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg) if you have any questions!
+
+---
 
 ## Resources
 
@@ -112,4 +133,3 @@ You can join our [Slack](https://join.slack.com/t/phase-community/shared_invite/
 - [Docs](https://docs.phase.dev)
 - [GitHub](https://github.com/phasehq/console)
 - [Slack](https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg)
-- [System Status](https://phase.statuspage.io)
