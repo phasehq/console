@@ -14,6 +14,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Get short SHA
+        id: short_sha
+        run: echo "::set-output name=sha::$(git rev-parse --short ${{ github.sha }})"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
@@ -36,7 +40,8 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:$(git rev-parse --short HEAD), ghcr.io/${{ github.repository }}/frontend:$(git rev-parse --short HEAD)
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.short_sha.outputs.sha }}
+          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/frontend:${{ steps.short_sha.outputs.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -46,7 +51,8 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:$(git rev-parse --short HEAD), ghcr.io/${{ github.repository }}/backend:$(git rev-parse --short HEAD)
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ steps.short_sha.outputs.sha }}
+          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/backend:${{ steps.short_sha.outputs.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -59,6 +65,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Get short SHA
+        id: short_sha
+        run: echo "::set-output name=sha::$(git rev-parse --short ${{ github.sha }})"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
@@ -75,23 +85,25 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        id: docker_build
+      - name: Build and push frontend
+        id: docker_build_frontend_main
         uses: docker/build-push-action@v2
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest, ghcr.io/${{ github.repository }}/frontend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest
+          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest, ghcr.io/${{ github.repository }}/frontend:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
-      - name: Build and push
-        id: docker_build
+      - name: Build and push backend
+        id: docker_build_backend_main
         uses: docker/build-push-action@v2
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest, ghcr.io/${{ github.repository }}/backend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest
+          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest, ghcr.io/${{ github.repository }}/backend:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -103,6 +115,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Get short SHA
+        id: short_sha
+        run: echo "::set-output name=sha::$(git rev-parse --short ${{ github.sha }})"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
@@ -119,22 +135,24 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        id: docker_build
+      - name: Build and push frontend
+        id: docker_build_frontend_release
         uses: docker/build-push-action@v2
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/frontend:${{ github.event.release.tag_name }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}
+          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/frontend:${{ github.event.release.tag_name }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
-      - name: Build and push
-        id: docker_build
+      - name: Build and push backend
+        id: docker_build_backend_release
         uses: docker/build-push-action@v2
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/backend:${{ github.event.release.tag_name }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}
+          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/backend:${{ github.event.release.tag_name }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
