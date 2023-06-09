@@ -1,9 +1,0 @@
-{
-  "name": "phase-node-demo",
-  "version": "1.0.0",
-  "main": "demo.js",
-  "license": "MIT",
-  "dependencies": {
-    "@phase.dev/phase-node": "^2.0.1"
-  }
-}

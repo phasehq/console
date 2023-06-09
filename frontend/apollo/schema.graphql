@@ -1,0 +1,114 @@
+type Query {
+  organisations: [OrganisationType]
+  apps(organisationId: ID, appId: ID): [AppType]
+  logs(appId: ID, start: BigInt, end: BigInt): [KMSLogType]
+  logsCount(appId: ID, thisMonth: Boolean): Int
+  appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
+}
+
+type OrganisationType {
+  id: String!
+  name: String!
+  identityKey: String!
+  createdAt: DateTime
+  plan: ApiOrganisationPlanChoices!
+}
+
+"""
+The `DateTime` scalar type represents a DateTime
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar DateTime
+
+"""An enumeration."""
+enum ApiOrganisationPlanChoices {
+  """Free"""
+  FR
+
+  """Pro"""
+  PR
+
+  """Enterprise"""
+  EN
+}
+
+type AppType {
+  id: String!
+  name: String!
+  identityKey: String!
+  appVersion: Int!
+  appToken: String!
+  appSeed: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+}
+
+type KMSLogType implements Node {
+  id: ID!
+  timestamp: BigInt
+  appId: String
+  phaseNode: String
+  eventType: String
+  ipAddress: String
+  phSize: Int
+  asn: Int
+  isp: String
+  edgeLocation: String
+  country: String
+  city: String
+  latitude: Float
+  longitude: Float
+}
+
+"""An object with an ID"""
+interface Node {
+  """The ID of the object"""
+  id: ID!
+}
+
+"""
+The `BigInt` scalar type represents non-fractional whole numeric values.
+`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
+compatible type.
+"""
+scalar BigInt
+
+type ChartDataPointType {
+  index: Int
+  date: BigInt
+  data: Int
+}
+
+"""An enumeration."""
+enum TimeRange {
+  HOUR
+  DAY
+  WEEK
+  MONTH
+  YEAR
+  ALL_TIME
+}
+
+type Mutation {
+  createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
+  createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
+  rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
+  deleteApp(id: ID!): DeleteAppMutation
+}
+
+type CreateOrganisationMutation {
+  organisation: OrganisationType
+}
+
+type CreateAppMutation {
+  app: AppType
+}
+
+type RotateAppKeysMutation {
+  app: AppType
+}
+
+type DeleteAppMutation {
+  app: AppType
+}

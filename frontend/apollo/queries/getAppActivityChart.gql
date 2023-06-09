@@ -1,0 +1,7 @@
+query GetAppActivityChart($appId: ID!, $period: TimeRange) {
+  appActivityChart(appId: $appId, period: $period) {
+    index
+    date
+    data
+  }
+}

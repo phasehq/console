@@ -1,0 +1,8 @@
+query GetApps($organisationId: ID!, $appId: ID!) {
+  apps(organisationId: $organisationId, appId: $appId) {
+    id
+    name
+    identityKey
+    createdAt
+  }
+}
