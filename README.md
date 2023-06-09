@@ -37,13 +37,12 @@ We're on a mission to make strong encryption accessible to all developers not ju
 
 ## Features
 
-- **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, rotating and monitoring key usage
+- **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating and monitoring keys
 - **[Phase KMS](https://phase.dev)**: A zero knowledge key management service
-  the browsers of your users without any external API or sensitive keys. [Live Demo](https://phase.dev/#use-cases)
-- **[Dual-Key Model](https://docs.phase.dev/security#dual-key-model)**: Decentralized private key deployment via [secret sharing schemes](https://en.wikipedia.org/wiki/Secret_sharing)
-- **[Hold your keys](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your keys with 24 word mnemonic phrase
+- **[Dual-Key Model](https://docs.phase.dev/security#dual-key-model)**: Avoid single point of compromise of the private key via [secret splitting schemes](https://en.wikipedia.org/wiki/Secret_sharing)
+- **[Hold your keys](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your root keys via 24 word mnemonic phrase
 - **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure
-- **[Client SDKs](https://docs.phase.dev/sdks)**: Asynchronously encrypt data in
+- **[Client SDKs](https://docs.phase.dev/sdks)**: Asynchronously encrypt data in the browsers of your users without any external API or sensitive keys [Live Demo](https://phase.dev/#use-cases)
 - **[Server SDKs](https://docs.phase.dev/sdks)**: Securely decrypt and process data in memory only when you need to with 3 lines of code
 - **[Phase I/O]()**: Self-hosted EaaS (Encryption as a Service) and a transparent proxy encryption (Coming Soon)
 
