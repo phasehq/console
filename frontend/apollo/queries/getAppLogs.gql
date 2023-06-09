@@ -1,0 +1,13 @@
+query GetAppLogs($appId: ID!, $start: BigInt, $end: BigInt) {
+  logs(appId: $appId, start: $start, end: $end) {
+    id
+    timestamp
+    phaseNode
+    eventType
+    ipAddress
+    country
+    city
+    phSize
+  }
+  logsCount(appId: $appId)
+}
