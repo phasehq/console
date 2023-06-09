@@ -75,8 +75,8 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        id: docker_build
+      - name: Build and push frontend
+        id: docker_build_frontend_main
         uses: docker/build-push-action@v2
         with:
           context: ./frontend
@@ -85,8 +85,8 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
-      - name: Build and push
-        id: docker_build
+      - name: Build and push backend
+        id: docker_build_backend_main
         uses: docker/build-push-action@v2
         with:
           context: ./backend
@@ -119,8 +119,8 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        id: docker_build
+      - name: Build and push frontend
+        id: docker_build_frontend_release
         uses: docker/build-push-action@v2
         with:
           context: ./frontend
@@ -129,8 +129,8 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
-      - name: Build and push
-        id: docker_build
+      - name: Build and push backend
+        id: docker_build_backend_release
         uses: docker/build-push-action@v2
         with:
           context: ./backend
