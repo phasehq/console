@@ -22,11 +22,13 @@
 </p>
 
 <img src="img/console-home.png" width="100%" alt="Phase Console" />
-<div style="display: flex; justify-content: space-between;">
-    <img src="img/console-logs.png" width="50%" alt="Phase Console" style="flex: 1; margin-right: 5px;"/>
-    <img src="img/vscode-demo.png" width="50%" alt="Phase Console" style="flex: 1; margin-left: 5px;"/>
-</div>
 
+<div width="100%">
+  <img src="img/console-logs.png" alt="Phase Console" width="48%">
+  &nbsp; &nbsp; &nbsp; &nbsp;
+  <img src="img/vscode-demo.png" alt="Phase Console" width="48%"/>
+</div>
+  
 <br>
 
 ## TL;DR
