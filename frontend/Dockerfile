@@ -33,6 +33,6 @@ COPY --from=build /app/public ./public
 # copy next config
 COPY next.config.js ./
 # expose port and define CMD
-RUN chmod 555 /app/scripts/*
+RUN chmod 555 ./scripts/*
 EXPOSE 3000
 CMD ["/app/scripts/start.sh"]
