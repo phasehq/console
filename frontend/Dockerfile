@@ -17,6 +17,16 @@ RUN yarn install --frozen-lockfile
 # ---- Build ----
 FROM dependencies AS build
 COPY . .
+
+# Set environment variables
+ENV NEXTAUTH_SECRET=BAKED_NEXTAUTH_SECRET
+ENV NEXT_PUBLIC_NEXTAUTH_PROVIDERS=BAKED_NEXT_PUBLIC_NEXTAUTH_PROVIDERS
+ENV GITHUB_CLIENT_ID=BAKED_GITHUB_CLIENT_ID
+ENV GITHUB_CLIENT_SECRET=BAKED_GITHUB_CLIENT_SECRET
+ENV GOOGLE_CLIENT_ID=BAKED_GOOGLE_CLIENT_ID
+ENV GOOGLE_CLIENT_SECRET=BAKED_GOOGLE_CLIENT_SECRET
+ENV GITLAB_CLIENT_ID=BAKED_GITLAB_CLIENT_ID
+ENV GITLAB_CLIENT_SECRET=BAKED_GITLAB_CLIENT_SECRET
 RUN yarn build
 
 # ---- Release ----
@@ -29,5 +39,6 @@ COPY --from=build /app/public ./public
 # copy next config
 COPY next.config.js ./
 # expose port and define CMD
+RUN chmod 555 /app/scripts/*
 EXPOSE 3000
-CMD ["yarn", "start"]
+CMD ["/app/scripts/start.sh"]
