@@ -35,8 +35,6 @@ services:
       - postgres
     image: phasehq/backend:test
     env_file: .env
-    environment:
-      - NODE_ENV=production
     networks:
       - phase-net
 
