@@ -4,8 +4,8 @@ This repository utilizes GitHub Actions to implement a Continuous Integration/Co
 
 The CI/CD pipeline consists of the following stages:
 
-1. **Build:** On every pull request to the `master` branch, Docker images are built for both the `frontend` and `backend` services. The images are tagged with the commit hash of the latest commit in the pull request.
-2. **Push:** When the pull request is merged into the `master` branch, Docker images are built again for both `frontend` and `backend`, but this time they are tagged as `latest` and pushed to DockerHub.
+1. **Build:** On every pull request to the `main` branch, Docker images are built for both the `frontend` and `backend` services. The images are tagged with the commit hash of the latest commit in the pull request.
+2. **Push:** When the pull request is merged into the `main` branch, Docker images are built again for both `frontend` and `backend`, but this time they are tagged as `latest` and pushed to DockerHub.
 3. **Release:** When a new release is published in the repository, Docker images are built for both `frontend` and `backend` services, tagged with the version of the release, and then pushed to DockerHub.
 
 ## Workflow File
@@ -16,8 +16,8 @@ The pipeline is defined in the `.github/workflows/docker.yml` file. This file de
 
 The workflow contains three jobs: `build`, `push`, and `release`.
 
-- **build:** Triggered on every pull request to the `master` branch. The job checks out the code, logs into DockerHub using stored secrets, and then builds the Docker images for `frontend` and `backend`.
-- **push:** Triggered when a pull request is merged into the `master` branch. The job follows the same steps as the `build` job but also pushes the Docker images to DockerHub.
+- **build:** Triggered on every pull request to the `main` branch. The job checks out the code, logs into DockerHub using stored secrets, and then builds the Docker images for `frontend` and `backend`.
+- **push:** Triggered when a pull request is merged into the `main` branch. The job follows the same steps as the `build` job but also pushes the Docker images to DockerHub.
 - **release:** Triggered when a new release is published. The job follows the same steps as the `push` job but tags the Docker images with the release version before pushing them to DockerHub.
 
 ## DockerHub Credentials
@@ -36,8 +36,8 @@ To add these secrets to your repository:
 
 The pipeline can be triggered by:
 
-- Creating a pull request to the `master` branch.
-- Merging a pull request into the `master` branch.
+- Creating a pull request to the `main` branch.
+- Merging a pull request into the `main` branch.
 - Publishing a new release.
 
 Once the pipeline is triggered, it automatically proceeds through the stages of `build`, `push` (if triggered by a pull request merge), or `release` (if triggered by a new release), as defined in the workflow file.
