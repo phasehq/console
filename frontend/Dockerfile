@@ -30,6 +30,8 @@ COPY --from=dependencies /tmp/node_modules ./node_modules
 # copy app sources
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
+# copy scripts directory
+COPY scripts ./scripts
 # copy next config
 COPY next.config.js ./
 # expose port and define CMD
