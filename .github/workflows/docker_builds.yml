@@ -11,18 +11,15 @@ on:
 
 jobs:
   build:
-    if: (github.event.comment.body == '/build' && github.event.issue.pull_request) || github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Get short SHA
         id: short_sha
-        run: echo "::set-output name=sha::$(git rev-parse --verify HEAD | cut -c 1-7)"
+        run: echo "::set-output name=sha::$(git rev-parse --short ${{ github.sha }})"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
@@ -71,6 +68,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Get short SHA
+        id: short_sha
+        run: echo "::set-output name=sha::$(git rev-parse --short ${{ github.sha }})"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
@@ -116,6 +117,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Get short SHA
+        id: short_sha
+        run: echo "::set-output name=sha::$(git rev-parse --short ${{ github.sha }})"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
