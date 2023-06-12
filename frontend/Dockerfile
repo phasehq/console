@@ -17,6 +17,10 @@ RUN yarn install --frozen-lockfile
 # ---- Build ----
 FROM dependencies AS build
 COPY . .
+
+# Set environment variables
+ARG NEXT_PUBLIC_BACKEND_API_BASE=BAKED_NEXT_PUBLIC_BACKEND_API_BASE
+ARG NEXT_PUBLIC_NEXTAUTH_PROVIDERS=BAKED_NEXT_PUBLIC_NEXTAUTH_PROVIDERS
 RUN yarn build
 
 # ---- Release ----
@@ -26,8 +30,11 @@ COPY --from=dependencies /tmp/node_modules ./node_modules
 # copy app sources
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
+# copy scripts directory
+COPY scripts ./scripts
 # copy next config
 COPY next.config.js ./
 # expose port and define CMD
+RUN chmod 555 ./scripts/*
 EXPOSE 3000
-CMD ["yarn", "start"]
+CMD ["/app/scripts/start.sh"]

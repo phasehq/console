@@ -77,7 +77,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
             try {
               const response = await axios.post<AccessTokenResponse>(
                 UrlUtils.makeUrl(
-                  process.env.NEXT_PUBLIC_BACKEND_API_BASE!,
+                  process.env.BACKEND_API_BASE!,
                   'social',
                   'login',
                   account.provider
