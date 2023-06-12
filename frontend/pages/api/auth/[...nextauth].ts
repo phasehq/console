@@ -105,7 +105,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
       newUser: '/onboard',
       signIn: '/login',
     },
-    debug: false,
+    debug: process.env.DEBUG ? process.env.DEBUG === 'True' : false,
   }
 }
 
