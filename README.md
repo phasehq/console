@@ -70,18 +70,22 @@ Check out the [Quickstart](https://docs.phase.dev/quickstart) Guides
 
 The quickest and most reliable way to get started is making a new free account on the [Phase Console](https://console.phase.dev/).
 
-### Deploy Phase Console on premise (Coming soon)
+### Deploy Phase Console on your infrastructure
 
-Deployment options: WIP: [Docker]()
+Deployment options:
+
+- Docker-compose
+- AWS
+- DigitalOcean
+
+See: [Self-hosting Phase](https://docs.phase.dev/self-hosting)
 
 ---
 
 ### SDKs
 
 - [JavaScript Browser](https://github.com/phasehq/client-js-sdk)
-
 - [Node.js](https://github.com/phasehq/node-sdk)
-
 - [Python](https://github.com/phasehq/python-sdk)
 
 More coming soon!
