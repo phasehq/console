@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    if: (github.event.comment.body == '/build' && github.event.issue.pull_request) || github.event_name == 'push' || github.event_name == 'release'
+    if: (github.event.comment.body == '/build' && github.event.issue.pull_request) || github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
