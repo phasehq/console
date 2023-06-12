@@ -23,8 +23,14 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    image: phasehq/frontend:test
+    image: phasehq/frontend:a928dc5
     env_file: .env
+    environment:
+      NEXTAUTH_URL: "${HTTP_PROTOTOCL}${HOST}"
+      OAUTH_REDIRECT_URI: "${HTTP_PROTOTOCL}${HOST}"
+      BACKEND_API_BASE: "http://backend:8000"
+      NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOTOCL}${HOST}/ph-backend"
+      NEXT_PUBLIC_NEXTAUTH_PROVIDERS: "${SSO_PROVIDERS}"
     networks:
       - phase-net
 
@@ -33,8 +39,12 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
-    image: phasehq/backend:test
+    image: phasehq/backend:a928dc5
     env_file: .env
+    environment:
+      ALLOWED_HOSTS: "${HOST},backend"
+      ALLOWED_ORIGINS: "${HTTP_PROTOTOCL}${HOST}"
+      SESSION_COOKIE_DOMAIN: "${HOST}"
     networks:
       - phase-net
 
