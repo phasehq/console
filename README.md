@@ -11,7 +11,7 @@
   </table>
     <h4 align="center">
   <a href="https://phase.dev">Website</a> |
-    <a href="https://join.slack.com/t/infisical-users/shared_invite/zt-1kdbk07ro-RtoyEt_9E~fyzGo_xQYP6g">Slack</a> |
+    <a href="https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg">Slack</a> |
     <a href="https://phase.dev">Security</a> |
   <a href="https://docs.phase.dev">Docs</a>
 
