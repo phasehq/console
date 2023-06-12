@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    image: phasehq/frontend:a928dc5
+    image: phasehq/frontend:latest
     env_file: .env
     environment:
       NEXTAUTH_URL: "${HTTP_PROTOTOCL}${HOST}"
@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
-    image: phasehq/backend:a928dc5
+    image: phasehq/backend:latest
     env_file: .env
     environment:
       ALLOWED_HOSTS: "${HOST},backend"
