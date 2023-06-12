@@ -19,7 +19,7 @@ jobs:
 
       - name: Get short SHA
         id: short_sha
-        run: echo "::set-output name=sha::$(echo ${GITHUB_SHA::7})"
+        run: echo "::set-output name=sha::$(git rev-parse --verify HEAD | cut -c 1-7)"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
