@@ -10,8 +10,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameModel(
-            old_name='KMSLog',
-            new_name='KMSDBLog',
-        ),
+        # migrations.RenameModel(
+        #     old_name='KMSLog',
+        #     new_name='KMSDBLog',
+        # ),
     ]
