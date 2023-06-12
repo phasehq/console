@@ -118,7 +118,7 @@ This repo available under the [MIT expat license](/LICENSE), with the exception 
 
 ## Security
 
-For more information of how Phase encryption works, please see the [Security Docs](https://docs.phase.dev/security/overview)
+For more information of how Phase encryption works, please see the [Security Docs](https://docs.phase.dev/security)
 
 Please do not file GitHub issues or post on our public forum for security vulnerabilities, as they are public!
 
