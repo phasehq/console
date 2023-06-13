@@ -197,7 +197,7 @@ def kms(request, app_id):
             KMSDBLog.objects.create(app_id=app_id, event_type=event_type, phase_node=phase_node, ph_size=ph_size, ip_address=ip_address, timestamp=timestamp)
         except Exception as ex:
             print(ex)
-            pass
+            #pass
         return JsonResponse({
             'wrappedKeyShare': app.wrapped_key_share
         })
