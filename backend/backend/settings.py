@@ -7,7 +7,7 @@ import logging.config
 LOGGING_CONFIG = None
 
 # Get loglevel from env
-LOGLEVEL = os.getenv('DJANGO_LOGLEVEL', 'info').upper()
+LOGLEVEL = 'DEBUG' if os.getenv('DEBUG') == 'True' else 'INFO'
 
 logging.config.dictConfig({
     'version': 1,
