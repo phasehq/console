@@ -9,6 +9,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -45,8 +49,7 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.short_sha.outputs.sha }}
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/frontend:${{ steps.short_sha.outputs.sha }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/frontend:${{ steps.short_sha.outputs.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -56,8 +59,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ steps.short_sha.outputs.sha }}
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/backend:${{ steps.short_sha.outputs.sha }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/backend:${{ steps.short_sha.outputs.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -92,8 +94,7 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest, ghcr.io/${{ github.repository }}/frontend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest, ghcr.io/${{ github.repository }}/frontend:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -103,8 +104,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest, ghcr.io/${{ github.repository }}/backend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest, ghcr.io/${{ github.repository }}/backend:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -138,8 +138,7 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/frontend:${{ github.event.release.tag_name }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/frontend:${{ github.event.release.tag_name }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -149,7 +148,6 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/backend:${{ github.event.release.tag_name }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/backend:${{ github.event.release.tag_name }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
