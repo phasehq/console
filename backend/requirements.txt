@@ -9,7 +9,7 @@ certifi==2022.12.7
 cffi==1.15.1
 charset-normalizer==3.0.1
 constantly==15.1.0
-cryptography==39.0.2
+cryptography==41.0.0
 defusedxml==0.7.1
 dj-rest-auth==3.0.0
 Django==4.2
