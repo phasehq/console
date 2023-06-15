@@ -48,7 +48,7 @@ jobs:
           aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws configure set default.region us-east-1
-          echo $(aws ecr-public get-login-password) | docker login --username AWS --password-stdin public.ecr.aws
+          echo $(aws ecr-public get-login-password) | docker login --username AWS --password-stdin public.ecr.aws/z2l0l3a1
 
       - name: Build and push frontend
         id: docker_build_frontend
