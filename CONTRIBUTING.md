@@ -6,7 +6,7 @@ We welcome any contributions to Phase, big or small.
 
 ## Community
 
-It's the early days of Phase and we're working hard to build an awesome, inclusive community. In order to grow this, all community members must adhere to our Code of conduct.
+It's the early days of Phase and we're working hard to build an awesome, inclusive community.
 
 ## Bugs and issues
 
