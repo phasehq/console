@@ -26,10 +26,10 @@ services:
     image: phasehq/frontend:latest
     env_file: .env
     environment:
-      NEXTAUTH_URL: "${HTTP_PROTOTOCL}${HOST}"
-      OAUTH_REDIRECT_URI: "${HTTP_PROTOTOCL}${HOST}"
+      NEXTAUTH_URL: "${HTTP_PROTOCOL}${HOST}"
+      OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
       BACKEND_API_BASE: "http://backend:8000"
-      NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOTOCL}${HOST}/ph-backend"
+      NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOCOL}${HOST}/ph-backend"
       NEXT_PUBLIC_NEXTAUTH_PROVIDERS: "${SSO_PROVIDERS}"
     networks:
       - phase-net
@@ -43,7 +43,7 @@ services:
     env_file: .env
     environment:
       ALLOWED_HOSTS: "${HOST},backend"
-      ALLOWED_ORIGINS: "${HTTP_PROTOTOCL}${HOST}"
+      ALLOWED_ORIGINS: "${HTTP_PROTOCOL}${HOST}"
       SESSION_COOKIE_DOMAIN: "${HOST}"
     networks:
       - phase-net
