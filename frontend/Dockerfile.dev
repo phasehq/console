@@ -9,9 +9,9 @@ COPY package.json ./
 COPY package-lock.json ./
 
 # Install dependencies
-RUN yarn
+RUN npm install
 
 # Copy all files 
 COPY . .
 
-CMD ["yarn", "dev"]
+CMD ["npm", "run", "dev"]
