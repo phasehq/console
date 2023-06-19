@@ -33,3 +33,9 @@ Anyone can contribute code to Phase. To get started, check out the local develop
 Most of Phase's code is under the MIT license, though some paid feature restrictions are covered by a proprietary license.
 
 Any third party components incorporated into our code are licensed under the original license provided by the applicable component owner.
+
+## Setup local development environment
+
+1. Create a `.env.dev` file with `cp .env.dev.example .env.dev` and add atleast one OAuth provider
+2. `docker-compose -f dev-docker-compose.yml up`
+3. The Console is now running at `https://localhost` with HMR

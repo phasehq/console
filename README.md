@@ -132,12 +132,6 @@ Whether it's big or small, we love contributions. See [CONTRIBUTING.md](/CONTRIB
 
 You can join our [Slack](https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg) if you have any questions!
 
-### Setup local development environment
-
-1. Create a `.env.dev` file with `cp .env.dev.example .env.dev` and add atleast one OAuth provider
-2. `docker-compose -f dev-docker-compose.yml up`
-3. The Console is now running at `https://localhost` with HMR
-
 ---
 
 ## Resources
