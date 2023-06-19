@@ -44,17 +44,17 @@ services:
     depends_on:
       - postgres
     build:
-    context: ./backend
-    dockerfile: Dockerfile.dev
+      context: ./backend
+      dockerfile: Dockerfile.dev
     volumes:
-      -  ## Write a volume for backend
+      - ./backend/:/app/
     env_file: .env
     environment:
       ALLOWED_HOSTS: "${HOST},backend"
       ALLOWED_ORIGINS: "${HTTP_PROTOTOCL}${HOST}"
       SESSION_COOKIE_DOMAIN: "${HOST}"
     networks:
-      - phase-net
+      - phase-net-dev
 
   postgres:
     container_name: phase-postgres
