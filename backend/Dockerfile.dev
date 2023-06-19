@@ -10,4 +10,6 @@ RUN pip install -r requirements.txt
 
 COPY . /app
 
-CMD sh -c "python manage.py migrate && python manage.py runserver"
+EXPOSE 8000
+
+CMD sh -c "python manage.py migrate && python manage.py runserver backend:8000"
