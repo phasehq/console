@@ -2,7 +2,7 @@ version: "3"
 
 services:
   nginx:
-    container_name: phase-nginx
+    container_name: phase-nginx-dev
     build:
       context: .
       dockerfile: ./nginx/Dockerfile
@@ -16,57 +16,56 @@ services:
       - frontend
       - backend
     networks:
-      - phase-net
+      - phase-net-dev
 
   frontend:
-    container_name: phase-frontend
+    container_name: phase-frontend-dev
     restart: unless-stopped
     depends_on:
       - backend
-    image: phasehq/frontend:latest
-    env_file: .env
-    environment:
-      NEXTAUTH_URL: "${HTTP_PROTOCOL}${HOST}"
-      OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
-      BACKEND_API_BASE: "http://backend:8000"
-      NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOCOL}${HOST}/ph-backend"
-      NEXT_PUBLIC_NEXTAUTH_PROVIDERS: "${SSO_PROVIDERS}"
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend/:/app/
+      - /app/node_modules
+    env_file: .env.dev
     networks:
-      - phase-net
+      - phase-net-dev
 
   backend:
-    container_name: phase-backend
+    container_name: phase-backend-dev
     restart: unless-stopped
     depends_on:
       - postgres
-    image: phasehq/backend:latest
-    env_file: .env
-    environment:
-      ALLOWED_HOSTS: "${HOST},backend"
-      ALLOWED_ORIGINS: "${HTTP_PROTOCOL}${HOST}"
-      SESSION_COOKIE_DOMAIN: "${HOST}"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./backend/:/app/
+    env_file: .env.dev
     networks:
-      - phase-net
+      - phase-net-dev
 
   postgres:
     container_name: phase-postgres
     image: postgres
     restart: always
     env_file:
-      - .env
+      - .env.dev
     environment:
       POSTGRES_DB: ${DATABASE_NAME}
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_HOST_AUTH_METHOD: "trust"
     volumes:
-      - phase-postgres-data:/var/lib/postgresql/data
+      - phase-postgres-data-dev:/var/lib/postgresql/data
     networks:
-      - phase-net
+      - phase-net-dev
 
 volumes:
-  phase-postgres-data:
+  phase-postgres-data-dev:
     driver: local
 
 networks:
-  phase-net:
+  phase-net-dev:
