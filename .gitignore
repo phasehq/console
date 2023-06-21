@@ -139,7 +139,7 @@ dmypy.json
 /coverage
 
 # next.js
-/.next/
+*.next/
 /out/
 
 # production
@@ -157,11 +157,10 @@ yarn-error.log*
 
 # local env files
 .env*.local
-
+.env.dev
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
