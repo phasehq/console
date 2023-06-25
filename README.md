@@ -8,7 +8,7 @@
 <div align="center">
   <a href="https://phase.dev">Website</a> |
   <a href="https://docs.phase.dev">Docs</a> |
-  <a href="https://phase.dev">Security</a> |
+  <a href="https://docs.phase.dev/security">Security</a> |
   <a href="https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg">Slack</a>
 </div>
 
