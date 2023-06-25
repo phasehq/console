@@ -1,9 +1,9 @@
 <h1 align="center">
   <!-- Phase Console -->
-  <img height="136" width="613" src="img/phase-console-wordmark-dark.png" alt="Phase">
+  <img height="68" width="306" src="img/phase-console-wordmark-dark.png" alt="Phase">
 </h1>
 
-<h2 align="center">Open Source, end-to-end encrypted key management platform for developers to encrypt data in their apps.</h2>
+<h3 align="center">Open Source, end-to-end encrypted key management platform for developers to encrypt data in their apps.</h3>
 
 <div align="center">
   <a href="https://phase.dev">Website</a> |
