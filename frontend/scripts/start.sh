@@ -1,7 +1,5 @@
 #!/bin/sh
 
-# Set up runtime env vars
-/app/scripts/replace-variable.sh
-
-# Start your Next.js app
+# Set up runtime env vars and start next server
+scripts/replace-variable.sh && 
 yarn start
