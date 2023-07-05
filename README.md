@@ -1,32 +1,25 @@
-<h1>
-  <table align="center" border="0">
-    <tr>
-      <td>
-        <img height="100" width="100" src="img/phase-logo.png" alt="Phase">
-      </td>
-      <td>
-        Phase Console
-      </td>
-    </tr>
-  </table>
-    <h4 align="center">
-  <a href="https://phase.dev">Website</a> |
-    <a href="https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg">Slack</a> |
-    <a href="https://phase.dev">Security</a> |
-  <a href="https://docs.phase.dev">Docs</a>
-
-  <h4>
+<h1 align="center">
+  <!-- Phase Console -->
+  <img height="68" width="306" src="img/phase-console-wordmark-dark.png" alt="Phase">
 </h1>
-<p align="center">
-  <p align="center">Open Source, end-to-end encrypted key management platform for developers to encrypt data in their apps.</p>
-</p>
+
+<h3 align="center">Open Source, end-to-end encrypted key management platform for developers to encrypt data in their apps.</h3>
+
+<div align="center">
+  <a href="https://phase.dev">Website</a> |
+  <a href="https://docs.phase.dev">Docs</a> |
+  <a href="https://docs.phase.dev/security">Security</a> |
+  <a href="https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg">Slack</a>
+</div>
+
+<hr/>
 
 <img src="img/console-home.png" width="100%" alt="Phase Console" />
 
 <div width="100%">
-  <img src="img/console-logs.png" alt="Phase Console" width="48%">
+  <img src="img/console-logs.png" alt="Phase Console" width="47%">
   &nbsp; &nbsp; &nbsp; &nbsp;
-  <img src="img/vscode-demo.png" alt="Phase Console" width="48%"/>
+  <img src="img/vscode-demo.png" alt="Phase Console" width="47%"/>
 </div>
   
 <br>

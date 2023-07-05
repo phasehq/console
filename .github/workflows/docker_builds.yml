@@ -9,6 +9,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,14 +43,20 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Login to AWS Public ECR
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region us-east-1
+          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/z2l0l3a1
+
       - name: Build and push frontend
         id: docker_build_frontend
         uses: docker/build-push-action@v2
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.short_sha.outputs.sha }}
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/frontend:${{ steps.short_sha.outputs.sha }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/frontend:${{ steps.short_sha.outputs.sha }}, public.ecr.aws/z2l0l3a1/phase-console-frontend:${{ steps.short_sha.outputs.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -56,8 +66,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ steps.short_sha.outputs.sha }}
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/backend:${{ steps.short_sha.outputs.sha }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ steps.short_sha.outputs.sha }}, ghcr.io/${{ github.repository }}/backend:${{ steps.short_sha.outputs.sha }}, public.ecr.aws/z2l0l3a1/phase-console-backend:${{ steps.short_sha.outputs.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -86,14 +95,21 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+
+      - name: Login to AWS Public ECR
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region us-east-1
+          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/z2l0l3a1
+
       - name: Build and push frontend
         id: docker_build_frontend_main
         uses: docker/build-push-action@v2
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest, ghcr.io/${{ github.repository }}/frontend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest, ghcr.io/${{ github.repository }}/frontend:latest, public.ecr.aws/z2l0l3a1/phase-console-frontend:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -103,8 +119,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest, ghcr.io/${{ github.repository }}/backend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest, ghcr.io/${{ github.repository }}/backend:latest, public.ecr.aws/z2l0l3a1/phase-console-backend:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -132,14 +147,20 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Login to AWS Public ECR
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region us-east-1
+          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/z2l0l3a1
+
       - name: Build and push frontend
         id: docker_build_frontend_release
         uses: docker/build-push-action@v2
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/frontend:${{ github.event.release.tag_name }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/frontend:${{ github.event.release.tag_name }}, public.ecr.aws/z2l0l3a1/phase-console-frontend:${{ github.event.release.tag_name }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -149,7 +170,6 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}
-          #tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/backend:${{ github.event.release.tag_name }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ github.event.release.tag_name }}, ghcr.io/${{ github.repository }}/backend:${{ github.event.release.tag_name }}, public.ecr.aws/z2l0l3a1/phase-console-backend:${{ github.event.release.tag_name }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
