@@ -37,4 +37,4 @@ COPY next.config.js ./
 # expose port and define CMD
 RUN chmod 555 ./scripts/*
 EXPOSE 3000
-CMD ["/app/scripts/start.sh"]
+CMD ["/app/scripts/replace-variable.sh && yarn start"]
