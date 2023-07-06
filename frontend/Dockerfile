@@ -14,17 +14,28 @@ RUN cp -R node_modules /tmp/node_modules
 # install ALL node_modules, including 'devDependencies'
 RUN yarn install --frozen-lockfile
 
-# ---- Copy Files ----
-FROM dependencies AS prepare-release
+# ---- Build ----
+FROM dependencies AS build
 COPY . .
+
+# Set environment variables
+ARG NEXT_PUBLIC_BACKEND_API_BASE=https://api-testing.phase.dev
+ARG NEXT_PUBLIC_NEXTAUTH_PROVIDERS=google,github,gitlab
+RUN yarn build
 
 # ---- Release ----
 FROM base AS release
 # copy production node_modules
 COPY --from=dependencies /tmp/node_modules ./node_modules
 # copy app sources
-COPY --from=prepare-release /app ./
-# expose port 
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
+# copy scripts directory
+COPY scripts ./scripts
+# copy next config
+COPY next.config.js ./
+# expose port and define CMD
+RUN chmod 555 ./scripts/*
 EXPOSE 3000
-# set the entrypoint to build and start the application
-ENTRYPOINT ["sh", "-c", "yarn build && yarn start"]
+CMD ["/app/scripts/start.sh"]
+
