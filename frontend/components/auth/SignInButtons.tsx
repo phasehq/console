@@ -11,7 +11,7 @@ import Spinner from '../common/Spinner'
 type ProviderButton = { id: string; name: string; icon: ReactNode; style: string }
 
 //const providers = process.env.NEXT_PUBLIC_NEXTAUTH_PROVIDERS?.split(',') ?? []
-const providers = "github,gitlab"
+const providers = "google,github,gitlab"
 
 const providerButtons: ProviderButton[] = [
   {
