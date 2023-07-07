@@ -19,8 +19,8 @@ FROM dependencies AS build
 COPY . .
 
 # Set environment variables
-ARG NEXT_PUBLIC_BACKEND_API_BASE=https://api-testing.phase.dev
-ARG NEXT_PUBLIC_NEXTAUTH_PROVIDERS=google,github,gitlab
+ARG NEXT_PUBLIC_BACKEND_API_BASE=BAKED_NEXT_PUBLIC_BACKEND_API_BASE
+ARG NEXT_PUBLIC_NEXTAUTH_PROVIDERS=BAKED_NEXT_PUBLIC_NEXTAUTH_PROVIDERS
 RUN yarn build
 
 # ---- Release ----
@@ -38,4 +38,3 @@ COPY next.config.js ./
 RUN chmod 555 ./scripts/*
 EXPOSE 3000
 CMD ["/app/scripts/start.sh"]
-
