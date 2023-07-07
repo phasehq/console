@@ -5,7 +5,7 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline';
   object-src 'none';
   base-uri 'self';
-  connect-src 'self' data: ${process.env.NEXT_PUBLIC_BACKEND_API_BASE};
+  connect-src 'self' data: ${process.env.BACKEND_API_BASE};
   font-src 'self';
   frame-src 'self';
   img-src 'self' https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://secure.gravatar.com;
