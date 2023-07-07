@@ -37,7 +37,7 @@ const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) 
   // instead of the onError link. This just logs the error.
   if (networkError) {
     console.log(`[Network error]: ${networkError}`)
-    if (networkError.message.includes('403')) handleSignout()
+    //if (networkError.message.includes('403')) handleSignout()
   }
 })
 
