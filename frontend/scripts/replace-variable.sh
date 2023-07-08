@@ -1,4 +1,15 @@
-#!/bin/sh
+#!/bin/bash
+
+# Ensure NEXT_PUBLIC_BACKEND_API_BASE and NEXT_PUBLIC_NEXTAUTH_PROVIDERS are set
+if [ -z "$NEXT_PUBLIC_BACKEND_API_BASE" ]; then
+    echo "NEXT_PUBLIC_BACKEND_API_BASE is not set. Please set it and rerun the script."
+    exit 1
+fi
+
+if [ -z "$NEXT_PUBLIC_NEXTAUTH_PROVIDERS" ]; then
+    echo "NEXT_PUBLIC_NEXTAUTH_PROVIDERS is not set. Please set it and rerun the script."
+    exit 1
+fi
 
 find /app/public /app/.next -type f -name "*.js" |
 while read file; do
