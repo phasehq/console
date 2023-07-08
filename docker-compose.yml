@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    image: ghcr.io/phasehq/console/frontend:2c4f0a1
+    image: phasehq/frontend:latest
     env_file: .env
     environment:
       NEXTAUTH_URL: "${HTTP_PROTOCOL}${HOST}"
@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
-    image: ghcr.io/phasehq/console/backend:2c4f0a1
+    image: phasehq/backend:latest
     env_file: .env
     environment:
       ALLOWED_HOSTS: "${HOST},backend"
