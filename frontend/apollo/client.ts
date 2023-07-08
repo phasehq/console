@@ -33,11 +33,11 @@ const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) 
     }
   }
 
-  // To retry on network errors, we recommend the RetryLink
-  // instead of the onError link. This just logs the error.
+  // Log network error
   if (networkError) {
     console.log(`[Network error]: ${networkError}`)
-    //if (networkError.message.includes('403')) handleSignout()
+    // Client-side logout when recieving a 403 from the backend
+    if (networkError.message.includes('403')) handleSignout()
   }
 })
 
