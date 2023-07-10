@@ -19,7 +19,6 @@ export const StatusIndicator = () => {
     const getStatus = async () => {
       try {
         const response = await axios.get(process.env.NEXT_PUBLIC_STATUSPAGE_API_URL!)
-        console.log(response.data.status)
         if (response) setStatus(response.data.status)
       } catch (e) {
         console.log(`Error getting system status: ${e}`)
