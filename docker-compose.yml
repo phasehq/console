@@ -31,7 +31,6 @@ services:
       BACKEND_API_BASE: "http://backend:8000"
       NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOCOL}${HOST}/ph-backend"
       NEXT_PUBLIC_NEXTAUTH_PROVIDERS: "${SSO_PROVIDERS}"
-      NEXT_PUBLIC_APP_HOST: "${APP_HOST}"
     networks:
       - phase-net
 
