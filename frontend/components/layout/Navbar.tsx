@@ -14,7 +14,7 @@ export const NavBar = (props: { team: string }) => {
   const { data: orgsData } = useQuery(GetOrganisations)
   const [getApps, { data: appsData }] = useLazyQuery(GetApps)
 
-  const IS_CLOUD_HOSTED = process.env.APP_HOST === 'cloud'
+  const IS_CLOUD_HOSTED = process.env.NEXT_PUBLIC_APP_HOST === 'cloud'
 
   useEffect(() => {
     if (orgsData?.organisations) {
