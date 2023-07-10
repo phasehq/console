@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import { Button } from './Button'
 import axios from 'axios'
@@ -17,6 +19,7 @@ export const StatusIndicator = () => {
 
   useEffect(() => {
     const getStatus = async () => {
+      console.log(process.env.NEXT_PUBLIC_APP_HOST)
       try {
         const response = await axios.get(process.env.NEXT_PUBLIC_STATUSPAGE_API_URL!)
         if (response) setStatus(response.data.status)
