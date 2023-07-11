@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { Button } from './Button'
-import axios from 'axios'
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 
@@ -20,9 +19,15 @@ export const StatusIndicator = () => {
     const getStatus = async () => {
       setLoading(true)
       try {
-        const response = await axios.get(process.env.NEXT_PUBLIC_STATUSPAGE_API_URL!)
-        if (response) setStatus(response.data.status)
-        setLoading(false)
+        await fetch(process.env.NEXT_PUBLIC_STATUSPAGE_API_URL!).then(res => {
+          setLoading(false)
+          if (!res.ok) throw ('Fetch error')
+          else {
+            res.json().then(json => {
+              setStatus(json.status)
+            })
+          }
+        })
       } catch (e) {
         console.log(`Error getting system status: ${e}`)
         setLoading(false)
