@@ -17,8 +17,7 @@ export const StatusIndicator = () => {
     description: 'Loading',
   })
 
-  const IS_CLOUD_HOSTED = process.env.NEXT_PUBLIC_APP_HOST === 'cloud'
-
+  
   useEffect(() => {
     const getStatus = async () => {
       console.log(process.env.NEXT_PUBLIC_APP_HOST)
@@ -34,7 +33,7 @@ export const StatusIndicator = () => {
       }
     }
 
-    if (IS_CLOUD_HOSTED) getStatus()
+    getStatus()
   }, [])
 
   const statusColor = () => {
@@ -63,7 +62,7 @@ export const StatusIndicator = () => {
 
   return (
     <>
-    {IS_CLOUD_HOSTED && <Link href="https://phase.statuspage.io/" target="_blank">
+    <Link href="https://phase.statuspage.io/" target="_blank">
       <Button variant="secondary">
         <span
           className={clsx(
@@ -74,7 +73,7 @@ export const StatusIndicator = () => {
         ></span>
         {status.description}
       </Button>
-    </Link>}
+    </Link>
     </>
   )
 }
