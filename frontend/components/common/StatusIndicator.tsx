@@ -11,10 +11,14 @@ type Status = {
 }
 
 export const StatusIndicator = () => {
+  const [mounted, setMounted] = useState<boolean>(false)
   const [status, setStatus] = useState<Status | null>(null)
   const [isLoading, setLoading] = useState<boolean>(false)
 
-  
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   useEffect(() => {
     const getStatus = async () => {
       setLoading(true)
@@ -38,8 +42,8 @@ export const StatusIndicator = () => {
       }
     }
 
-    getStatus()
-  }, [])
+    if (mounted) getStatus()
+  }, [mounted])
 
   const statusColor = () => {
     let color = 'bg-neutral-500'
@@ -61,6 +65,8 @@ export const StatusIndicator = () => {
     }
     return color
   }
+
+  if (!mounted) return null
 
   return (
     <>
