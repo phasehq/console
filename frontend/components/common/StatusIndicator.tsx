@@ -7,25 +7,25 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 
 type Status = {
-  indicator: 'none' | 'minor' | 'major' | 'critical' | 'loading' | 'error'
+  indicator: 'none' | 'minor' | 'major' | 'critical' | 'error'
   description: string
 }
 
 export const StatusIndicator = () => {
-  const [status, setStatus] = useState<Status>({
-    indicator: 'loading',
-    description: 'Loading',
-  })
+  const [status, setStatus] = useState<Status | null>(null)
+  const [isLoading, setLoading] = useState<boolean>(false)
 
   
   useEffect(() => {
     const getStatus = async () => {
-      console.log(process.env.NEXT_PUBLIC_APP_HOST)
+      setLoading(true)
       try {
         const response = await axios.get(process.env.NEXT_PUBLIC_STATUSPAGE_API_URL!)
         if (response) setStatus(response.data.status)
+        setLoading(false)
       } catch (e) {
         console.log(`Error getting system status: ${e}`)
+        setLoading(false)
         setStatus({
           indicator: 'error',
           description: 'Error fetching status'
@@ -38,10 +38,7 @@ export const StatusIndicator = () => {
 
   const statusColor = () => {
     let color = 'bg-neutral-500'
-    switch (status.indicator) {
-      case 'loading':
-        color = 'bg-neutral-500'
-        break
+    switch (status?.indicator) {
       case 'none':
         color = 'bg-emerald-500'
         break
@@ -68,10 +65,10 @@ export const StatusIndicator = () => {
           className={clsx(
             'h-2 w-2 mr-1 rounded-full',
             statusColor(),
-            status.indicator === 'loading' && 'animate-pulse'
+            isLoading && 'animate-pulse'
           )}
         ></span>
-        {status.description}
+        {status?.description || 'Loading'}
       </Button>
     </Link>
     </>
