@@ -26,7 +26,7 @@ If you're ever in doubt about whether or not a proposed feature aligns with Phas
 
 ## Writing and submitting code
 
-Anyone can contribute code to Phase. To get started, check out the local development guide, make your changes, and submit a pull request to the main repository.
+Anyone can contribute code to Phase. To get started, check out the local development guide, make your changes, and submit a pull request to the main repository. When committing code, please try and use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 ## Licensing
 
@@ -36,6 +36,15 @@ Any third party components incorporated into our code are licensed under the ori
 
 ## Setup local development environment
 
-1. Create a `.env.dev` file with `cp .env.dev.example .env.dev` and add atleast one OAuth provider
-2. `docker-compose -f dev-docker-compose.yml up`
-3. The Console is now running at `https://localhost` with HMR
+### Dev server with hot reload
+
+1. Create a `.env.dev` file with `cp .env.dev.example .env.dev` and add atleast one OAuth provider.
+2. `docker-compose -f dev-docker-compose.yml up`.
+3. The Console is now running at `https://localhost` with HMR.
+
+### Staging env to test production builds
+
+1. Set up a `.env` file with `cp .env.example` and add atleast one OAuth provider. View the [docs](https://docs.phase.dev/self-hosting/configuration/envars) for more info.
+2. Build the image locally with `docker-compose -f staging-docker-compose.yml build`
+3. Bring docker compose up with `docker-compose -f staging-docker-compose.yml up`
+4. The Console is now running at `https://localhost`.
