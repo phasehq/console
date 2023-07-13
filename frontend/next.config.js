@@ -5,7 +5,7 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline';
   object-src 'none';
   base-uri 'self';
-  connect-src 'self' data: https://*.phase.dev;
+  connect-src 'self' data: https://*.phase.dev https://phase.statuspage.io/api/v2/status.json;
   font-src 'self';
   frame-src 'self';
   img-src 'self' https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://secure.gravatar.com https://gitlab.com;
