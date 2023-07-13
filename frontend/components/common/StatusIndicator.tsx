@@ -10,20 +10,19 @@ type Status = {
   description: string
 }
 
+const STATUS_PAGE_BASE_URL = 'https://phase.statuspage.io'
+
 export const StatusIndicator = () => {
-  const [mounted, setMounted] = useState<boolean>(false)
+
   const [status, setStatus] = useState<Status | null>(null)
   const [isLoading, setLoading] = useState<boolean>(false)
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
     const getStatus = async () => {
+
       setLoading(true)
       try {
-        await fetch(process.env.NEXT_PUBLIC_STATUSPAGE_API_URL!).then(res => {
+        await fetch(`${STATUS_PAGE_BASE_URL}/api/v2/status.json`).then(res => {
           setLoading(false)
           if (!res.ok) throw ('Fetch error')
           else {
@@ -42,8 +41,8 @@ export const StatusIndicator = () => {
       }
     }
 
-    if (mounted) getStatus()
-  }, [mounted])
+    getStatus()
+  }, [])
 
   const statusColor = () => {
     let color = 'bg-neutral-500'
@@ -66,11 +65,8 @@ export const StatusIndicator = () => {
     return color
   }
 
-  if (!mounted) return null
-
   return (
-    <>
-    <Link href="https://phase.statuspage.io/" target="_blank">
+    <Link href={STATUS_PAGE_BASE_URL} target="_blank">
       <Button variant="secondary">
         <span
           className={clsx(
@@ -82,6 +78,5 @@ export const StatusIndicator = () => {
         {status?.description || 'Loading'}
       </Button>
     </Link>
-    </>
   )
 }
