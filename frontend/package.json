@@ -33,7 +33,7 @@
     "libsodium-wrappers-sumo": "^0.7.11",
     "next": "13.1.6",
     "next-auth": "^4.20.1",
-    "npm": "^9.5.0",
+    "npm": "^9.8.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-icons": "^4.8.0",
