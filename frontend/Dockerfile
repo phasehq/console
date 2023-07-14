@@ -2,23 +2,28 @@
 FROM node:alpine AS base
 # set working directory
 WORKDIR /app
+
+# Add a new user "app" and switch to this non-root user
+RUN addgroup app && adduser -S -G app app
+USER app
+
 # copy project file
 COPY package.json yarn.lock ./
 
 # ---- Dependencies ----
 FROM base AS dependencies
-# install node packages
+# Install node packages
 RUN yarn install --frozen-lockfile --no-cache && yarn cache clean
-# copy production node_modules aside (this is a neat trick to get only production modules)
+# Copy production node_modules aside (this is a neat trick to get only production modules)
 RUN cp -R node_modules /tmp/node_modules
-# install ALL node_modules, including 'devDependencies'
+# Install ALL node_modules, including 'devDependencies'
 RUN yarn install --frozen-lockfile
 
 # ---- Build ----
 FROM dependencies AS build
 COPY . .
 
-# Set environment variables
+# Set baked environment variables. These will be replaced once the container starts.
 ARG NEXT_PUBLIC_BACKEND_API_BASE=BAKED_NEXT_PUBLIC_BACKEND_API_BASE
 ARG NEXT_PUBLIC_NEXTAUTH_PROVIDERS=BAKED_NEXT_PUBLIC_NEXTAUTH_PROVIDERS
 ARG NEXT_PUBLIC_APP_HOST=BAKED_NEXT_PUBLIC_APP_HOST
@@ -35,7 +40,11 @@ COPY --from=build /app/public ./public
 COPY scripts ./scripts
 # copy next config
 COPY next.config.js ./
-# expose port and define CMD
+
+# Temporarily switch back to root to run chmod and then back to app user
+USER root
 RUN chmod 555 ./scripts/*
+USER app
+
 EXPOSE 3000
 CMD ["/app/scripts/start.sh"]
