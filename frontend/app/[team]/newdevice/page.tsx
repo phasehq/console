@@ -110,6 +110,9 @@ export default function NewDevice({ params }: { params: { team: string } }) {
   return (
     <>
       <div className="flex flex-col justify-between w-full h-screen">
+        <div className="w-full flex justify-end p-4">
+          <UserMenu />
+        </div>
         <div className="flex flex-col mx-auto my-auto w-full max-w-3xl gap-y-8">
           <div className="mx-auto max-w-xl">
             <h1 className="text-4xl text-black dark:text-white text-center font-bold">
@@ -152,9 +155,6 @@ export default function NewDevice({ params }: { params: { team: string } }) {
               </div>
             </div>
           </form>
-        </div>
-        <div className="w-full p-4">
-          <UserMenu />
         </div>
       </div>
     </>
