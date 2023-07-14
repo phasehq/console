@@ -7,10 +7,14 @@ import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { AppType } from '@/apollo/graphql'
 import Link from 'next/link'
+import { Button } from '../common/Button'
+import { StatusIndicator } from '../common/StatusIndicator'
 
 export const NavBar = (props: { team: string }) => {
   const { data: orgsData } = useQuery(GetOrganisations)
   const [getApps, { data: appsData }] = useLazyQuery(GetApps)
+
+  const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 
   useEffect(() => {
     if (orgsData?.organisations) {
@@ -48,7 +52,11 @@ export const NavBar = (props: { team: string }) => {
         {activeApp && <span>/</span>}
         {activeApp && <span className="text-black dark:text-white">{activeApp.name}</span>}
       </div>
-      <UserMenu />
+      <div className="flex gap-4 items-center justify-end">
+        {IS_CLOUD_HOSTED && <StatusIndicator />}
+        <Link href="https://docs.phase.dev" target="_blank"><Button variant="secondary">Docs</Button></Link>
+        <UserMenu />
+      </div>
     </header>
   )
 }
