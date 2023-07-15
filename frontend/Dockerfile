@@ -2,8 +2,15 @@
 FROM node:alpine AS base
 # set working directory
 WORKDIR /app
+
+# Add a new user "app" and change ownership of the /app directory
+RUN addgroup app && adduser -S -G app app && chown -R app:app /app
+
+# Switch to the new user "app"
+USER app
+
 # copy project file
-COPY package.json yarn.lock ./
+COPY --chown=app:app package.json yarn.lock ./
 
 # ---- Dependencies ----
 FROM base AS dependencies
@@ -16,7 +23,7 @@ RUN yarn install --frozen-lockfile
 
 # ---- Build ----
 FROM dependencies AS build
-COPY . .
+COPY --chown=app:app . .
 
 # Set environment variables
 ARG NEXT_PUBLIC_BACKEND_API_BASE=BAKED_NEXT_PUBLIC_BACKEND_API_BASE
@@ -32,10 +39,15 @@ COPY --from=dependencies /tmp/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 # copy scripts directory
-COPY scripts ./scripts
+COPY --chown=app:app scripts ./scripts
 # copy next config
-COPY next.config.js ./
-# expose port and define CMD
+COPY --chown=app:app next.config.js ./
+
+# Switch back to root to change permissions and then back to app user
+USER root
 RUN chmod 555 ./scripts/*
+USER app
+
+# expose port and define CMD
 EXPOSE 3000
 CMD ["/app/scripts/start.sh"]
