@@ -26,7 +26,7 @@
 
 [Phase Console](https://phase.dev) is an open source, end-to-end encrypted key management solution for developers to seamlessly encrypt production data in their apps.
 
-We're on a mission to make strong encryption accessible to all developers not just security teams. That means redesigning the entire developer experience from the ground up.
+We're on a mission to make strong encryption accessible to all developers, not just security teams. That means redesigning the entire developer experience from the ground up.
 
 ## Features
 
@@ -95,7 +95,7 @@ const ciphertext = await phase.encrypt('hello world')
 
 // Decrypt
 const plaintext = await phase.decrypt(ciphertext)
-console.log(ciphertext)
+console.log(plaintext)
 $ hello world
 ```
 
@@ -103,7 +103,7 @@ $ hello world
 
 ## Community vs Enterprise edition
 
-Phase operates on a [open-core](https://en.wikipedia.org/wiki/Open-core_model) model, similar to that of [GitLab](https://gitlab.com), [Infisical](https://infisical.com), [PostHog](https://posthog.com) etc.
+Phase operates on an [open-core](https://en.wikipedia.org/wiki/Open-core_model) model, similar to that of [GitLab](https://gitlab.com), [Infisical](https://infisical.com), [PostHog](https://posthog.com) etc.
 
 This repo available under the [MIT expat license](/LICENSE), with the exception of the `ee` directory which will contain premium Pro or Enterprise features requiring a Phase license in the future.
 
@@ -111,7 +111,7 @@ This repo available under the [MIT expat license](/LICENSE), with the exception 
 
 ## Security
 
-For more information of how Phase encryption works, please see the [Security Docs](https://docs.phase.dev/security)
+For more information on how Phase encryption works, please see the [Security Docs](https://docs.phase.dev/security)
 
 Please do not file GitHub issues or post on our public forum for security vulnerabilities, as they are public!
 

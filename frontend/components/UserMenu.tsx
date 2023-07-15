@@ -6,6 +6,7 @@ import { ChevronDownIcon } from '@heroicons/react/20/solid'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
+import { Button } from './common/Button'
 
 export default function UserMenu() {
   const { data: session } = useSession()
@@ -15,15 +16,15 @@ export default function UserMenu() {
   return (
     <div className="">
       <Menu as="div" className="relative inline-block text-left">
-        <div>
-          <Menu.Button className="inline-flex w-full justify-center items-center gap-2 rounded-full text-xs font-medium text-black dark:text-white hover:text-emerald-500 dark:hover:text-emerald-500 hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
-            <div
-              className="h-8 w-8 rounded-full bg-center bg-cover bg-no-repeat ring-white"
+        <Menu.Button as="div">
+          <Button variant="secondary">
+          <div
+              className="h-5 w-5 mr-1 rounded-full bg-center bg-cover bg-no-repeat ring-white"
               style={{ backgroundImage: `url(${session?.user?.image})` }}
             ></div>
             <div className="flex flex-col">{firstName}</div>
-          </Menu.Button>
-        </div>
+          </Button>
+        </Menu.Button>
         <Transition
           as={Fragment}
           enter="transition ease-out duration-100"

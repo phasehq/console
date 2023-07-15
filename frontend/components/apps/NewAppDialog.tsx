@@ -37,7 +37,7 @@ export default function NewAppDialog(props: {
   const { data: session } = useSession()
   const [createApp, { data, loading, error }] = useMutation(CreateApp)
 
-  const IS_CLOUD_HOSTED = process.env.APP_HOST === 'cloud'
+  const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 
   const DEFAULT_BUTTON = {
     label: 'Create an app',
