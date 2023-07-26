@@ -49,7 +49,7 @@ Relying on automatic database, disk or bucket level encryption has its limitatio
 
 See:
 
-- [OWAP - Cryptographic Failures](https://owasp.org/Top10/A02_2021-Cryptographic_Failures/#example-attack-scenarios)
+- [OWASP - Cryptographic Failures](https://owasp.org/Top10/A02_2021-Cryptographic_Failures/#example-attack-scenarios)
 - [IAM misconfiguration](https://github.com/nagwww/s3-leaks)
 - [Problems with S3 encryption](https://www.secwale.com/p/encryption)
 
