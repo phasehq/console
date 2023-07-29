@@ -41,18 +41,16 @@ Any third party components incorporated into our code are licensed under the ori
     cp .env.dev.example .env.dev
     ```
 2. Add atleast one OAuth provider in your **.env.dev**. Follow the [docs](https://docs.phase.dev/self-hosting/configuration/envars)
-2. Check **dev-docker-compose.yml** file is populating correctly with env variables by running 
+3. Verify that **dev-docker-compose.yml** file is populated with the correct environment variables by running
     ```
     docker compose -f dev-docker-compose.yml --env-file .env.dev config
     ```
-3. If all the configs are correct, start the cotainers using 
+4. Start the containers using 
     ```
     docker-compose -f dev-docker-compose.yml --env-file .env.dev up
     ```
-4. The Console is now running at <http://localhost> with HMR(Hot Module Reload)
-   You can also connect using https protocol - <https://localhost>
-   >**Note :** It might show **Your connection isn't private**. 
-   You can ignore the message and continue using localhost
+5. The Console is now running at <https://localhost> with [HMR(Hot Module Replacement)](https://webpack.js.org/concepts/hot-module-replacement) and a self-signed certificate.
+   >**Note : Your browser might warn you about the self-signed certificate. You can safely accept the certificate and proceed. 
 
 ### Staging env to test production builds
 
