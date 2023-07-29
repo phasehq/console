@@ -35,12 +35,11 @@ Most of Phase's code is under the MIT license, though some paid feature restrict
 Any third party components incorporated into our code are licensed under the original license provided by the applicable component owner.
 
 ## Setup local development environment
-
 ### Dev server with hot reload
-
-1. Create a `.env.dev` file with `cp .env.dev.example .env.dev` and add atleast one OAuth provider.
-2. `docker-compose -f dev-docker-compose.yml up`.
-3. The Console is now running at `https://localhost` with HMR.
+1. Create a `.env.dev` file with `cp .env.dev.example .env.dev` and add atleast one OAuth provider
+2. Check dev-docker-compose.yml file is populating correctly with env by running `docker compose -f dev-docker-compose.yml --env-file .env.dev config`
+3. If config is correct start the cotainers using `docker-compose -f dev-docker-compose.yml --env-file .env.dev up`
+4. The Console is now running at `http://localhost` with HMR
 
 ### Staging env to test production builds
 
