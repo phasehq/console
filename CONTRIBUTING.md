@@ -36,10 +36,23 @@ Any third party components incorporated into our code are licensed under the ori
 
 ## Setup local development environment
 ### Dev server with hot reload
-1. Create a `.env.dev` file with `cp .env.dev.example .env.dev` and add atleast one OAuth provider
-2. Check dev-docker-compose.yml file is populating correctly with env by running `docker compose -f dev-docker-compose.yml --env-file .env.dev config`
-3. If config is correct start the cotainers using `docker-compose -f dev-docker-compose.yml --env-file .env.dev up`
-4. The Console is now running at `http://localhost` with HMR
+1. Create a **.env.dev** file using
+    ```
+    cp .env.dev.example .env.dev
+    ```
+2. Add atleast one OAuth provider in your **.env.dev**. Follow the [docs](https://docs.phase.dev/self-hosting/configuration/envars)
+2. Check **dev-docker-compose.yml** file is populating correctly with env variables by running 
+    ```
+    docker compose -f dev-docker-compose.yml --env-file .env.dev config
+    ```
+3. If all the configs are correct, start the cotainers using 
+    ```
+    docker-compose -f dev-docker-compose.yml --env-file .env.dev up
+    ```
+4. The Console is now running at <http://localhost> with HMR(Hot Module Reload)
+   You can also connect using https protocol - <https://localhost>
+   >**Note :** It might show **Your connection isn't private**. 
+   You can ignore the message and continue using localhost
 
 ### Staging env to test production builds
 
