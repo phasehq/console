@@ -1,6 +1,5 @@
 from django.utils import timezone
-from backend.graphene.mutations.organisation import user_is_org_member
-from backend.graphene.utils.permissions import user_can_access_app, user_can_access_environment
+from backend.graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_org_member
 import graphene
 from graphql import GraphQLError
 from api.models import App, Environment, EnvironmentKey, EnvironmentSecret, Organisation, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag
@@ -32,7 +31,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
 
         org_member = OrganisationMember.objects.get(user_id=user_id, organisation=env.app.organisation)
 
-        EnvironmentKey.objects.create(id=id, environment=env, user_id=user_id, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
+        EnvironmentKey.objects.create(id=id, environment=env, user=org_member, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
         
         return CreateEnvironmentMutation(env=env)
         
@@ -60,7 +59,8 @@ class CreateEnvironmentKeyMutation(graphene.Mutation):
 
         org_member = OrganisationMember.objects.get(user_id=user_id, organisation=env.app.organisation)
 
-        if EnvironmentKey.objects.filter(environment=env, user_id=org_member).exists()
+        if EnvironmentKey.objects.filter(environment=env, user_id=org_member).exists():
+            raise GraphQLError("This user already has access to this environment")
         
         env_key = EnvironmentKey.objects.create(id=id, environment=env, user_id=user_id, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
         
@@ -103,7 +103,7 @@ class CreateSecretFolderMutation(graphene.Mutation):
 
             return CreateSecretFolderMutation(folder=folder)
 
-class CreateSecretTagMutation(graphene.Mutataion):
+class CreateSecretTagMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
         org_id = graphene.ID(required=True)
@@ -134,7 +134,7 @@ class CreateSecretMutation(graphene.Mutation):
         key = graphene.String(required=True)
         key_digest = graphene.String(required=True)
         value = graphene.String(required=True)
-        tags = graphene.List(graphene.String(required=True))
+        tags = graphene.List(graphene.String)
         comment = graphene.String()
 
     secret = graphene.Field(SecretType)
@@ -174,7 +174,7 @@ class EditSecretMutation(graphene.Mutation):
         key = graphene.String(required=True)
         key_digest = graphene.String(required=True)
         value = graphene.String(required=True)
-        tags = graphene.List(graphene.String(required=True))
+        tags = graphene.List(graphene.String)
         comment = graphene.String()
 
     secret = graphene.Field(SecretType)
