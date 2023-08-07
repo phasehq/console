@@ -4,6 +4,10 @@ type Query {
   logs(appId: ID, start: BigInt, end: BigInt): [KMSLogType]
   logsCount(appId: ID, thisMonth: Boolean): Int
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
+  appEnvironments(appId: ID): [EnvironmentType]
+  secrets(envId: ID): [SecretType]
+  secretHistory(secretId: ID): [SecretEventType]
+  secretTags(orgId: ID): [SecretTagType]
 }
 
 type OrganisationType {
@@ -90,11 +94,78 @@ enum TimeRange {
   ALL_TIME
 }
 
+type EnvironmentType {
+  id: String!
+  name: String!
+  envType: ApiEnvironmentEnvTypeChoices!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+"""An enumeration."""
+enum ApiEnvironmentEnvTypeChoices {
+  """Development"""
+  DEV
+
+  """Staging"""
+  STAGING
+
+  """Production"""
+  PROD
+}
+
+type SecretType implements Node {
+  """The ID of the object"""
+  id: ID!
+  history: [SecretEventType]
+}
+
+type SecretEventType {
+  id: String!
+  key: String!
+  value: String!
+  version: Int!
+  tags: [String!]!
+  comment: String!
+  eventType: ApiSecretEventEventTypeChoices!
+  timestamp: DateTime!
+}
+
+"""An enumeration."""
+enum ApiSecretEventEventTypeChoices {
+  """Create"""
+  C
+
+  """Read"""
+  R
+
+  """Update"""
+  U
+
+  """Delete"""
+  D
+}
+
+type SecretTagType {
+  id: String!
+  name: String!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
+  createEnvironment(appId: ID!, envType: String!, id: ID!, identityKey: String!, name: String!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentMutation
+  createEnvironmentKey(envId: ID!, id: ID!, identityKey: String!, userId: ID!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
+  createEnvironmentSecret(envId: ID!, id: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentSecretMutation
+  createSecretFolder(envId: ID!, id: ID!, name: String!, parentFolderId: ID): CreateSecretFolderMutation
+  createSecretTag(id: ID!, name: String!, orgId: ID!): CreateSecretTagMutation
+  createSecret(comment: String, envId: ID!, folderId: ID, id: ID!, key: String!, keyDigest: String!, tags: [String], value: String!): CreateSecretMutation
+  editSecret(comment: String, folderId: ID, id: ID!, key: String!, keyDigest: String!, tags: [String], value: String!): EditSecretMutation
+  deleteSecret(id: ID!): DeleteSecretMutation
 }
 
 type CreateOrganisationMutation {
@@ -111,4 +182,62 @@ type RotateAppKeysMutation {
 
 type DeleteAppMutation {
   app: AppType
+}
+
+type CreateEnvironmentMutation {
+  env: EnvironmentType
+}
+
+type CreateEnvironmentKeyMutation {
+  envKey: EnvironmentKeyType
+}
+
+type EnvironmentKeyType {
+  id: String!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type CreateEnvironmentSecretMutation {
+  envSecret: EnvironmentSecretType
+}
+
+type EnvironmentSecretType {
+  id: String!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type CreateSecretFolderMutation {
+  folder: SecretFolderType
+}
+
+type SecretFolderType {
+  id: String!
+  name: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type CreateSecretTagMutation {
+  tag: SecretTagType
+}
+
+type CreateSecretMutation {
+  secret: SecretType
+}
+
+type EditSecretMutation {
+  secret: SecretType
+}
+
+type DeleteSecretMutation {
+  secret: SecretType
 }
