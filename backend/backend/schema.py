@@ -1,195 +1,16 @@
-from enum import Enum
+from .graphene.utils.permissions import user_can_access_app, user_can_access_environment
+from .graphene.mutations.app import CreateAppMutation, DeleteAppMutation, RotateAppKeysMutation
+from .graphene.mutations.organisation import CreateOrganisationMutation
+from .graphene.types import AppType, ChartDataPointType, KMSLogType, OrganisationType, TimeRange
 import graphene
-from django.utils import timezone
-from graphene import ObjectType, relay
-from graphene_django import DjangoObjectType
 from graphql import GraphQLError
-from api.models import CustomUser, Organisation, App
-from backend.api.kv import delete, purge
-from ee.feature_flags import allow_new_app
-from logs.dynamodb_models import KMSLog
+from api.models import Environment, EnvironmentKey, Organisation, App, OrganisationMember, Secret, SecretEvent
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
 from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
-
-class OrganisationType(DjangoObjectType):
-    class Meta:
-        model = Organisation
-        fields = ('id', 'name', 'identity_key', 'created_at', 'plan')
-
-
-class AppType(DjangoObjectType):
-    class Meta:
-        model = App
-        fields = ('id', 'name', 'identity_key',
-                  'wrapped_key_share', 'created_at', 'app_token', 'app_seed', 'app_version')
-
-
-class KMSLogType(ObjectType):
-    class Meta:
-        model = KMSLog
-        fields = ('id', 'app_id', 'timestamp', 'phase_node',
-                  'event_type', 'ip_address', 'ph_size', 'edge_location', 'country', 'city', 'latitude', 'longitude')
-        interfaces = (relay.Node, )
-
-    id = graphene.ID(required=True)
-    timestamp = graphene.BigInt()
-    app_id = graphene.String()
-    phase_node = graphene.String()
-    event_type = graphene.String()
-    ip_address = graphene.String()
-    ph_size = graphene.Int()
-    asn = graphene.Int()
-    isp = graphene.String()
-    edge_location = graphene.String()
-    country = graphene.String()
-    city = graphene.String()
-    latitude = graphene.Float()
-    longitude = graphene.Float()
-
-
-class ChartDataPointType(graphene.ObjectType):
-    index = graphene.Int()
-    date = graphene.BigInt()
-    data = graphene.Int()
-
-
-class TimeRange(Enum):
-    HOUR = 'hour'
-    DAY = 'day'
-    WEEK = 'week'
-    MONTH = 'month'
-    YEAR = 'year'
-    ALL_TIME = 'allTime'
-
-
-class CreateOrganisationMutation(graphene.Mutation):
-    class Arguments:
-        id = graphene.ID(required=True)
-        name = graphene.String(required=True)
-        identity_key = graphene.String(required=True)
-
-    organisation = graphene.Field(OrganisationType)
-
-    @classmethod
-    def mutate(cls, root, info, id, name, identity_key):
-        if Organisation.objects.filter(name__iexact=name).exists():
-            raise GraphQLError('This organisation name is not available.')
-        if Organisation.objects.filter(owner__userId=info.context.user.userId).exists():
-            raise GraphQLError(
-                'Your current plan only supports one organisation.')
-
-        owner = CustomUser.objects.get(userId=info.context.user.userId)
-        org = Organisation.objects.create(
-            id=id, name=name, identity_key=identity_key, owner=owner)
-
-        return CreateOrganisationMutation(organisation=org)
-
-
-class CreateAppMutation(graphene.Mutation):
-    class Arguments:
-        id = graphene.ID(required=True)
-        organisation_id = graphene.ID(required=True)
-        name = graphene.String(required=True)
-        identity_key = graphene.String(required=True)
-        app_token = graphene.String(required=True)
-        app_seed = graphene.String(required=True)
-        wrapped_key_share = graphene.String(required=True)
-        app_version = graphene.Int(required=True)
-
-    app = graphene.Field(AppType)
-
-    @classmethod
-    def mutate(cls, root, info, id, organisation_id, name, identity_key, app_token, app_seed, wrapped_key_share, app_version):
-        owner = info.context.user
-        org = Organisation.objects.get(id=organisation_id)
-        if not Organisation.objects.filter(id=organisation_id, owner__userId=owner.userId).exists():
-            raise GraphQLError("You don't have access to this organisation")
-
-        if allow_new_app(org) == False:
-            raise GraphQLError(
-                'You have reached the App limit for your current plan. Please upgrade your account to add more.')
-
-        if App.objects.filter(identity_key=identity_key).exists():
-            raise GraphQLError("This app already exists")
-
-        app = App.objects.create(id=id, organisation=org, name=name, identity_key=identity_key,
-                                 app_token=app_token, app_seed=app_seed, wrapped_key_share=wrapped_key_share, app_version=app_version)
-
-        return CreateAppMutation(app=app)
-
-
-class RotateAppKeysMutation(graphene.Mutation):
-    class Arguments:
-        id = graphene.ID(required=True)
-        app_token = graphene.String(required=True)
-        wrapped_key_share = graphene.String(required=True)
-
-    app = graphene.Field(AppType)
-
-    @classmethod
-    def mutate(cls, root, info, id, app_token, wrapped_key_share):
-        owner = info.context.user
-        org = Organisation.objects.filter(
-            owner__userId=owner.userId).first()
-        app = App.objects.get(id=id)
-        if not app.organisation.id == org.id:
-            raise GraphQLError("You don't have access to this app")
-
-        if CLOUD_HOSTED:
-            # delete current keys from cloudflare KV
-            deleted = delete(app.app_token)
-
-            # purge keys from cloudflare cache
-            purged = purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}")
-
-            if not deleted or not purged:
-                raise GraphQLError("Failed to delete app keys. Please try again.")
-
-        app.app_token = app_token
-        app.wrapped_key_share = wrapped_key_share
-        app.save()
-
-        return RotateAppKeysMutation(app=app)
-
-
-class DeleteAppMutation(graphene.Mutation):
-    class Arguments:
-        id = graphene.ID(required=True)
-
-    app = graphene.Field(AppType)
-
-    @classmethod
-    def mutate(cls, root, info, id):
-        owner = info.context.user
-        org = Organisation.objects.filter(
-            owner__userId=owner.userId).first()
-        app = App.objects.get(id=id)
-        if not app.organisation.id == org.id:
-            raise GraphQLError("You don't have access to this app")
-
-        if CLOUD_HOSTED:
-            # delete current keys from cloudflare KV
-            deleted = delete(app.app_token)
-
-            # purge keys from cloudflare cache
-            purged = purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}")
-
-            if not deleted or not purged:
-                raise GraphQLError("Failed to delete app keys. Please try again.")
-
-        app.wrapped_key_share = ""
-        app.is_deleted = True
-        app.deleted_at = timezone.now()
-        app.save()
-
-        return DeleteAppMutation(app=app)
-
 
 class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
@@ -205,7 +26,8 @@ class Query(graphene.ObjectType):
     ), period=graphene.Argument(graphene.Enum.from_enum(TimeRange)))
 
     def resolve_organisations(root, info):
-        return Organisation.objects.filter(owner__userId=info.context.user.userId)
+        memberships = OrganisationMember.objects.filter(user=info.context.user)
+        return [membership.organisation for membership in memberships]
 
     def resolve_apps(root, info, organisation_id, app_id):
         filter = {
@@ -215,28 +37,49 @@ class Query(graphene.ObjectType):
         if app_id != '':
             filter['id'] = app_id
         return App.objects.filter(**filter)
+    
+    def resolve_app_environments(root, info, app_id):
+        if not user_can_access_app(info.context.user.userId, app_id):
+            raise GraphQLError("You don't have access to this app")
+        
+        app_environments = Environment.objects.filter(app_id=app_id)
+        return [app_env for app_env in app_environments if EnvironmentKey.objects.filter(user_id=info.context.user.userId, env_id=app_env.id).exists()]
+
+    def resolve_environment_secrets(root, info, env_id):
+        if not user_can_access_environment(info.context.user.userId, env_id):
+            raise GraphQLError("You don't have access to this environment")
+        
+        return Secret.objects.filter(environment_id=env_id)
+    
+    def resolve_secret_history(root, info, secret_id):
+        secret = Secret.objects.get(id=secret_id)
+        if not user_can_access_environment(info.context.user.userId, secret.environment.id):
+            raise GraphQLError("You don't have access to this secret")
+        return SecretEvent.objects.filter(secret_id=secret_id)
+        
 
     def resolve_logs(root, info, app_id, start=0, end=0):
-        owner = info.context.user
-        org = Organisation.objects.filter(
-            owner__userId=owner.userId).first()
-        app = App.objects.get(id=app_id)
-        if not app.organisation.id == org.id:
+        if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
+        
+        app = App.objects.get(id=app_id)
+        
         if end == 0:
             end = datetime.now().timestamp() * 1000
+        
         if CLOUD_HOSTED:
             return get_app_logs(f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25)
+        
         logs = KMSDBLog.objects.filter(app_id=f"phApp:v{app.app_version}:{app.identity_key}",timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25]
+        
         return list(logs.values())
 
     def resolve_logs_count(root, info, app_id):
-        owner = info.context.user
-        org = Organisation.objects.filter(
-            owner__userId=owner.userId).first()
-        app = App.objects.get(id=app_id)
-        if not app.organisation.id == org.id:
+        if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
+        
+        app = App.objects.get(id=app_id)
+
         if CLOUD_HOSTED:
             return get_app_log_count(f"phApp:v{app.app_version}:{app.identity_key}")
         return KMSDBLog.objects.filter(app_id=f"phApp:v{app.app_version}:{app.identity_key}").count()
@@ -255,11 +98,9 @@ class Query(graphene.ObjectType):
         Returns:
             List[ChartDataPointType]: Time series decrypt count data
         """
-        owner = info.context.user
-        org = Organisation.objects.filter(
-            owner__userId=owner.userId).first()
+        
         app = App.objects.get(id=app_id)
-        if not app.organisation.id == org.id:
+        if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
         end_date = datetime.now()  # current time
@@ -326,7 +167,6 @@ class Query(graphene.ObjectType):
             index += 1
 
         return time_series_logs
-
 
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
