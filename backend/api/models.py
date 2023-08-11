@@ -167,6 +167,7 @@ class Environment(models.Model):
         choices=ENV_TYPES,
         default=DEVELOPMENT,
     )
+    identity_key = models.CharField(max_length=256)
     wrapped_seed = models.CharField(max_length=208)
     wrapped_salt = models.CharField(max_length=208)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
