@@ -42,9 +42,10 @@ export default function AppLayout({
       if (app) {
         const currentUrl = path?.split('/')[4]
         if (currentUrl === '') return 0
-        if (currentUrl === 'logs') return 1
-        if (currentUrl === 'keys') return 2
-        if (currentUrl === 'settings') return 3
+        if (currentUrl === 'keys') return 1
+        if (currentUrl === 'secrets') return 2
+        if (currentUrl === 'logs') return 3
+        if (currentUrl === 'settings') return 4
       }
       return 0
     }
@@ -57,13 +58,18 @@ export default function AppLayout({
       link: '',
     },
     {
-      name: 'Logs',
-      link: 'logs',
-    },
-    {
       name: 'Keys',
       link: 'keys',
     },
+    {
+      name: 'Secrets',
+      link: 'secrets'
+    },
+    {
+      name: 'Logs',
+      link: 'logs',
+    },
+    
     {
       name: 'Settings',
       link: 'settings',
