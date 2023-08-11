@@ -151,8 +151,6 @@ class CreateSecretMutation(graphene.Mutation):
         
         tag_names = SecretTag.objects.filter(id__in=tags).values('name')
 
-        print("TAGS", tag_names)
-        
         secret_data = {
             'environment_id': env.id,
             'folder_id': folder_id,
@@ -166,16 +164,10 @@ class CreateSecretMutation(graphene.Mutation):
         
         secret = Secret.objects.create(**secret_data)
 
-        print("Created secret", secret)
-        
         org_member = OrganisationMember.objects.get(user=info.context.user, organisation=org)
 
-        print("member:", org_member)
-        
         SecretEvent.objects.create(**{**secret_data, **{'user': org_member, 'secret': secret, 'event_type': SecretEvent.CREATE}})
-        
-        print("Created event")
-        
+
         return CreateSecretMutation(secret=secret)
   
 class EditSecretMutation(graphene.Mutation):
@@ -215,6 +207,7 @@ class EditSecretMutation(graphene.Mutation):
           setattr(secret, key, value)
         
         secret.updated_at = timezone.now()
+        secret.save()
 
         org_member = OrganisationMember.objects.get(user=info.context.user, organisation=org)
 
@@ -236,11 +229,13 @@ class DeleteSecretMutation(graphene.Mutation):
         if not user_is_org_member(info.context.user.userId, org.id):
             raise GraphQLError("You don't have permission to perform this action")
         
+        secret.updated_at = timezone.now()
         secret.deleted_at = timezone.now()
+        secret.save()
 
         most_recent_event = SecretEvent.objects.filter(secret=secret).order_by('version').last()
         
-        # settings the pk to None and then saving it creates a copy of the instance with updated fields
+        # setting the pk to None and then saving it creates a copy of the instance with updated fields
         most_recent_event.id = None
         most_recent_event.event_type=SecretEvent.DELETE
         most_recent_event.save()
