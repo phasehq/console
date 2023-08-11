@@ -1,0 +1,6 @@
+query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
+  organisationMembers(organisationId: $organisationId, role: $role) {
+    role
+    identityKey
+  }
+}
