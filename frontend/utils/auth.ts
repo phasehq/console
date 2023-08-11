@@ -82,7 +82,7 @@ export namespace cryptoUtils {
    * @param {Uint8Array} key
    * @returns {Promise<Uint8Array>} - Ciphertext with appended nonce
    */
-  const encryptRaw = async (plaintext: string, key: Uint8Array): Promise<Uint8Array> => {
+  export const encryptRaw = async (plaintext: string, key: Uint8Array): Promise<Uint8Array> => {
     await _sodium.ready
     const sodium = _sodium
 
@@ -125,6 +125,42 @@ export namespace cryptoUtils {
 
     return plaintext
   }
+
+  /**
+ * Encrypts a single string with the given key. Returns the ciphertext as a base64 string
+ *
+ * @param {string} plaintext - Plaintext string to encrypt
+ * @param {Uint8Array} key - Symmetric encryption key
+ * @returns {string}
+ */
+export const encryptString = async (plaintext: string, key: Uint8Array) => {
+  await _sodium.ready;
+  const sodium = _sodium;
+
+  return sodium.to_base64(
+    await encryptRaw(sodium.from_string(plaintext), key),
+    sodium.base64_variants.ORIGINAL
+  );
+};
+
+/**
+ * Decrypts a single base64 ciphertext string with the given key. Returns the plaintext as a string
+ *
+ * @param cipherText - base64 string ciphertext with appended nonce
+ * @param key - Symmetric encryption key
+ * @returns {string}
+ */
+export const decryptString = async (cipherText: string, key: Uint8Array) => {
+  await _sodium.ready;
+  const sodium = _sodium;
+
+  return sodium.to_string(
+    await decryptRaw(
+      sodium.from_base64(cipherText, sodium.base64_variants.ORIGINAL),
+      key
+    )
+  );
+};
 
   /**
    * Computes the account recovery key from the mnemonic phrase and orgId.
