@@ -1,5 +1,5 @@
 from rest_framework.serializers import ModelSerializer
-from .models import CustomUser, Organisation
+from .models import CustomUser, Organisation, Secret
 
 
 class CustomUserSerializer(ModelSerializer):
@@ -29,3 +29,8 @@ class OrganisationSerializer(ModelSerializer):
 
         def create(self, validated_data):
             return Organisation(**validated_data)
+
+class SecretSerializer(ModelSerializer):
+    class Meta:
+        model = Secret
+        fields = '__all__'
