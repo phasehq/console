@@ -134,7 +134,7 @@ export const generateEnvironmentSecret = async (environment: EnvironmentType, ke
     useKeyring.publicKey
   )
 
-  const pssEnv = `pss_env:v1:${envKeys.publicKey}:${keyShares[0]}:${token}:${wrapKey}:${envSalt}`
+  const pssEnv = `pss_env:v1:${token}:${envKeys.publicKey}:${envSalt}:${keyShares[0]}:${wrapKey}`
   const mutationPayload = {
     envId: environment.id,
     name: 'testSecret',
