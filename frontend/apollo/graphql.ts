@@ -36,6 +36,16 @@ export enum ApiEnvironmentEnvTypeChoices {
 }
 
 /** An enumeration. */
+export enum ApiOrganisationMemberRoleChoices {
+  /** Admin */
+  Admin = 'ADMIN',
+  /** Developer */
+  Dev = 'DEV',
+  /** Owner */
+  Owner = 'OWNER'
+}
+
+/** An enumeration. */
 export enum ApiOrganisationPlanChoices {
   /** Enterprise */
   En = 'EN',
@@ -83,17 +93,17 @@ export type CreateAppMutation = {
 
 export type CreateEnvironmentKeyMutation = {
   __typename?: 'CreateEnvironmentKeyMutation';
-  envKey?: Maybe<EnvironmentKeyType>;
+  environmentKey?: Maybe<EnvironmentKeyType>;
 };
 
 export type CreateEnvironmentMutation = {
   __typename?: 'CreateEnvironmentMutation';
-  env?: Maybe<EnvironmentType>;
+  environment?: Maybe<EnvironmentType>;
 };
 
 export type CreateEnvironmentSecretMutation = {
   __typename?: 'CreateEnvironmentSecretMutation';
-  envSecret?: Maybe<EnvironmentSecretType>;
+  environmentSecret?: Maybe<EnvironmentSecretType>;
 };
 
 export type CreateOrganisationMutation = {
@@ -157,6 +167,7 @@ export type EnvironmentType = {
   createdAt?: Maybe<Scalars['DateTime']>;
   envType: ApiEnvironmentEnvTypeChoices;
   id: Scalars['String'];
+  identityKey: Scalars['String'];
   name: Scalars['String'];
   updatedAt: Scalars['DateTime'];
   wrappedSalt: Scalars['String'];
@@ -223,7 +234,6 @@ export type MutationCreateEnvironmentArgs = {
 
 export type MutationCreateEnvironmentKeyArgs = {
   envId: Scalars['ID'];
-  id: Scalars['ID'];
   identityKey: Scalars['String'];
   userId: Scalars['ID'];
   wrappedSalt: Scalars['String'];
@@ -233,7 +243,6 @@ export type MutationCreateEnvironmentKeyArgs = {
 
 export type MutationCreateEnvironmentSecretArgs = {
   envId: Scalars['ID'];
-  id: Scalars['ID'];
   identityKey: Scalars['String'];
   name: Scalars['String'];
   token: Scalars['String'];
@@ -252,7 +261,6 @@ export type MutationCreateSecretArgs = {
   comment?: InputMaybe<Scalars['String']>;
   envId: Scalars['ID'];
   folderId?: InputMaybe<Scalars['ID']>;
-  id: Scalars['ID'];
   key: Scalars['String'];
   keyDigest: Scalars['String'];
   tags?: InputMaybe<Array<InputMaybe<Scalars['String']>>>;
@@ -308,6 +316,16 @@ export type Node = {
   id: Scalars['ID'];
 };
 
+export type OrganisationMemberType = {
+  __typename?: 'OrganisationMemberType';
+  createdAt?: Maybe<Scalars['DateTime']>;
+  id: Scalars['String'];
+  identityKey?: Maybe<Scalars['String']>;
+  role: ApiOrganisationMemberRoleChoices;
+  updatedAt: Scalars['DateTime'];
+  wrappedKeyring: Scalars['String'];
+};
+
 export type OrganisationType = {
   __typename?: 'OrganisationType';
   createdAt?: Maybe<Scalars['DateTime']>;
@@ -322,8 +340,12 @@ export type Query = {
   appActivityChart?: Maybe<Array<Maybe<ChartDataPointType>>>;
   appEnvironments?: Maybe<Array<Maybe<EnvironmentType>>>;
   apps?: Maybe<Array<Maybe<AppType>>>;
+  environmentKeys?: Maybe<Array<Maybe<EnvironmentKeyType>>>;
+  environmentSecrets?: Maybe<Array<Maybe<EnvironmentSecretType>>>;
   logs?: Maybe<Array<Maybe<KmsLogType>>>;
   logsCount?: Maybe<Scalars['Int']>;
+  organisationAdminsAndSelf?: Maybe<Array<Maybe<OrganisationMemberType>>>;
+  organisationMembers?: Maybe<Array<Maybe<OrganisationMemberType>>>;
   organisations?: Maybe<Array<Maybe<OrganisationType>>>;
   secretHistory?: Maybe<Array<Maybe<SecretEventType>>>;
   secretTags?: Maybe<Array<Maybe<SecretTagType>>>;
@@ -348,6 +370,16 @@ export type QueryAppsArgs = {
 };
 
 
+export type QueryEnvironmentKeysArgs = {
+  environmentId?: InputMaybe<Scalars['ID']>;
+};
+
+
+export type QueryEnvironmentSecretsArgs = {
+  environmentId?: InputMaybe<Scalars['ID']>;
+};
+
+
 export type QueryLogsArgs = {
   appId?: InputMaybe<Scalars['ID']>;
   end?: InputMaybe<Scalars['BigInt']>;
@@ -358,6 +390,18 @@ export type QueryLogsArgs = {
 export type QueryLogsCountArgs = {
   appId?: InputMaybe<Scalars['ID']>;
   thisMonth?: InputMaybe<Scalars['Boolean']>;
+};
+
+
+export type QueryOrganisationAdminsAndSelfArgs = {
+  organisationId?: InputMaybe<Scalars['ID']>;
+};
+
+
+export type QueryOrganisationMembersArgs = {
+  organisationId?: InputMaybe<Scalars['ID']>;
+  role?: InputMaybe<Array<InputMaybe<Scalars['String']>>>;
+  userId?: InputMaybe<Scalars['ID']>;
 };
 
 
@@ -386,6 +430,7 @@ export type SecretEventType = {
   eventType: ApiSecretEventEventTypeChoices;
   id: Scalars['String'];
   key: Scalars['String'];
+  secret: SecretType;
   tags: Array<Scalars['String']>;
   timestamp: Scalars['DateTime'];
   value: Scalars['String'];
@@ -406,11 +451,18 @@ export type SecretTagType = {
   name: Scalars['String'];
 };
 
-export type SecretType = Node & {
+export type SecretType = {
   __typename?: 'SecretType';
+  comment: Scalars['String'];
+  createdAt?: Maybe<Scalars['DateTime']>;
+  folder?: Maybe<SecretFolderType>;
   history?: Maybe<Array<Maybe<SecretEventType>>>;
-  /** The ID of the object */
-  id: Scalars['ID'];
+  id: Scalars['String'];
+  key: Scalars['String'];
+  tags: Array<Scalars['String']>;
+  updatedAt: Scalars['DateTime'];
+  value: Scalars['String'];
+  version: Scalars['Int'];
 };
 
 /** An enumeration. */
