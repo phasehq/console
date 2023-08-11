@@ -1,5 +1,5 @@
 from django.utils import timezone
-from backend.graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_org_member
+from backend.graphene.utils.permissions import member_can_access_org, user_can_access_app, user_can_access_environment, user_is_org_member
 import graphene
 from graphql import GraphQLError
 from api.models import App, Environment, EnvironmentKey, EnvironmentSecret, Organisation, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag
@@ -16,7 +16,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
         wrapped_salt = graphene.String(required=True)
         identity_key = graphene.String(required=True)
 
-    env = graphene.Field(EnvironmentType)
+    environment = graphene.Field(EnvironmentType)
 
     @classmethod
     def mutate(cls, root, info, id, app_id, name, env_type, wrapped_seed, wrapped_salt, identity_key):
@@ -27,64 +27,68 @@ class CreateEnvironmentMutation(graphene.Mutation):
         
         app = App.objects.get(id=app_id)
 
-        env = Environment.objects.create(id=id, app=app, name=name, env_type=env_type, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
+        environment = Environment.objects.create(id=id, app=app, name=name, env_type=env_type, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
 
-        org_member = OrganisationMember.objects.get(user_id=user_id, organisation=env.app.organisation)
+        org_owner = OrganisationMember.objects.get(organisation=environment.app.organisation, role=OrganisationMember.OWNER)
 
-        EnvironmentKey.objects.create(id=id, environment=env, user=org_member, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
+        EnvironmentKey.objects.create(id=id, environment=environment, user=org_owner, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
         
-        return CreateEnvironmentMutation(env=env)
+        return CreateEnvironmentMutation(environment=environment)
         
 class CreateEnvironmentKeyMutation(graphene.Mutation):
     class Arguments:
-        id = graphene.ID(required=True)
+        #id = graphene.ID(required=True)
         env_id = graphene.ID(required=True)
         user_id =graphene.ID(required=True)
         identity_key = graphene.String(required=True)
         wrapped_seed = graphene.String(required=True)
         wrapped_salt = graphene.String(required=True)
 
-    env_key = graphene.Field(EnvironmentKeyType)
+    environment_key = graphene.Field(EnvironmentKeyType)
 
     @classmethod
-    def mutate(cls, root, info, id, env_id, user_id, identity_key, wrapped_seed, wrapped_salt):
+    def mutate(cls, root, info, env_id, user_id, identity_key, wrapped_seed, wrapped_salt):
         
         env = Environment.objects.get(id=env_id)
         
+        # check that the user attempting the mutation has access
         if not user_can_access_app(info.context.user.userId, env.app.id):
           raise GraphQLError("You don't have access to this app")
         
-        if not user_can_access_app(user_id, env.app.id):
+        # check that the user for whom we are add a key has access
+        if not member_can_access_org(user_id, env.app.organisation.id):
           raise GraphQLError("This user doesn't have access to this app")
 
-        org_member = OrganisationMember.objects.get(user_id=user_id, organisation=env.app.organisation)
+        org_member = OrganisationMember.objects.get(id=user_id)
 
         if EnvironmentKey.objects.filter(environment=env, user_id=org_member).exists():
             raise GraphQLError("This user already has access to this environment")
         
-        env_key = EnvironmentKey.objects.create(id=id, environment=env, user_id=user_id, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
+        environment_key = EnvironmentKey.objects.create(environment=env, user_id=user_id, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
         
-        return CreateEnvironmentKeyMutation(env_key=env_key)
+        return CreateEnvironmentKeyMutation(environment_key=environment_key)
         
 class CreateEnvironmentSecretMutation(graphene.Mutation):
     class Arguments:
-        id = graphene.ID(required=True)
         env_id = graphene.ID(required=True)
         name = graphene.String(required=True)
         identity_key = graphene.String(required=True)
         token = graphene.String(required=True)
         wrapped_key_share = graphene.String(required=True)
 
-    env_secret = graphene.Field(EnvironmentSecretType)
+    environment_secret = graphene.Field(EnvironmentSecretType)
 
     @classmethod
-    def mutate(cls, root, info, id, env_id, name, identity_key, token, wrapped_key_share):
+    def mutate(cls, root, info, env_id, name, identity_key, token, wrapped_key_share):
         user = info.context.user
-        if user_can_access_environment(user.id, env_id):
+        if user_can_access_environment(user.userId, env_id):
         
-          env_secret = EnvironmentSecret.objects.create(id=id, environment_id=env_id, user=user, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share)
+          env = Environment.objects.get(id=env_id)
+          org_member = OrganisationMember.objects.get(organisation=env.app.organisation, user_id=user.userId)
 
-          return CreateEnvironmentSecretMutation(env_secret=env_secret)
+          environment_secret = EnvironmentSecret.objects.create(environment_id=env_id, user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share)
+
+          return CreateEnvironmentSecretMutation(environment_secret=environment_secret)
         
 class CreateSecretFolderMutation(graphene.Mutation):
     class Arguments:
@@ -128,7 +132,6 @@ class CreateSecretTagMutation(graphene.Mutation):
                                        
 class CreateSecretMutation(graphene.Mutation):
     class Arguments:
-        id = graphene.ID(required=True)
         env_id = graphene.ID(required=True)
         folder_id = graphene.ID(required=False)
         key = graphene.String(required=True)
@@ -140,13 +143,15 @@ class CreateSecretMutation(graphene.Mutation):
     secret = graphene.Field(SecretType)
 
     @classmethod
-    def mutate(cls, root, info, id, env_id, folder_id, key, key_digest, value, tags, comment):
+    def mutate(cls, root, info, env_id, key, key_digest, value, folder_id=None, tags=[], comment=''):
         env = Environment.objects.get(id=env_id)
         org = env.app.organisation
         if not user_is_org_member(info.context.user.userId, org.id):
             raise GraphQLError("You don't have permission to perform this action")
         
         tag_names = SecretTag.objects.filter(id__in=tags).values('name')
+
+        print("TAGS", tag_names)
         
         secret_data = {
             'environment_id': env.id,
@@ -155,15 +160,21 @@ class CreateSecretMutation(graphene.Mutation):
             'key_digest': key_digest,
             'value': value,
             'version': 1,
-            'tags': tag_names,
+            'tags': [],
             'comment': comment
         }
         
-        secret = Secret.objects.create(**{**secret_data, **{'id': id}})
+        secret = Secret.objects.create(**secret_data)
+
+        print("Created secret", secret)
         
         org_member = OrganisationMember.objects.get(user=info.context.user, organisation=org)
 
+        print("member:", org_member)
+        
         SecretEvent.objects.create(**{**secret_data, **{'user': org_member, 'secret': secret, 'event_type': SecretEvent.CREATE}})
+        
+        print("Created event")
         
         return CreateSecretMutation(secret=secret)
   

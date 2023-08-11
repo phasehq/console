@@ -2,19 +2,22 @@ from .graphene.mutations.environment import CreateEnvironmentKeyMutation, Create
 from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_org_member
 from .graphene.mutations.app import CreateAppMutation, DeleteAppMutation, RotateAppKeysMutation
 from .graphene.mutations.organisation import CreateOrganisationMutation
-from .graphene.types import AppType, ChartDataPointType, EnvironmentType, KMSLogType, OrganisationType, SecretEventType, SecretTagType, SecretType, TimeRange
+from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentSecretType, EnvironmentType, KMSLogType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, TimeRange
 import graphene
 from graphql import GraphQLError
-from api.models import Environment, EnvironmentKey, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretTag
+from api.models import Environment, EnvironmentKey, EnvironmentSecret, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretTag
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
 from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
+from itertools import chain
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
 class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
+    organisation_members = graphene.List(OrganisationMemberType, organisation_id=graphene.ID(), user_id=graphene.ID(), role=graphene.List(graphene.String))
+    organisation_admins_and_self = graphene.List(OrganisationMemberType, organisation_id=graphene.ID())
     apps = graphene.List(
         AppType, organisation_id=graphene.ID(), app_id=graphene.ID())
     logs = graphene.List(KMSLogType, app_id=graphene.ID(),
@@ -30,11 +33,36 @@ class Query(graphene.ObjectType):
     secrets = graphene.List(SecretType, env_id=graphene.ID())
     secret_history = graphene.List(SecretEventType, secret_id=graphene.ID())
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
+    environment_keys = graphene.List(EnvironmentKeyType, environment_id=graphene.ID())
+    environment_secrets = graphene.List(EnvironmentSecretType, environment_id=graphene.ID())
 
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(user=info.context.user)
         return [membership.organisation for membership in memberships]
+    
+    def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
+        if not user_is_org_member(info.context.user.userId, organisation_id):
+            raise GraphQLError("You don't have access to this organisation")
+        
+        roles = [user_role.lower() for user_role in role]
+
+        return OrganisationMember.objects.filter(organisation_id=organisation_id, role__in=roles)
+    
+    def resolve_organisation_admins_and_self(root, info, organisation_id):
+        if not user_is_org_member(info.context.user.userId, organisation_id):
+            raise GraphQLError("You don't have access to this organisation")
+        
+        roles = ['owner', 'admin']
+
+        members = OrganisationMember.objects.filter(organisation_id=organisation_id, role__in=roles)
+        
+        if not info.context.user.userId in [member.user_id for member in members]:
+          self_member = OrganisationMember.objects.filter(organisation_id=organisation_id, user_id=info.context.user.userId)
+          members = list(chain(members, self_member))
+
+        return members
+
 
     def resolve_apps(root, info, organisation_id, app_id):
         filter = {
@@ -49,8 +77,12 @@ class Query(graphene.ObjectType):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
         
+        app = App.objects.get(id=app_id)
+
+        org_member = OrganisationMember.objects.get(organisation=app.organisation, user_id=info.context.user.userId)
+        
         app_environments = Environment.objects.filter(app_id=app_id)
-        return [app_env for app_env in app_environments if EnvironmentKey.objects.filter(user_id=info.context.user.userId, env_id=app_env.id).exists()]
+        return [app_env for app_env in app_environments if EnvironmentKey.objects.filter(user=org_member, environment_id=app_env.id).exists()]
 
     def resolve_secrets(root, info, env_id):
         if not user_can_access_environment(info.context.user.userId, env_id):
@@ -69,8 +101,25 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have access to this Organisation")
         
         return SecretTag.objects.filter(org_id=org_id)
+    
+    def resolve_environment_keys(root, info, environment_id):
+        if not user_can_access_environment(info.context.user.userId, environment_id):
+            raise GraphQLError("You don't have access to this secret")
         
-
+        env = Environment.objects.get(id=environment_id)
+        org_member = OrganisationMember.objects.get(user=info.context.user, organisation=env.app.organisation)
+        return EnvironmentKey.objects.filter(environment=env, user=org_member)
+    
+    def resolve_environment_secrets(root, info, environment_id):
+        if not user_can_access_environment(info.context.user.userId, environment_id):
+            raise GraphQLError("You don't have access to this secret")
+        
+        env = Environment.objects.get(id=environment_id)
+        org_member = OrganisationMember.objects.get(user=info.context.user, organisation=env.app.organisation)
+        return EnvironmentSecret.objects.filter(environment=env, user=org_member)
+        
+        
+        
     def resolve_logs(root, info, app_id, start=0, end=0):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")

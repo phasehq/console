@@ -5,6 +5,7 @@ from graphene_django import DjangoObjectType
 from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentSecret, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag
 from logs.dynamodb_models import KMSLog
 
+
 class OrganisationType(DjangoObjectType):
     class Meta:
         model = Organisation
@@ -13,7 +14,7 @@ class OrganisationType(DjangoObjectType):
 class OrganisationMemberType(DjangoObjectType):
     class Meta:
         model = OrganisationMember
-        fields = ('user', 'role', 'identity_key', 'wrapped_keyring', 'created_at', 'updated_at')
+        fields = ('id', 'role', 'identity_key', 'wrapped_keyring', 'created_at', 'updated_at')
 
 class AppType(DjangoObjectType):
     class Meta:
@@ -24,7 +25,7 @@ class AppType(DjangoObjectType):
 class EnvironmentType(DjangoObjectType):
     class Meta:
         model = Environment
-        fields = ('id', 'name', 'env_type', 'wrapped_seed', 'wrapped_salt', 'created_at', 'updated_at')
+        fields = ('id', 'name', 'env_type', 'identity_key', 'wrapped_seed', 'wrapped_salt', 'created_at', 'updated_at')
 
 class EnvironmentKeyType(DjangoObjectType):
     class Meta:
@@ -51,14 +52,14 @@ class SecretEventType(DjangoObjectType):
         model = SecretEvent
         fields = ('id', 'secret', 'collection', 'key', 'value', 'version', 'tags', 'comment', 'event_type', 'timestamp')
 
-class SecretType(ObjectType):
+class SecretType(DjangoObjectType):
     
     history = graphene.List(SecretEventType)
   
     class Meta:
         model = Secret
         fields = ('id', 'key', 'value', 'folder', 'version', 'tags', 'comment', 'created_at', 'updated_at', 'history')
-        interfaces = (relay.Node, )
+        #interfaces = (relay.Node, )
 
     def resolve_history(self, info):
         return SecretEvent.objects.filter(secret_id=self.id).order_by('version')
