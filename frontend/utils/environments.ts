@@ -116,15 +116,15 @@ export const envKeyring = async (envSeed: string): Promise<EnvKeyring> => {
 export const generateEnvironmentToken = async (
   environment: EnvironmentType,
   key: EnvironmentKeyType,
-  useKeyring: { publicKey: string; privateKey: string }
+  userKeyring: { publicKey: string; privateKey: string }
 ) => {
   const wrapKey = await newEnvWrapKey()
   const token = await newEnvToken()
 
   const envSeed = await decryptAsymmetric(
     key.wrappedSeed,
-    useKeyring.privateKey,
-    useKeyring.publicKey
+    userKeyring.privateKey,
+    userKeyring.publicKey
   )
 
   const envKeys = await envKeyring(envSeed)
@@ -134,14 +134,14 @@ export const generateEnvironmentToken = async (
 
   const envSalt = await decryptAsymmetric(
     key.wrappedSalt,
-    useKeyring.privateKey,
-    useKeyring.publicKey
+    userKeyring.privateKey,
+    userKeyring.publicKey
   )
 
   const pssEnv = `pss_env:v1:${token}:${envKeys.publicKey}:${envSalt}:${keyShares[0]}:${wrapKey}`
   const mutationPayload = {
     envId: environment.id,
-    name: 'testSecret',
+    name: 'testEnvToken',
     identityKey: environment.identityKey,
     token,
     wrappedKeyShare,
@@ -149,6 +149,27 @@ export const generateEnvironmentToken = async (
 
   return {
     pssEnv,
+    mutationPayload,
+  }
+}
+
+export const generateUserToken = async (userKeyring: { publicKey: string; privateKey: string }) => {
+  const wrapKey = await newEnvWrapKey()
+  const token = await newEnvToken()
+
+  const keyShares = await splitSecret(userKeyring.privateKey)
+  const wrappedKeyShare = await cryptoUtils.wrappedKeyShare(keyShares[1], wrapKey)
+
+  const pssUser = `pss_user:v1:${token}:${userKeyring.publicKey}:${keyShares[0]}:${wrapKey}`
+  const mutationPayload = {
+    name: 'testUserToken',
+    identityKey: userKeyring.publicKey,
+    token,
+    wrappedKeyShare,
+  }
+
+  return {
+    pssUser,
     mutationPayload,
   }
 }
