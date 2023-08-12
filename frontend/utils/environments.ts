@@ -10,10 +10,10 @@ type EnvKeyring = {
 }
 
 /**
-   * Create a random seed for a new env
-   *
-   * @returns {Promise<string>} - hex encoded env seed
-   */
+ * Create a random seed for a new env
+ *
+ * @returns {Promise<string>} - hex encoded env seed
+ */
 export const newEnvSeed = async () => {
   await _sodium.ready
   const sodium = _sodium
@@ -23,10 +23,10 @@ export const newEnvSeed = async () => {
 }
 
 /**
-   * Create a random salt for a new env
-   *
-   * @returns {Promise<string>} - hex encoded env salt
-   */
+ * Create a random salt for a new env
+ *
+ * @returns {Promise<string>} - hex encoded env salt
+ */
 export const newEnvSalt = async () => {
   await _sodium.ready
   const sodium = _sodium
@@ -41,11 +41,11 @@ export const newEnvSalt = async () => {
  * @returns {Promise<string>} - hex encoded env token
  */
 export const newEnvToken = async () => {
-await _sodium.ready
-const sodium = _sodium
+  await _sodium.ready
+  const sodium = _sodium
 
-const token = sodium.crypto_kdf_keygen()
-return sodium.to_hex(token)
+  const token = sodium.crypto_kdf_keygen()
+  return sodium.to_hex(token)
 }
 
 /**
@@ -62,12 +62,12 @@ export const newEnvWrapKey = async () => {
 }
 
 /**
-   * Encrypts an env seed with the given key
-   *
-   * @param seed - Env seed as a hex string
-   * @param key - Encryption key as a hex string
-   * @returns {Promise<Uint8Array>}
-   */
+ * Encrypts an env seed with the given key
+ *
+ * @param seed - Env seed as a hex string
+ * @param key - Encryption key as a hex string
+ * @returns {Promise<Uint8Array>}
+ */
 export const encryptedEnvSeed = async (seed: string, key: string) => {
   await _sodium.ready
   const sodium = _sodium
@@ -78,12 +78,12 @@ export const encryptedEnvSeed = async (seed: string, key: string) => {
 }
 
 /**
-   * Decrypts an env seed with the given key
-   *
-   * @param encryptedSeed - Encrytped env seed as a hex string
-   * @param key - Decryption key as a hex string
-   * @returns {Promise<string>} - hex encoded plaintext app seed
-   */
+ * Decrypts an env seed with the given key
+ *
+ * @param encryptedSeed - Encrytped env seed as a hex string
+ * @param key - Decryption key as a hex string
+ * @returns {Promise<string>} - hex encoded plaintext app seed
+ */
 export const decryptedAppSeed = async (encryptedSeed: string, key: string) => {
   await _sodium.ready
   const sodium = _sodium
@@ -96,11 +96,11 @@ export const decryptedAppSeed = async (encryptedSeed: string, key: string) => {
 }
 
 /**
-   * Derives an env keyring from the given seed
-   *
-   * @param {string} envSeed - Env seed as a hex string
-   * @returns {Promise<EnvKeyring>}
-   */
+ * Derives an env keyring from the given seed
+ *
+ * @param {string} envSeed - Env seed as a hex string
+ * @returns {Promise<EnvKeyring>}
+ */
 export const envKeyring = async (envSeed: string): Promise<EnvKeyring> => {
   await _sodium.ready
   const sodium = _sodium
@@ -113,7 +113,11 @@ export const envKeyring = async (envSeed: string): Promise<EnvKeyring> => {
   return { publicKey: sodium.to_hex(publicKey), privateKey: sodium.to_hex(privateKey) }
 }
 
-export const generateEnvironmentSecret = async (environment: EnvironmentType, key: EnvironmentKeyType, useKeyring: { publicKey: string, privateKey: string }) => {
+export const generateEnvironmentSecret = async (
+  environment: EnvironmentType,
+  key: EnvironmentKeyType,
+  useKeyring: { publicKey: string; privateKey: string }
+) => {
   const wrapKey = await newEnvWrapKey()
   const token = await newEnvToken()
 
@@ -140,11 +144,11 @@ export const generateEnvironmentSecret = async (environment: EnvironmentType, ke
     name: 'testSecret',
     identityKey: environment.identityKey,
     token,
-    wrappedKeyShare
+    wrappedKeyShare,
   }
 
   return {
     pssEnv,
-    mutationPayload
+    mutationPayload,
   }
 }

@@ -2,18 +2,20 @@ import _sodium, { KeyPair } from 'libsodium-wrappers-sumo'
 
 import { cryptoUtils } from '@/utils/auth'
 
+const VERSION = 1
+
 /**
  * Returns an random key exchange keypair
  *
  * @returns {KeyPair}
  */
 export const randomKeyPair = async () => {
-  await _sodium.ready;
-  const sodium = _sodium;
-  const keypair = await sodium.crypto_kx_keypair();
+  await _sodium.ready
+  const sodium = _sodium
+  const keypair = await sodium.crypto_kx_keypair()
 
-  return keypair;
-};
+  return keypair
+}
 
 /**
  * Carries out diffie-hellman key exchange for client and returns a pair of symmetric encryption keys
@@ -22,20 +24,17 @@ export const randomKeyPair = async () => {
  * @param {Uint8Array} recipientPubKey
  * @returns
  */
-export const clientSessionKeys = async (
-  ephemeralKeyPair: KeyPair,
-  recipientPubKey: Uint8Array
-) => {
-  await _sodium.ready;
-  const sodium = _sodium;
+export const clientSessionKeys = async (ephemeralKeyPair: KeyPair, recipientPubKey: Uint8Array) => {
+  await _sodium.ready
+  const sodium = _sodium
 
   const keys = await sodium.crypto_kx_client_session_keys(
     ephemeralKeyPair.publicKey,
     ephemeralKeyPair.privateKey,
     recipientPubKey
-  );
-  return keys;
-};
+  )
+  return keys
+}
 
 /**
  * Carries out diffie-hellman key exchange for server and returns a pair of symmetric encryption keys
@@ -48,66 +47,59 @@ export const serverSessionKeys = async (
   appKeyPair: { publicKey: Uint8Array; privateKey: Uint8Array },
   dataPubKey: Uint8Array
 ) => {
-  await _sodium.ready;
-  const sodium = _sodium;
+  await _sodium.ready
+  const sodium = _sodium
   const keys = await sodium.crypto_kx_server_session_keys(
     appKeyPair.publicKey,
     appKeyPair.privateKey,
     dataPubKey
-  );
-  return keys;
-};
+  )
+  return keys
+}
 
-export const encryptAsymmetric = async (
-  plaintext: string,
-  publicKey: string,
-): Promise<string> => {
-  await _sodium.ready;
-  const sodium = _sodium;
+export const encryptAsymmetric = async (plaintext: string, publicKey: string): Promise<string> => {
+  await _sodium.ready
+  const sodium = _sodium
 
   return new Promise<string>(async (resolve, reject) => {
     try {
-      const oneTimeKeyPair = await randomKeyPair();
+      const oneTimeKeyPair = await randomKeyPair()
 
-      const symmetricKeys = await clientSessionKeys(
-        oneTimeKeyPair,
-        sodium.from_hex(publicKey)
-      );
+      const symmetricKeys = await clientSessionKeys(oneTimeKeyPair, sodium.from_hex(publicKey))
 
-      const ciphertext = await cryptoUtils.encryptString(
-        plaintext,
-        symmetricKeys.sharedTx
-      );
+      const ciphertext = await cryptoUtils.encryptString(plaintext, symmetricKeys.sharedTx)
 
       // Use sodium.memzero to wipe the keys from memory
-      sodium.memzero(oneTimeKeyPair.privateKey);
-      sodium.memzero(symmetricKeys.sharedTx);
-      sodium.memzero(symmetricKeys.sharedRx);
+      sodium.memzero(oneTimeKeyPair.privateKey)
+      sodium.memzero(symmetricKeys.sharedTx)
+      sodium.memzero(symmetricKeys.sharedRx)
 
-      resolve(
-        `${sodium.to_hex(
-          oneTimeKeyPair.publicKey
-        )}:${ciphertext}`
-      );
+      resolve(`ph:v${VERSION}:${sodium.to_hex(oneTimeKeyPair.publicKey)}:${ciphertext}`)
     } catch (error) {
-      reject(`Something went wrong: ${error}`);
+      reject(`Something went wrong: ${error}`)
     }
-  });
-};
+  })
+}
 
-export const decryptAsymmetric = async (ciphertextString: string, privateKey: string, publicKey: string): Promise<string> => {
-  await _sodium.ready;
-  const sodium = _sodium;
+export const decryptAsymmetric = async (
+  ciphertextString: string,
+  privateKey: string,
+  publicKey: string
+): Promise<string> => {
+  await _sodium.ready
+  const sodium = _sodium
 
   return new Promise<string>(async (resolve, reject) => {
-    const ciphertextSegments = ciphertextString.split(":");
-    if (ciphertextSegments.length !== 2)
-      reject("Invalid ciphertext");
+    const ciphertextSegments = ciphertextString.split(':')
+
+    if (ciphertextSegments.length !== 4) reject('Invalid ciphertext')
 
     const ciphertext = {
-      pubKey: ciphertextSegments[0],
-      data: ciphertextSegments[1],
-    };
+      prefix: ciphertextSegments[0],
+      version: ciphertextSegments[1],
+      pubKey: ciphertextSegments[2],
+      data: ciphertextSegments[3],
+    }
 
     try {
       const sessionKeys = await serverSessionKeys(
@@ -116,41 +108,42 @@ export const decryptAsymmetric = async (ciphertextString: string, privateKey: st
           privateKey: sodium.from_hex(privateKey) as Uint8Array,
         },
         sodium.from_hex(ciphertext.pubKey)
-      );
+      )
 
-      const plaintext = await cryptoUtils.decryptString(
-        ciphertext.data,
-        sessionKeys.sharedRx
-      );
+      const plaintext = await cryptoUtils.decryptString(ciphertext.data, sessionKeys.sharedRx)
 
       // Use sodium.memzero to wipe the keys from memory
-      sodium.memzero(sessionKeys.sharedRx);
-      sodium.memzero(sessionKeys.sharedTx);
+      sodium.memzero(sessionKeys.sharedRx)
+      sodium.memzero(sessionKeys.sharedTx)
 
-      resolve(plaintext);
+      resolve(plaintext)
     } catch (error) {
-      reject(`Something went wrong: ${error}`);
+      reject(`Something went wrong: ${error}`)
     }
-  });
-};
+  })
+}
 
 export const getUserKxPublicKey = async (signingPublicKey: string) => {
-  await _sodium.ready;
-  const sodium = _sodium;
-  
-  return sodium.to_hex(sodium.crypto_sign_ed25519_pk_to_curve25519(sodium.from_hex(signingPublicKey)))
+  await _sodium.ready
+  const sodium = _sodium
+
+  return sodium.to_hex(
+    sodium.crypto_sign_ed25519_pk_to_curve25519(sodium.from_hex(signingPublicKey))
+  )
 }
 
 export const getUserKxPrivateKey = async (signingPrivateKey: string) => {
-  await _sodium.ready;
-  const sodium = _sodium;
-  
-  return sodium.to_hex(sodium.crypto_sign_ed25519_sk_to_curve25519(sodium.from_hex(signingPrivateKey)))
+  await _sodium.ready
+  const sodium = _sodium
+
+  return sodium.to_hex(
+    sodium.crypto_sign_ed25519_sk_to_curve25519(sodium.from_hex(signingPrivateKey))
+  )
 }
 
 export const digest = async (input: string) => {
-  await _sodium.ready;
-  const sodium = _sodium;
+  await _sodium.ready
+  const sodium = _sodium
 
   const hash = await sodium.crypto_generichash(32, input)
   return sodium.to_base64(hash, sodium.base64_variants.ORIGINAL)
