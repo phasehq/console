@@ -2,8 +2,8 @@ from django.utils import timezone
 from backend.graphene.utils.permissions import member_can_access_org, user_can_access_app, user_can_access_environment, user_is_org_member
 import graphene
 from graphql import GraphQLError
-from api.models import App, Environment, EnvironmentKey, EnvironmentToken, Organisation, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag
-from backend.graphene.types import EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, SecretFolderType, SecretTagType, SecretType
+from api.models import App, Environment, EnvironmentKey, EnvironmentToken, Organisation, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag, UserToken
+from backend.graphene.types import EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, SecretFolderType, SecretTagType, SecretType, UserTokenType
 
 
 class CreateEnvironmentMutation(graphene.Mutation):
@@ -98,6 +98,30 @@ class CreateEnvironmentTokenMutation(graphene.Mutation):
                 environment_id=env_id, user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share)
 
             return CreateEnvironmentTokenMutation(environment_token=environment_token)
+
+
+class CreateUserTokenMutation(graphene.Mutation):
+    class Arguments:
+        org_id = graphene.ID(required=True)
+        name = graphene.String(required=True)
+        identity_key = graphene.String(required=True)
+        token = graphene.String(required=True)
+        wrapped_key_share = graphene.String(required=True)
+
+    user_token = graphene.Field(UserTokenType)
+
+    @classmethod
+    def mutate(cls, root, info, org_id, name, identity_key, token, wrapped_key_share):
+        user = info.context.user
+        if user_is_org_member(user.userId, org_id):
+
+            org_member = OrganisationMember.objects.get(
+                organisation_id=org_id, user_id=user.userId)
+
+            user_token = UserToken.objects.create(
+                user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share)
+
+            return CreateUserTokenMutation(user_token=user_token)
 
 
 class CreateSecretFolderMutation(graphene.Mutation):

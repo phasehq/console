@@ -2,7 +2,7 @@ import graphene
 from enum import Enum
 from graphene import ObjectType, relay
 from graphene_django import DjangoObjectType
-from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag
+from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag, UserToken
 from logs.dynamodb_models import KMSLog
 
 
@@ -43,6 +43,13 @@ class EnvironmentKeyType(DjangoObjectType):
 class EnvironmentTokenType(DjangoObjectType):
     class Meta:
         model = EnvironmentToken
+        fields = ('id', 'name', 'identity_key', 'token',
+                  'wrapped_key_share', 'created_at', 'updated_at')
+
+
+class UserTokenType(DjangoObjectType):
+    class Meta:
+        model = UserToken
         fields = ('id', 'name', 'identity_key', 'token',
                   'wrapped_key_share', 'created_at', 'updated_at')
 
