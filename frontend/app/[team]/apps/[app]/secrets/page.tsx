@@ -7,6 +7,8 @@ import { GetOrganisationAdminsAndSelf } from '@/apollo/queries/organisation/getO
 import { CreateEnvironment } from '@/apollo/mutations/environments/createEnvironment.gql'
 import { CreateEnvironmentKey } from '@/apollo/mutations/environments/createEnvironmentKey.gql'
 import { CreateEnvironmentToken } from '@/apollo/mutations/environments/createEnvironmentToken.gql'
+import { CreateUserToken } from '@/apollo/mutations/users/createUserToken.gql'
+import { GetUserTokens } from '@/apollo/queries/users/getUserTokens.gql'
 import { GetEnvironmentTokens } from '@/apollo/queries/secrets/getEnvironmentTokens.gql'
 import { CreateSecret } from '@/apollo/mutations/environments/createSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
@@ -14,7 +16,13 @@ import { useEffect, useState } from 'react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
-import { envKeyring, generateEnvironmentToken, newEnvSalt, newEnvSeed } from '@/utils/environments'
+import {
+  envKeyring,
+  generateEnvironmentToken,
+  generateUserToken,
+  newEnvSalt,
+  newEnvSeed,
+} from '@/utils/environments'
 import { Button } from '@/components/common/Button'
 import {
   ApiEnvironmentEnvTypeChoices,
@@ -24,6 +32,7 @@ import {
   EnvironmentType,
   OrganisationMemberType,
   SecretType,
+  UserTokenType,
 } from '@/apollo/graphql'
 import {
   decryptAsymmetric,
@@ -45,9 +54,11 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const { data: orgsData } = useQuery(GetOrganisations)
 
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
-
+  const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
   const [createEnvironment, { loading, error }] = useMutation(CreateEnvironment)
-  const [createEnvironmentKey] = useMutation(CreateEnvironmentKey)
+  const [createUserToken] = useMutation(CreateUserToken)
+
+  const [userToken, setUserToken] = useState<string>('')
 
   const { data: session } = useSession()
 
@@ -59,8 +70,13 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           organisationId,
         },
       })
+      getUserTokens({
+        variables: {
+          organisationId,
+        },
+      })
     }
-  }, [getOrgAdmins, orgsData, params.app])
+  }, [getOrgAdmins, getUserTokens, orgsData, params.app])
 
   const setupRequired = data?.appEnvironments.length === 0 ?? true
 
@@ -136,24 +152,39 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         },
       ],
     })
+  }
 
-    console.log(result)
+  const handleCreateNewUserToken = async () => {
+    const sudoPass = 'testpassword1234'
+    const deviceKey = await cryptoUtils.deviceVaultKey(sudoPass, session?.user?.email!)
+    const encryptedKeyring = getLocalKeyring(orgsData.organisations[0].id)
+    if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
+    const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(encryptedKeyring!, deviceKey)
+    if (!decryptedKeyring) throw 'Failed to decrypt keys'
 
-    // if (result.data.createEnvironment.environment) {
-    //   const envKeyMutationPayload = {
-    //     envId: result.data.createEnvironment.environment.id,
-    //     ownerId: owner.id,
-    //     wrappedSeed: ownerWrappedEnv.wrappedSeed,
-    //     wrappedSalt: ownerWrappedEnv.wrappedSalt,
-    //     identityKey: keys.publicKey,
-    //   }
+    const userKxKeys = {
+      publicKey: await getUserKxPublicKey(decryptedKeyring.publicKey),
+      privateKey: await getUserKxPrivateKey(decryptedKeyring.privateKey),
+    }
 
-    //   const keyResult = await createEnvironmentKey({
-    //     variables: envKeyMutationPayload,
-    //   })
+    const { pssUser, mutationPayload } = await generateUserToken(
+      orgsData.organisations[0].id,
+      userKxKeys
+    )
 
-    //   console.log(keyResult)
-    // }
+    await createUserToken({
+      variables: mutationPayload,
+      refetchQueries: [
+        {
+          query: GetUserTokens,
+          variables: {
+            organisationId: orgsData.organisations[0].id,
+          },
+        },
+      ],
+    })
+
+    setUserToken(pssUser)
   }
 
   const EnvironmentCard = (props: { environment: EnvironmentType }) => {
@@ -167,7 +198,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     const [key, setKey] = useState<string>('')
     const [value, setValue] = useState<string>('')
     const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
-    const [envSecret, setEnvSecret] = useState<string>('')
+    const [envToken, setEnvToken] = useState<string>('')
     const [createSecret, { data, loading, error }] = useMutation(CreateSecret)
     const [createEnvironmentToken] = useMutation(CreateEnvironmentToken)
     const { data: secretsData } = useQuery(GetSecrets, {
@@ -282,15 +313,13 @@ export default function Secrets({ params }: { params: { team: string; app: strin
       setValue('')
     }
 
-    const handleCreateNewEnvSecret = async () => {
+    const handleCreateNewEnvToken = async () => {
       const sudoPass = 'testpassword1234'
       const deviceKey = await cryptoUtils.deviceVaultKey(sudoPass, session?.user?.email!)
       const encryptedKeyring = getLocalKeyring(orgsData.organisations[0].id)
       if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
       const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(encryptedKeyring!, deviceKey)
       if (!decryptedKeyring) throw 'Failed to decrypt keys'
-
-      const wrappedSeed = secretsData.environmentKeys[0].wrappedSeed
 
       const userKxKeys = {
         publicKey: await getUserKxPublicKey(decryptedKeyring.publicKey),
@@ -302,6 +331,10 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         secretsData.environmentKeys[0],
         userKxKeys
       )
+
+      const { pssUser } = await generateUserToken(orgsData.organisations[0].id, userKxKeys)
+
+      console.log('user token', pssUser)
 
       await createEnvironmentToken({
         variables: mutationPayload,
@@ -315,7 +348,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         ],
       })
 
-      setEnvSecret(pssEnv)
+      setEnvToken(pssEnv)
     }
 
     return (
@@ -362,10 +395,10 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 {envToken.name} | {envToken.createdAt}
               </div>
             ))}
-            <code className="break-all p-2">{envSecret}</code>
+            <code className="break-all p-2">{envToken}</code>
             <div>
-              <Button variant="outline" onClick={handleCreateNewEnvSecret}>
-                Create new `pss_env` secret
+              <Button variant="outline" onClick={handleCreateNewEnvToken}>
+                Create new env token
               </Button>
             </div>
           </div>
@@ -395,6 +428,20 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               <Button variant="primary" onClick={createEnv}>
                 Create new env
               </Button>
+            </div>
+
+            <div className="col-span-2 flex flex-col gap-2">
+              {userTokensData?.userTokens.map((userToken: UserTokenType) => (
+                <div key={userToken.id}>
+                  {userToken.name} | {userToken.createdAt}
+                </div>
+              ))}
+              <code className="break-all p-2">{userToken}</code>
+              <div>
+                <Button variant="outline" onClick={handleCreateNewUserToken}>
+                  Create new user token
+                </Button>
+              </div>
             </div>
           </div>
         )}
