@@ -33,6 +33,8 @@ from django.utils import timezone
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
 # for custom gitlab adapter class
+
+
 def _check_errors(response):
     #  403 error's are presented as user-facing errors
     if response.status_code == 403:
@@ -178,8 +180,8 @@ def logout_view(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def health_check(request):  
-     return JsonResponse({
+def health_check(request):
+    return JsonResponse({
         'status': 'alive'
     })
 
@@ -200,7 +202,8 @@ def kms(request, app_id):
         app = App.objects.get(app_token=app_token)
         try:
             timestamp = datetime.now().timestamp() * 1000
-            KMSDBLog.objects.create(app_id=app_id, event_type=event_type, phase_node=phase_node, ph_size=float(ph_size), ip_address=ip_address, timestamp=timestamp)
+            KMSDBLog.objects.create(app_id=app_id, event_type=event_type, phase_node=phase_node, ph_size=float(
+                ph_size), ip_address=ip_address, timestamp=timestamp)
         except:
             pass
         return JsonResponse({
@@ -214,104 +217,109 @@ class PrivateGraphQLView(LoginRequiredMixin, GraphQLView):
     raise_exception = True
     pass
 
+
 class SecretsView(APIView):
     permission_classes = [AllowAny, ]
 
     @csrf_exempt
     def dispatch(self, request, *args):
         return super(SecretsView, self).dispatch(request, *args)
-    
+
     def get(self, request):
         auth_token = request.headers['authorization']
         env, user = get_env_from_token(auth_token)
-        
+
         if not env.id:
             return HttpResponse(status=404)
-        
+
         secrets_filter = {
             'environment': env
         }
 
         try:
-          key_digest = request.headers['keydigest']
-          if key_digest:
-              secrets_filter['key_digest'] = key_digest
+            key_digest = request.headers['keydigest']
+            if key_digest:
+                secrets_filter['key_digest'] = key_digest
         except:
             pass
 
         secrets = Secret.objects.filter(**secrets_filter)
 
         serializer = SecretSerializer(secrets, many=True)
-        
+
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
+
     def post(self, request):
         auth_token = request.headers['authorization']
         env, user = get_env_from_token(auth_token)
         if not env:
             return HttpResponse(status=404)
-        
+
         request_body = json.loads(request.body)
 
         for secret in request_body['secrets']:
-            
-            tag_names = SecretTag.objects.filter(id__in=secret['tags']).values('name')
-            
+
+            tag_names = SecretTag.objects.filter(
+                id__in=secret['tags']).values('name')
+
             secret_data = {
-              'environment': env,
-              'key': secret['key'],
-              'key_digest':secret['keyDigest'],
-              'value': secret['value'],
-              'folder_id': secret['folderId'],
-              'version': 1,
-              'tags': [],
-              'comment': secret['comment'],
+                'environment': env,
+                'key': secret['key'],
+                'key_digest': secret['keyDigest'],
+                'value': secret['value'],
+                'folder_id': secret['folderId'],
+                'version': 1,
+                'tags': [],
+                'comment': secret['comment'],
             }
 
             Secret.objects.create(**secret_data)
-            SecretEvent.objects.create(**{**secret_data, **{'user': user, 'secret': secret, 'event_type': SecretEvent.CREATE}})
+            SecretEvent.objects.create(
+                **{**secret_data, **{'user': user, 'secret': secret, 'event_type': SecretEvent.CREATE}})
 
         return Response(status=status.HTTP_200_OK)
-    
+
     def put(self, request):
         auth_token = request.headers['authorization']
         env, user = get_env_from_token(auth_token)
         if not env:
             return HttpResponse(status=404)
-        
+
         request_body = json.loads(request.body)
 
         for secret in request_body['secrets']:
             secret_obj = Secret.objects.get(id=secret['id'])
-            
-            tag_names = SecretTag.objects.filter(id__in=secret['tags']).values('name')
-            
+
+            tag_names = SecretTag.objects.filter(
+                id__in=secret['tags']).values('name')
+
             secret_data = {
-              'environment': env,
-              'key': secret['key'],
-              'key_digest':secret['keyDigest'],
-              'value': secret['value'],
-              'folder_id': secret['folderId'],
-              'version': secret_obj.version + 1,
-              'tags': [],
-              'comment': secret['comment'],
+                'environment': env,
+                'key': secret['key'],
+                'key_digest': secret['keyDigest'],
+                'value': secret['value'],
+                'folder_id': secret['folderId'],
+                'version': secret_obj.version + 1,
+                'tags': [],
+                'comment': secret['comment'],
             }
 
             for key, value in secret_data.items():
-              setattr(secret_obj, key, value)
-            
+                setattr(secret_obj, key, value)
+
             secret_obj.updated_at = timezone.now()
             secret_obj.save()
-            SecretEvent.objects.create(**{**secret_data, **{'user': user, 'secret': secret, 'event_type': SecretEvent.UPDATE}})
+            SecretEvent.objects.create(
+                **{**secret_data, **{'user': user, 'secret': secret, 'event_type': SecretEvent.UPDATE}})
 
         return Response(status=status.HTTP_200_OK)
-    
+
     def delete(self, request):
         auth_token = request.headers['authorization']
         env, user = get_env_from_token(auth_token)
         if not env:
             return HttpResponse(status=404)
-        
+
         request_body = json.loads(request.body)
 
         for secret in request_body['secrets']:
@@ -320,15 +328,12 @@ class SecretsView(APIView):
             secret_obj.deleted_at = timezone.now()
             secret_obj.save()
 
-            most_recent_event = SecretEvent.objects.filter(secret=secret).order_by('version').last()
+            most_recent_event = SecretEvent.objects.filter(
+                secret=secret).order_by('version').last()
 
             # setting the pk to None and then saving it creates a copy of the instance with updated fields
             most_recent_event.id = None
-            most_recent_event.event_type=SecretEvent.DELETE
+            most_recent_event.event_type = SecretEvent.DELETE
             most_recent_event.save()
 
         return Response(status=status.HTTP_200_OK)
-
-        
-        
-        

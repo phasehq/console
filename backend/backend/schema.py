@@ -14,10 +14,13 @@ from itertools import chain
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
+
 class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
-    organisation_members = graphene.List(OrganisationMemberType, organisation_id=graphene.ID(), user_id=graphene.ID(), role=graphene.List(graphene.String))
-    organisation_admins_and_self = graphene.List(OrganisationMemberType, organisation_id=graphene.ID())
+    organisation_members = graphene.List(OrganisationMemberType, organisation_id=graphene.ID(
+    ), user_id=graphene.ID(), role=graphene.List(graphene.String))
+    organisation_admins_and_self = graphene.List(
+        OrganisationMemberType, organisation_id=graphene.ID())
     apps = graphene.List(
         AppType, organisation_id=graphene.ID(), app_id=graphene.ID())
     logs = graphene.List(KMSLogType, app_id=graphene.ID(),
@@ -33,36 +36,38 @@ class Query(graphene.ObjectType):
     secrets = graphene.List(SecretType, env_id=graphene.ID())
     secret_history = graphene.List(SecretEventType, secret_id=graphene.ID())
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
-    environment_keys = graphene.List(EnvironmentKeyType, environment_id=graphene.ID())
-    environment_secrets = graphene.List(EnvironmentSecretType, environment_id=graphene.ID())
-
+    environment_keys = graphene.List(
+        EnvironmentKeyType, environment_id=graphene.ID())
+    environment_secrets = graphene.List(
+        EnvironmentSecretType, environment_id=graphene.ID())
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(user=info.context.user)
         return [membership.organisation for membership in memberships]
-    
+
     def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
-        
+
         roles = [user_role.lower() for user_role in role]
 
         return OrganisationMember.objects.filter(organisation_id=organisation_id, role__in=roles)
-    
+
     def resolve_organisation_admins_and_self(root, info, organisation_id):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
-        
+
         roles = ['owner', 'admin']
 
-        members = OrganisationMember.objects.filter(organisation_id=organisation_id, role__in=roles)
-        
+        members = OrganisationMember.objects.filter(
+            organisation_id=organisation_id, role__in=roles)
+
         if not info.context.user.userId in [member.user_id for member in members]:
-          self_member = OrganisationMember.objects.filter(organisation_id=organisation_id, user_id=info.context.user.userId)
-          members = list(chain(members, self_member))
+            self_member = OrganisationMember.objects.filter(
+                organisation_id=organisation_id, user_id=info.context.user.userId)
+            members = list(chain(members, self_member))
 
         return members
-
 
     def resolve_apps(root, info, organisation_id, app_id):
         filter = {
@@ -72,74 +77,76 @@ class Query(graphene.ObjectType):
         if app_id != '':
             filter['id'] = app_id
         return App.objects.filter(**filter)
-    
+
     def resolve_app_environments(root, info, app_id):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
-        
+
         app = App.objects.get(id=app_id)
 
-        org_member = OrganisationMember.objects.get(organisation=app.organisation, user_id=info.context.user.userId)
-        
+        org_member = OrganisationMember.objects.get(
+            organisation=app.organisation, user_id=info.context.user.userId)
+
         app_environments = Environment.objects.filter(app_id=app_id)
         return [app_env for app_env in app_environments if EnvironmentKey.objects.filter(user=org_member, environment_id=app_env.id).exists()]
 
     def resolve_secrets(root, info, env_id):
         if not user_can_access_environment(info.context.user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
-        
+
         return Secret.objects.filter(environment_id=env_id)
-    
+
     def resolve_secret_history(root, info, secret_id):
         secret = Secret.objects.get(id=secret_id)
         if not user_can_access_environment(info.context.user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this secret")
         return SecretEvent.objects.filter(secret_id=secret_id)
-    
+
     def resolve_secret_tags(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
             raise GraphQLError("You don't have access to this Organisation")
-        
+
         return SecretTag.objects.filter(org_id=org_id)
-    
+
     def resolve_environment_keys(root, info, environment_id):
         if not user_can_access_environment(info.context.user.userId, environment_id):
             raise GraphQLError("You don't have access to this secret")
-        
+
         env = Environment.objects.get(id=environment_id)
-        org_member = OrganisationMember.objects.get(user=info.context.user, organisation=env.app.organisation)
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=env.app.organisation)
         return EnvironmentKey.objects.filter(environment=env, user=org_member)
-    
+
     def resolve_environment_secrets(root, info, environment_id):
         if not user_can_access_environment(info.context.user.userId, environment_id):
             raise GraphQLError("You don't have access to this secret")
-        
+
         env = Environment.objects.get(id=environment_id)
-        org_member = OrganisationMember.objects.get(user=info.context.user, organisation=env.app.organisation)
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=env.app.organisation)
         return EnvironmentSecret.objects.filter(environment=env, user=org_member)
-        
-        
-        
+
     def resolve_logs(root, info, app_id, start=0, end=0):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
-        
+
         app = App.objects.get(id=app_id)
-        
+
         if end == 0:
             end = datetime.now().timestamp() * 1000
-        
+
         if CLOUD_HOSTED:
             return get_app_logs(f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25)
-        
-        logs = KMSDBLog.objects.filter(app_id=f"phApp:v{app.app_version}:{app.identity_key}",timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25]
-        
+
+        logs = KMSDBLog.objects.filter(
+            app_id=f"phApp:v{app.app_version}:{app.identity_key}", timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25]
+
         return list(logs.values())
 
     def resolve_logs_count(root, info, app_id):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
-        
+
         app = App.objects.get(id=app_id)
 
         if CLOUD_HOSTED:
@@ -160,7 +167,7 @@ class Query(graphene.ObjectType):
         Returns:
             List[ChartDataPointType]: Time series decrypt count data
         """
-        
+
         app = App.objects.get(id=app_id)
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
@@ -219,7 +226,8 @@ class Query(graphene.ObjectType):
                 decrypts = get_app_log_count_range(
                     f"phApp:v{app.app_version}:{app.identity_key}", start_unix, end_unix)
             else:
-                decrypts = KMSDBLog.objects.filter(app_id=f"phApp:v{app.app_version}:{app.identity_key}",timestamp__lte=end_unix, timestamp__gte=start_unix).count()
+                decrypts = KMSDBLog.objects.filter(
+                    app_id=f"phApp:v{app.app_version}:{app.identity_key}", timestamp__lte=end_unix, timestamp__gte=start_unix).count()
 
             time_series_logs.append(ChartDataPointType(
                 index=str(index), date=end_unix, data=decrypts))
@@ -229,6 +237,7 @@ class Query(graphene.ObjectType):
             index += 1
 
         return time_series_logs
+
 
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
