@@ -9,6 +9,7 @@ from django.conf import settings
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
+
 class CustomUserManager(BaseUserManager):
     def create_user(self, username, email, password=None):
         """
@@ -73,7 +74,7 @@ class Organisation(models.Model):
         (PRO_PLAN, 'Pro'),
         (ENTERPRISE_PLAN, 'Enterprise')
     ]
-    
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=64, unique=True)
     identity_key = models.CharField(max_length=256)
@@ -89,6 +90,7 @@ class Organisation(models.Model):
     def __str__(self):
         return self.name
 
+
 class OrganisationMember(models.Model):
     OWNER = 'owner'
     ADMIN = 'admin'
@@ -103,7 +105,8 @@ class OrganisationMember(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     user = models.ForeignKey(
         CustomUser, related_name='organisation', on_delete=models.CASCADE)
-    organisation = models.ForeignKey(Organisation, related_name='users', on_delete=models.CASCADE)
+    organisation = models.ForeignKey(
+        Organisation, related_name='users', on_delete=models.CASCADE)
     role = models.CharField(
         max_length=5,
         choices=USER_ROLES,
@@ -114,6 +117,7 @@ class OrganisationMember(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(auto_now=True)
+
 
 class App(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
@@ -147,8 +151,9 @@ class App(models.Model):
     def __str__(self):
         return self.name
 
+
 class Environment(models.Model):
-    
+
     DEVELOPMENT = "dev"
     STAGING = "staging"
     PRODUCTION = "prod"
@@ -158,7 +163,7 @@ class Environment(models.Model):
         (STAGING, 'Staging'),
         (PRODUCTION, 'Production')
     ]
-    
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     app = models.ForeignKey(App, on_delete=models.CASCADE)
     name = models.CharField(max_length=64)
@@ -168,28 +173,32 @@ class Environment(models.Model):
         default=DEVELOPMENT,
     )
     identity_key = models.CharField(max_length=256)
-    wrapped_seed = models.CharField(max_length=208)
-    wrapped_salt = models.CharField(max_length=208)
+    wrapped_seed = models.CharField(max_length=256)
+    wrapped_salt = models.CharField(max_length=256)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
 
+
 class EnvironmentKey(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    user = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE, blank=True, null=True)
+    user = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True)
     identity_key = models.CharField(max_length=256)
-    wrapped_seed = models.CharField(max_length=208)
-    wrapped_salt = models.CharField(max_length=208)
+    wrapped_seed = models.CharField(max_length=256)
+    wrapped_salt = models.CharField(max_length=256)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
+
 class EnvironmentSecret(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    user = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE, blank=True, null=True)
+    user = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True)
     name = models.CharField(max_length=64)
     identity_key = models.CharField(max_length=256)
     token = models.CharField(max_length=64)
@@ -197,6 +206,7 @@ class EnvironmentSecret(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
 
 class SecretFolder(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
@@ -207,6 +217,7 @@ class SecretFolder(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
+
 class SecretTag(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
@@ -215,18 +226,20 @@ class SecretTag(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
+
 class Secret(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    folder = models.ForeignKey(
+        SecretFolder, on_delete=models.CASCADE, null=True)
     key = models.TextField()
     key_digest = models.TextField()
     value = models.TextField()
     version = models.IntegerField(default=1)
     tags = ArrayField(
-            models.CharField(max_length=64),
-            size=10,
-        )
+        models.CharField(max_length=64),
+        size=10,
+    )
     comment = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -234,7 +247,7 @@ class Secret(models.Model):
 
 
 class SecretEvent(models.Model):
-    
+
     CREATE = "C"
     READ = "R"
     UPDATE = "U"
@@ -246,20 +259,22 @@ class SecretEvent(models.Model):
         (UPDATE, 'Update'),
         (DELETE, 'Delete')
     ]
-    
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
-    user = models.ForeignKey(OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True)
+    folder = models.ForeignKey(
+        SecretFolder, on_delete=models.CASCADE, null=True)
+    user = models.ForeignKey(
+        OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True)
     key = models.TextField()
     key_digest = models.TextField()
     value = models.TextField()
     version = models.IntegerField(default=1)
     tags = ArrayField(
-            models.CharField(max_length=64),
-            size=10,
-        )
+        models.CharField(max_length=64),
+        size=10,
+    )
     comment = models.TextField()
     event_type = models.CharField(
         max_length=1,
