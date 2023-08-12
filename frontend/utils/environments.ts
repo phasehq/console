@@ -113,7 +113,7 @@ export const envKeyring = async (envSeed: string): Promise<EnvKeyring> => {
   return { publicKey: sodium.to_hex(publicKey), privateKey: sodium.to_hex(privateKey) }
 }
 
-export const generateEnvironmentSecret = async (
+export const generateEnvironmentToken = async (
   environment: EnvironmentType,
   key: EnvironmentKeyType,
   useKeyring: { publicKey: string; privateKey: string }

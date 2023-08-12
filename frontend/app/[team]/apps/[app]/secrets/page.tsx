@@ -6,26 +6,21 @@ import { GetOrganisations } from '@/apollo/queries/getOrganisations.gql'
 import { GetOrganisationAdminsAndSelf } from '@/apollo/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { CreateEnvironment } from '@/apollo/mutations/environments/createEnvironment.gql'
 import { CreateEnvironmentKey } from '@/apollo/mutations/environments/createEnvironmentKey.gql'
-import { CreateEnvironmentSecret } from '@/apollo/mutations/environments/createEnvironmentSecret.gql'
-import { GetEnvironmentSecrets } from '@/apollo/queries/secrets/getEnvironmentSecrets.gql'
+import { CreateEnvironmentToken } from '@/apollo/mutations/environments/createEnvironmentToken.gql'
+import { GetEnvironmentTokens } from '@/apollo/queries/secrets/getEnvironmentTokens.gql'
 import { CreateSecret } from '@/apollo/mutations/environments/createSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useEffect, useState } from 'react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
-import {
-  envKeyring,
-  generateEnvironmentSecret,
-  newEnvSalt,
-  newEnvSeed,
-} from '@/utils/environments'
+import { envKeyring, generateEnvironmentToken, newEnvSalt, newEnvSeed } from '@/utils/environments'
 import { Button } from '@/components/common/Button'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationMemberRoleChoices,
   EnvironmentKeyType,
-  EnvironmentSecretType,
+  EnvironmentTokenType,
   EnvironmentType,
   OrganisationMemberType,
   SecretType,
@@ -174,13 +169,13 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
     const [envSecret, setEnvSecret] = useState<string>('')
     const [createSecret, { data, loading, error }] = useMutation(CreateSecret)
-    const [createEnvironmentSecret] = useMutation(CreateEnvironmentSecret)
+    const [createEnvironmentToken] = useMutation(CreateEnvironmentToken)
     const { data: secretsData } = useQuery(GetSecrets, {
       variables: {
         envId: environment.id,
       },
     })
-    const { data: envSecretsData } = useQuery(GetEnvironmentSecrets, {
+    const { data: envTokensData } = useQuery(GetEnvironmentTokens, {
       variables: {
         envId: environment.id,
       },
@@ -302,22 +297,22 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         privateKey: await getUserKxPrivateKey(decryptedKeyring.privateKey),
       }
 
-      const { pssEnv, mutationPayload } = await generateEnvironmentSecret(
+      const { pssEnv, mutationPayload } = await generateEnvironmentToken(
         environment,
         secretsData.environmentKeys[0],
         userKxKeys
       )
 
-      await createEnvironmentSecret({
+      await createEnvironmentToken({
         variables: mutationPayload,
         refetchQueries: [
           {
-            query: GetEnvironmentSecrets,
+            query: GetEnvironmentTokens,
             variables: {
-              envId: environment.id
-            }
-          }
-        ]
+              envId: environment.id,
+            },
+          },
+        ],
       })
 
       setEnvSecret(pssEnv)
@@ -362,9 +357,9 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           </div>
 
           <div className="col-span-2 flex flex-col gap-2">
-            {envSecretsData?.environmentSecrets.map((envSecret: EnvironmentSecretType) => (
-              <div key={envSecret.id}>
-                {envSecret.name} | {envSecret.createdAt}
+            {envTokensData?.environmentTokens.map((envToken: EnvironmentTokenType) => (
+              <div key={envToken.id}>
+                {envToken.name} | {envToken.createdAt}
               </div>
             ))}
             <code className="break-all p-2">{envSecret}</code>
