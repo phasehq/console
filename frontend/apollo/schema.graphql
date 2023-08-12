@@ -11,7 +11,7 @@ type Query {
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
   environmentKeys(environmentId: ID): [EnvironmentKeyType]
-  environmentSecrets(environmentId: ID): [EnvironmentSecretType]
+  environmentTokens(environmentId: ID): [EnvironmentTokenType]
 }
 
 type OrganisationType {
@@ -203,7 +203,7 @@ type EnvironmentKeyType {
   updatedAt: DateTime!
 }
 
-type EnvironmentSecretType {
+type EnvironmentTokenType {
   id: String!
   name: String!
   identityKey: String!
@@ -220,7 +220,7 @@ type Mutation {
   deleteApp(id: ID!): DeleteAppMutation
   createEnvironment(appId: ID!, envType: String!, id: ID!, identityKey: String!, name: String!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
-  createEnvironmentSecret(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentSecretMutation
+  createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createSecretFolder(envId: ID!, id: ID!, name: String!, parentFolderId: ID): CreateSecretFolderMutation
   createSecretTag(id: ID!, name: String!, orgId: ID!): CreateSecretTagMutation
   createSecret(comment: String, envId: ID!, folderId: ID, key: String!, keyDigest: String!, tags: [String], value: String!): CreateSecretMutation
@@ -252,8 +252,8 @@ type CreateEnvironmentKeyMutation {
   environmentKey: EnvironmentKeyType
 }
 
-type CreateEnvironmentSecretMutation {
-  environmentSecret: EnvironmentSecretType
+type CreateEnvironmentTokenMutation {
+  environmentToken: EnvironmentTokenType
 }
 
 type CreateSecretFolderMutation {
