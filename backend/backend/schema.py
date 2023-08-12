@@ -1,11 +1,11 @@
-from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentSecretMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, DeleteSecretMutation, EditSecretMutation
+from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, DeleteSecretMutation, EditSecretMutation
 from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_org_member
 from .graphene.mutations.app import CreateAppMutation, DeleteAppMutation, RotateAppKeysMutation
 from .graphene.mutations.organisation import CreateOrganisationMutation
-from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentSecretType, EnvironmentType, KMSLogType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, TimeRange
+from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, KMSLogType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, TimeRange
 import graphene
 from graphql import GraphQLError
-from api.models import Environment, EnvironmentKey, EnvironmentSecret, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretTag
+from api.models import Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretTag
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
 from datetime import datetime, timedelta
 from django.conf import settings
@@ -38,8 +38,8 @@ class Query(graphene.ObjectType):
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
     environment_keys = graphene.List(
         EnvironmentKeyType, environment_id=graphene.ID())
-    environment_secrets = graphene.List(
-        EnvironmentSecretType, environment_id=graphene.ID())
+    environment_tokens = graphene.List(
+        EnvironmentTokenType, environment_id=graphene.ID())
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(user=info.context.user)
@@ -117,14 +117,14 @@ class Query(graphene.ObjectType):
             user=info.context.user, organisation=env.app.organisation)
         return EnvironmentKey.objects.filter(environment=env, user=org_member)
 
-    def resolve_environment_secrets(root, info, environment_id):
+    def resolve_environment_tokens(root, info, environment_id):
         if not user_can_access_environment(info.context.user.userId, environment_id):
             raise GraphQLError("You don't have access to this secret")
 
         env = Environment.objects.get(id=environment_id)
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=env.app.organisation)
-        return EnvironmentSecret.objects.filter(environment=env, user=org_member)
+        return EnvironmentToken.objects.filter(environment=env, user=org_member)
 
     def resolve_logs(root, info, app_id, start=0, end=0):
         if not user_can_access_app(info.context.user.userId, app_id):
@@ -246,7 +246,7 @@ class Mutation(graphene.ObjectType):
     delete_app = DeleteAppMutation.Field()
     create_environment = CreateEnvironmentMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
-    create_environment_secret = CreateEnvironmentSecretMutation.Field()
+    create_environment_token = CreateEnvironmentTokenMutation.Field()
     create_secret_folder = CreateSecretFolderMutation.Field()
     create_secret_tag = CreateSecretTagMutation.Field()
     create_secret = CreateSecretMutation.Field()

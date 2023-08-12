@@ -2,7 +2,7 @@ import graphene
 from enum import Enum
 from graphene import ObjectType, relay
 from graphene_django import DjangoObjectType
-from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentSecret, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag
+from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag
 from logs.dynamodb_models import KMSLog
 
 
@@ -11,10 +11,13 @@ class OrganisationType(DjangoObjectType):
         model = Organisation
         fields = ('id', 'name', 'identity_key', 'created_at', 'plan')
 
+
 class OrganisationMemberType(DjangoObjectType):
     class Meta:
         model = OrganisationMember
-        fields = ('id', 'role', 'identity_key', 'wrapped_keyring', 'created_at', 'updated_at')
+        fields = ('id', 'role', 'identity_key',
+                  'wrapped_keyring', 'created_at', 'updated_at')
+
 
 class AppType(DjangoObjectType):
     class Meta:
@@ -22,48 +25,61 @@ class AppType(DjangoObjectType):
         fields = ('id', 'name', 'identity_key',
                   'wrapped_key_share', 'created_at', 'app_token', 'app_seed', 'app_version')
 
+
 class EnvironmentType(DjangoObjectType):
     class Meta:
         model = Environment
-        fields = ('id', 'name', 'env_type', 'identity_key', 'wrapped_seed', 'wrapped_salt', 'created_at', 'updated_at')
+        fields = ('id', 'name', 'env_type', 'identity_key',
+                  'wrapped_seed', 'wrapped_salt', 'created_at', 'updated_at')
+
 
 class EnvironmentKeyType(DjangoObjectType):
     class Meta:
         model = EnvironmentKey
-        fields = ('id','identity_key', 'wrapped_seed', 'wrapped_salt', 'created_at', 'updated_at')
+        fields = ('id', 'identity_key', 'wrapped_seed',
+                  'wrapped_salt', 'created_at', 'updated_at')
 
-class EnvironmentSecretType(DjangoObjectType):
+
+class EnvironmentTokenType(DjangoObjectType):
     class Meta:
-        model = EnvironmentSecret
-        fields = ('id', 'name', 'identity_key', 'token', 'wrapped_key_share', 'created_at', 'updated_at')
+        model = EnvironmentToken
+        fields = ('id', 'name', 'identity_key', 'token',
+                  'wrapped_key_share', 'created_at', 'updated_at')
+
 
 class SecretFolderType(DjangoObjectType):
     class Meta:
         model = SecretFolder
-        fields = ('id', 'environment_id', 'parent_folder_id', 'name', 'created_at', 'updated_at')
+        fields = ('id', 'environment_id', 'parent_folder_id',
+                  'name', 'created_at', 'updated_at')
+
 
 class SecretTagType(DjangoObjectType):
     class Meta:
         model = SecretTag
         fields = ('id', 'name')
 
+
 class SecretEventType(DjangoObjectType):
     class Meta:
         model = SecretEvent
-        fields = ('id', 'secret', 'collection', 'key', 'value', 'version', 'tags', 'comment', 'event_type', 'timestamp')
+        fields = ('id', 'secret', 'collection', 'key', 'value',
+                  'version', 'tags', 'comment', 'event_type', 'timestamp')
+
 
 class SecretType(DjangoObjectType):
-    
+
     history = graphene.List(SecretEventType)
-  
+
     class Meta:
         model = Secret
-        fields = ('id', 'key', 'value', 'folder', 'version', 'tags', 'comment', 'created_at', 'updated_at', 'history')
-        #interfaces = (relay.Node, )
+        fields = ('id', 'key', 'value', 'folder', 'version', 'tags',
+                  'comment', 'created_at', 'updated_at', 'history')
+        # interfaces = (relay.Node, )
 
     def resolve_history(self, info):
         return SecretEvent.objects.filter(secret_id=self.id).order_by('version')
-    
+
 
 class KMSLogType(ObjectType):
     class Meta:

@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
 from api.utils import get_client_ip, get_env_from_token
 from logs.models import KMSDBLog
-from .models import App, EnvironmentSecret, Secret, SecretEvent, SecretTag
+from .models import App, EnvironmentToken, Secret, SecretEvent, SecretTag
 import jwt
 import requests
 from django.contrib.auth import logout
