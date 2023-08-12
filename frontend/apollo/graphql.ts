@@ -126,6 +126,11 @@ export type CreateSecretTagMutation = {
   tag?: Maybe<SecretTagType>
 }
 
+export type CreateUserTokenMutation = {
+  __typename?: 'CreateUserTokenMutation'
+  userToken?: Maybe<UserTokenType>
+}
+
 export type DeleteAppMutation = {
   __typename?: 'DeleteAppMutation'
   app?: Maybe<AppType>
@@ -202,6 +207,7 @@ export type Mutation = {
   createSecret?: Maybe<CreateSecretMutation>
   createSecretFolder?: Maybe<CreateSecretFolderMutation>
   createSecretTag?: Maybe<CreateSecretTagMutation>
+  createUserToken?: Maybe<CreateUserTokenMutation>
   deleteApp?: Maybe<DeleteAppMutation>
   deleteSecret?: Maybe<DeleteSecretMutation>
   editSecret?: Maybe<EditSecretMutation>
@@ -274,6 +280,14 @@ export type MutationCreateSecretTagArgs = {
   orgId: Scalars['ID']
 }
 
+export type MutationCreateUserTokenArgs = {
+  identityKey: Scalars['String']
+  name: Scalars['String']
+  orgId: Scalars['ID']
+  token: Scalars['String']
+  wrappedKeyShare: Scalars['String']
+}
+
 export type MutationDeleteAppArgs = {
   id: Scalars['ID']
 }
@@ -338,6 +352,7 @@ export type Query = {
   secretHistory?: Maybe<Array<Maybe<SecretEventType>>>
   secretTags?: Maybe<Array<Maybe<SecretTagType>>>
   secrets?: Maybe<Array<Maybe<SecretType>>>
+  userTokens?: Maybe<Array<Maybe<UserTokenType>>>
 }
 
 export type QueryAppActivityChartArgs = {
@@ -395,6 +410,10 @@ export type QuerySecretsArgs = {
   envId?: InputMaybe<Scalars['ID']>
 }
 
+export type QueryUserTokensArgs = {
+  organisationId?: InputMaybe<Scalars['ID']>
+}
+
 export type RotateAppKeysMutation = {
   __typename?: 'RotateAppKeysMutation'
   app?: Maybe<AppType>
@@ -449,4 +468,15 @@ export enum TimeRange {
   Month = 'MONTH',
   Week = 'WEEK',
   Year = 'YEAR',
+}
+
+export type UserTokenType = {
+  __typename?: 'UserTokenType'
+  createdAt?: Maybe<Scalars['DateTime']>
+  id: Scalars['String']
+  identityKey: Scalars['String']
+  name: Scalars['String']
+  token: Scalars['String']
+  updatedAt: Scalars['DateTime']
+  wrappedKeyShare: Scalars['String']
 }

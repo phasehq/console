@@ -12,6 +12,7 @@ type Query {
   secretTags(orgId: ID): [SecretTagType]
   environmentKeys(environmentId: ID): [EnvironmentKeyType]
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
+  userTokens(organisationId: ID): [UserTokenType]
 }
 
 type OrganisationType {
@@ -213,6 +214,16 @@ type EnvironmentTokenType {
   updatedAt: DateTime!
 }
 
+type UserTokenType {
+  id: String!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
@@ -221,6 +232,7 @@ type Mutation {
   createEnvironment(appId: ID!, envType: String!, id: ID!, identityKey: String!, name: String!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
+  createUserToken(identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   createSecretFolder(envId: ID!, id: ID!, name: String!, parentFolderId: ID): CreateSecretFolderMutation
   createSecretTag(id: ID!, name: String!, orgId: ID!): CreateSecretTagMutation
   createSecret(comment: String, envId: ID!, folderId: ID, key: String!, keyDigest: String!, tags: [String], value: String!): CreateSecretMutation
@@ -254,6 +266,10 @@ type CreateEnvironmentKeyMutation {
 
 type CreateEnvironmentTokenMutation {
   environmentToken: EnvironmentTokenType
+}
+
+type CreateUserTokenMutation {
+  userToken: UserTokenType
 }
 
 type CreateSecretFolderMutation {
