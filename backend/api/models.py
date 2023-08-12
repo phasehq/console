@@ -194,9 +194,22 @@ class EnvironmentKey(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
 
 
-class EnvironmentSecret(models.Model):
+class EnvironmentToken(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    user = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True)
+    name = models.CharField(max_length=64)
+    identity_key = models.CharField(max_length=256)
+    token = models.CharField(max_length=64)
+    wrapped_key_share = models.CharField(max_length=406)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+
+class UserToken(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.CASCADE, blank=True, null=True)
     name = models.CharField(max_length=64)
