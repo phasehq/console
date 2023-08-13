@@ -1,7 +1,8 @@
 
 from datetime import datetime
 import json
-from api.serializers import SecretSerializer
+from api.serializers import EnvironmentKeySerializer, SecretSerializer, UserTokenSerializer
+from backend.graphene.utils.permissions import user_can_access_environment
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from graphene_django.views import GraphQLView
@@ -10,9 +11,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
-from api.utils import get_client_ip, get_env_from_token
+from api.utils import get_client_ip, get_env_from_service_token, get_org_member_from_user_token, get_token_type
 from logs.models import KMSDBLog
-from .models import App, EnvironmentToken, Secret, SecretEvent, SecretTag
+from .models import App, Environment, EnvironmentKey, EnvironmentToken, Secret, SecretEvent, SecretTag, UserToken
 import jwt
 import requests
 from django.contrib.auth import logout
@@ -213,6 +214,24 @@ def kms(request, app_id):
         return HttpResponse(status=404)
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def user_token_kms(request):
+    auth_token = request.headers['authorization']
+    token_type = get_token_type(auth_token)
+
+    if token_type != 'User':
+        return HttpResponse(status=403)
+
+    token = auth_token.split(' ')[2]
+
+    user_token = UserToken.objects.get(token=token)
+
+    serializer = UserTokenSerializer(user_token)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class PrivateGraphQLView(LoginRequiredMixin, GraphQLView):
     raise_exception = True
     pass
@@ -227,7 +246,22 @@ class SecretsView(APIView):
 
     def get(self, request):
         auth_token = request.headers['authorization']
-        env, user = get_env_from_token(auth_token)
+        token_type = get_token_type(auth_token)
+
+        if token_type == 'Environment':
+            env, org_member = get_env_from_service_token(auth_token)
+        elif token_type == 'User':
+            try:
+                env_id = request.headers['environment']
+
+                env = Environment.objects.get(id=env_id)
+                org_member = get_org_member_from_user_token(auth_token)
+
+                if not user_can_access_environment(org_member.user.userId, env_id):
+                    return HttpResponse(status=403)
+            except Exception as ex:
+                print('EX:', ex)
+                return HttpResponse(status=404)
 
         if not env.id:
             return HttpResponse(status=404)
@@ -251,7 +285,20 @@ class SecretsView(APIView):
 
     def post(self, request):
         auth_token = request.headers['authorization']
-        env, user = get_env_from_token(auth_token)
+        token_type = get_token_type(auth_token)
+        if token_type == 'Environment':
+            env, user = get_env_from_service_token(auth_token)
+        elif token_type == 'User':
+            try:
+                env_id = request.headers['environment']
+                env = Environment.objects.get(id=env_id)
+                org_member = get_org_member_from_user_token(auth_token)
+
+                if not user_can_access_environment(org_member.user.userId, env_id):
+                    return HttpResponse(status=403)
+            except:
+                return HttpResponse(status=404)
+
         if not env:
             return HttpResponse(status=404)
 
@@ -281,9 +328,19 @@ class SecretsView(APIView):
 
     def put(self, request):
         auth_token = request.headers['authorization']
-        env, user = get_env_from_token(auth_token)
-        if not env:
-            return HttpResponse(status=404)
+        token_type = get_token_type(auth_token)
+        if token_type == 'Environment':
+            env, user = get_env_from_service_token(auth_token)
+        elif token_type == 'User':
+            try:
+                env_id = request.headers['environment']
+                env = Environment.objects.get(id=env_id)
+                org_member = get_org_member_from_user_token(auth_token)
+
+                if not user_can_access_environment(org_member.user.userId, env_id):
+                    return HttpResponse(status=403)
+            except:
+                return HttpResponse(status=404)
 
         request_body = json.loads(request.body)
 
@@ -316,17 +373,32 @@ class SecretsView(APIView):
 
     def delete(self, request):
         auth_token = request.headers['authorization']
-        env, user = get_env_from_token(auth_token)
-        if not env:
-            return HttpResponse(status=404)
+        token_type = get_token_type(auth_token)
+        if token_type == 'Environment':
+            env, user = get_env_from_service_token(auth_token)
+        elif token_type == 'User':
+            try:
+                env_id = request.headers['environment']
+                org_member = get_org_member_from_user_token(auth_token)
+
+                if not user_can_access_environment(org_member.user.userId, env_id):
+                    return HttpResponse(status=403)
+            except:
+                return HttpResponse(status=404)
 
         request_body = json.loads(request.body)
 
-        for secret in request_body['secrets']:
-            secret_obj = Secret.objects.get(id=secret['id'])
-            secret_obj.updated_at = timezone.now()
-            secret_obj.deleted_at = timezone.now()
-            secret_obj.save()
+        secrets_to_delete = Secret.objects.filter(
+            id__in=request_body['secrets'])
+
+        for secret in secrets_to_delete:
+            if not user_can_access_environment(user.id, secret.environment.id):
+                return HttpResponse(status=403)
+
+        for secret in secrets_to_delete:
+            secret.updated_at = timezone.now()
+            secret.deleted_at = timezone.now()
+            secret.save()
 
             most_recent_event = SecretEvent.objects.filter(
                 secret=secret).order_by('version').last()

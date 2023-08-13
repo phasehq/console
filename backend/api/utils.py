@@ -1,4 +1,4 @@
-from api.models import EnvironmentToken
+from api.models import EnvironmentToken, UserToken
 
 
 def get_client_ip(request):
@@ -10,14 +10,31 @@ def get_client_ip(request):
     return ip
 
 
-def get_env_from_token(auth_token):
-    env_token = auth_token.split("Bearer ")[1]
+def get_token_type(auth_token):
+    return auth_token.split(" ")[1]
 
-    if not env_token:
+
+def get_env_from_service_token(auth_token):
+    token = auth_token.split(" ")[2]
+
+    if not token:
         return False
 
     try:
-        env_secret = EnvironmentToken.objects.get(token=env_token)
-        return env_secret.environment, env_secret.user
+        env_token = EnvironmentToken.objects.get(token=token)
+        return env_token.environment, env_token.user
+    except Exception as ex:
+        return False
+
+
+def get_org_member_from_user_token(auth_token):
+    token = auth_token.split(" ")[2]
+
+    if not token:
+        return False
+
+    try:
+        user_token = UserToken.objects.get(token=token)
+        return user_token.user
     except Exception as ex:
         return False
