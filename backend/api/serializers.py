@@ -2,6 +2,13 @@ from rest_framework import serializers
 from .models import CustomUser, Environment, EnvironmentKey, Organisation, Secret, UserToken
 
 
+def find_index_by_id(dictionaries, target_id):
+    for index, dictionary in enumerate(dictionaries):
+        if dictionary.get('id') == target_id:
+            return index
+    return -1
+
+
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
@@ -52,11 +59,11 @@ class EnvironmentKeySerializer(serializers.ModelSerializer):
 
 
 class UserTokenSerializer(serializers.ModelSerializer):
-    environment_keys = EnvironmentKeySerializer(many=True, read_only=True)
+    apps = EnvironmentKeySerializer(many=True, read_only=True)
 
     class Meta:
         model = UserToken
-        fields = ['wrapped_key_share', 'environment_keys']
+        fields = ['wrapped_key_share', 'apps']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -65,9 +72,21 @@ class UserTokenSerializer(serializers.ModelSerializer):
 
         if user is not None:
             environment_keys = EnvironmentKey.objects.filter(user=user)
+            apps = []
             for key in environment_keys:
-                print('env key', key.id, key.environment.id)
-            serializer = EnvironmentKeySerializer(environment_keys, many=True)
 
-            representation['environment_keys'] = serializer.data
+                serializer = EnvironmentKeySerializer(key)
+                index = find_index_by_id(apps, key.environment.app.id)
+
+                if index == -1:
+
+                    apps.append({
+                        'id': key.environment.app.id,
+                        'name': key.environment.app.name,
+                        'environment_keys': serializer.data
+                    })
+                else:
+                    apps[index]['environment_keys'].append(serializer.data)
+            representation['apps'] = apps
+
         return representation
