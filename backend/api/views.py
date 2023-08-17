@@ -292,9 +292,9 @@ class SecretsView(APIView):
             try:
                 env_id = request.headers['environment']
                 env = Environment.objects.get(id=env_id)
-                org_member = get_org_member_from_user_token(auth_token)
+                user = get_org_member_from_user_token(auth_token)
 
-                if not user_can_access_environment(org_member.user.userId, env_id):
+                if not user_can_access_environment(user.user.userId, env_id):
                     return HttpResponse(status=403)
             except:
                 return HttpResponse(status=404)
@@ -320,9 +320,9 @@ class SecretsView(APIView):
                 'comment': secret['comment'],
             }
 
-            Secret.objects.create(**secret_data)
+            secret_obj = Secret.objects.create(**secret_data)
             SecretEvent.objects.create(
-                **{**secret_data, **{'user': user, 'secret': secret, 'event_type': SecretEvent.CREATE}})
+                **{**secret_data, **{'user': user, 'secret': secret_obj, 'event_type': SecretEvent.CREATE}})
 
         return Response(status=status.HTTP_200_OK)
 
