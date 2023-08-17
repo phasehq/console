@@ -191,6 +191,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     type EnvKeyring = {
       privateKey: string
       publicKey: string
+      salt: string
     }
 
     const { environment } = props
@@ -240,11 +241,17 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           userKxKeys.publicKey
         )
 
+        const salt = await decryptAsymmetric(
+          secretsData.environmentKeys[0].wrappedSalt,
+          userKxKeys.privateKey,
+          userKxKeys.publicKey
+        )
         const { publicKey, privateKey } = await envKeyring(seed)
 
         setEnvKeys({
           publicKey,
           privateKey,
+          salt,
         })
       }
 
@@ -291,7 +298,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     const handleCreateNewSecret = async () => {
       const encryptedKey = await encryptAsymmetric(key, environment.identityKey)
       const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
-      const keyDigest = await digest(key)
+      const keyDigest = await digest(key, envKeys!.salt)
 
       await createSecret({
         variables: {

@@ -141,10 +141,10 @@ export const getUserKxPrivateKey = async (signingPrivateKey: string) => {
   )
 }
 
-export const digest = async (input: string) => {
+export const digest = async (input: string, salt: string) => {
   await _sodium.ready
   const sodium = _sodium
 
-  const hash = await sodium.crypto_generichash(32, input)
-  return sodium.to_base64(hash, sodium.base64_variants.ORIGINAL)
+  const hash = await sodium.crypto_generichash(32, input, salt)
+  return sodium.to_hex(hash)
 }
