@@ -267,7 +267,8 @@ class SecretsView(APIView):
             return HttpResponse(status=404)
 
         secrets_filter = {
-            'environment': env
+            'environment': env,
+            'deleted_at': None
         }
 
         try:
@@ -379,9 +380,9 @@ class SecretsView(APIView):
         elif token_type == 'User':
             try:
                 env_id = request.headers['environment']
-                org_member = get_org_member_from_user_token(auth_token)
+                user = get_org_member_from_user_token(auth_token)
 
-                if not user_can_access_environment(org_member.user.userId, env_id):
+                if not user_can_access_environment(user.user.userId, env_id):
                     return HttpResponse(status=403)
             except:
                 return HttpResponse(status=404)
@@ -392,7 +393,7 @@ class SecretsView(APIView):
             id__in=request_body['secrets'])
 
         for secret in secrets_to_delete:
-            if not user_can_access_environment(user.id, secret.environment.id):
+            if not user_can_access_environment(user.user.userId, secret.environment.id):
                 return HttpResponse(status=403)
 
         for secret in secrets_to_delete:
