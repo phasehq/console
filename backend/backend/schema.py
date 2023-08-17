@@ -95,7 +95,7 @@ class Query(graphene.ObjectType):
         if not user_can_access_environment(info.context.user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
 
-        return Secret.objects.filter(environment_id=env_id)
+        return Secret.objects.filter(environment_id=env_id, deleted_at=None)
 
     def resolve_secret_history(root, info, secret_id):
         secret = Secret.objects.get(id=secret_id)
