@@ -60,13 +60,20 @@ class EnvironmentKeySerializer(serializers.ModelSerializer):
 
 class UserTokenSerializer(serializers.ModelSerializer):
     apps = EnvironmentKeySerializer(many=True, read_only=True)
-
+    
+    # New field 'userId'
+    userId = serializers.UUIDField(source='user.id', read_only=True)
+    
+    # New field 'offline_enabled' with default value False
+    offline_enabled = serializers.BooleanField(default=False, read_only=True)
+    
     class Meta:
         model = UserToken
-        fields = ['wrapped_key_share', 'apps']
+        fields = ['wrapped_key_share', 'userId', 'offline_enabled', 'apps']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
+        
         # Filter environment_keys to include only those associated with the same user
         user = instance.user
 
@@ -79,14 +86,14 @@ class UserTokenSerializer(serializers.ModelSerializer):
                 index = find_index_by_id(apps, key.environment.app.id)
 
                 if index == -1:
-
                     apps.append({
                         'id': key.environment.app.id,
                         'name': key.environment.app.name,
-                        'environment_keys': serializer.data
+                        'environment_keys': [serializer.data]
                     })
                 else:
                     apps[index]['environment_keys'].append(serializer.data)
+                    
             representation['apps'] = apps
 
         return representation
