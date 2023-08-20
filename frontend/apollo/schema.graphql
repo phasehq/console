@@ -229,7 +229,7 @@ type Mutation {
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
-  createEnvironment(appId: ID!, envType: String!, id: ID!, identityKey: String!, name: String!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentMutation
+  createEnvironment(environmentData: EnvironmentInput!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createUserToken(identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
@@ -258,6 +258,16 @@ type DeleteAppMutation {
 
 type CreateEnvironmentMutation {
   environment: EnvironmentType
+}
+
+input EnvironmentInput {
+  id: ID!
+  appId: ID!
+  name: String!
+  envType: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  identityKey: String!
 }
 
 type CreateEnvironmentKeyMutation {

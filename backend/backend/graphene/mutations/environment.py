@@ -6,35 +6,39 @@ from api.models import App, Environment, EnvironmentKey, EnvironmentToken, Organ
 from backend.graphene.types import EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, SecretFolderType, SecretTagType, SecretType, UserTokenType
 
 
+class EnvironmentInput(graphene.InputObjectType):
+    id = graphene.ID(required=True)
+    app_id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    env_type = graphene.String(required=True)
+    wrapped_seed = graphene.String(required=True)
+    wrapped_salt = graphene.String(required=True)
+    identity_key = graphene.String(required=True)
+
+
 class CreateEnvironmentMutation(graphene.Mutation):
     class Arguments:
-        id = graphene.ID(required=True)
-        app_id = graphene.ID(required=True)
-        name = graphene.String(required=True)
-        env_type = graphene.String(required=True)
-        wrapped_seed = graphene.String(required=True)
-        wrapped_salt = graphene.String(required=True)
-        identity_key = graphene.String(required=True)
+        environment_data = EnvironmentInput(required=True)
 
     environment = graphene.Field(EnvironmentType)
 
     @classmethod
-    def mutate(cls, root, info, id, app_id, name, env_type, wrapped_seed, wrapped_salt, identity_key):
+    def mutate(cls, root, info, environment_data):
         user_id = info.context.user.userId
 
-        if not user_can_access_app(user_id, app_id):
+        if not user_can_access_app(user_id, environment_data.app_id):
             raise GraphQLError("You don't have access to this app")
 
-        app = App.objects.get(id=app_id)
+        app = App.objects.get(id=environment_data.app_id)
 
         environment = Environment.objects.create(
-            id=id, app=app, name=name, env_type=env_type, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
+            id=environment_data.id, app=app, name=environment_data.name, env_type=environment_data.env_type, identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
 
         org_owner = OrganisationMember.objects.get(
             organisation=environment.app.organisation, role=OrganisationMember.OWNER)
 
         EnvironmentKey.objects.create(id=id, environment=environment, user=org_owner,
-                                      identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
+                                      identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
 
         return CreateEnvironmentMutation(environment=environment)
 
@@ -188,7 +192,8 @@ class CreateSecretMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have permission to perform this action")
 
-        tag_names = SecretTag.objects.filter(id__in=tags).values('name')
+        tag_names = SecretTag.objects.filter(
+            id__in=tags).values_list('name', flat=True)
 
         secret_data = {
             'environment_id': env.id,
@@ -233,7 +238,8 @@ class EditSecretMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have permission to perform this action")
 
-        tag_names = SecretTag.objects.filter(id__in=tags).values('name')
+        tag_names = SecretTag.objects.filter(
+            id__in=tags).values_list('name', flat=True)
 
         secret_data = {
             'environment_id': env.id,
@@ -242,7 +248,7 @@ class EditSecretMutation(graphene.Mutation):
             'key_digest': key_digest,
             'value': value,
             'version': secret.version + 1,
-            'tags': tag_names,
+            'tags': [],
             'comment': comment
         }
 

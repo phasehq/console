@@ -1,20 +1,9 @@
-input CreateEnvironmentInput {
-  id: ID!
-  appId: ID!
-  name: String!
-  envType: String!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-}
-
-
 mutation InitAppEnvironments(
-  $devEnv: CreateEnvironmentInput!
-  $stagingEnv: CreateEnvironmentInput!
-  $prodEnv: CreateEnvironmentInput!
+  $devEnv: EnvironmentInput!
+  $stagingEnv: EnvironmentInput!
+  $prodEnv: EnvironmentInput!
 ) {
-  devEnvironment: createEnvironment(input: $devEnv) {
+  devEnvironment: createEnvironment(environmentData: $devEnv) {
     environment {
       id
       name
@@ -22,7 +11,7 @@ mutation InitAppEnvironments(
       identityKey
     }
   }
-  stagingEnvironment: createEnvironment(input: $stagingEnv) {
+  stagingEnvironment: createEnvironment(environmentData: $stagingEnv) {
     environment {
       id
       name
@@ -30,7 +19,7 @@ mutation InitAppEnvironments(
       identityKey
     }
   }
-  prodEnvironment: createEnvironment(input: $prodEnv) {
+  prodEnvironment: createEnvironment(environmentData: $prodEnv) {
     environment {
       id
       name

@@ -1,6 +1,6 @@
 
-mutation CreateEnv($id: ID!, $appId: ID!, $name: String!, $envType: String!, $identityKey: String!, $wrappedSeed: String!, $wrappedSalt: String!) {
-  createEnvironment(id: $id, appId: $appId, name: $name, envType: $envType, identityKey:$identityKey, wrappedSeed: $wrappedSeed, wrappedSalt: $wrappedSalt) {
+mutation CreateEnv($input: EnvironmentInput!) {
+  createEnvironment(environmentData: $input) {
     environment {
       id
       name
