@@ -2,7 +2,7 @@
 
 import AppsHomeCard from '@/components/apps/AppsHomeCard'
 import { useQuery } from '@apollo/client'
-import GetOrganisations from '@/apollo/queries/getOrganisations.gql'
+import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import Link from 'next/link'
 
 export default function AppsHome({ params }: { params: { team: string } }) {

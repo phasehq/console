@@ -4,7 +4,7 @@ import { useQuery } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import Loading from './loading'
-import { GetOrganisations } from '@/apollo/queries/getOrganisations.gql'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { OrganisationType } from '@/apollo/graphql'
 import { getLocalOrgs } from '@/utils/localStorage'
 

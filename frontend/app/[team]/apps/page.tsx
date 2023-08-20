@@ -1,8 +1,8 @@
 'use client'
 
 import { useLazyQuery, useQuery } from '@apollo/client'
-import { GetApps } from '@/apollo/queries/getApps.gql'
-import { GetOrganisations } from '@/apollo/queries/getOrganisations.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { AppType, OrganisationType } from '@/apollo/graphql'
 import NewAppDialog from '@/components/apps/NewAppDialog'
 import { FaPlus } from 'react-icons/fa'

@@ -1,0 +1,41 @@
+input CreateEnvironmentInput {
+  id: ID!
+  appId: ID!
+  name: String!
+  envType: String!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+}
+
+
+mutation InitAppEnvironments(
+  $devEnv: CreateEnvironmentInput!
+  $stagingEnv: CreateEnvironmentInput!
+  $prodEnv: CreateEnvironmentInput!
+) {
+  devEnvironment: createEnvironment(input: $devEnv) {
+    environment {
+      id
+      name
+      createdAt
+      identityKey
+    }
+  }
+  stagingEnvironment: createEnvironment(input: $stagingEnv) {
+    environment {
+      id
+      name
+      createdAt
+      identityKey
+    }
+  }
+  prodEnvironment: createEnvironment(input: $prodEnv) {
+    environment {
+      id
+      name
+      createdAt
+      identityKey
+    }
+  }
+}

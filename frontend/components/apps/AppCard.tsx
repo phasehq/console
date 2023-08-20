@@ -2,7 +2,7 @@ import { useQuery } from '@apollo/client'
 import { FaCube } from 'react-icons/fa'
 import { Card } from '../common/Card'
 import Spinner from '../common/Spinner'
-import { GetAppActivityChart } from '@/apollo/queries/getAppActivityChart.gql'
+import { GetAppActivityChart } from '@/graphql/queries/getAppActivityChart.gql'
 import { AppType, ChartDataPointType, TimeRange } from '@/apollo/graphql'
 import {
   Area,

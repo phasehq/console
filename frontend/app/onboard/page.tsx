@@ -21,7 +21,7 @@ import { toast } from 'react-toastify'
 import { gql, useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CreateOrganisation } from '@/apollo/mutations/createOrganisation.gql'
+import { CreateOrganisation } from '@/graphql/mutations/createOrganisation.gql'
 import { setLocalOrg } from '@/utils/localStorage'
 
 const bip39 = require('bip39')

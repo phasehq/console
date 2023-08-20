@@ -1,4 +1,4 @@
-mutation CreateUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {
+mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {
   createUserToken(orgId: $orgId, name: $name, identityKey: $identityKey, token: $token, wrappedKeyShare: $wrappedKeyShare) {
     userToken {
       id

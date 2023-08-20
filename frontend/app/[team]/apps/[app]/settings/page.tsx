@@ -1,7 +1,7 @@
 'use client'
 
-import { GetOrganisations } from '@/apollo/queries/getOrganisations.gql'
-import { GetAppDetail } from '@/apollo/queries/getAppDetail.gql'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
+import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useLazyQuery, useQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
 import { useEffect } from 'react'

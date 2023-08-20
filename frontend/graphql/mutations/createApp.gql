@@ -1,4 +1,4 @@
-mutation CreateApp(
+mutation CreateApplication(
   $id: ID!
   $organisationId: ID!
   $name: String!

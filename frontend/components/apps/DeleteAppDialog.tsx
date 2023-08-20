@@ -6,8 +6,8 @@ import { Fragment, useState } from 'react'
 import { FaTrash, FaTimes, FaExclamationTriangle } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
-import { DeleteApp } from '@/apollo/mutations/deleteApp.gql'
-import { GetApps } from '@/apollo/queries/getApps.gql'
+import { DeleteApplication } from '@/graphql/mutations/deleteApp.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
 import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 
@@ -20,7 +20,7 @@ export default function DeleteAppDialog(props: {
   const { organisationId, appId, appName, teamName } = props
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [typedName, setTypedName] = useState<string>('')
-  const [deleteApp, { loading }] = useMutation(DeleteApp)
+  const [deleteApp, { loading }] = useMutation(DeleteApplication)
   const router = useRouter()
 
   const reset = () => {

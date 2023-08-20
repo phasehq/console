@@ -1,8 +1,8 @@
 import { Logo } from '../common/Logo'
 import UserMenu from '../UserMenu'
 import { useLazyQuery, useQuery } from '@apollo/client'
-import GetOrganisations from '@/apollo/queries/getOrganisations.gql'
-import { GetApps } from '@/apollo/queries/getApps.gql'
+import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { AppType } from '@/apollo/graphql'
@@ -54,7 +54,9 @@ export const NavBar = (props: { team: string }) => {
       </div>
       <div className="flex gap-4 items-center justify-end">
         {IS_CLOUD_HOSTED && <StatusIndicator />}
-        <Link href="https://docs.phase.dev" target="_blank"><Button variant="secondary">Docs</Button></Link>
+        <Link href="https://docs.phase.dev" target="_blank">
+          <Button variant="secondary">Docs</Button>
+        </Link>
         <UserMenu />
       </div>
     </header>

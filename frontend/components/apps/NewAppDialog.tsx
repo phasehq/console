@@ -7,8 +7,8 @@ import { Fragment, ReactNode, useEffect, useState } from 'react'
 import { FaCopy, FaCross, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
-import { GetApps } from '@/apollo/queries/getApps.gql'
-import { CreateApp } from '@/apollo/mutations/createApp.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
+import { CreateApplication } from '@/graphql/mutations/createApp.gql'
 import { useMutation } from '@apollo/client'
 import {
   ApiOrganisationPlanChoices,
@@ -35,7 +35,7 @@ export default function NewAppDialog(props: {
   const [appId, setAppId] = useState<string>('')
   const [appSecret, setAppSecret] = useState<string>('')
   const { data: session } = useSession()
-  const [createApp, { data, loading, error }] = useMutation(CreateApp)
+  const [createApp, { data, loading, error }] = useMutation(CreateApplication)
 
   const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 

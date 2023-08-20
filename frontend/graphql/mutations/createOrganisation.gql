@@ -1,4 +1,4 @@
-mutation CreateOrganisation($id: ID!, $name: String!, $identityKey: String!) {
+mutation CreateOrg($id: ID!, $name: String!, $identityKey: String!) {
   createOrganisation(id: $id, name: $name, identityKey: $identityKey) {
     organisation {
       id

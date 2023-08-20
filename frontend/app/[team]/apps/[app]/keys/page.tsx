@@ -1,8 +1,8 @@
 'use client'
 
-import { GetOrganisations } from '@/apollo/queries/getOrganisations.gql'
-import { GetAppDetail } from '@/apollo/queries/getAppDetail.gql'
-import { RotateAppKeys } from '@/apollo/mutations/rotateAppKeys.gql'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
+import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
+import { RotateAppKey } from '@/graphql/mutations/rotateAppKeys.gql'
 import { useLazyQuery, useQuery, useMutation } from '@apollo/client'
 import { AppType, ChartDataPointType, TimeRange } from '@/apollo/graphql'
 import { Fragment, useEffect, useState } from 'react'
@@ -62,7 +62,7 @@ export default function App({ params }: { params: { team: string; app: string } 
     const [showPw, setShowPw] = useState<boolean>(false)
     const [loading, setLoading] = useState<boolean>(false)
     const [isOpen, setIsOpen] = useState(false)
-    const [rotateAppKeys] = useMutation(RotateAppKeys)
+    const [rotateAppKeys] = useMutation(RotateAppKey)
 
     const closeModal = () => {
       setPw('')
@@ -179,7 +179,7 @@ export default function App({ params }: { params: { team: string; app: string } 
                               <FaExclamationTriangle />
                               <div>
                                 Warning: This will revoke your current app keys. Your application
-                                won't be able to decrypt data using the current keys.
+                                won&apos;t be able to decrypt data using the current keys.
                               </div>
                             </div>
                           </Alert>

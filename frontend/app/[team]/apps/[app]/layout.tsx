@@ -6,8 +6,8 @@ import clsx from 'clsx'
 import Link from 'next/link'
 import { useQuery, useLazyQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { GetOrganisations } from '@/apollo/queries/getOrganisations.gql'
-import { GetAppDetail } from '@/apollo/queries/getAppDetail.gql'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
+import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/common/Button'
 import { FaCopy } from 'react-icons/fa'
@@ -63,13 +63,13 @@ export default function AppLayout({
     },
     {
       name: 'Secrets',
-      link: 'secrets'
+      link: 'secrets',
     },
     {
       name: 'Logs',
       link: 'logs',
     },
-    
+
     {
       name: 'Settings',
       link: 'settings',

@@ -1,6 +1,6 @@
 'use client'
 
-import { GetAppLogs } from '@/apollo/queries/getAppLogs.gql'
+import { GetAppLogs } from '@/graphql/queries/getAppLogs.gql'
 import { useLazyQuery } from '@apollo/client'
 import { KmsLogType } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'

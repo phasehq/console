@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@apollo/client'
-import { GetApps } from '@/apollo/queries/getApps.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
 import { AppType } from '@/apollo/graphql'
 import Spinner from '../common/Spinner'
 import { FaCubes } from 'react-icons/fa'
