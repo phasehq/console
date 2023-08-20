@@ -85,19 +85,19 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     const mutationPayload = {
       devEnv: await createNewEnvPayload(
         params.app,
-        'devEnv',
+        'Development',
         ApiEnvironmentEnvTypeChoices.Dev,
         owner
       ),
       stagingEnv: await createNewEnvPayload(
         params.app,
-        'stagingEnv',
+        'Staging',
         ApiEnvironmentEnvTypeChoices.Staging,
         owner
       ),
       prodEnv: await createNewEnvPayload(
         params.app,
-        'productionEnv',
+        'Production',
         ApiEnvironmentEnvTypeChoices.Prod,
         owner
       ),
