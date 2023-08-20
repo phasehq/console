@@ -261,7 +261,6 @@ type CreateEnvironmentMutation {
 }
 
 input EnvironmentInput {
-  id: ID!
   appId: ID!
   name: String!
   envType: String!

@@ -150,7 +150,6 @@ export type EditSecretMutation = {
 export type EnvironmentInput = {
   appId: Scalars['ID'];
   envType: Scalars['String'];
-  id: Scalars['ID'];
   identityKey: Scalars['String'];
   name: Scalars['String'];
   wrappedSalt: Scalars['String'];

@@ -1,10 +1,15 @@
 import _sodium from 'libsodium-wrappers-sumo'
 import { cryptoUtils } from '@/utils/auth'
 import { splitSecret } from './keyshares'
-import { EnvironmentKeyType, EnvironmentType } from '@/apollo/graphql'
-import { decryptAsymmetric } from './crypto'
+import {
+  ApiEnvironmentEnvTypeChoices,
+  EnvironmentKeyType,
+  EnvironmentType,
+  OrganisationMemberType,
+} from '@/apollo/graphql'
+import { decryptAsymmetric, encryptAsymmetric, getUserKxPublicKey } from './crypto'
 
-type EnvKeyring = {
+export type EnvKeyring = {
   publicKey: string
   privateKey: string
 }
@@ -175,5 +180,43 @@ export const generateUserToken = async (
   return {
     pssUser,
     mutationPayload,
+  }
+}
+
+const wrapEnvSecretsForUser = async (
+  envSecrets: { seed: string; salt: string },
+  user: OrganisationMemberType
+) => {
+  const userPubKey = await getUserKxPublicKey(user.identityKey!)
+  const wrappedSeed = await encryptAsymmetric(envSecrets.seed, userPubKey)
+  const wrappedSalt = await encryptAsymmetric(envSecrets.salt, userPubKey)
+
+  return {
+    user,
+    wrappedSeed,
+    wrappedSalt,
+  }
+}
+
+export const createNewEnvPayload = async (
+  appId: string,
+  name: string,
+  envType: ApiEnvironmentEnvTypeChoices,
+  user: OrganisationMemberType
+) => {
+  const seed = await newEnvSeed()
+  const keys = await envKeyring(seed)
+
+  const salt = await newEnvSalt()
+
+  const ownerWrappedEnv = await wrapEnvSecretsForUser({ seed, salt }, user)
+
+  return {
+    appId,
+    name,
+    envType,
+    wrappedSeed: ownerWrappedEnv.wrappedSeed,
+    wrappedSalt: ownerWrappedEnv.wrappedSalt,
+    identityKey: keys.publicKey,
   }
 }

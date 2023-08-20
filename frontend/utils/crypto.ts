@@ -2,7 +2,7 @@ import _sodium, { KeyPair } from 'libsodium-wrappers-sumo'
 
 import { cryptoUtils } from '@/utils/auth'
 
-const VERSION = 1
+const VERSION = 2
 
 /**
  * Returns an random key exchange keypair
@@ -55,6 +55,28 @@ export const serverSessionKeys = async (
     dataPubKey
   )
   return keys
+}
+
+export const createSealedBox = async (plaintext: string, publicKey: string) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  const sealedBox = await sodium.crypto_box_seal(plaintext, sodium.from_hex(publicKey))
+  return `ph:${VERSION}:${sodium.to_base64(sealedBox)}`
+}
+
+export const openSealedBox = async (ciphertext: string, publicKey: string, privateKey: string) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  const ciphertextSegments = ciphertext.split(':')
+
+  const plaintext = sodium.crypto_box_seal_open(
+    sodium.from_base64(ciphertextSegments[2]),
+    sodium.from_hex(publicKey),
+    sodium.from_hex(privateKey)
+  )
+  return sodium.to_string(plaintext)
 }
 
 export const encryptAsymmetric = async (plaintext: string, publicKey: string): Promise<string> => {

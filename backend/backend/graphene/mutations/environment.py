@@ -7,7 +7,6 @@ from backend.graphene.types import EnvironmentKeyType, EnvironmentTokenType, Env
 
 
 class EnvironmentInput(graphene.InputObjectType):
-    id = graphene.ID(required=True)
     app_id = graphene.ID(required=True)
     name = graphene.String(required=True)
     env_type = graphene.String(required=True)
@@ -31,13 +30,13 @@ class CreateEnvironmentMutation(graphene.Mutation):
 
         app = App.objects.get(id=environment_data.app_id)
 
-        environment = Environment.objects.create(
-            id=environment_data.id, app=app, name=environment_data.name, env_type=environment_data.env_type, identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
+        environment = Environment.objects.create(app=app, name=environment_data.name, env_type=environment_data.env_type,
+                                                 identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
 
         org_owner = OrganisationMember.objects.get(
             organisation=environment.app.organisation, role=OrganisationMember.OWNER)
 
-        EnvironmentKey.objects.create(id=id, environment=environment, user=org_owner,
+        EnvironmentKey.objects.create(environment=environment, user=org_owner,
                                       identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
 
         return CreateEnvironmentMutation(environment=environment)

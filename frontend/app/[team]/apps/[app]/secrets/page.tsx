@@ -6,49 +6,40 @@ import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { CreateEnv } from '@/graphql/mutations/environments/createEnvironment.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
-import { CreateEnvKey } from '@/graphql/mutations/environments/createEnvironmentKey.gql'
 import { CreateEnvToken } from '@/graphql/mutations/environments/createEnvironmentToken.gql'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
 import { GetEnvironmentTokens } from '@/graphql/queries/secrets/getEnvironmentTokens.gql'
-import { CreateSecret } from '@/graphql/mutations/environments/createSecret.gql'
-import { gql, useLazyQuery, useMutation, useQuery } from '@apollo/client'
+import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useEffect, useState } from 'react'
-import { copyToClipBoard } from '@/utils/clipboard'
-import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import {
-  EnvKeyring,
+  createNewEnvPayload,
   envKeyring,
   generateEnvironmentToken,
   generateUserToken,
-  newEnvSalt,
-  newEnvSeed,
 } from '@/utils/environments'
 import { Button } from '@/components/common/Button'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationMemberRoleChoices,
-  EnvironmentKeyType,
   EnvironmentTokenType,
   EnvironmentType,
-  MutationCreateEnvironmentArgs,
   OrganisationMemberType,
   SecretType,
   UserTokenType,
 } from '@/apollo/graphql'
 import {
-  createSealedBox,
   decryptAsymmetric,
   digest,
   encryptAsymmetric,
   getUserKxPrivateKey,
   getUserKxPublicKey,
-  openSealedBox,
 } from '@/utils/crypto'
 import { cryptoUtils } from '@/utils/auth'
 import { getLocalKeyring } from '@/utils/localStorage'
-import _sodium, { KeyPair } from 'libsodium-wrappers-sumo'
+import _sodium from 'libsodium-wrappers-sumo'
 
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppEnvironments, {
@@ -86,99 +77,38 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const setupRequired = data?.appEnvironments.length === 0 ?? true
 
-  const wrapEnvSecretsForUser = async (
-    envSecrets: { seed: string; salt: string },
-    user: OrganisationMemberType
-  ) => {
-    const userPubKey = await getUserKxPublicKey(user.identityKey!)
-    const wrappedSeed = await encryptAsymmetric(envSecrets.seed, userPubKey)
-    const wrappedSalt = await encryptAsymmetric(envSecrets.salt, userPubKey)
-
-    return {
-      user,
-      wrappedSeed,
-      wrappedSalt,
-    }
-  }
-
   const initAppEnvs = async () => {
     const owner = orgAdminsData.organisationAdminsAndSelf.find(
       (user: OrganisationMemberType) => user.role === ApiOrganisationMemberRoleChoices.Owner
     )
 
-    const envs = [
-      {
-        name: 'devEnv',
-        envType: ApiEnvironmentEnvTypeChoices.Dev,
-        seed: await newEnvSeed(),
-        salt: await newEnvSalt(),
-        keys: {},
-      },
-      {
-        name: 'stagingEnv',
-        envType: ApiEnvironmentEnvTypeChoices.Staging,
-        seed: await newEnvSeed(),
-        salt: await newEnvSalt(),
-        keys: { publicKey: '', privateKey: '' },
-      },
-      {
-        name: 'prodEnv',
-        envType: ApiEnvironmentEnvTypeChoices.Prod,
-        seed: await newEnvSeed(),
-        salt: await newEnvSalt(),
-        keys: { publicKey: '', privateKey: '' },
-      },
-    ]
-
-    let mutationPayload = {
-      devEnv: {} as MutationCreateEnvironmentArgs,
-      stagingEnv: {} as MutationCreateEnvironmentArgs,
-      prodEnv: {} as MutationCreateEnvironmentArgs,
+    const mutationPayload = {
+      devEnv: await createNewEnvPayload(
+        params.app,
+        'devEnv',
+        ApiEnvironmentEnvTypeChoices.Dev,
+        owner
+      ),
+      stagingEnv: await createNewEnvPayload(
+        params.app,
+        'stagingEnv',
+        ApiEnvironmentEnvTypeChoices.Staging,
+        owner
+      ),
+      prodEnv: await createNewEnvPayload(
+        params.app,
+        'productionEnv',
+        ApiEnvironmentEnvTypeChoices.Prod,
+        owner
+      ),
     }
 
-    envs.forEach(async (env) => {
-      env.keys = await envKeyring(env.seed)
-      const { name, envType, seed, salt, keys } = env
-
-      const ownerWrappedEnv = await wrapEnvSecretsForUser({ seed, salt }, owner)
-
-      if (envType === ApiEnvironmentEnvTypeChoices.Dev) {
-        mutationPayload.devEnv = {
-          id: crypto.randomUUID(),
-          appId: params.app,
-          name,
-          envType,
-          wrappedSeed: ownerWrappedEnv.wrappedSeed,
-          wrappedSalt: ownerWrappedEnv.wrappedSalt,
-          identityKey: keys.publicKey,
-        }
-      } else if (envType === ApiEnvironmentEnvTypeChoices.Staging) {
-        mutationPayload.stagingEnv = {
-          id: crypto.randomUUID(),
-          appId: params.app,
-          name,
-          envType,
-          wrappedSeed: ownerWrappedEnv.wrappedSeed,
-          wrappedSalt: ownerWrappedEnv.wrappedSalt,
-          identityKey: keys.publicKey,
-        }
-      } else if (envType === ApiEnvironmentEnvTypeChoices.Prod) {
-        mutationPayload.prodEnv = {
-          id: crypto.randomUUID(),
-          appId: params.app,
-          name,
-          envType,
-          wrappedSeed: ownerWrappedEnv.wrappedSeed,
-          wrappedSalt: ownerWrappedEnv.wrappedSalt,
-          identityKey: keys.publicKey,
-        }
-      }
-    })
-
-    console.log(mutationPayload.devEnv)
-
-    await createEnvironment({
-      variables: mutationPayload.devEnv,
+    await initAppEnvironments({
+      variables: {
+        devEnv: mutationPayload.devEnv,
+        stagingEnv: mutationPayload.stagingEnv,
+        prodEnv: mutationPayload.prodEnv,
+      },
       refetchQueries: [
         {
           query: GetAppEnvironments,
@@ -188,82 +118,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         },
       ],
     })
-
-    console.log(mutationPayload.stagingEnv)
-
-    await createEnvironment({
-      variables: mutationPayload.stagingEnv,
-      refetchQueries: [
-        {
-          query: GetAppEnvironments,
-          variables: {
-            appId: params.app,
-          },
-        },
-      ],
-    })
-
-    console.log(mutationPayload.prodEnv)
-
-    await createEnvironment({
-      variables: mutationPayload.prodEnv,
-      refetchQueries: [
-        {
-          query: GetAppEnvironments,
-          variables: {
-            appId: params.app,
-          },
-        },
-      ],
-    })
-
-    // await Promise.all([
-    //   createEnvironment({
-    //     variables: mutationPayload.devEnv,
-    //     refetchQueries: [
-    //       {
-    //         query: GetAppEnvironments,
-    //         variables: {
-    //           appId: params.app,
-    //         },
-    //       },
-    //     ],
-    //   }),
-    //   createEnvironment({
-    //     variables: mutationPayload.stagingEnv,
-    //     refetchQueries: [
-    //       {
-    //         query: GetAppEnvironments,
-    //         variables: {
-    //           appId: params.app,
-    //         },
-    //       },
-    //     ],
-    //   }),
-    //   createEnvironment({
-    //     variables: mutationPayload.prodEnv,
-    //     refetchQueries: [
-    //       {
-    //         query: GetAppEnvironments,
-    //         variables: {
-    //           appId: params.app,
-    //         },
-    //       },
-    //     ],
-    //   }),
-    // ])
-
-    // const result = await initAppEnvironments({
-    //   variables: mutationPayload,
-    //   refetchQueries: [
-    //     {
-    //       query: GetAppEnvironments,
-    //       variables: {
-    //         appId: params.app,
-    //       },
-    //     },
-    //   ],
-    // })
   }
 
   const handleCreateNewUserToken = async () => {
@@ -312,7 +166,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     const [value, setValue] = useState<string>('')
     const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
     const [envToken, setEnvToken] = useState<string>('')
-    const [createSecret, { data, loading, error }] = useMutation(CreateSecret)
+    const [createSecret, { data, loading, error }] = useMutation(CreateNewSecret)
     const [createEnvironmentToken] = useMutation(CreateEnvToken)
     const { data: secretsData } = useQuery(GetSecrets, {
       variables: {
@@ -386,10 +240,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 envKeys.privateKey,
                 envKeys.publicKey
               )
-              const box = await createSealedBox(decryptedSecret.value, envKeys.publicKey)
-              console.log('sealedBox', box)
-              const openBox = await openSealedBox(box, envKeys.publicKey, envKeys.privateKey)
-              console.log('openBox', openBox)
               return decryptedSecret
             })
           )
@@ -547,11 +397,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             {data?.appEnvironments.map((env: EnvironmentType) => (
               <EnvironmentCard key={env.id} environment={env} />
             ))}
-            <div>
-              <Button variant="primary" onClick={initAppEnvs}>
-                Create new env
-              </Button>
-            </div>
 
             <div className="col-span-2 flex flex-col gap-2">
               {userTokensData?.userTokens.map((userToken: UserTokenType) => (
