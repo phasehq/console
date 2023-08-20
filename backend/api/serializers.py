@@ -62,14 +62,14 @@ class UserTokenSerializer(serializers.ModelSerializer):
     apps = EnvironmentKeySerializer(many=True, read_only=True)
     
     # New field 'userId'
-    userId = serializers.UUIDField(source='user.id', read_only=True)
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
     
     # New field 'offline_enabled' with default value False
     offline_enabled = serializers.BooleanField(default=False, read_only=True)
     
     class Meta:
         model = UserToken
-        fields = ['wrapped_key_share', 'userId', 'offline_enabled', 'apps']
+        fields = ['wrapped_key_share', 'user_id', 'offline_enabled', 'apps']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
