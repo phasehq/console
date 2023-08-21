@@ -2,7 +2,7 @@ import _sodium, { KeyPair } from 'libsodium-wrappers-sumo'
 
 import { cryptoUtils } from '@/utils/auth'
 
-const VERSION = 2
+const VERSION = 1
 
 /**
  * Returns an random key exchange keypair
