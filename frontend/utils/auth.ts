@@ -1,6 +1,17 @@
 import jwt from 'jsonwebtoken'
 import _sodium from 'libsodium-wrappers-sumo'
 
+export type OrganisationKeyring = {
+  symmetricKey: string
+  publicKey: string
+  privateKey: string
+}
+
+type AppKeyring = {
+  publicKey: string
+  privateKey: string
+}
+
 export namespace JwtUtils {
   export const isJwtExpired = (token: string) => {
     // offset by 60 seconds, so we will check if the token is "almost expired".
@@ -43,23 +54,6 @@ export namespace UrlUtils {
 }
 
 export namespace cryptoUtils {
-  type OrganisationKeyring = {
-    symmetricKey: string
-    publicKey: string
-    privateKey: string
-  }
-
-  type AppKeyring = {
-    publicKey: string
-    privateKey: string
-  }
-
-  type ShamirShare = {
-    bits: number
-    id: number
-    data: string
-  }
-
   /**
    * Returns 16 bytes from an input string that can be used as a salt for Argon2
    *
@@ -127,40 +121,37 @@ export namespace cryptoUtils {
   }
 
   /**
- * Encrypts a single string with the given key. Returns the ciphertext as a base64 string
- *
- * @param {string} plaintext - Plaintext string to encrypt
- * @param {Uint8Array} key - Symmetric encryption key
- * @returns {string}
- */
-export const encryptString = async (plaintext: string, key: Uint8Array) => {
-  await _sodium.ready;
-  const sodium = _sodium;
+   * Encrypts a single string with the given key. Returns the ciphertext as a base64 string
+   *
+   * @param {string} plaintext - Plaintext string to encrypt
+   * @param {Uint8Array} key - Symmetric encryption key
+   * @returns {string}
+   */
+  export const encryptString = async (plaintext: string, key: Uint8Array) => {
+    await _sodium.ready
+    const sodium = _sodium
 
-  return sodium.to_base64(
-    await encryptRaw(sodium.from_string(plaintext), key),
-    sodium.base64_variants.ORIGINAL
-  );
-};
-
-/**
- * Decrypts a single base64 ciphertext string with the given key. Returns the plaintext as a string
- *
- * @param cipherText - base64 string ciphertext with appended nonce
- * @param key - Symmetric encryption key
- * @returns {string}
- */
-export const decryptString = async (cipherText: string, key: Uint8Array) => {
-  await _sodium.ready;
-  const sodium = _sodium;
-
-  return sodium.to_string(
-    await decryptRaw(
-      sodium.from_base64(cipherText, sodium.base64_variants.ORIGINAL),
-      key
+    return sodium.to_base64(
+      await encryptRaw(sodium.from_string(plaintext), key),
+      sodium.base64_variants.ORIGINAL
     )
-  );
-};
+  }
+
+  /**
+   * Decrypts a single base64 ciphertext string with the given key. Returns the plaintext as a string
+   *
+   * @param cipherText - base64 string ciphertext with appended nonce
+   * @param key - Symmetric encryption key
+   * @returns {string}
+   */
+  export const decryptString = async (cipherText: string, key: Uint8Array) => {
+    await _sodium.ready
+    const sodium = _sodium
+
+    return sodium.to_string(
+      await decryptRaw(sodium.from_base64(cipherText, sodium.base64_variants.ORIGINAL), key)
+    )
+  }
 
   /**
    * Computes the account recovery key from the mnemonic phrase and orgId.

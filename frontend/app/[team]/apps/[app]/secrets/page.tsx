@@ -12,7 +12,7 @@ import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
 import { GetEnvironmentTokens } from '@/graphql/queries/secrets/getEnvironmentTokens.gql'
 import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import {
   createNewEnvPayload,
@@ -40,6 +40,8 @@ import {
 import { cryptoUtils } from '@/utils/auth'
 import { getLocalKeyring } from '@/utils/localStorage'
 import _sodium from 'libsodium-wrappers-sumo'
+import { KeyringContext } from '@/contexts/keyringContext'
+import SudoPasswordDialog from '@/components/auth/SudoPasswordDialog'
 
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppEnvironments, {
@@ -58,6 +60,13 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const [userToken, setUserToken] = useState<string>('')
 
   const { data: session } = useSession()
+
+  const { keyring, setKeyring } = useContext(KeyringContext)
+
+  useEffect(() => {
+    if (keyring === null) {
+    }
+  })
 
   useEffect(() => {
     if (orgsData) {
@@ -121,36 +130,33 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   }
 
   const handleCreateNewUserToken = async () => {
-    const sudoPass = 'testpassword1234'
-    const deviceKey = await cryptoUtils.deviceVaultKey(sudoPass, session?.user?.email!)
-    const encryptedKeyring = getLocalKeyring(orgsData.organisations[0].id)
-    if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
-    const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(encryptedKeyring!, deviceKey)
-    if (!decryptedKeyring) throw 'Failed to decrypt keys'
+    if (keyring) {
+      const userKxKeys = {
+        publicKey: await getUserKxPublicKey(keyring.publicKey),
+        privateKey: await getUserKxPrivateKey(keyring.privateKey),
+      }
 
-    const userKxKeys = {
-      publicKey: await getUserKxPublicKey(decryptedKeyring.publicKey),
-      privateKey: await getUserKxPrivateKey(decryptedKeyring.privateKey),
-    }
+      const { pssUser, mutationPayload } = await generateUserToken(
+        orgsData.organisations[0].id,
+        userKxKeys
+      )
 
-    const { pssUser, mutationPayload } = await generateUserToken(
-      orgsData.organisations[0].id,
-      userKxKeys
-    )
-
-    await createUserToken({
-      variables: mutationPayload,
-      refetchQueries: [
-        {
-          query: GetUserTokens,
-          variables: {
-            organisationId: orgsData.organisations[0].id,
+      await createUserToken({
+        variables: mutationPayload,
+        refetchQueries: [
+          {
+            query: GetUserTokens,
+            variables: {
+              organisationId: orgsData.organisations[0].id,
+            },
           },
-        },
-      ],
-    })
+        ],
+      })
 
-    setUserToken(pssUser)
+      setUserToken(pssUser)
+    } else {
+      console.log('keyring unavailable')
+    }
   }
 
   const EnvironmentCard = (props: { environment: EnvironmentType }) => {
@@ -182,24 +188,11 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
     useEffect(() => {
       const initEnvKeys = async () => {
-        await _sodium.ready
-        const sodium = _sodium
-
-        const sudoPass = 'testpassword1234'
-        const deviceKey = await cryptoUtils.deviceVaultKey(sudoPass, session?.user?.email!)
-        const encryptedKeyring = getLocalKeyring(orgsData.organisations[0].id)
-        if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
-        const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(
-          encryptedKeyring!,
-          deviceKey
-        )
-        if (!decryptedKeyring) throw 'Failed to decrypt keys'
-
         const wrappedSeed = secretsData.environmentKeys[0].wrappedSeed
 
         const userKxKeys = {
-          publicKey: await getUserKxPublicKey(decryptedKeyring.publicKey),
-          privateKey: await getUserKxPrivateKey(decryptedKeyring.privateKey),
+          publicKey: await getUserKxPublicKey(keyring!.publicKey),
+          privateKey: await getUserKxPrivateKey(keyring!.privateKey),
         }
         const seed = await decryptAsymmetric(
           wrappedSeed,
@@ -221,8 +214,8 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         })
       }
 
-      if (secretsData) initEnvKeys()
-    }, [secretsData])
+      if (secretsData && keyring) initEnvKeys()
+    }, [secretsData, keyring])
 
     useEffect(() => {
       if (secretsData && envKeys) {
@@ -287,41 +280,34 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     }
 
     const handleCreateNewEnvToken = async () => {
-      const sudoPass = 'testpassword1234'
-      const deviceKey = await cryptoUtils.deviceVaultKey(sudoPass, session?.user?.email!)
-      const encryptedKeyring = getLocalKeyring(orgsData.organisations[0].id)
-      if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
-      const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(encryptedKeyring!, deviceKey)
-      if (!decryptedKeyring) throw 'Failed to decrypt keys'
+      if (keyring) {
+        const userKxKeys = {
+          publicKey: await getUserKxPublicKey(keyring.publicKey),
+          privateKey: await getUserKxPrivateKey(keyring.privateKey),
+        }
 
-      const userKxKeys = {
-        publicKey: await getUserKxPublicKey(decryptedKeyring.publicKey),
-        privateKey: await getUserKxPrivateKey(decryptedKeyring.privateKey),
-      }
+        const { pssEnv, mutationPayload } = await generateEnvironmentToken(
+          environment,
+          secretsData.environmentKeys[0],
+          userKxKeys
+        )
 
-      const { pssEnv, mutationPayload } = await generateEnvironmentToken(
-        environment,
-        secretsData.environmentKeys[0],
-        userKxKeys
-      )
-
-      const { pssUser } = await generateUserToken(orgsData.organisations[0].id, userKxKeys)
-
-      console.log('user token', pssUser)
-
-      await createEnvironmentToken({
-        variables: mutationPayload,
-        refetchQueries: [
-          {
-            query: GetEnvironmentTokens,
-            variables: {
-              envId: environment.id,
+        await createEnvironmentToken({
+          variables: mutationPayload,
+          refetchQueries: [
+            {
+              query: GetEnvironmentTokens,
+              variables: {
+                envId: environment.id,
+              },
             },
-          },
-        ],
-      })
+          ],
+        })
 
-      setEnvToken(pssEnv)
+        setEnvToken(pssEnv)
+      } else {
+        console.log('keyring unavailable')
+      }
     }
 
     return (
@@ -382,38 +368,43 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   return (
     <div className="h-screen w-full text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-16">
-      <section className="md:col-span-3">
-        {setupRequired ? (
-          <div className="flex flex-col gap-4 w-full items-center p-16">
-            <h2 className="text-white font-semibold text-xl">
-              {"You don't have any environments for this app yet"}
-            </h2>
-            <Button variant="primary" onClick={initAppEnvs}>
-              Get started
-            </Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-4 divide-y divide-zinc-700">
-            {data?.appEnvironments.map((env: EnvironmentType) => (
-              <EnvironmentCard key={env.id} environment={env} />
-            ))}
-
-            <div className="col-span-2 flex flex-col gap-2">
-              {userTokensData?.userTokens.map((userToken: UserTokenType) => (
-                <div key={userToken.id}>
-                  {userToken.name} | {userToken.createdAt}
-                </div>
+      {orgsData?.organisations && (
+        <SudoPasswordDialog organisationId={orgsData.organisations[0].id} />
+      )}
+      {keyring !== null && (
+        <section className="md:col-span-3">
+          {setupRequired ? (
+            <div className="flex flex-col gap-4 w-full items-center p-16">
+              <h2 className="text-white font-semibold text-xl">
+                {"You don't have any environments for this app yet"}
+              </h2>
+              <Button variant="primary" onClick={initAppEnvs}>
+                Get started
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-4 divide-y divide-zinc-700">
+              {data?.appEnvironments.map((env: EnvironmentType) => (
+                <EnvironmentCard key={env.id} environment={env} />
               ))}
-              <code className="break-all p-2">{userToken}</code>
-              <div>
-                <Button variant="outline" onClick={handleCreateNewUserToken}>
-                  Create new user token
-                </Button>
+
+              <div className="col-span-2 flex flex-col gap-2">
+                {userTokensData?.userTokens.map((userToken: UserTokenType) => (
+                  <div key={userToken.id}>
+                    {userToken.name} | {userToken.createdAt}
+                  </div>
+                ))}
+                <code className="break-all p-2">{userToken}</code>
+                <div>
+                  <Button variant="outline" onClick={handleCreateNewUserToken}>
+                    Create new user token
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
     </div>
   )
 }
