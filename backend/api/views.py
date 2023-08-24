@@ -393,10 +393,11 @@ class SecretsView(APIView):
             id__in=request_body['secrets'])
 
         for secret in secrets_to_delete:
-            if not user_can_access_environment(user.user.userId, secret.environment.id):
-                return HttpResponse(status=403)
             if not Secret.objects.filter(id=secret.id).exists():
                 return HttpResponse(status=404)
+
+            if not user_can_access_environment(user.user.userId, secret.environment.id):
+                return HttpResponse(status=403)
 
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
