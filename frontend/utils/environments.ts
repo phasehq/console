@@ -1,13 +1,19 @@
 import _sodium from 'libsodium-wrappers-sumo'
-import { cryptoUtils } from '@/utils/auth'
+import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { splitSecret } from './keyshares'
 import {
   ApiEnvironmentEnvTypeChoices,
   EnvironmentKeyType,
   EnvironmentType,
   OrganisationMemberType,
+  SecretType,
 } from '@/apollo/graphql'
-import { decryptAsymmetric, encryptAsymmetric, getUserKxPublicKey } from './crypto'
+import {
+  decryptAsymmetric,
+  encryptAsymmetric,
+  getUserKxPrivateKey,
+  getUserKxPublicKey,
+} from './crypto'
 
 export type EnvKeyring = {
   publicKey: string
@@ -198,6 +204,70 @@ const wrapEnvSecretsForUser = async (
   }
 }
 
+export const unwrapEnvSecretsForUser = async (
+  wrappedSeed: string,
+  wrappedSalt: string,
+  keyring: OrganisationKeyring
+) => {
+  const userKxKeys = {
+    publicKey: await getUserKxPublicKey(keyring!.publicKey),
+    privateKey: await getUserKxPrivateKey(keyring!.privateKey),
+  }
+  const seed = await decryptAsymmetric(wrappedSeed, userKxKeys.privateKey, userKxKeys.publicKey)
+
+  const salt = await decryptAsymmetric(wrappedSalt, userKxKeys.privateKey, userKxKeys.publicKey)
+
+  const { publicKey, privateKey } = await envKeyring(seed)
+
+  return {
+    publicKey,
+    privateKey,
+    salt,
+  }
+}
+
+export const decryptEnvSecretNames = async (
+  encryptedSecrets: SecretType[],
+  envKeys: { publicKey: string; privateKey: string }
+) => {
+  const decryptedSecrets = await Promise.all(
+    encryptedSecrets.map(async (secret: SecretType) => {
+      const decryptedSecret = structuredClone(secret)
+      decryptedSecret.key = await decryptAsymmetric(
+        secret.key,
+        envKeys?.privateKey,
+        envKeys?.publicKey
+      )
+
+      return decryptedSecret
+    })
+  )
+  return decryptedSecrets
+}
+
+export const decryptEnvSecrets = async (
+  encryptedSecrets: SecretType[],
+  envKeys: { publicKey: string; privateKey: string }
+) => {
+  const decryptedSecrets = await Promise.all(
+    encryptedSecrets.map(async (secret: SecretType) => {
+      const decryptedSecret = structuredClone(secret)
+      decryptedSecret.key = await decryptAsymmetric(
+        secret.key,
+        envKeys?.privateKey,
+        envKeys?.publicKey
+      )
+      decryptedSecret.value = await decryptAsymmetric(
+        secret.value,
+        envKeys.privateKey,
+        envKeys.publicKey
+      )
+      return decryptedSecret
+    })
+  )
+  return decryptedSecrets
+}
+
 export const createNewEnvPayload = async (
   appId: string,
   name: string,
@@ -219,4 +289,16 @@ export const createNewEnvPayload = async (
     wrappedSalt: ownerWrappedEnv.wrappedSalt,
     identityKey: keys.publicKey,
   }
+}
+
+export const arraysEqual = (arr1: any[], arr2: any[]) => {
+  if (arr1.length !== arr2.length) {
+    return false
+  }
+  for (let i = 0; i < arr1.length; i++) {
+    if (arr1[i] !== arr2[i]) {
+      return false
+    }
+  }
+  return true
 }
