@@ -1,0 +1,415 @@
+'use client'
+
+import { EnvironmentType, SecretInput, SecretType } from '@/apollo/graphql'
+import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import { KeyringContext } from '@/contexts/keyringContext'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
+import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
+import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
+import { UpdateSecret } from '@/graphql/mutations/environments/editSecret.gql'
+import { DeleteSecretOp } from '@/graphql/mutations/environments/deleteSecret.gql'
+import { GetEnvironmentTokens } from '@/graphql/queries/secrets/getEnvironmentTokens.gql'
+import { CreateEnvToken } from '@/graphql/mutations/environments/createEnvironmentToken.gql'
+import {
+  getUserKxPublicKey,
+  getUserKxPrivateKey,
+  decryptAsymmetric,
+  digest,
+  encryptAsymmetric,
+} from '@/utils/crypto'
+import { arraysEqual, envKeyring, generateEnvironmentToken } from '@/utils/environments'
+import { useMutation, useQuery } from '@apollo/client'
+import { useContext, useEffect, useState } from 'react'
+import { Button } from '@/components/common/Button'
+import { FaFileDownload, FaKey, FaPlus, FaSearch } from 'react-icons/fa'
+import SecretRow from '@/components/environments/SecretRow'
+
+type EnvKeyring = {
+  privateKey: string
+  publicKey: string
+  salt: string
+}
+
+export default function Environment({
+  params,
+}: {
+  params: { team: string; app: string; environment: string }
+}) {
+  const { data: orgsData } = useQuery(GetOrganisations)
+
+  const { data, loading } = useQuery(GetSecrets, {
+    variables: {
+      appId: params.app,
+      envId: params.environment,
+    },
+  })
+
+  const [createSecret, { loading: createSecretMutationLoading, error }] =
+    useMutation(CreateNewSecret)
+
+  const [updateSecret] = useMutation(UpdateSecret)
+  const [deleteSecret] = useMutation(DeleteSecretOp)
+
+  const [createEnvironmentToken] = useMutation(CreateEnvToken)
+
+  const { data: envTokensData } = useQuery(GetEnvironmentTokens, {
+    variables: {
+      envId: params.environment,
+    },
+  })
+
+  const { keyring } = useContext(KeyringContext)
+
+  const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
+  const [secrets, setSecrets] = useState<SecretType[]>([])
+  const [updatedSecrets, updateSecrets] = useState<SecretType[]>([])
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [newSecretKey, setNewSecretKey] = useState<string>('')
+  const [newSecretValue, setNewSecretValue] = useState<string>('')
+
+  const environment = data?.appEnvironments[0] as EnvironmentType
+
+  const handleCreateNewSecret = async () => {
+    const encryptedKey = await encryptAsymmetric(newSecretKey, environment.identityKey)
+    const encryptedValue = await encryptAsymmetric(newSecretValue, environment.identityKey)
+    const keyDigest = await digest(newSecretKey, envKeys!.salt)
+
+    await createSecret({
+      variables: {
+        newSecret: {
+          envId: params.environment,
+          key: encryptedKey,
+          keyDigest,
+          value: encryptedValue,
+          folderId: null,
+          comment: '',
+          tags: [],
+        } as SecretInput,
+      },
+      refetchQueries: [
+        {
+          query: GetSecrets,
+          variables: {
+            appId: params.app,
+            envId: params.environment,
+          },
+        },
+      ],
+    })
+    setNewSecretKey('')
+    setNewSecretValue('')
+  }
+
+  const handleUpdateSecret = async (id: string) => {
+    const { key, value, comment } = updatedSecrets.find((secret) => secret.id === id)!
+
+    const encryptedKey = await encryptAsymmetric(key, environment.identityKey)
+    const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
+    const keyDigest = await digest(key, envKeys!.salt)
+    const encryptedComment = await encryptAsymmetric(comment, environment.identityKey)
+
+    await updateSecret({
+      variables: {
+        id,
+        secretData: {
+          key: encryptedKey,
+          keyDigest,
+          value: encryptedValue,
+          folderId: null,
+          comment: encryptedComment,
+          tags: [],
+        } as SecretInput,
+      },
+      refetchQueries: [
+        {
+          query: GetSecrets,
+          variables: {
+            appId: params.app,
+            envId: params.environment,
+          },
+        },
+      ],
+    })
+    setNewSecretKey('')
+    setNewSecretValue('')
+  }
+
+  const handleDeleteSecret = async (id: string) => {
+    await deleteSecret({
+      variables: {
+        id,
+      },
+      refetchQueries: [
+        {
+          query: GetSecrets,
+          variables: {
+            appId: params.app,
+            envId: params.environment,
+          },
+        },
+      ],
+    })
+  }
+
+  const handleCreateNewEnvToken = async () => {
+    if (keyring) {
+      const userKxKeys = {
+        publicKey: await getUserKxPublicKey(keyring.publicKey),
+        privateKey: await getUserKxPrivateKey(keyring.privateKey),
+      }
+
+      const { pssEnv, mutationPayload } = await generateEnvironmentToken(
+        environment,
+        data.environmentKeys[0],
+        userKxKeys
+      )
+
+      await createEnvironmentToken({
+        variables: mutationPayload,
+        refetchQueries: [
+          {
+            query: GetEnvironmentTokens,
+            variables: {
+              envId: environment.id,
+            },
+          },
+        ],
+      })
+
+      console.log(pssEnv)
+    } else {
+      console.log('keyring unavailable')
+    }
+  }
+
+  useEffect(() => {
+    const initEnvKeys = async () => {
+      const wrappedSeed = data.environmentKeys[0].wrappedSeed
+
+      const userKxKeys = {
+        publicKey: await getUserKxPublicKey(keyring!.publicKey),
+        privateKey: await getUserKxPrivateKey(keyring!.privateKey),
+      }
+      const seed = await decryptAsymmetric(wrappedSeed, userKxKeys.privateKey, userKxKeys.publicKey)
+
+      const salt = await decryptAsymmetric(
+        data.environmentKeys[0].wrappedSalt,
+        userKxKeys.privateKey,
+        userKxKeys.publicKey
+      )
+      const { publicKey, privateKey } = await envKeyring(seed)
+
+      setEnvKeys({
+        publicKey,
+        privateKey,
+        salt,
+      })
+    }
+
+    if (data && keyring) initEnvKeys()
+  }, [data, keyring])
+
+  useEffect(() => {
+    if (data && envKeys) {
+      const decryptSecrets = async () => {
+        const decryptedSecrets = await Promise.all(
+          data.secrets.map(async (secret: SecretType) => {
+            const decryptedSecret = structuredClone(secret)
+
+            decryptedSecret.key = await decryptAsymmetric(
+              secret.key,
+              envKeys?.privateKey,
+              envKeys?.publicKey
+            )
+
+            decryptedSecret.value = await decryptAsymmetric(
+              secret.value,
+              envKeys.privateKey,
+              envKeys.publicKey
+            )
+
+            if (decryptedSecret.comment !== '')
+              decryptedSecret.comment = await decryptAsymmetric(
+                secret.comment,
+                envKeys.privateKey,
+                envKeys.publicKey
+              )
+
+            return decryptedSecret
+          })
+        )
+        return decryptedSecrets
+      }
+
+      decryptSecrets().then((decryptedSecrets) => {
+        setSecrets(decryptedSecrets)
+        updateSecrets(decryptedSecrets)
+      })
+    }
+  }, [envKeys, data])
+
+  const handleUpdateSecretProperty = (id: string, property: string, value: any) => {
+    const updatedSecretList = updatedSecrets.map((secret) => {
+      if (secret.id === id) {
+        return { ...secret, [property]: value }
+      }
+      return secret
+    })
+
+    updateSecrets(updatedSecretList)
+  }
+
+  const unsavedChanges = secrets.some((secret, index) => {
+    const updatedSecret = updatedSecrets[index]
+
+    // Compare the properties that can be edited (comment, key, tags, value)
+    return (
+      secret.comment !== updatedSecret.comment ||
+      secret.key !== updatedSecret.key ||
+      !arraysEqual(secret.tags, updatedSecret.tags) ||
+      secret.value !== updatedSecret.value
+    )
+  })
+
+  const getUpdatedSecrets = () => {
+    const changedElements = []
+
+    for (let i = 0; i < secrets.length; i++) {
+      const originalSecret = secrets[i]
+      const updatedSecret = updatedSecrets[i]
+
+      if (
+        originalSecret.comment !== updatedSecret.comment ||
+        originalSecret.key !== updatedSecret.key ||
+        !arraysEqual(originalSecret.tags, updatedSecret.tags) ||
+        originalSecret.value !== updatedSecret.value
+      ) {
+        changedElements.push(updatedSecret)
+      }
+    }
+
+    return changedElements
+  }
+
+  const handleSaveChanges = async () => {
+    const updates = getUpdatedSecrets().map((secret) => handleUpdateSecret(secret.id))
+
+    await Promise.all(updates)
+  }
+
+  const filteredSecrets =
+    searchQuery === ''
+      ? updatedSecrets
+      : updatedSecrets.filter((secret) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(secret.key)
+        })
+
+  const downloadEnvFile = () => {
+    const envContent = secrets
+      .map((secret) => {
+        const comment = secret.comment ? `#${secret.comment}\n` : ''
+        return `${comment}${secret.key}=${secret.value}`
+      })
+      .join('\n')
+
+    const blob = new Blob([envContent], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${environment.name}.env`
+
+    document.body.appendChild(a)
+    a.click()
+
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  // useEffect(() => {
+  //   const warningText = 'You have unsaved changes - are you sure you wish to leave this page?'
+  //   const handleWindowClose = (e: BeforeUnloadEvent) => {
+  //     if (!unsavedChanges) return
+  //     e.preventDefault()
+  //     return (e.returnValue = warningText)
+  //   }
+  //   const handleBrowseAway = () => {
+  //     if (!unsavedChanges) return
+  //     if (window.confirm(warningText)) return
+  //     router.events.emit('routeChangeError')
+  //     throw 'routeChange aborted.'
+  //   }
+  //   window.addEventListener('beforeunload', handleWindowClose)
+  //   router.events.on('routeChangeStart', handleBrowseAway)
+  //   return () => {
+  //     window.removeEventListener('beforeunload', handleWindowClose)
+  //     router.events.off('routeChangeStart', handleBrowseAway)
+  //   }
+  // }, [unsavedChanges])
+
+  return (
+    <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white">
+      {orgsData?.organisations && (
+        <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
+      )}
+      {keyring !== null && !loading && (
+        <div className="flex flex-col p-4 gap-8">
+          <div className="h3 text-white font-semibold text-2xl">
+            {environment.name}
+            {unsavedChanges && <span className="text-emerald-500">*</span>}
+          </div>
+          <div className="flex items-center w-full justify-between">
+            <div className="relative flex items-center">
+              <div className="absolute right-2">
+                <FaSearch className="text-neutral-500" />
+              </div>
+              <input
+                placeholder="Search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 items-center">
+              <Button variant="outline" onClick={downloadEnvFile}>
+                <span className="px-2 py-1">
+                  <FaFileDownload />
+                </span>
+              </Button>
+              <Button variant="outline">
+                <span className="px-2 py-1">
+                  <FaKey />
+                </span>
+              </Button>
+              <Button
+                variant={unsavedChanges ? 'primary' : 'secondary'}
+                disabled={!unsavedChanges}
+                onClick={handleSaveChanges}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            {filteredSecrets.map((secret: SecretType) => (
+              <SecretRow
+                key={secret.id}
+                secret={secret}
+                handlePropertyChange={handleUpdateSecretProperty}
+                handleDelete={handleDeleteSecret}
+              />
+            ))}
+
+            <div className="col-span-2 flex mt-4">
+              <Button variant="primary" onClick={handleCreateNewSecret}>
+                <div className="flex items-center gap-2">
+                  <FaPlus /> Create new secret
+                </div>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

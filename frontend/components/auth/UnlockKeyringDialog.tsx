@@ -7,7 +7,7 @@ import { cryptoUtils } from '@/utils/auth'
 import { getLocalKeyring } from '@/utils/localStorage'
 import { useSession } from 'next-auth/react'
 
-export default function SudoPasswordDialog(props: { organisationId: string }) {
+export default function UnlockKeyringDialog(props: { organisationId: string }) {
   const [password, setPassword] = useState<string>('')
   const [showPw, setShowPw] = useState<boolean>(false)
   const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -69,9 +69,6 @@ export default function SudoPasswordDialog(props: { organisationId: string }) {
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       Unlock User Keyring
                     </h3>
-                    <Button variant="text" onClick={closeModal}>
-                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                    </Button>
                   </Dialog.Title>
                   <form onSubmit={decryptLocalKeyring}>
                     <div className="space-y-4 max-w-md mx-auto">

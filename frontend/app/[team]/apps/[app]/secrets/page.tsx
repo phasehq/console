@@ -1,47 +1,41 @@
 'use client'
 
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
+import { GetSecretNames } from '@/graphql/queries/secrets/getSecretNames.gql'
 import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
-import { CreateEnv } from '@/graphql/mutations/environments/createEnvironment.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
-import { CreateEnvToken } from '@/graphql/mutations/environments/createEnvironmentToken.gql'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
-import { GetEnvironmentTokens } from '@/graphql/queries/secrets/getEnvironmentTokens.gql'
-import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { useContext, useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useCallback, useContext, useEffect, useState } from 'react'
 import {
   createNewEnvPayload,
-  envKeyring,
-  generateEnvironmentToken,
+  decryptEnvSecretNames,
   generateUserToken,
+  unwrapEnvSecretsForUser,
 } from '@/utils/environments'
 import { Button } from '@/components/common/Button'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationMemberRoleChoices,
-  EnvironmentTokenType,
   EnvironmentType,
   OrganisationMemberType,
   SecretType,
   UserTokenType,
 } from '@/apollo/graphql'
-import {
-  decryptAsymmetric,
-  digest,
-  encryptAsymmetric,
-  getUserKxPrivateKey,
-  getUserKxPublicKey,
-} from '@/utils/crypto'
-import { cryptoUtils } from '@/utils/auth'
-import { getLocalKeyring } from '@/utils/localStorage'
+import { getUserKxPrivateKey, getUserKxPublicKey } from '@/utils/crypto'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
-import SudoPasswordDialog from '@/components/auth/SudoPasswordDialog'
+import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
+type EnvSecrets = {
+  env: EnvironmentType
+  secrets: SecretType[]
+}
 
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppEnvironments, {
@@ -53,15 +47,23 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
   const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
-  const [createEnvironment, { loading, error }] = useMutation(CreateEnv)
+  const [getEnvSecrets] = useLazyQuery(GetSecretNames)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
   const [createUserToken] = useMutation(CreateNewUserToken)
+  const [commonSecrets, setCommonSecrets] = useState<SecretType[]>([])
+  const [envSecrets, setEnvSecrets] = useState<EnvSecrets[]>([])
+
+  const sortedEnvSecrets = [...envSecrets].sort((a, b) => {
+    const order = ['Development', 'Staging', 'Production']
+    const indexA = order.indexOf(a.env.name)
+    const indexB = order.indexOf(b.env.name)
+
+    return indexA - indexB
+  })
 
   const [userToken, setUserToken] = useState<string>('')
 
-  const { data: session } = useSession()
-
-  const { keyring, setKeyring } = useContext(KeyringContext)
+  const { keyring } = useContext(KeyringContext)
 
   useEffect(() => {
     if (keyring === null) {
@@ -85,6 +87,46 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   }, [getOrgAdmins, getUserTokens, orgsData, params.app])
 
   const setupRequired = data?.appEnvironments.length === 0 ?? true
+
+  const commonSecretsKeys = commonSecrets.map((commonSecret: SecretType) => commonSecret.key)
+
+  const updateCommonSecrets = useCallback((decryptedSecrets: SecretType[]) => {
+    setCommonSecrets((prevCommonSecrets) => [...prevCommonSecrets, ...decryptedSecrets])
+  }, [])
+
+  const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {
+    let envCards = [] as EnvSecrets[]
+
+    appEnvironments.forEach(async (env: EnvironmentType) => {
+      const { data } = await getEnvSecrets({
+        variables: {
+          envId: env.id,
+        },
+      })
+
+      const { wrappedSeed, wrappedSalt } = data.environmentKeys[0]
+
+      const { publicKey, privateKey } = await unwrapEnvSecretsForUser(
+        wrappedSeed,
+        wrappedSalt,
+        keyring!
+      )
+
+      const decryptedSecrets = await decryptEnvSecretNames(data.secrets, {
+        publicKey,
+        privateKey,
+      })
+
+      envCards.push({ env, secrets: decryptedSecrets })
+      updateCommonSecrets(decryptedSecrets)
+    })
+
+    setEnvSecrets(envCards)
+  }
+
+  useEffect(() => {
+    if (keyring !== null && data?.appEnvironments) fetchAndDecryptAppEnvs(data?.appEnvironments)
+  }, [data?.appEnvironments, keyring])
 
   const initAppEnvs = async () => {
     const owner = orgAdminsData.organisationAdminsAndSelf.find(
@@ -159,217 +201,46 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     }
   }
 
-  const EnvironmentCard = (props: { environment: EnvironmentType }) => {
-    type EnvKeyring = {
-      privateKey: string
-      publicKey: string
-      salt: string
+  const EnvCard = (props: { envSecrets: EnvSecrets }) => {
+    const { env, secrets } = props.envSecrets
+
+    const secretExistsInEnv = (key: string) => {
+      return secrets.find((s: SecretType) => s.key === key)
     }
 
-    const { environment } = props
-
-    const [key, setKey] = useState<string>('')
-    const [value, setValue] = useState<string>('')
-    const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
-    const [envToken, setEnvToken] = useState<string>('')
-    const [createSecret, { data, loading, error }] = useMutation(CreateNewSecret)
-    const [createEnvironmentToken] = useMutation(CreateEnvToken)
-    const { data: secretsData } = useQuery(GetSecrets, {
-      variables: {
-        envId: environment.id,
-      },
-    })
-    const { data: envTokensData } = useQuery(GetEnvironmentTokens, {
-      variables: {
-        envId: environment.id,
-      },
-    })
-    const [secrets, setSecrets] = useState<SecretType[]>([])
-
-    useEffect(() => {
-      const initEnvKeys = async () => {
-        const wrappedSeed = secretsData.environmentKeys[0].wrappedSeed
-
-        const userKxKeys = {
-          publicKey: await getUserKxPublicKey(keyring!.publicKey),
-          privateKey: await getUserKxPrivateKey(keyring!.privateKey),
-        }
-        const seed = await decryptAsymmetric(
-          wrappedSeed,
-          userKxKeys.privateKey,
-          userKxKeys.publicKey
-        )
-
-        const salt = await decryptAsymmetric(
-          secretsData.environmentKeys[0].wrappedSalt,
-          userKxKeys.privateKey,
-          userKxKeys.publicKey
-        )
-        const { publicKey, privateKey } = await envKeyring(seed)
-
-        setEnvKeys({
-          publicKey,
-          privateKey,
-          salt,
-        })
-      }
-
-      if (secretsData && keyring) initEnvKeys()
-    }, [secretsData, keyring])
-
-    useEffect(() => {
-      if (secretsData && envKeys) {
-        const decryptSecrets = async () => {
-          const decryptedSecrets = await Promise.all(
-            secretsData.secrets.map(async (secret: SecretType) => {
-              const decryptedSecret = structuredClone(secret)
-              decryptedSecret.key = await decryptAsymmetric(
-                secret.key,
-                envKeys?.privateKey,
-                envKeys?.publicKey
-              )
-              decryptedSecret.value = await decryptAsymmetric(
-                secret.value,
-                envKeys.privateKey,
-                envKeys.publicKey
-              )
-              return decryptedSecret
-            })
-          )
-          return decryptedSecrets
-        }
-
-        decryptSecrets().then((decryptedSecrets) => {
-          setSecrets(decryptedSecrets)
-        })
-      }
-    }, [envKeys, secretsData])
-
-    const decryptSecretField = async (encryptedField: string) => {
-      const decryptedField = await decryptAsymmetric(
-        encryptedField,
-        envKeys!.privateKey,
-        envKeys!.publicKey
-      )
-      return decryptedField
-    }
-
-    const handleCreateNewSecret = async () => {
-      const encryptedKey = await encryptAsymmetric(key, environment.identityKey)
-      const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
-      const keyDigest = await digest(key, envKeys!.salt)
-
-      await createSecret({
-        variables: {
-          envId: environment.id,
-          key: encryptedKey,
-          keyDigest,
-          value: encryptedValue,
-        },
-        refetchQueries: [
-          {
-            query: GetSecrets,
-            variables: {
-              envId: environment.id,
-            },
-          },
-        ],
-      })
-      setKey('')
-      setValue('')
-    }
-
-    const handleCreateNewEnvToken = async () => {
-      if (keyring) {
-        const userKxKeys = {
-          publicKey: await getUserKxPublicKey(keyring.publicKey),
-          privateKey: await getUserKxPrivateKey(keyring.privateKey),
-        }
-
-        const { pssEnv, mutationPayload } = await generateEnvironmentToken(
-          environment,
-          secretsData.environmentKeys[0],
-          userKxKeys
-        )
-
-        await createEnvironmentToken({
-          variables: mutationPayload,
-          refetchQueries: [
-            {
-              query: GetEnvironmentTokens,
-              variables: {
-                envId: environment.id,
-              },
-            },
-          ],
-        })
-
-        setEnvToken(pssEnv)
-      } else {
-        console.log('keyring unavailable')
-      }
-    }
+    const pathname = usePathname()
 
     return (
-      <div className="bg-zinc-800 rounded-lg flex flex-col gap-4 p-4" key={environment.id}>
-        <div className="text-white font-semibold text-2xl">
-          {environment.name}
-          <span className="font-extralight text-neutral-500">{environment.envType}</span>
+      <div className="bg-zinc-800 rounded-lg flex flex-col gap-4 p-4 w-60">
+        <div className="text-2xl text-center font-light text-neutral-500">
+          <Link href={`${pathname}/environments/${env.id}`}>{env.name}</Link>
         </div>
-        <div className="grid grid-cols-2 gap-2  divide-zinc-600">
-          {envKeys !== null &&
-            secrets.map((secret: SecretType) => (
-              <div key={secret.id} className="grid grid-cols-2 col-span-2 gap-4 p-4">
-                <div className="break-all">{secret.key}</div>
-                <div className="break-all">{secret.value}</div>
-              </div>
-            ))}
-          <div className="flex flex-col text-white border dark:border border-neutral-500">
-            <label>Key</label>
-            <input
-              className=" bg-zinc-900"
-              type="text"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col text-white border dark:border border-neutral-500">
-            <label>Value</label>
-            <input
-              className=" bg-zinc-900"
-              type="text"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          </div>
-          <div className="col-span-2 flex">
-            <Button variant="primary" onClick={handleCreateNewSecret}>
-              Create new secret
-            </Button>
-          </div>
-
-          <div className="col-span-2 flex flex-col gap-2">
-            {envTokensData?.environmentTokens.map((envToken: EnvironmentTokenType) => (
-              <div key={envToken.id}>
-                {envToken.name} | {envToken.createdAt}
-              </div>
-            ))}
-            <code className="break-all p-2">{envToken}</code>
-            <div>
-              <Button variant="outline" onClick={handleCreateNewEnvToken}>
-                Create new env token
-              </Button>
+        <div className="flex flex-col gap-4 p-4">
+          {commonSecretsKeys.map((key: string, index: number) => (
+            <div key={index} className="flex h-6 items-center justify-center text-neutral-500">
+              {secretExistsInEnv(key) ? (
+                <div className="break-all flex items-center gap-2 group text-base">
+                  <FaCheckCircle className="text-emerald-500 shrink-0" />
+                </div>
+              ) : (
+                <FaTimesCircle className="text-red-500" />
+              )}
             </div>
-          </div>
+          ))}
+        </div>
+        <div className="flex w-full justify-center">
+          <Link href={`${pathname}/environments/${env.id}`}>
+            <Button variant="primary">Manage</Button>
+          </Link>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen w-full text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-16">
+    <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-16">
       {orgsData?.organisations && (
-        <SudoPasswordDialog organisationId={orgsData.organisations[0].id} />
+        <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
       )}
       {keyring !== null && (
         <section className="md:col-span-3">
@@ -383,12 +254,23 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-4 divide-y divide-zinc-700">
-              {data?.appEnvironments.map((env: EnvironmentType) => (
-                <EnvironmentCard key={env.id} environment={env} />
-              ))}
-
-              <div className="col-span-2 flex flex-col gap-2">
+            <>
+              <div className="mt-8 flex flex-row w-full gap-4 divide-y divide-zinc-700">
+                <div className="bg-zinc-800 rounded-lg flex flex-col gap-4 p-4">
+                  <div className="text-neutral-500 text-2xl px-4">KEY</div>
+                  <div className="flex flex-col gap-4 p-4">
+                    {commonSecretsKeys.map((secret: string, index: number) => (
+                      <div key={index}>
+                        <div className="break-all font-mono">{secret}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {sortedEnvSecrets.map((envS: EnvSecrets) => (
+                  <EnvCard key={envS.env.id} envSecrets={envS} />
+                ))}
+              </div>
+              <div className="col-span-4 flex flex-col gap-2">
                 {userTokensData?.userTokens.map((userToken: UserTokenType) => (
                   <div key={userToken.id}>
                     {userToken.name} | {userToken.createdAt}
@@ -401,7 +283,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                   </Button>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </section>
       )}
