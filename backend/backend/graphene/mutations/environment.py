@@ -15,6 +15,16 @@ class EnvironmentInput(graphene.InputObjectType):
     identity_key = graphene.String(required=True)
 
 
+class SecretInput(graphene.InputObjectType):
+    env_id = graphene.ID(required=False)
+    folder_id = graphene.ID(required=False)
+    key = graphene.String(required=True)
+    key_digest = graphene.String(required=True)
+    value = graphene.String(required=True)
+    tags = graphene.List(graphene.String)
+    comment = graphene.String()
+
+
 class CreateEnvironmentMutation(graphene.Mutation):
     class Arguments:
         environment_data = EnvironmentInput(required=True)
@@ -173,45 +183,39 @@ class CreateSecretTagMutation(graphene.Mutation):
 
 class CreateSecretMutation(graphene.Mutation):
     class Arguments:
-        env_id = graphene.ID(required=True)
-        folder_id = graphene.ID(required=False)
-        key = graphene.String(required=True)
-        key_digest = graphene.String(required=True)
-        value = graphene.String(required=True)
-        tags = graphene.List(graphene.String)
-        comment = graphene.String()
+        secret_data = SecretInput(SecretInput)
 
     secret = graphene.Field(SecretType)
 
     @classmethod
-    def mutate(cls, root, info, env_id, key, key_digest, value, folder_id=None, tags=[], comment=''):
-        env = Environment.objects.get(id=env_id)
+    def mutate(cls, root, info, secret_data):
+        env = Environment.objects.get(id=secret_data.env_id)
         org = env.app.organisation
         if not user_is_org_member(info.context.user.userId, org.id):
             raise GraphQLError(
                 "You don't have permission to perform this action")
 
         tag_names = SecretTag.objects.filter(
-            id__in=tags).values_list('name', flat=True)
+            id__in=secret_data.tags).values_list('name', flat=True)
 
-        secret_data = {
+        secret_obj_data = {
             'environment_id': env.id,
-            'folder_id': folder_id,
-            'key': key,
-            'key_digest': key_digest,
-            'value': value,
+            'folder_id': secret_data.folder_id,
+            'key': secret_data.key,
+            'key_digest': secret_data.key_digest,
+            'value': secret_data.value,
             'version': 1,
             'tags': [],
-            'comment': comment
+            'comment': secret_data.comment
         }
 
-        secret = Secret.objects.create(**secret_data)
+        secret = Secret.objects.create(**secret_obj_data)
 
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=org)
 
         SecretEvent.objects.create(
-            **{**secret_data, **{'user': org_member, 'secret': secret, 'event_type': SecretEvent.CREATE}})
+            **{**secret_obj_data, **{'user': org_member, 'secret': secret, 'event_type': SecretEvent.CREATE}})
 
         return CreateSecretMutation(secret=secret)
 
@@ -219,17 +223,12 @@ class CreateSecretMutation(graphene.Mutation):
 class EditSecretMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
-        folder_id = graphene.ID(required=False)
-        key = graphene.String(required=True)
-        key_digest = graphene.String(required=True)
-        value = graphene.String(required=True)
-        tags = graphene.List(graphene.String)
-        comment = graphene.String()
+        secret_data = SecretInput(SecretInput)
 
     secret = graphene.Field(SecretType)
 
     @classmethod
-    def mutate(cls, root, info, id, folder_id, key, key_digest, value, tags, comment):
+    def mutate(cls, root, info, id, secret_data):
         secret = Secret.objects.get(id=id)
         env = secret.environment
         org = env.app.organisation
@@ -238,20 +237,19 @@ class EditSecretMutation(graphene.Mutation):
                 "You don't have permission to perform this action")
 
         tag_names = SecretTag.objects.filter(
-            id__in=tags).values_list('name', flat=True)
+            id__in=secret_data.tags).values_list('name', flat=True)
 
-        secret_data = {
-            'environment_id': env.id,
-            'folder_id': folder_id,
-            'key': key,
-            'key_digest': key_digest,
-            'value': value,
+        secret_obj_data = {
+            'folder_id': secret_data.folder_id,
+            'key': secret_data.key,
+            'key_digest': secret_data.key_digest,
+            'value': secret_data.value,
             'version': secret.version + 1,
             'tags': [],
-            'comment': comment
+            'comment': secret_data.comment
         }
 
-        for key, value in secret_data.items():
+        for key, value in secret_obj_data.items():
             setattr(secret, key, value)
 
         secret.updated_at = timezone.now()
@@ -261,7 +259,7 @@ class EditSecretMutation(graphene.Mutation):
             user=info.context.user, organisation=org)
 
         SecretEvent.objects.create(
-            **{**secret_data, **{'user': org_member, 'secret': secret, 'event_type': SecretEvent.UPDATE}})
+            **{**secret_obj_data, **{'user': org_member, 'environment': env, 'secret': secret, 'event_type': SecretEvent.UPDATE}})
 
         return EditSecretMutation(secret=secret)
 
