@@ -32,7 +32,8 @@ class Query(graphene.ObjectType):
     app_activity_chart = graphene.List(ChartDataPointType, app_id=graphene.ID(
     ), period=graphene.Argument(graphene.Enum.from_enum(TimeRange)))
 
-    app_environments = graphene.List(EnvironmentType, app_id=graphene.ID())
+    app_environments = graphene.List(EnvironmentType, app_id=graphene.ID(
+    ), environment_id=graphene.ID(required=False))
     secrets = graphene.List(SecretType, env_id=graphene.ID())
     secret_history = graphene.List(SecretEventType, secret_id=graphene.ID())
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
@@ -79,7 +80,7 @@ class Query(graphene.ObjectType):
             filter['id'] = app_id
         return App.objects.filter(**filter)
 
-    def resolve_app_environments(root, info, app_id):
+    def resolve_app_environments(root, info, app_id, environment_id):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
@@ -88,14 +89,21 @@ class Query(graphene.ObjectType):
         org_member = OrganisationMember.objects.get(
             organisation=app.organisation, user_id=info.context.user.userId)
 
-        app_environments = Environment.objects.filter(app_id=app_id)
+        filter = {
+            'app_id': app_id
+        }
+
+        if environment_id:
+            filter['id'] = environment_id
+
+        app_environments = Environment.objects.filter(**filter)
         return [app_env for app_env in app_environments if EnvironmentKey.objects.filter(user=org_member, environment_id=app_env.id).exists()]
 
     def resolve_secrets(root, info, env_id):
         if not user_can_access_environment(info.context.user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
 
-        return Secret.objects.filter(environment_id=env_id, deleted_at=None)
+        return Secret.objects.filter(environment_id=env_id, deleted_at=None).order_by('created_at')
 
     def resolve_secret_history(root, info, secret_id):
         secret = Secret.objects.get(id=secret_id)
