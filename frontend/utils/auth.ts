@@ -132,7 +132,7 @@ export namespace cryptoUtils {
     const sodium = _sodium
 
     return sodium.to_base64(
-      await encryptRaw(sodium.from_string(plaintext), key),
+      await encryptRaw(plaintext, key),
       sodium.base64_variants.ORIGINAL
     )
   }
