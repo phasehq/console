@@ -21,7 +21,7 @@ import { toast } from 'react-toastify'
 import { gql, useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CreateOrganisation } from '@/graphql/mutations/createOrganisation.gql'
+import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import { setLocalOrg } from '@/utils/localStorage'
 
 const bip39 = require('bip39')
@@ -36,7 +36,7 @@ const Onboard = () => {
   const [inputs, setInputs] = useState<Array<string>>([])
   const [step, setStep] = useState<number>(0)
   const [showWelcome, setShowWelcome] = useState<boolean>(true)
-  const [createOrganisation, { data, loading, error }] = useMutation(CreateOrganisation)
+  const [createOrganisation, { data, loading, error }] = useMutation(CreateOrg)
   const [isloading, setIsLoading] = useState<boolean>(false)
   const [seedDownloaded, setSeedDownloaded] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
