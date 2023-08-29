@@ -64,7 +64,7 @@ class SecretFolderType(DjangoObjectType):
 class SecretTagType(DjangoObjectType):
     class Meta:
         model = SecretTag
-        fields = ('id', 'name')
+        fields = ('id', 'name', 'color')
 
 
 class SecretEventType(DjangoObjectType):

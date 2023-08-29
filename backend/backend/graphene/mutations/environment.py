@@ -158,14 +158,14 @@ class CreateSecretFolderMutation(graphene.Mutation):
 
 class CreateSecretTagMutation(graphene.Mutation):
     class Arguments:
-        id = graphene.ID(required=True)
         org_id = graphene.ID(required=True)
         name = graphene.String(required=True)
+        color = graphene.String(required=True)
 
     tag = graphene.Field(SecretTagType)
 
     @classmethod
-    def mutate(cls, root, info, id, org_id, name):
+    def mutate(cls, root, info, org_id, name, color):
 
         if not user_is_org_member(info.context.user.userId, org_id):
             raise GraphQLError(
@@ -176,7 +176,8 @@ class CreateSecretTagMutation(graphene.Mutation):
         if SecretTag.objects.filter(organisation=org, name=name).exists():
             raise GraphQLError('This tag already exists!')
 
-        tag = SecretTag.objects.create(id=id, organisation=org, name=name)
+        tag = SecretTag.objects.create(
+            organisation=org, name=name, color=color)
 
         return CreateSecretTagMutation(tag=tag)
 

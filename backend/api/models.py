@@ -235,6 +235,7 @@ class SecretTag(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
     name = models.CharField(max_length=64)
+    color = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
@@ -249,10 +250,7 @@ class Secret(models.Model):
     key_digest = models.TextField()
     value = models.TextField()
     version = models.IntegerField(default=1)
-    tags = ArrayField(
-        models.CharField(max_length=64),
-        size=10,
-    )
+    tags = models.ManyToManyField(SecretTag)
     comment = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -284,10 +282,7 @@ class SecretEvent(models.Model):
     key_digest = models.TextField()
     value = models.TextField()
     version = models.IntegerField(default=1)
-    tags = ArrayField(
-        models.CharField(max_length=64),
-        size=10,
-    )
+    tags = models.ManyToManyField(SecretTag)
     comment = models.TextField()
     event_type = models.CharField(
         max_length=1,

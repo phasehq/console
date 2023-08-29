@@ -149,7 +149,7 @@ type SecretType {
   key: String!
   value: String!
   version: Int!
-  tags: [String!]!
+  tags: [SecretTagType!]!
   comment: String!
   createdAt: DateTime
   updatedAt: DateTime!
@@ -163,13 +163,19 @@ type SecretFolderType {
   updatedAt: DateTime!
 }
 
+type SecretTagType {
+  id: String!
+  name: String!
+  color: String!
+}
+
 type SecretEventType {
   id: String!
   secret: SecretType!
   key: String!
   value: String!
   version: Int!
-  tags: [String!]!
+  tags: [SecretTagType!]!
   comment: String!
   eventType: ApiSecretEventEventTypeChoices!
   timestamp: DateTime!
@@ -188,11 +194,6 @@ enum ApiSecretEventEventTypeChoices {
 
   """Delete"""
   D
-}
-
-type SecretTagType {
-  id: String!
-  name: String!
 }
 
 type EnvironmentKeyType {
@@ -234,7 +235,7 @@ type Mutation {
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createUserToken(identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   createSecretFolder(envId: ID!, id: ID!, name: String!, parentFolderId: ID): CreateSecretFolderMutation
-  createSecretTag(id: ID!, name: String!, orgId: ID!): CreateSecretTagMutation
+  createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
   createSecret(secretData: SecretInput): CreateSecretMutation
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
   deleteSecret(id: ID!): DeleteSecretMutation
