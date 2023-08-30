@@ -115,7 +115,7 @@ class Query(graphene.ObjectType):
         if not user_is_org_member(info.context.user.userId, org_id):
             raise GraphQLError("You don't have access to this Organisation")
 
-        return SecretTag.objects.filter(org_id=org_id)
+        return SecretTag.objects.filter(organisation_id=org_id)
 
     def resolve_environment_keys(root, info, environment_id):
         if not user_can_access_environment(info.context.user.userId, environment_id):

@@ -196,8 +196,8 @@ class CreateSecretMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have permission to perform this action")
 
-        tag_names = SecretTag.objects.filter(
-            id__in=secret_data.tags).values_list('name', flat=True)
+        tags = SecretTag.objects.filter(
+            id__in=secret_data.tags)
 
         secret_obj_data = {
             'environment_id': env.id,
@@ -206,17 +206,20 @@ class CreateSecretMutation(graphene.Mutation):
             'key_digest': secret_data.key_digest,
             'value': secret_data.value,
             'version': 1,
-            'tags': [],
             'comment': secret_data.comment
         }
 
         secret = Secret.objects.create(**secret_obj_data)
+        secret.tags.set(tags)
+        secret.save()
 
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=org)
 
-        SecretEvent.objects.create(
+        event = SecretEvent.objects.create(
             **{**secret_obj_data, **{'user': org_member, 'secret': secret, 'event_type': SecretEvent.CREATE}})
+        event.tags.set(tags)
+        event.save()
 
         return CreateSecretMutation(secret=secret)
 
@@ -237,8 +240,8 @@ class EditSecretMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have permission to perform this action")
 
-        tag_names = SecretTag.objects.filter(
-            id__in=secret_data.tags).values_list('name', flat=True)
+        tags = SecretTag.objects.filter(
+            id__in=secret_data.tags)
 
         secret_obj_data = {
             'folder_id': secret_data.folder_id,
@@ -246,7 +249,6 @@ class EditSecretMutation(graphene.Mutation):
             'key_digest': secret_data.key_digest,
             'value': secret_data.value,
             'version': secret.version + 1,
-            'tags': [],
             'comment': secret_data.comment
         }
 
@@ -254,13 +256,16 @@ class EditSecretMutation(graphene.Mutation):
             setattr(secret, key, value)
 
         secret.updated_at = timezone.now()
+        secret.tags.set(tags)
         secret.save()
 
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=org)
 
-        SecretEvent.objects.create(
+        event = SecretEvent.objects.create(
             **{**secret_obj_data, **{'user': org_member, 'environment': env, 'secret': secret, 'event_type': SecretEvent.UPDATE}})
+        event.tags.set(tags)
+        event.save()
 
         return EditSecretMutation(secret=secret)
 

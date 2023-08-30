@@ -307,8 +307,8 @@ class SecretsView(APIView):
 
         for secret in request_body['secrets']:
 
-            tag_names = SecretTag.objects.filter(
-                id__in=secret['tags']).values('name')
+            tags = SecretTag.objects.filter(
+                id__in=secret['tags'])
 
             secret_data = {
                 'environment': env,
@@ -317,13 +317,17 @@ class SecretsView(APIView):
                 'value': secret['value'],
                 'folder_id': secret['folderId'],
                 'version': 1,
-                'tags': [],
                 'comment': secret['comment'],
             }
 
             secret_obj = Secret.objects.create(**secret_data)
-            SecretEvent.objects.create(
+            secret_obj.tags.set(tags)
+            secret_obj.save()
+
+            event = SecretEvent.objects.create(
                 **{**secret_data, **{'user': user, 'secret': secret_obj, 'event_type': SecretEvent.CREATE}})
+            event.tags.set(tags)
+            event.save()
 
         return Response(status=status.HTTP_200_OK)
 
@@ -348,8 +352,8 @@ class SecretsView(APIView):
         for secret in request_body['secrets']:
             secret_obj = Secret.objects.get(id=secret['id'])
 
-            tag_names = SecretTag.objects.filter(
-                id__in=secret['tags']).values('name')
+            tags = SecretTag.objects.filter(
+                id__in=secret['tags'])
 
             secret_data = {
                 'environment': env,
@@ -358,7 +362,6 @@ class SecretsView(APIView):
                 'value': secret['value'],
                 'folder_id': secret['folderId'],
                 'version': secret_obj.version + 1,
-                'tags': [],
                 'comment': secret['comment'],
             }
 
@@ -366,9 +369,13 @@ class SecretsView(APIView):
                 setattr(secret_obj, key, value)
 
             secret_obj.updated_at = timezone.now()
+            secret_obj.tags.set(tags)
             secret_obj.save()
-            SecretEvent.objects.create(
+
+            event = SecretEvent.objects.create(
                 **{**secret_data, **{'user': user, 'secret': secret_obj, 'event_type': SecretEvent.UPDATE}})
+            event.tags.set(tags)
+            event.save()
 
         return Response(status=status.HTTP_200_OK)
 
