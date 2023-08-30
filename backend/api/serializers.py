@@ -86,12 +86,15 @@ class UserTokenSerializer(serializers.ModelSerializer):
                 serializer = EnvironmentKeySerializer(key)
                 index = find_index_by_id(apps, key.environment.app.id)
 
+                app_data = {
+                    'id': key.environment.app.id,
+                    'name': key.environment.app.name,
+                    'encryption': 'E2E',  # Adding encryption to each app
+                }
+
                 if index == -1:
-                    apps.append({
-                        'id': key.environment.app.id,
-                        'name': key.environment.app.name,
-                        'environment_keys': [serializer.data]
-                    })
+                    app_data['environment_keys'] = [serializer.data]
+                    apps.append(app_data)
                 else:
                     apps[index]['environment_keys'].append(serializer.data)
 
