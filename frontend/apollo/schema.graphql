@@ -49,6 +49,8 @@ type OrganisationMemberType {
   wrappedKeyring: String!
   createdAt: DateTime
   updatedAt: DateTime!
+  email: String
+  username: String
 }
 
 """An enumeration."""
@@ -172,6 +174,7 @@ type SecretTagType {
 type SecretEventType {
   id: String!
   secret: SecretType!
+  user: OrganisationMemberType
   key: String!
   value: String!
   version: Int!

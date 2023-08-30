@@ -13,10 +13,21 @@ class OrganisationType(DjangoObjectType):
 
 
 class OrganisationMemberType(DjangoObjectType):
+    email = graphene.String()
+    username = graphene.String()
+
     class Meta:
         model = OrganisationMember
-        fields = ('id', 'role', 'identity_key',
+        fields = ('id', 'email', 'username', 'role', 'identity_key',
                   'wrapped_keyring', 'created_at', 'updated_at')
+
+    def resolve_email(self, info):
+        org_member = OrganisationMember.objects.get(id=self.id)
+        return org_member.user.email
+
+    def resolve_username(self, info):
+        org_member = OrganisationMember.objects.get(id=self.id)
+        return org_member.user.username
 
 
 class AppType(DjangoObjectType):
@@ -71,7 +82,7 @@ class SecretEventType(DjangoObjectType):
     class Meta:
         model = SecretEvent
         fields = ('id', 'secret', 'collection', 'key', 'value',
-                  'version', 'tags', 'comment', 'event_type', 'timestamp')
+                  'version', 'tags', 'comment', 'event_type', 'timestamp', 'user')
 
 
 class SecretType(DjangoObjectType):
