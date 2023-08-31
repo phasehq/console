@@ -495,7 +495,7 @@ const DeleteConfirmDialog = (props: {
                       <Button variant="secondary" type="button" onClick={closeModal}>
                         Cancel
                       </Button>
-                      <Button variant="primary" onClick={() => onDelete(secretId)}>
+                      <Button variant="danger" onClick={() => onDelete(secretId)}>
                         Delete
                       </Button>
                     </div>
