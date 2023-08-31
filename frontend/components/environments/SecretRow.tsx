@@ -443,7 +443,7 @@ const DeleteConfirmDialog = (props: {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="Delete secret">
+        <Button variant="danger" onClick={openModal} title="Delete secret">
           <div className="text-red-500 flex items-center gap-1 p-1">
             <FaTrashAlt />
           </div>
