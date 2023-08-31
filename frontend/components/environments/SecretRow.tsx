@@ -502,7 +502,7 @@ const DeleteConfirmDialog = (props: {
 export default function SecretRow(props: {
   orgId: string
   secret: SecretType
-  cannonicalSecret: SecretType
+  cannonicalSecret: SecretType | undefined
   secretNames: Array<Partial<SecretType>>
   handlePropertyChange: Function
   handleDelete: Function
@@ -514,7 +514,7 @@ export default function SecretRow(props: {
   const toggleReveal = () => setIsRevealed(!isRevealed)
 
   const INPUT_BASE_STYLE =
-    'w-full text-zinc-300 font-mono secrets bg-white dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-black dark:text-white transition ease'
+    'w-full text-zinc-300 font-mono secrets bg-white dark:bg-zinc-800 rounded-sm text-black dark:text-white transition ease'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -536,6 +536,7 @@ export default function SecretRow(props: {
   }
 
   const secretHasBeenModified = () => {
+    if (cannonicalSecret === undefined) return false
     return (
       secret.key !== cannonicalSecret.key ||
       secret.value !== cannonicalSecret.value ||
@@ -554,7 +555,7 @@ export default function SecretRow(props: {
               ? 'ring-1 ring-inset ring-red-500'
               : keyIsDuplicate
               ? 'ring-1 ring-inset ring-orange-500'
-              : 'focus:ring-1 focus:ring-inset focus:ring-emerald-500',
+              : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
             secretHasBeenModified() && '!text-orange-500'
           )}
           value={secret.key}
@@ -579,7 +580,7 @@ export default function SecretRow(props: {
       </div>
       <div className="w-2/3 relative">
         <input
-          className={clsx(INPUT_BASE_STYLE)}
+          className={clsx(INPUT_BASE_STYLE, 'focus:ring-1 focus:ring-inset focus:ring-zinc-500')}
           value={secret.value}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
