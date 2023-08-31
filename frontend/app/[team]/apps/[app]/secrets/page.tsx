@@ -126,6 +126,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   useEffect(() => {
     if (keyring !== null && data?.appEnvironments) fetchAndDecryptAppEnvs(data?.appEnvironments)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.appEnvironments, keyring])
 
   const initAppEnvs = async () => {
@@ -211,7 +212,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     const pathname = usePathname()
 
     return (
-      <div className="bg-zinc-800 rounded-lg flex flex-col gap-4 p-4 w-60">
+      <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg flex flex-col gap-4 p-4 w-60">
         <div className="text-2xl text-center font-light text-neutral-500">
           <Link href={`${pathname}/environments/${env.id}`}>{env.name}</Link>
         </div>
@@ -255,8 +256,8 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             </div>
           ) : (
             <>
-              <div className="mt-8 flex flex-row w-full gap-4 divide-y divide-zinc-700">
-                <div className="bg-zinc-800 rounded-lg flex flex-col gap-4 p-4">
+              <div className="mt-8 flex flex-row w-full gap-8">
+                <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg flex flex-col gap-4 p-4">
                   <div className="text-neutral-500 text-2xl px-4">KEY</div>
                   <div className="flex flex-col gap-4 p-4">
                     {commonSecretsKeys.map((secret: string, index: number) => (
@@ -266,9 +267,11 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                     ))}
                   </div>
                 </div>
-                {sortedEnvSecrets.map((envS: EnvSecrets) => (
-                  <EnvCard key={envS.env.id} envSecrets={envS} />
-                ))}
+                <div className="flex gap-4">
+                  {sortedEnvSecrets.map((envS: EnvSecrets) => (
+                    <EnvCard key={envS.env.id} envSecrets={envS} />
+                  ))}
+                </div>
               </div>
               <div className="col-span-4 flex flex-col gap-2">
                 {userTokensData?.userTokens.map((userToken: UserTokenType) => (

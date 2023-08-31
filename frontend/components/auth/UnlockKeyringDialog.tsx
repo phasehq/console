@@ -75,7 +75,7 @@ export default function UnlockKeyringDialog(props: { organisationId: string }) {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full gap-2 items-center">
                     <FaLock
                       className={clsx(
@@ -114,7 +114,7 @@ export default function UnlockKeyringDialog(props: { organisationId: string }) {
                             className="w-full "
                           />
                           <button
-                            className="absolute inset-y-0 right-4"
+                            className="absolute inset-y-0 right-4 text-neutral-500"
                             type="button"
                             onClick={() => setShowPw(!showPw)}
                             tabIndex={-1}

@@ -25,7 +25,7 @@ export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
 
   return (
-    <div className="flex items-center w-min px-2 rounded-full gap-1 border border-zinc-700 text-neutral-500 text-base">
+    <div className="flex items-center w-min px-2 rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-neutral-500 text-base">
       <div className={`h-2 w-2 rounded-full`} style={{ backgroundColor: color }}></div>
       <span>{name}</span>
     </div>
@@ -115,7 +115,7 @@ const TagsDialog = (props: {
         {isSelected ? (
           <FaCheckSquare className="text-emerald-500" />
         ) : (
-          <FaSquare className="text-zinc-700" />
+          <FaSquare className="text-zinc-300 dark:text-zinc-700" />
         )}
         <div className={clsx(isSelected ? 'opacity-100' : 'opacity-70', 'transition-opacity ease')}>
           <Tag tag={props.tag} />
@@ -134,7 +134,7 @@ const TagsDialog = (props: {
         </div>
       ) : (
         <div className="flex items-center justify-center">
-          <Button variant="outline" onClick={openModal} title="Update comment">
+          <Button variant="outline" onClick={openModal} title="Update tags">
             <FaTags /> Tags
           </Button>
         </div>
@@ -168,7 +168,11 @@ const TagsDialog = (props: {
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Update <span className="text-zinc-300 font-mono">{secretName}</span> tags
+                      Update{' '}
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono">
+                        {secretName}
+                      </span>{' '}
+                      tags
                     </h3>
 
                     <Button variant="text" onClick={handleClose}>
@@ -278,7 +282,10 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      <span className="text-zinc-300 font-mono">{secret.key}</span> history
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono">
+                        {secret.key}
+                      </span>{' '}
+                      history
                     </h3>
 
                     <Button variant="text" onClick={closeModal}>
@@ -288,7 +295,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
 
                   <div className="space-y-8 py-4">
                     <div className="max-h-96 overflow-y-auto px-2">
-                      <div className="space-y-4 pb-4 border-l border-zinc-700">
+                      <div className="space-y-4 pb-4 border-l border-zinc-300 dark:border-zinc-700">
                         {secret.history?.map((historyItem) => (
                           <div key={historyItem!.timestamp} className="pb-8 space-y-2">
                             <div className="flex flex-row items-center gap-2 -ml-1">
@@ -299,7 +306,9 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                                 )}
                               ></span>
                               {/* <span>{historyItem!.version}</span> */}
-                              <div>{getEventTypeText(historyItem!.eventType)}</div>
+                              <div className="text-zinc-800 dark:text-zinc-200 font-semibold">
+                                {getEventTypeText(historyItem!.eventType)}
+                              </div>
                               <div className="text-neutral-500 text-sm">
                                 {relativeTimeFromDates(new Date(historyItem!.timestamp))}
                               </div>
@@ -385,7 +394,11 @@ const CommentDialog = (props: {
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Update <span className="text-zinc-300 font-mono">{secretName}</span> comment
+                      Update{' '}
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono">
+                        {secretName}
+                      </span>{' '}
+                      comment
                     </h3>
 
                     <Button variant="text" onClick={handleClose}>
@@ -399,11 +412,6 @@ const CommentDialog = (props: {
                       className="w-full"
                       onChange={(e) => setCommentValue(e.target.value)}
                     ></textarea>
-                    <div className="flex items-center gap-4">
-                      <Button variant="secondary" type="button" onClick={handleClose}>
-                        Close
-                      </Button>
-                    </div>
                   </div>
                 </Dialog.Panel>
               </Transition.Child>
@@ -470,7 +478,10 @@ const DeleteConfirmDialog = (props: {
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Delete <span className="text-zinc-300 font-mono">{secretName}</span>
+                      Delete{' '}
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono">
+                        {secretName}
+                      </span>
                     </h3>
 
                     <Button variant="text" onClick={closeModal}>
@@ -479,7 +490,7 @@ const DeleteConfirmDialog = (props: {
                   </Dialog.Title>
 
                   <div className="space-y-6 p-4">
-                    <p>Are you sure you want to delete this secret?</p>
+                    <p className="text-neutral-500">Are you sure you want to delete this secret?</p>
                     <div className="flex items-center gap-4">
                       <Button variant="secondary" type="button" onClick={closeModal}>
                         Cancel
@@ -514,7 +525,7 @@ export default function SecretRow(props: {
   const toggleReveal = () => setIsRevealed(!isRevealed)
 
   const INPUT_BASE_STYLE =
-    'w-full text-zinc-300 font-mono secrets bg-white dark:bg-zinc-800 rounded-sm text-black dark:text-white transition ease'
+    'w-full text-zinc-800 font-mono secrets bg-zinc-100 dark:bg-zinc-800 rounded-sm text-black dark:text-white transition ease'
 
   const keyIsBlank = secret.key.length === 0
 

@@ -397,7 +397,7 @@ export default function Environment({
       )}
       {keyring !== null && !loading && (
         <div className="flex flex-col p-4 gap-8">
-          <div className="h3 text-white font-semibold text-2xl">
+          <div className="h3 font-semibold text-2xl">
             {environment.name}
             {unsavedChanges && (
               <span
@@ -408,14 +408,14 @@ export default function Environment({
               </span>
             )}
           </div>
-          <div className="flex items-center w-full justify-between border-b border-zinc-700 pb-4">
+          <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
             <div className="relative flex items-center bg-white dark:bg-zinc-800 rounded-md px-2">
               <div className="">
                 <FaSearch className="text-neutral-500" />
               </div>
               <input
                 placeholder="Search"
-                className="secrets bg-white dark:bg-zinc-800"
+                className="secrets bg-zinc-100 dark:bg-zinc-800"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
