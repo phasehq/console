@@ -345,6 +345,8 @@ export default function Environment({
           return searchRegex.test(secret.key)
         })
 
+  const cannonicalSecret = (id: string) => secrets.find((secret) => secret.id === id)
+
   const downloadEnvFile = () => {
     const envContent = secrets
       .map((secret) => {
@@ -455,7 +457,7 @@ export default function Environment({
                 <SecretRow
                   orgId={orgsData.organisations[0].id}
                   secret={secret}
-                  cannonicalSecret={secrets[index]}
+                  cannonicalSecret={cannonicalSecret(secret.id)}
                   secretNames={secretNames}
                   handlePropertyChange={handleUpdateSecretProperty}
                   handleDelete={handleDeleteSecret}
