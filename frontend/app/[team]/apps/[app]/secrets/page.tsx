@@ -88,7 +88,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const setupRequired = data?.appEnvironments.length === 0 ?? true
 
-  const commonSecretsKeys = commonSecrets.map((commonSecret: SecretType) => commonSecret.key)
+  const commonSecretsKeys = Array.from(new Set(commonSecrets.map((secret) => secret.key)))
 
   const updateCommonSecrets = useCallback((decryptedSecrets: SecretType[]) => {
     setCommonSecrets((prevCommonSecrets) => [...prevCommonSecrets, ...decryptedSecrets])
