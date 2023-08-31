@@ -1,15 +1,204 @@
+import { ApiSecretEventEventTypeChoices, SecretTagType, SecretType } from '@/apollo/graphql'
+import { Fragment, useEffect, useState } from 'react'
 import {
-  ApiEnvironmentEnvTypeChoices,
-  ApiSecretEventEventTypeChoices,
-  SecretType,
-} from '@/apollo/graphql'
-import { Fragment, useState } from 'react'
-import { FaEyeSlash, FaEye, FaTimes, FaRegCommentDots, FaTrashAlt, FaHistory } from 'react-icons/fa'
+  FaEyeSlash,
+  FaEye,
+  FaTimes,
+  FaRegCommentDots,
+  FaTrashAlt,
+  FaHistory,
+  FaPlus,
+  FaUser,
+  FaTags,
+  FaCheckSquare,
+  FaSquare,
+} from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Dialog, Transition } from '@headlessui/react'
-
+import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
+import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
 import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
+import { useLazyQuery, useMutation } from '@apollo/client'
+
+const TagsDialog = (props: {
+  orgId: string
+  secretId: string
+  secretName: string
+  tags: Array<SecretTagType>
+  handlePropertyChange: Function
+}) => {
+  const { orgId, secretId, secretName, tags, handlePropertyChange } = props
+
+  const [getOrgTags, { data: orgTags }] = useLazyQuery(GetSecretTags)
+  const [createSecretTag] = useMutation(CreateNewSecretTag)
+
+  const [secretTags, setSecretTags] = useState<Array<SecretTagType>>(tags)
+
+  const [isOpen, setIsOpen] = useState<boolean>(false)
+
+  const [newTag, setNewTag] = useState<Partial<SecretTagType>>({ name: '', color: '' })
+
+  useEffect(() => {
+    if (isOpen)
+      getOrgTags({
+        variables: {
+          orgId,
+        },
+      })
+  }, [getOrgTags, isOpen, orgId])
+
+  const closeModal = () => {
+    setIsOpen(false)
+  }
+
+  const openModal = () => {
+    setIsOpen(true)
+  }
+
+  const handleClose = () => {
+    handlePropertyChange(secretId, 'tags', secretTags)
+    closeModal()
+  }
+
+  const handleNewTagNameChange = (name: string) => setNewTag({ ...newTag, ...{ name } })
+
+  const handleNewTagColorChange = (color: string) => setNewTag({ ...newTag, ...{ color } })
+
+  const handleCreateTag = () => {
+    const { name, color } = newTag
+    createSecretTag({
+      variables: {
+        orgId,
+        name,
+        color,
+      },
+      refetchQueries: [
+        {
+          query: GetSecretTags,
+          variables: {
+            orgId,
+          },
+        },
+      ],
+    })
+  }
+
+  const Tag = (props: { id: string; name: string; color: string }) => {
+    const { id, name, color } = props
+
+    const isSelected = secretTags.map((secretTag) => secretTag.name).includes(name)
+
+    const handleTagClick = () => {
+      console.log('secretTags', secretTags)
+      if (isSelected) {
+        setSecretTags(secretTags.filter((tag) => tag.name !== name))
+      } else setSecretTags([...secretTags, ...[{ id, name, color }]])
+    }
+
+    return (
+      <div className="flex items-center gap-2 cursor-pointer" onClick={handleTagClick}>
+        {isSelected ? (
+          <FaCheckSquare className="text-emerald-700" />
+        ) : (
+          <FaSquare className="text-zinc-700" />
+        )}
+        <div
+          className={clsx(
+            'flex items-center w-min px-2 rounded-full gap-1 border ',
+            isSelected ? 'border-zinc-400' : 'border-zinc-700'
+          )}
+        >
+          <div className={`h-2 w-2 rounded-full`} style={{ backgroundColor: color }}></div>
+          <span className={clsx(isSelected ? 'text-zinc-300' : 'text-zinc-600')}>{name}</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-center">
+        <Button variant="outline" onClick={openModal} title="Update comment">
+          <FaTags /> Tags
+        </Button>
+      </div>
+
+      <Transition appear show={isOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Title as="div" className="flex w-full justify-between">
+                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                      Update <span className="text-zinc-300 font-mono">{secretName}</span> tags
+                    </h3>
+
+                    <Button variant="text" onClick={handleClose}>
+                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
+                    </Button>
+                  </Dialog.Title>
+
+                  <div className="space-y-6 p-4">
+                    <div className="space-y-4">
+                      {orgTags?.secretTags.map((tag: SecretTagType) => (
+                        <Tag key={tag.id} id={tag.id} name={tag.name} color={tag.color} />
+                      ))}
+                      <div className="flex items-center w-full justify-between border-t border-zinc-700 py-4">
+                        <div className="flex items-center gap-2">
+                          <input
+                            className="text-sm"
+                            value={newTag.name}
+                            onChange={(e) => handleNewTagNameChange(e.target.value)}
+                          />
+                          <input
+                            type="color"
+                            value={newTag.color}
+                            onChange={(e) => handleNewTagColorChange(e.target.value)}
+                          />
+                        </div>
+                        <Button variant="primary" onClick={handleCreateTag}>
+                          <FaPlus />
+                          Create new tag
+                        </Button>
+                      </div>
+                    </div>
+                    {/* <div className="flex items-center gap-4">
+                      <Button variant="secondary" type="button" onClick={handleClose}>
+                        Close
+                      </Button>
+                    </div> */}
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+    </>
+  )
+}
 
 const HistoryDialog = (props: { secret: SecretType }) => {
   const { secret } = props
@@ -82,31 +271,32 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="space-y-6 py-4">
-                    <div className="space-y-4 py-4 border-l border-zinc-700">
-                      {secret.history?.map((historyItem) => (
-                        <div key={historyItem!.timestamp} className="pb-8 ">
-                          <div className="flex flex-row items-center gap-2 -ml-1">
-                            <span
-                              className={clsx(
-                                'h-2 w-2 rounded-full',
-                                getEventTypeColor(historyItem!.eventType)
-                              )}
-                            ></span>
-                            {/* <span>{historyItem!.version}</span> */}
-                            <div>{getEventTypeText(historyItem!.eventType)}</div>
-                            <div className="text-neutral-500 text-sm">
-                              {relativeTimeFromDates(new Date(historyItem!.timestamp))}
+                  <div className="space-y-8 py-4">
+                    <div className="max-h-96 overflow-y-auto px-2">
+                      <div className="space-y-4 pb-4 border-l border-zinc-700">
+                        {secret.history?.map((historyItem) => (
+                          <div key={historyItem!.timestamp} className="pb-8 space-y-2">
+                            <div className="flex flex-row items-center gap-2 -ml-1">
+                              <span
+                                className={clsx(
+                                  'h-2 w-2 rounded-full',
+                                  getEventTypeColor(historyItem!.eventType)
+                                )}
+                              ></span>
+                              {/* <span>{historyItem!.version}</span> */}
+                              <div>{getEventTypeText(historyItem!.eventType)}</div>
+                              <div className="text-neutral-500 text-sm">
+                                {relativeTimeFromDates(new Date(historyItem!.timestamp))}
+                              </div>
+                              {/* <div>{historyItem!.value}</div> */}
                             </div>
-                            {/* <div>{historyItem!.value}</div> */}
+                            <div className="pl-3 text-sm flex items-center gap-2 text-neutral-500">
+                              <FaUser />
+                              {historyItem!.user!.username}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <Button variant="secondary" type="button" onClick={closeModal}>
-                        Close
-                      </Button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </Dialog.Panel>
@@ -295,28 +485,70 @@ const DeleteConfirmDialog = (props: {
 }
 
 export default function SecretRow(props: {
+  orgId: string
   secret: SecretType
+  cannonicalSecret: SecretType
+  secretNames: Array<Partial<SecretType>>
   handlePropertyChange: Function
   handleDelete: Function
 }) {
-  const { secret, handlePropertyChange, handleDelete } = props
+  const { orgId, secret, cannonicalSecret, secretNames, handlePropertyChange, handleDelete } = props
 
   const [isRevealed, setIsRevealed] = useState<boolean>(false)
 
   const toggleReveal = () => setIsRevealed(!isRevealed)
 
+  const INPUT_BASE_STYLE =
+    'w-full text-zinc-300 font-mono secrets bg-white dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-black dark:text-white '
+
+  const keyIsBlank = secret.key.length === 0
+
+  const keyIsDuplicate =
+    secretNames.findIndex((s) => s.key === secret.key && s.id !== secret.id) > -1
+
+  const isTagSame = (tag1: SecretTagType, tag2: SecretTagType) => {
+    return tag1.color === tag2.color && tag1.name === tag2.name
+  }
+
+  const areTagsAreSame = (tags1: SecretTagType[], tags2: SecretTagType[]) => {
+    if (tags1.length !== tags2.length) return false
+
+    tags1.forEach((tag, index) => {
+      if (!isTagSame(tag, tags2[index])) return false
+    })
+
+    return true
+  }
+
+  const secretHasBeenModified = () => {
+    return (
+      secret.key !== cannonicalSecret.key ||
+      secret.value !== cannonicalSecret.value ||
+      secret.comment !== cannonicalSecret.comment ||
+      !areTagsAreSame(secret.tags, cannonicalSecret.tags)
+    )
+  }
+
   return (
     <div className="flex flex-row w-full gap-2 group">
       <div className="w-1/3">
         <input
-          className="w-full text-zinc-300 font-mono"
+          className={clsx(
+            INPUT_BASE_STYLE,
+            keyIsBlank
+              ? 'ring-1 ring-inset ring-red-500'
+              : keyIsDuplicate
+              ? 'ring-1 ring-inset ring-orange-500'
+              : 'focus:ring-1 focus:ring-inset focus:ring-emerald-500',
+            secretHasBeenModified() && '!text-orange-500'
+          )}
           value={secret.key}
           onChange={(e) => handlePropertyChange(secret.id, 'key', e.target.value.toUpperCase())}
         />
       </div>
       <div className="w-2/3 relative">
         <input
-          className="w-full text-zinc-300 font-mono"
+          className={clsx(INPUT_BASE_STYLE)}
           value={secret.value}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
@@ -330,6 +562,13 @@ export default function SecretRow(props: {
             <span className="py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
             {isRevealed ? 'Mask' : 'Reveal'}
           </Button>
+          <TagsDialog
+            orgId={orgId}
+            secretName={secret.key}
+            secretId={secret.id}
+            tags={secret.tags}
+            handlePropertyChange={handlePropertyChange}
+          />
           <CommentDialog
             secretName={secret.key}
             secretId={secret.id}

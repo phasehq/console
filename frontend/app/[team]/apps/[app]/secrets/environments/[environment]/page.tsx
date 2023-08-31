@@ -21,8 +21,10 @@ import { arraysEqual, envKeyring, generateEnvironmentToken } from '@/utils/envir
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
 import { Button } from '@/components/common/Button'
-import { FaFileDownload, FaKey, FaPlus, FaSearch } from 'react-icons/fa'
+import { FaDownload, FaPlus, FaSearch, FaTimesCircle, FaUndo } from 'react-icons/fa'
 import SecretRow from '@/components/environments/SecretRow'
+import clsx from 'clsx'
+import { toast } from 'react-toastify'
 
 type EnvKeyring = {
   privateKey: string
@@ -101,12 +103,13 @@ export default function Environment({
   }
 
   const handleUpdateSecret = async (id: string) => {
-    const { key, value, comment } = updatedSecrets.find((secret) => secret.id === id)!
+    const { key, value, comment, tags } = updatedSecrets.find((secret) => secret.id === id)!
 
     const encryptedKey = await encryptAsymmetric(key, environment.identityKey)
     const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
     const keyDigest = await digest(key, envKeys!.salt)
     const encryptedComment = await encryptAsymmetric(comment, environment.identityKey)
+    const tagIds = tags.map((tag) => tag.id)
 
     await updateSecret({
       variables: {
@@ -117,7 +120,7 @@ export default function Environment({
           value: encryptedValue,
           folderId: null,
           comment: encryptedComment,
-          tags: [],
+          tags: tagIds,
         } as SecretInput,
       },
       refetchQueries: [
@@ -291,11 +294,48 @@ export default function Environment({
     return changedElements
   }
 
+  const duplicateKeysExist = () => {
+    const keySet = new Set<string>()
+
+    for (const secret of updatedSecrets) {
+      if (keySet.has(secret.key)) {
+        return true // Duplicate key found
+      }
+      keySet.add(secret.key)
+    }
+
+    return false // No duplicate keys found
+  }
+
   const handleSaveChanges = async () => {
-    const updates = getUpdatedSecrets().map((secret) => handleUpdateSecret(secret.id))
+    const changedSecrets = getUpdatedSecrets()
+    if (changedSecrets.some((secret) => secret.key.length === 0)) {
+      toast.error('Secret keys cannot be empty!')
+      return false
+    }
+
+    if (duplicateKeysExist()) {
+      toast.error('Secret keys cannot be repeated!')
+      return false
+    }
+
+    const updates = changedSecrets.map((secret) => handleUpdateSecret(secret.id))
 
     await Promise.all(updates)
+    toast.success('Changes successfully deployed!')
   }
+
+  const handleDiscardChanges = () => {
+    updateSecrets(secrets)
+  }
+
+  const secretNames = secrets.map((secret) => {
+    const { id, key } = secret
+    return {
+      id,
+      key,
+    }
+  })
 
   const filteredSecrets =
     searchQuery === ''
@@ -354,50 +394,73 @@ export default function Environment({
         <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
       )}
       {keyring !== null && !loading && (
-        <div className="flex flex-col p-4 gap-8">
+        <div className="flex flex-col p-4 gap-8 max-w-screen-2xl mx-auto">
           <div className="h3 text-white font-semibold text-2xl">
             {environment.name}
-            {unsavedChanges && <span className="text-emerald-500">*</span>}
+            {unsavedChanges && (
+              <span
+                className="text-orange-500 cursor-default"
+                title="Environment has been modified"
+              >
+                *
+              </span>
+            )}
           </div>
-          <div className="flex items-center w-full justify-between">
-            <div className="relative flex items-center">
-              <div className="absolute right-2">
+          <div className="flex items-center w-full justify-between border-b border-zinc-700 pb-4">
+            <div className="relative flex items-center bg-white dark:bg-zinc-800 rounded-md px-2">
+              <div className="">
                 <FaSearch className="text-neutral-500" />
               </div>
               <input
                 placeholder="Search"
+                className="secrets bg-white dark:bg-zinc-800"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              <FaTimesCircle
+                className={clsx(
+                  'cursor-pointer text-neutral-500 transition-opacity ease',
+                  searchQuery ? 'opacity-100' : 'opacity-0'
+                )}
+                role="button"
+                onClick={() => setSearchQuery('')}
+              />
             </div>
             <div className="flex gap-2 items-center">
-              <Button variant="outline" onClick={downloadEnvFile}>
+              <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
                 <span className="px-2 py-1">
-                  <FaFileDownload />
+                  <FaDownload className="text-lg" />
                 </span>
               </Button>
-              <Button variant="outline">
-                <span className="px-2 py-1">
-                  <FaKey />
-                </span>
-              </Button>
+              {unsavedChanges && (
+                <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
+                  <span className="px-2 py-1">
+                    <FaUndo className="text-lg" />
+                  </span>
+                </Button>
+              )}
               <Button
-                variant={unsavedChanges ? 'primary' : 'secondary'}
+                variant={unsavedChanges ? 'warning' : 'primary'}
                 disabled={!unsavedChanges}
                 onClick={handleSaveChanges}
               >
-                Save
+                <span className="text-lg">{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
               </Button>
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            {filteredSecrets.map((secret: SecretType) => (
-              <SecretRow
-                key={secret.id}
-                secret={secret}
-                handlePropertyChange={handleUpdateSecretProperty}
-                handleDelete={handleDeleteSecret}
-              />
+            {filteredSecrets.map((secret: SecretType, index: number) => (
+              <div className="flex items-center gap-2" key={secret.id}>
+                <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
+                <SecretRow
+                  orgId={orgsData.organisations[0].id}
+                  secret={secret}
+                  cannonicalSecret={secrets[index]}
+                  secretNames={secretNames}
+                  handlePropertyChange={handleUpdateSecretProperty}
+                  handleDelete={handleDeleteSecret}
+                />
+              </div>
             ))}
 
             <div className="col-span-2 flex mt-4">

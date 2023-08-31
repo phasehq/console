@@ -109,7 +109,11 @@ a {
 
 @layer components {
   input {
-    @apply bg-white dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:ring-inset;
+    @apply p-2 focus:outline-none
+  }
+
+  input:not(.secrets) {
+    @apply bg-white dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-black dark:text-white focus:ring-1 focus:ring-emerald-500 focus:ring-inset;
   }
 
   textarea {
