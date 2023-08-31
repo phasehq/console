@@ -21,6 +21,17 @@ import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation } from '@apollo/client'
 
+export const Tag = (props: { tag: SecretTagType }) => {
+  const { name, color } = props.tag
+
+  return (
+    <div className="flex items-center w-min px-2 rounded-full gap-1 border border-zinc-700 text-neutral-500 text-base">
+      <div className={`h-2 w-2 rounded-full`} style={{ backgroundColor: color }}></div>
+      <span>{name}</span>
+    </div>
+  )
+}
+
 const TagsDialog = (props: {
   orgId: string
   secretId: string
@@ -65,9 +76,12 @@ const TagsDialog = (props: {
 
   const handleNewTagColorChange = (color: string) => setNewTag({ ...newTag, ...{ color } })
 
-  const handleCreateTag = () => {
+  const handleCreateTag = async () => {
     const { name, color } = newTag
-    createSecretTag({
+
+    if (!name) return false
+
+    await createSecretTag({
       variables: {
         orgId,
         name,
@@ -82,15 +96,15 @@ const TagsDialog = (props: {
         },
       ],
     })
+    setNewTag({ name: '', color: '' })
   }
 
-  const Tag = (props: { id: string; name: string; color: string }) => {
-    const { id, name, color } = props
+  const TagSelector = (props: { tag: SecretTagType }) => {
+    const { id, name, color } = props.tag
 
     const isSelected = secretTags.map((secretTag) => secretTag.name).includes(name)
 
     const handleTagClick = () => {
-      console.log('secretTags', secretTags)
       if (isSelected) {
         setSecretTags(secretTags.filter((tag) => tag.name !== name))
       } else setSecretTags([...secretTags, ...[{ id, name, color }]])
@@ -99,18 +113,12 @@ const TagsDialog = (props: {
     return (
       <div className="flex items-center gap-2 cursor-pointer" onClick={handleTagClick}>
         {isSelected ? (
-          <FaCheckSquare className="text-emerald-700" />
+          <FaCheckSquare className="text-emerald-500" />
         ) : (
           <FaSquare className="text-zinc-700" />
         )}
-        <div
-          className={clsx(
-            'flex items-center w-min px-2 rounded-full gap-1 border ',
-            isSelected ? 'border-zinc-400' : 'border-zinc-700'
-          )}
-        >
-          <div className={`h-2 w-2 rounded-full`} style={{ backgroundColor: color }}></div>
-          <span className={clsx(isSelected ? 'text-zinc-300' : 'text-zinc-600')}>{name}</span>
+        <div className={clsx(isSelected ? 'opacity-100' : 'opacity-70', 'transition-opacity ease')}>
+          <Tag tag={props.tag} />
         </div>
       </div>
     )
@@ -118,11 +126,19 @@ const TagsDialog = (props: {
 
   return (
     <>
-      <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="Update comment">
-          <FaTags /> Tags
-        </Button>
-      </div>
+      {tags.length > 0 ? (
+        <div className="flex items-center gap-1.5 cursor-pointer" role="button" onClick={openModal}>
+          {tags.map((tag) => (
+            <Tag key={tag.id} tag={tag} />
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center justify-center">
+          <Button variant="outline" onClick={openModal} title="Update comment">
+            <FaTags /> Tags
+          </Button>
+        </div>
+      )}
 
       <Transition appear show={isOpen} as={Fragment}>
         <Dialog as="div" className="relative z-10" onClose={closeModal}>
@@ -163,7 +179,7 @@ const TagsDialog = (props: {
                   <div className="space-y-6 p-4">
                     <div className="space-y-4">
                       {orgTags?.secretTags.map((tag: SecretTagType) => (
-                        <Tag key={tag.id} id={tag.id} name={tag.name} color={tag.color} />
+                        <TagSelector key={tag.id} tag={tag} />
                       ))}
                       <div className="flex items-center w-full justify-between border-t border-zinc-700 py-4">
                         <div className="flex items-center gap-2">
@@ -178,17 +194,16 @@ const TagsDialog = (props: {
                             onChange={(e) => handleNewTagColorChange(e.target.value)}
                           />
                         </div>
-                        <Button variant="primary" onClick={handleCreateTag}>
+                        <Button
+                          variant={newTag.name!.length === 0 ? 'secondary' : 'primary'}
+                          disabled={newTag.name!.length === 0}
+                          onClick={handleCreateTag}
+                        >
                           <FaPlus />
                           Create new tag
                         </Button>
                       </div>
                     </div>
-                    {/* <div className="flex items-center gap-4">
-                      <Button variant="secondary" type="button" onClick={handleClose}>
-                        Close
-                      </Button>
-                    </div> */}
                   </div>
                 </Dialog.Panel>
               </Transition.Child>
@@ -420,9 +435,9 @@ const DeleteConfirmDialog = (props: {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal}>
-          <div className="text-red-500 flex items-center gap-1">
-            <FaTrashAlt /> Delete
+        <Button variant="outline" onClick={openModal} title="Delete secret">
+          <div className="text-red-500 flex items-center gap-1 p-1">
+            <FaTrashAlt />
           </div>
         </Button>
       </div>
@@ -499,7 +514,7 @@ export default function SecretRow(props: {
   const toggleReveal = () => setIsRevealed(!isRevealed)
 
   const INPUT_BASE_STYLE =
-    'w-full text-zinc-300 font-mono secrets bg-white dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-black dark:text-white '
+    'w-full text-zinc-300 font-mono secrets bg-white dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-black dark:text-white transition ease'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -531,7 +546,7 @@ export default function SecretRow(props: {
 
   return (
     <div className="flex flex-row w-full gap-2 group">
-      <div className="w-1/3">
+      <div className="w-1/3 relative">
         <input
           className={clsx(
             INPUT_BASE_STYLE,
@@ -545,6 +560,22 @@ export default function SecretRow(props: {
           value={secret.key}
           onChange={(e) => handlePropertyChange(secret.id, 'key', e.target.value.toUpperCase())}
         />
+        <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
+          <div
+            className={clsx(
+              secret.tags.length === 0 &&
+                'opacity-0 group-hover:opacity-100 transition-opacity ease'
+            )}
+          >
+            <TagsDialog
+              orgId={orgId}
+              secretName={secret.key}
+              secretId={secret.id}
+              tags={secret.tags}
+              handlePropertyChange={handlePropertyChange}
+            />
+          </div>
+        </div>
       </div>
       <div className="w-2/3 relative">
         <input
@@ -553,35 +584,39 @@ export default function SecretRow(props: {
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
         />
-        <div className="absolute inset-y-0 right-2 flex gap-1 items-center opacity-0 group-hover:opacity-100 transition ease">
-          <Button
-            variant="outline"
-            onClick={toggleReveal}
-            title={isRevealed ? 'Mask value' : 'Reveal value'}
+        <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+            <Button
+              variant="outline"
+              onClick={toggleReveal}
+              title={isRevealed ? 'Mask value' : 'Reveal value'}
+            >
+              <span className="py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+              {isRevealed ? 'Mask' : 'Reveal'}
+            </Button>
+          </div>
+
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+            <HistoryDialog secret={secret} />
+          </div>
+
+          <div
+            className={clsx(
+              secret.comment.length === 0 &&
+                'opacity-0 group-hover:opacity-100 transition-opacity ease'
+            )}
           >
-            <span className="py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
-            {isRevealed ? 'Mask' : 'Reveal'}
-          </Button>
-          <TagsDialog
-            orgId={orgId}
-            secretName={secret.key}
-            secretId={secret.id}
-            tags={secret.tags}
-            handlePropertyChange={handlePropertyChange}
-          />
-          <CommentDialog
-            secretName={secret.key}
-            secretId={secret.id}
-            comment={secret.comment}
-            handlePropertyChange={handlePropertyChange}
-          />
-          <HistoryDialog secret={secret} />
-          <DeleteConfirmDialog
-            secretName={secret.key}
-            secretId={secret.id}
-            onDelete={handleDelete}
-          />
+            <CommentDialog
+              secretName={secret.key}
+              secretId={secret.id}
+              comment={secret.comment}
+              handlePropertyChange={handlePropertyChange}
+            />
+          </div>
         </div>
+      </div>
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-center">
+        <DeleteConfirmDialog secretName={secret.key} secretId={secret.id} onDelete={handleDelete} />
       </div>
     </div>
   )
