@@ -267,7 +267,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                     ))}
                   </div>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-8">
                   {sortedEnvSecrets.map((envS: EnvSecrets) => (
                     <EnvCard key={envS.env.id} envSecrets={envS} />
                   ))}
