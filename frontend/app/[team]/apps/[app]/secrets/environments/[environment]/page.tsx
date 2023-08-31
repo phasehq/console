@@ -394,7 +394,7 @@ export default function Environment({
         <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
       )}
       {keyring !== null && !loading && (
-        <div className="flex flex-col p-4 gap-8 max-w-screen-2xl mx-auto">
+        <div className="flex flex-col p-4 gap-8">
           <div className="h3 text-white font-semibold text-2xl">
             {environment.name}
             {unsavedChanges && (
