@@ -444,7 +444,7 @@ const DeleteConfirmDialog = (props: {
     <>
       <div className="flex items-center justify-center">
         <Button variant="danger" onClick={openModal} title="Delete secret">
-          <div className="text-red-500 flex items-center gap-1 p-1">
+          <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
             <FaTrashAlt />
           </div>
         </Button>
