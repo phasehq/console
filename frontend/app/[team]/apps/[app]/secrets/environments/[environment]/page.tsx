@@ -154,20 +154,25 @@ export default function Environment({
   }
 
   const handleDeleteSecret = async (id: string) => {
-    await deleteSecret({
-      variables: {
-        id,
-      },
-      refetchQueries: [
-        {
-          query: GetSecrets,
-          variables: {
-            appId: params.app,
-            envId: params.environment,
-          },
+    if (id.split('-')[0] === 'new')
+      updateSecrets(updatedSecrets.filter((secret) => secret.id !== id))
+    else {
+      await deleteSecret({
+        variables: {
+          id,
         },
-      ],
-    })
+        refetchQueries: [
+          {
+            query: GetSecrets,
+            variables: {
+              appId: params.app,
+              envId: params.environment,
+            },
+          },
+        ],
+      })
+    }
+    toast.success('Secret deleted.')
   }
 
   const handleCreateNewEnvToken = async () => {
@@ -328,7 +333,7 @@ export default function Environment({
 
     await Promise.all(updates)
 
-    toast.success('Changes successfully deployed!')
+    toast.success('Changes successfully deployed.')
   }
 
   const handleDiscardChanges = () => {
