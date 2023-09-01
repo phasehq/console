@@ -9,6 +9,7 @@ import { AppType } from '@/apollo/graphql'
 import Link from 'next/link'
 import { Button } from '../common/Button'
 import { StatusIndicator } from '../common/StatusIndicator'
+import clsx from 'clsx'
 
 export const NavBar = (props: { team: string }) => {
   const { data: orgsData } = useQuery(GetOrganisations)
@@ -38,6 +39,8 @@ export const NavBar = (props: { team: string }) => {
 
   const appId = usePathname()?.split('/')[3]
 
+  const appPage = usePathname()?.split('/')[4]
+
   const activeApp = apps?.find((app) => app.id === appId)
 
   return (
@@ -47,10 +50,23 @@ export const NavBar = (props: { team: string }) => {
           <Logo boxSize={40} />
         </Link>
         <span>/</span>
+
         {!activeApp && <span className="text-black dark:text-white">{props.team}</span>}
+
         {activeApp && <Link href={`/${props.team}`}>{props.team}</Link>}
+
         {activeApp && <span>/</span>}
-        {activeApp && <span className="text-black dark:text-white">{activeApp.name}</span>}
+
+        {activeApp &&
+          (appPage ? (
+            <Link href={`/${props.team}/apps/${activeApp.id}`}>{activeApp.name}</Link>
+          ) : (
+            <span className="text-black dark:text-white">{activeApp.name}</span>
+          ))}
+
+        {appPage && <span>/</span>}
+
+        {appPage && <span className="text-black dark:text-white capitalize">{appPage}</span>}
       </div>
       <div className="flex gap-4 items-center justify-end">
         {IS_CLOUD_HOSTED && <StatusIndicator />}
