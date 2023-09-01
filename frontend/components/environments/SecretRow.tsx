@@ -25,7 +25,7 @@ export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
 
   return (
-    <div className="flex items-center w-min px-2 rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-neutral-500 text-base">
+    <div className="flex items-center px-2 rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-neutral-500 text-base">
       <div className={`h-2 w-2 rounded-full`} style={{ backgroundColor: color }}></div>
       <span>{name}</span>
     </div>
