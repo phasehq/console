@@ -37,18 +37,38 @@ export default function Environment({
 }: {
   params: { team: string; app: string; environment: string }
 }) {
+  const { keyring } = useContext(KeyringContext)
+
+  const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
+  const [secrets, setSecrets] = useState<SecretType[]>([])
+  const [updatedSecrets, updateSecrets] = useState<SecretType[]>([])
+  const [searchQuery, setSearchQuery] = useState<string>('')
+
   const { data: orgsData } = useQuery(GetOrganisations)
+
+  const unsavedChanges =
+    secrets.length !== updatedSecrets.length ||
+    secrets.some((secret, index) => {
+      const updatedSecret = updatedSecrets[index]
+
+      // Compare secret properties (comment, key, tags, value)
+      return (
+        secret.comment !== updatedSecret.comment ||
+        secret.key !== updatedSecret.key ||
+        !arraysEqual(secret.tags, updatedSecret.tags) ||
+        secret.value !== updatedSecret.value
+      )
+    })
 
   const { data, loading } = useQuery(GetSecrets, {
     variables: {
       appId: params.app,
       envId: params.environment,
     },
+    pollInterval: unsavedChanges ? 0 : 5000,
   })
 
-  const [createSecret, { loading: createSecretMutationLoading, error }] =
-    useMutation(CreateNewSecret)
-
+  const [createSecret] = useMutation(CreateNewSecret)
   const [updateSecret] = useMutation(UpdateSecret)
   const [deleteSecret] = useMutation(DeleteSecretOp)
 
@@ -60,50 +80,23 @@ export default function Environment({
     },
   })
 
-  const { keyring } = useContext(KeyringContext)
-
-  const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
-  const [secrets, setSecrets] = useState<SecretType[]>([])
-  const [updatedSecrets, updateSecrets] = useState<SecretType[]>([])
-  const [searchQuery, setSearchQuery] = useState<string>('')
-  const [newSecretKey, setNewSecretKey] = useState<string>('')
-  const [newSecretValue, setNewSecretValue] = useState<string>('')
-
   const environment = data?.appEnvironments[0] as EnvironmentType
 
-  const handleCreateNewSecret = async () => {
-    const encryptedKey = await encryptAsymmetric(newSecretKey, environment.identityKey)
-    const encryptedValue = await encryptAsymmetric(newSecretValue, environment.identityKey)
-    const keyDigest = await digest(newSecretKey, envKeys!.salt)
-
-    await createSecret({
-      variables: {
-        newSecret: {
-          envId: params.environment,
-          key: encryptedKey,
-          keyDigest,
-          value: encryptedValue,
-          folderId: null,
-          comment: '',
-          tags: [],
-        } as SecretInput,
-      },
-      refetchQueries: [
-        {
-          query: GetSecrets,
-          variables: {
-            appId: params.app,
-            envId: params.environment,
-          },
-        },
-      ],
-    })
-    setNewSecretKey('')
-    setNewSecretValue('')
+  const handleAddSecret = () => {
+    const newSecret = {
+      id: `new-${crypto.randomUUID()}`,
+      updatedAt: null,
+      version: 1,
+      key: '',
+      value: '',
+      tags: [],
+      comment: '',
+    } as SecretType
+    updateSecrets([...updatedSecrets, newSecret])
   }
 
-  const handleUpdateSecret = async (id: string) => {
-    const { key, value, comment, tags } = updatedSecrets.find((secret) => secret.id === id)!
+  const handleUpdateSecret = async (secret: SecretType) => {
+    const { id, key, value, comment, tags } = secret
 
     const encryptedKey = await encryptAsymmetric(key, environment.identityKey)
     const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
@@ -111,30 +104,53 @@ export default function Environment({
     const encryptedComment = await encryptAsymmetric(comment, environment.identityKey)
     const tagIds = tags.map((tag) => tag.id)
 
-    await updateSecret({
-      variables: {
-        id,
-        secretData: {
-          key: encryptedKey,
-          keyDigest,
-          value: encryptedValue,
-          folderId: null,
-          comment: encryptedComment,
-          tags: tagIds,
-        } as SecretInput,
-      },
-      refetchQueries: [
-        {
-          query: GetSecrets,
-          variables: {
-            appId: params.app,
+    if (id.split('-')[0] === 'new') {
+      await createSecret({
+        variables: {
+          newSecret: {
             envId: params.environment,
-          },
+            key: encryptedKey,
+            keyDigest,
+            value: encryptedValue,
+            folderId: null,
+            comment: encryptedComment,
+            tags: tagIds,
+          } as SecretInput,
         },
-      ],
-    })
-    setNewSecretKey('')
-    setNewSecretValue('')
+        refetchQueries: [
+          {
+            query: GetSecrets,
+            variables: {
+              appId: params.app,
+              envId: params.environment,
+            },
+          },
+        ],
+      })
+    } else {
+      await updateSecret({
+        variables: {
+          id,
+          secretData: {
+            key: encryptedKey,
+            keyDigest,
+            value: encryptedValue,
+            folderId: null,
+            comment: encryptedComment,
+            tags: tagIds,
+          } as SecretInput,
+        },
+        refetchQueries: [
+          {
+            query: GetSecrets,
+            variables: {
+              appId: params.app,
+              envId: params.environment,
+            },
+          },
+        ],
+      })
+    }
   }
 
   const handleDeleteSecret = async (id: string) => {
@@ -262,26 +278,15 @@ export default function Environment({
     updateSecrets(updatedSecretList)
   }
 
-  const unsavedChanges = secrets.some((secret, index) => {
-    const updatedSecret = updatedSecrets[index]
-
-    // Compare the properties that can be edited (comment, key, tags, value)
-    return (
-      secret.comment !== updatedSecret.comment ||
-      secret.key !== updatedSecret.key ||
-      !arraysEqual(secret.tags, updatedSecret.tags) ||
-      secret.value !== updatedSecret.value
-    )
-  })
-
   const getUpdatedSecrets = () => {
     const changedElements = []
 
-    for (let i = 0; i < secrets.length; i++) {
+    for (let i = 0; i < updatedSecrets.length; i++) {
       const originalSecret = secrets[i]
       const updatedSecret = updatedSecrets[i]
 
-      if (
+      if (updatedSecret.id.split('-')[0] === 'new') changedElements.push(updatedSecret)
+      else if (
         originalSecret.comment !== updatedSecret.comment ||
         originalSecret.key !== updatedSecret.key ||
         !arraysEqual(originalSecret.tags, updatedSecret.tags) ||
@@ -319,9 +324,10 @@ export default function Environment({
       return false
     }
 
-    const updates = changedSecrets.map((secret) => handleUpdateSecret(secret.id))
+    const updates = changedSecrets.map((secret) => handleUpdateSecret(secret))
 
     await Promise.all(updates)
+
     toast.success('Changes successfully deployed!')
   }
 
@@ -451,12 +457,12 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            {filteredSecrets.map((secret: SecretType, index: number) => (
+            {filteredSecrets.map((secret, index: number) => (
               <div className="flex items-center gap-2" key={secret.id}>
                 <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
                 <SecretRow
                   orgId={orgsData.organisations[0].id}
-                  secret={secret}
+                  secret={secret as SecretType}
                   cannonicalSecret={cannonicalSecret(secret.id)}
                   secretNames={secretNames}
                   handlePropertyChange={handleUpdateSecretProperty}
@@ -466,7 +472,7 @@ export default function Environment({
             ))}
 
             <div className="col-span-2 flex mt-4">
-              <Button variant="primary" onClick={handleCreateNewSecret}>
+              <Button variant="primary" onClick={handleAddSecret}>
                 <div className="flex items-center gap-2">
                   <FaPlus /> Create new secret
                 </div>

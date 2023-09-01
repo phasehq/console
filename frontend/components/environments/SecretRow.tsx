@@ -547,7 +547,7 @@ export default function SecretRow(props: {
   }
 
   const secretHasBeenModified = () => {
-    if (cannonicalSecret === undefined) return false
+    if (cannonicalSecret === undefined) return true
     return (
       secret.key !== cannonicalSecret.key ||
       secret.value !== cannonicalSecret.value ||
