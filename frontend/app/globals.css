@@ -116,7 +116,7 @@ a {
     @apply p-2 focus:outline-none
   }
 
-  input:not(.secrets) {
+  input:not(.custom) {
     @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-zinc-800 dark:text-white ring-1 ring-inset ring-zinc-200 focus:ring-1 focus:ring-emerald-500 focus:ring-inset;
   }
 

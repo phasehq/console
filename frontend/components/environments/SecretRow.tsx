@@ -294,7 +294,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                   </Dialog.Title>
 
                   <div className="space-y-8 py-4">
-                    <div className="max-h-96 overflow-y-auto px-2">
+                    <div className="max-h-[800px] overflow-y-auto px-2">
                       <div className="space-y-4 pb-4 border-l border-zinc-300 dark:border-zinc-700">
                         {secret.history?.map((historyItem) => (
                           <div key={historyItem!.timestamp} className="pb-8 space-y-2">
@@ -525,7 +525,7 @@ export default function SecretRow(props: {
   const toggleReveal = () => setIsRevealed(!isRevealed)
 
   const INPUT_BASE_STYLE =
-    'w-full text-zinc-800 font-mono secrets bg-zinc-100 dark:bg-zinc-800 rounded-sm text-black dark:text-white transition ease'
+    'w-full text-zinc-800 font-mono custom bg-zinc-100 dark:bg-zinc-800 dark:text-white transition ease'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -562,6 +562,7 @@ export default function SecretRow(props: {
         <input
           className={clsx(
             INPUT_BASE_STYLE,
+            'rounded-sm',
             keyIsBlank
               ? 'ring-1 ring-inset ring-red-500'
               : keyIsDuplicate
@@ -589,14 +590,14 @@ export default function SecretRow(props: {
           </div>
         </div>
       </div>
-      <div className="w-2/3 relative">
+      <div className="w-2/3 flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-zinc-100 dark:bg-zinc-800 p-px">
         <input
-          className={clsx(INPUT_BASE_STYLE, 'focus:ring-1 focus:ring-inset focus:ring-zinc-500')}
+          className={clsx(INPUT_BASE_STYLE, 'w-full')}
           value={secret.value}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
         />
-        <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
+        <div className="flex gap-1 items-center group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10">
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
             <Button
               variant="outline"

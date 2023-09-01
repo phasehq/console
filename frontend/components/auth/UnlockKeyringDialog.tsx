@@ -95,14 +95,14 @@ export default function UnlockKeyringDialog(props: { organisationId: string }) {
                       </p>
                     </div>
                     <div className="flex justify-between items-end gap-4">
-                      <div className="space-y-4 max-w-lg">
+                      <div className="space-y-4 w-full">
                         <label
                           className="block text-gray-700 text-sm font-bold mb-2"
                           htmlFor="password"
                         >
                           Sudo password
                         </label>
-                        <div className="relative">
+                        <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
                           <input
                             id="password"
                             value={password}
@@ -111,10 +111,10 @@ export default function UnlockKeyringDialog(props: { organisationId: string }) {
                             minLength={16}
                             required
                             autoFocus
-                            className="w-full "
+                            className="custom w-full text-zinc-800 font-mono  dark:text-white"
                           />
                           <button
-                            className="absolute inset-y-0 right-4 text-neutral-500"
+                            className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
                             type="button"
                             onClick={() => setShowPw(!showPw)}
                             tabIndex={-1}

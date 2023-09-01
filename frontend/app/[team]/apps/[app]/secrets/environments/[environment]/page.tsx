@@ -415,7 +415,7 @@ export default function Environment({
               </div>
               <input
                 placeholder="Search"
-                className="secrets bg-zinc-100 dark:bg-zinc-800"
+                className="custom bg-zinc-100 dark:bg-zinc-800"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
