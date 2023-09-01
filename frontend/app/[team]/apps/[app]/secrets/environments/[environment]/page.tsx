@@ -411,10 +411,7 @@ export default function Environment({
           <div className="h3 font-semibold text-2xl">
             {environment.name}
             {unsavedChanges && (
-              <span
-                className="text-orange-500 cursor-default"
-                title="Environment has been modified"
-              >
+              <span className="text-amber-500 cursor-default" title="Environment has been modified">
                 *
               </span>
             )}

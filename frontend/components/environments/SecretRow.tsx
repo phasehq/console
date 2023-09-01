@@ -566,9 +566,9 @@ export default function SecretRow(props: {
             keyIsBlank
               ? 'ring-1 ring-inset ring-red-500'
               : keyIsDuplicate
-              ? 'ring-1 ring-inset ring-orange-500'
+              ? 'ring-1 ring-inset ring-amber-500'
               : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
-            secretHasBeenModified() && '!text-orange-500'
+            secretHasBeenModified() && '!text-amber-500'
           )}
           value={secret.key}
           onChange={(e) => handlePropertyChange(secret.id, 'key', e.target.value.toUpperCase())}
