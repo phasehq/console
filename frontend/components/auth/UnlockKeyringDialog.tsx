@@ -111,7 +111,7 @@ export default function UnlockKeyringDialog(props: { organisationId: string }) {
                             minLength={16}
                             required
                             autoFocus
-                            className="custom w-full text-zinc-800 font-mono  dark:text-white"
+                            className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
                           />
                           <button
                             className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
