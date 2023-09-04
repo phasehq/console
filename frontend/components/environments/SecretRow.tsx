@@ -1,5 +1,10 @@
-import { ApiSecretEventEventTypeChoices, SecretTagType, SecretType } from '@/apollo/graphql'
-import { Fragment, useEffect, useState } from 'react'
+import {
+  ApiSecretEventEventTypeChoices,
+  SecretEventType,
+  SecretTagType,
+  SecretType,
+} from '@/apollo/graphql'
+import { FormEvent, Fragment, useEffect, useState } from 'react'
 import {
   FaEyeSlash,
   FaEye,
@@ -20,6 +25,7 @@ import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecre
 import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation } from '@apollo/client'
+import { areTagsAreSame } from '@/utils/tags'
 
 export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
@@ -246,6 +252,76 @@ const HistoryDialog = (props: { secret: SecretType }) => {
     if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted'
   }
 
+  const PropertyDiffs = (props: { historyItem: SecretEventType; index: number }) => {
+    const { historyItem, index } = props
+
+    const previousItem = secret.history![index - 1]!
+
+    const getAddedTags = () => {
+      const addedTags = historyItem!.tags.filter((currentTag) =>
+        previousItem.tags.every((previousTag) => previousTag.id !== currentTag.id)
+      )
+      return addedTags
+    }
+
+    const getRemovedTags = () => {
+      const removedTags = previousItem.tags.filter((previousTag) =>
+        historyItem.tags.every((currentTag) => currentTag.id !== previousTag.id)
+      )
+      return removedTags
+    }
+
+    return (
+      <>
+        {historyItem!.key !== previousItem.key && (
+          <div className="pl-3 font-mono">
+            <span className="text-neutral-500 mr-2">KEY:</span>
+            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.key}</s>
+            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+              {historyItem!.key}
+            </span>
+          </div>
+        )}
+
+        {historyItem!.value !== previousItem.value && (
+          <div className="pl-3 font-mono">
+            <span className="text-neutral-500 mr-2">VALUE:</span>
+            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.value}</s>
+            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+              {historyItem!.value}
+            </span>
+          </div>
+        )}
+
+        {historyItem!.comment !== previousItem.comment && (
+          <div className="pl-3 font-mono">
+            <span className="text-neutral-500 mr-2">COMMENT:</span>
+            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.comment}</s>
+            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+              {historyItem!.comment}
+            </span>
+          </div>
+        )}
+
+        {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
+          <div className="pl-3 font-mono">
+            <span className="text-neutral-500 mr-2">TAGS:</span>
+            <div className="bg-red-200 dark:bg-red-950 text-red-500 flex w-min gap-2 rounded-full">
+              {getRemovedTags().map((tag) => (
+                <Tag key={tag.id} tag={tag} />
+              ))}
+            </div>
+            <div className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 flex w-min gap-2 rounded-full">
+              {getAddedTags().map((tag) => (
+                <Tag key={tag.id} tag={tag} />
+              ))}
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
   return (
     <>
       <div className="flex items-center justify-center">
@@ -296,7 +372,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                   <div className="space-y-8 py-4">
                     <div className="max-h-[800px] overflow-y-auto px-2">
                       <div className="space-y-4 pb-4 border-l border-zinc-300 dark:border-zinc-700">
-                        {secret.history?.map((historyItem) => (
+                        {secret.history?.map((historyItem, index) => (
                           <div key={historyItem!.timestamp} className="pb-8 space-y-2">
                             <div className="flex flex-row items-center gap-2 -ml-1">
                               <span
@@ -305,19 +381,21 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                                   getEventTypeColor(historyItem!.eventType)
                                 )}
                               ></span>
-                              {/* <span>{historyItem!.version}</span> */}
                               <div className="text-zinc-800 dark:text-zinc-200 font-semibold">
                                 {getEventTypeText(historyItem!.eventType)}
                               </div>
                               <div className="text-neutral-500 text-sm">
                                 {relativeTimeFromDates(new Date(historyItem!.timestamp))}
+                              </div>{' '}
+                              <span className="text-sm text-neutral-500">by</span>
+                              <div className="text-sm flex items-center gap-2 text-neutral-500">
+                                <FaUser />
+                                {historyItem!.user!.username}
                               </div>
-                              {/* <div>{historyItem!.value}</div> */}
                             </div>
-                            <div className="pl-3 text-sm flex items-center gap-2 text-neutral-500">
-                              <FaUser />
-                              {historyItem!.user!.username}
-                            </div>
+                            {index > 0 && (
+                              <PropertyDiffs historyItem={historyItem!} index={index} />
+                            )}
                           </div>
                         ))}
                       </div>
@@ -532,20 +610,6 @@ export default function SecretRow(props: {
   const keyIsDuplicate =
     secretNames.findIndex((s) => s.key === secret.key && s.id !== secret.id) > -1
 
-  const isTagSame = (tag1: SecretTagType, tag2: SecretTagType) => {
-    return tag1.color === tag2.color && tag1.name === tag2.name
-  }
-
-  const areTagsAreSame = (tags1: SecretTagType[], tags2: SecretTagType[]) => {
-    if (tags1.length !== tags2.length) return false
-
-    tags1.forEach((tag, index) => {
-      if (!isTagSame(tag, tags2[index])) return false
-    })
-
-    return true
-  }
-
   const secretHasBeenModified = () => {
     if (cannonicalSecret === undefined) return true
     return (
@@ -554,6 +618,37 @@ export default function SecretRow(props: {
       secret.comment !== cannonicalSecret.comment ||
       !areTagsAreSame(secret.tags, cannonicalSecret.tags)
     )
+  }
+
+  function highlightTemplateLiterals(inputValue: string) {
+    // Regular expression to match template literals "${...}"
+    const templateLiteralRegex = /\${(.*?)}/g
+
+    // Split the input value into segments based on the regex
+    const segments = inputValue.split(templateLiteralRegex)
+
+    // Initialize an empty array to store segments and their styles
+    const highlightedSegments: Record<string, string>[] = []
+
+    segments.forEach((segment, index) => {
+      if (index % 2 === 0) {
+        // Even index segments are not part of template literals, so add them without styling
+        const formattedSegment = segment.replace(/\$/g, '$').replace(/{/g, '{').replace(/}/g, '}')
+        highlightedSegments.push({ text: formattedSegment, style: '' })
+      } else {
+        // Odd index segments are part of template literals, so style them differently
+        highlightedSegments.push({ text: segment, style: 'text-amber-500' }) // You can use any styling you prefer here
+      }
+    })
+
+    return highlightedSegments
+  }
+
+  const highlightedSegments = highlightTemplateLiterals(secret.value)
+
+  const handleCustomInputChange = (secretId: string, e: FormEvent<HTMLDivElement>) => {
+    const html = (e.target as HTMLDivElement).textContent
+    handlePropertyChange(secretId, 'value', html)
   }
 
   return (
@@ -590,13 +685,37 @@ export default function SecretRow(props: {
           </div>
         </div>
       </div>
-      <div className="w-2/3 flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-zinc-100 dark:bg-zinc-800 p-px">
-        <input
-          className={clsx(INPUT_BASE_STYLE, 'w-full')}
-          value={secret.value}
-          type={isRevealed ? 'text' : 'password'}
-          onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
-        />
+      <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-zinc-100 dark:bg-zinc-800 p-px">
+        <div
+          contentEditable
+          role="textbox"
+          className={clsx(INPUT_BASE_STYLE, 'w-full z-10 focus:outline-none p-2')}
+          //value={secret.value}
+          //type={isRevealed ? 'text' : 'password'}
+          onBlur={(e) => handleCustomInputChange(secret.id, e)}
+          //onInput={(e) => handlePropertyChange(secret.id, 'value', e.target.)}
+          suppressContentEditableWarning={true}
+        >
+          {isRevealed
+            ? highlightedSegments.map((segment, index) => (
+                <span key={index} className={segment.style}>
+                  {segment.text}
+                </span>
+              ))
+            : '•'.repeat(secret.value.length)}
+          {/* {isRevealed ? secret.value : '•'.repeat(secret.value.length)} */}
+        </div>
+
+        {/* <div className="absolute inset-0 pointer-events-none p-2">
+          {isRevealed
+            ? highlightedSegments.map((segment, index) => (
+                <span key={index} className={segment.style}>
+                  {segment.text}
+                </span>
+              ))
+            : '•'.repeat(secret.value.length)}
+        </div>
+         */}
         <div className="flex gap-1 items-center group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10">
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
             <Button
