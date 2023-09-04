@@ -117,7 +117,10 @@ const TagsDialog = (props: {
     }
 
     return (
-      <div className="flex items-center gap-2 cursor-pointer" onClick={handleTagClick}>
+      <div
+        className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors ease"
+        onClick={handleTagClick}
+      >
         {isSelected ? (
           <FaCheckSquare className="text-emerald-500" />
         ) : (
@@ -187,7 +190,7 @@ const TagsDialog = (props: {
                   </Dialog.Title>
 
                   <div className="space-y-6 p-4">
-                    <div className="space-y-4">
+                    <div className="space-y-1">
                       {orgTags?.secretTags.map((tag: SecretTagType) => (
                         <TagSelector key={tag.id} tag={tag} />
                       ))}
@@ -644,13 +647,6 @@ export default function SecretRow(props: {
     return highlightedSegments
   }
 
-  const highlightedSegments = highlightTemplateLiterals(secret.value)
-
-  const handleCustomInputChange = (secretId: string, e: FormEvent<HTMLDivElement>) => {
-    const html = (e.target as HTMLDivElement).textContent
-    handlePropertyChange(secretId, 'value', html)
-  }
-
   return (
     <div className="flex flex-row w-full gap-2 group">
       <div className="w-1/3 relative">
@@ -686,36 +682,13 @@ export default function SecretRow(props: {
         </div>
       </div>
       <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-zinc-100 dark:bg-zinc-800 p-px">
-        <div
-          contentEditable
-          role="textbox"
+        <input
           className={clsx(INPUT_BASE_STYLE, 'w-full z-10 focus:outline-none p-2')}
-          //value={secret.value}
-          //type={isRevealed ? 'text' : 'password'}
-          onBlur={(e) => handleCustomInputChange(secret.id, e)}
-          //onInput={(e) => handlePropertyChange(secret.id, 'value', e.target.)}
-          suppressContentEditableWarning={true}
-        >
-          {isRevealed
-            ? highlightedSegments.map((segment, index) => (
-                <span key={index} className={segment.style}>
-                  {segment.text}
-                </span>
-              ))
-            : '•'.repeat(secret.value.length)}
-          {/* {isRevealed ? secret.value : '•'.repeat(secret.value.length)} */}
-        </div>
+          value={secret.value}
+          type={isRevealed ? 'text' : 'password'}
+          onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
+        />
 
-        {/* <div className="absolute inset-0 pointer-events-none p-2">
-          {isRevealed
-            ? highlightedSegments.map((segment, index) => (
-                <span key={index} className={segment.style}>
-                  {segment.text}
-                </span>
-              ))
-            : '•'.repeat(secret.value.length)}
-        </div>
-         */}
         <div className="flex gap-1 items-center group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10">
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
             <Button
