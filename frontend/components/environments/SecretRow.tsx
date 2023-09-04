@@ -623,30 +623,6 @@ export default function SecretRow(props: {
     )
   }
 
-  function highlightTemplateLiterals(inputValue: string) {
-    // Regular expression to match template literals "${...}"
-    const templateLiteralRegex = /\${(.*?)}/g
-
-    // Split the input value into segments based on the regex
-    const segments = inputValue.split(templateLiteralRegex)
-
-    // Initialize an empty array to store segments and their styles
-    const highlightedSegments: Record<string, string>[] = []
-
-    segments.forEach((segment, index) => {
-      if (index % 2 === 0) {
-        // Even index segments are not part of template literals, so add them without styling
-        const formattedSegment = segment.replace(/\$/g, '$').replace(/{/g, '{').replace(/}/g, '}')
-        highlightedSegments.push({ text: formattedSegment, style: '' })
-      } else {
-        // Odd index segments are part of template literals, so style them differently
-        highlightedSegments.push({ text: segment, style: 'text-amber-500' }) // You can use any styling you prefer here
-      }
-    })
-
-    return highlightedSegments
-  }
-
   return (
     <div className="flex flex-row w-full gap-2 group">
       <div className="w-1/3 relative">
