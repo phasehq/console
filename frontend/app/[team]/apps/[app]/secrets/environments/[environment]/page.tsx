@@ -259,6 +259,40 @@ export default function Environment({
                 envKeys.publicKey
               )
 
+            // Decrypt history for each secret
+            if (secret.history && secret.history.length > 0) {
+              const decryptedHistory = await Promise.all(
+                secret.history.map(async (event) => {
+                  const decryptedEvent = structuredClone(event)
+
+                  // Decrypt event fields
+                  decryptedEvent!.key = await decryptAsymmetric(
+                    event!.key,
+                    envKeys.privateKey,
+                    envKeys.publicKey
+                  )
+
+                  decryptedEvent!.value = await decryptAsymmetric(
+                    event!.value,
+                    envKeys.privateKey,
+                    envKeys.publicKey
+                  )
+
+                  if (decryptedEvent!.comment !== '') {
+                    decryptedEvent!.comment = await decryptAsymmetric(
+                      event!.comment,
+                      envKeys.privateKey,
+                      envKeys.publicKey
+                    )
+                  }
+
+                  return decryptedEvent
+                })
+              )
+
+              decryptedSecret.history = decryptedHistory
+            }
+
             return decryptedSecret
           })
         )
