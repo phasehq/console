@@ -13,6 +13,7 @@ type Query {
   environmentKeys(environmentId: ID): [EnvironmentKeyType]
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
+  serviceTokens(appId: ID): [ServiceTokenType]
 }
 
 type OrganisationType {
@@ -228,15 +229,28 @@ type UserTokenType {
   updatedAt: DateTime!
 }
 
+type ServiceTokenType {
+  id: String!
+  keys: [EnvironmentKeyType!]!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  name: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  expiresAt: DateTime
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
   createEnvironment(environmentData: EnvironmentInput!): CreateEnvironmentMutation
-  createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID!, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
+  createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createUserToken(identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
+  createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
   createSecretFolder(envId: ID!, id: ID!, name: String!, parentFolderId: ID): CreateSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
   createSecret(secretData: SecretInput): CreateSecretMutation
@@ -283,6 +297,18 @@ type CreateEnvironmentTokenMutation {
 
 type CreateUserTokenMutation {
   userToken: UserTokenType
+}
+
+type CreateServiceTokenMutation {
+  serviceToken: ServiceTokenType
+}
+
+input EnvironmentKeyInput {
+  envId: ID!
+  userId: ID
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
 }
 
 type CreateSecretFolderMutation {

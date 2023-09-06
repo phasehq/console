@@ -4,7 +4,7 @@ import {
   SecretTagType,
   SecretType,
 } from '@/apollo/graphql'
-import { FormEvent, Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   FaEyeSlash,
   FaEye,

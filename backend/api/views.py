@@ -1,7 +1,7 @@
 
 from datetime import datetime
 import json
-from api.serializers import EnvironmentKeySerializer, SecretSerializer, UserTokenSerializer
+from api.serializers import EnvironmentKeySerializer, SecretSerializer, ServiceTokenSerializer, UserTokenSerializer
 from backend.graphene.utils.permissions import user_can_access_environment
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
 from api.utils import get_client_ip, get_env_from_service_token, get_org_member_from_user_token, get_token_type
 from logs.models import KMSDBLog
-from .models import App, Environment, EnvironmentKey, EnvironmentToken, Secret, SecretEvent, SecretTag, UserToken
+from .models import App, Environment, EnvironmentKey, EnvironmentToken, Secret, SecretEvent, SecretTag, ServiceToken, UserToken
 import jwt
 import requests
 from django.contrib.auth import logout
@@ -232,6 +232,24 @@ def user_token_kms(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def service_token_kms(request):
+    auth_token = request.headers['authorization']
+    token_type = get_token_type(auth_token)
+
+    if token_type != 'Service':
+        return HttpResponse(status=403)
+
+    token = auth_token.split(' ')[2]
+
+    service_token = ServiceToken.objects.get(token=token)
+
+    serializer = ServiceTokenSerializer(service_token)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class PrivateGraphQLView(LoginRequiredMixin, GraphQLView):
     raise_exception = True
     pass
@@ -322,12 +340,10 @@ class SecretsView(APIView):
 
             secret_obj = Secret.objects.create(**secret_data)
             secret_obj.tags.set(tags)
-            secret_obj.save()
 
             event = SecretEvent.objects.create(
                 **{**secret_data, **{'user': user, 'secret': secret_obj, 'event_type': SecretEvent.CREATE}})
             event.tags.set(tags)
-            event.save()
 
         return Response(status=status.HTTP_200_OK)
 
@@ -375,7 +391,6 @@ class SecretsView(APIView):
             event = SecretEvent.objects.create(
                 **{**secret_data, **{'user': user, 'secret': secret_obj, 'event_type': SecretEvent.UPDATE}})
             event.tags.set(tags)
-            event.save()
 
         return Response(status=status.HTTP_200_OK)
 

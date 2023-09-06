@@ -13,6 +13,7 @@ import {
   encryptAsymmetric,
   getUserKxPrivateKey,
   getUserKxPublicKey,
+  randomKeyPair,
 } from './crypto'
 
 export type EnvKeyring = {
@@ -75,9 +76,9 @@ export const newEnvWrapKey = async () => {
 /**
  * Encrypts an env seed with the given key
  *
- * @param seed - Env seed as a hex string
- * @param key - Encryption key as a hex string
- * @returns {Promise<Uint8Array>}
+ * @param {string} seed - Env seed as a hex string
+ * @param {string} key - Encryption key as a hex string
+ * @returns {Promise<string>} - hex encoded encrypted seed
  */
 export const encryptedEnvSeed = async (seed: string, key: string) => {
   await _sodium.ready
@@ -91,8 +92,8 @@ export const encryptedEnvSeed = async (seed: string, key: string) => {
 /**
  * Decrypts an env seed with the given key
  *
- * @param encryptedSeed - Encrytped env seed as a hex string
- * @param key - Decryption key as a hex string
+ * @param {string} encryptedSeed - Encrypted env seed as a hex string
+ * @param {string} key - Decryption key as a hex string
  * @returns {Promise<string>} - hex encoded plaintext app seed
  */
 export const decryptedAppSeed = async (encryptedSeed: string, key: string) => {
@@ -124,6 +125,26 @@ export const envKeyring = async (envSeed: string): Promise<EnvKeyring> => {
   return { publicKey: sodium.to_hex(publicKey), privateKey: sodium.to_hex(privateKey) }
 }
 
+export const newServiceTokenKeys = async () => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  const { publicKey, privateKey } = await randomKeyPair()
+
+  return {
+    publicKey: sodium.to_hex(publicKey),
+    privateKey: sodium.to_hex(privateKey),
+  }
+}
+
+/**
+ * Generates an environment token.
+ *
+ * @param {EnvironmentType} environment - The environment for which the token is generated.
+ * @param {EnvironmentKeyType} key - The key associated with the environment.
+ * @param {{ publicKey: string; privateKey: string }} userKeyring - The user's keyring.
+ * @returns {Promise<{ pssEnv: string; mutationPayload: object }>} - An object containing the environment token and mutation payload.
+ */
 export const generateEnvironmentToken = async (
   environment: EnvironmentType,
   key: EnvironmentKeyType,
@@ -164,6 +185,13 @@ export const generateEnvironmentToken = async (
   }
 }
 
+/**
+ * Generates a user token.
+ *
+ * @param {string} orgId - The organization ID.
+ * @param {{ publicKey: string; privateKey: string }} userKeyring - The user's keyring.
+ * @returns {Promise<{ pssUser: string; mutationPayload: object }>} - An object containing the user token and mutation payload.
+ */
 export const generateUserToken = async (
   orgId: string,
   userKeyring: { publicKey: string; privateKey: string }
@@ -189,6 +217,13 @@ export const generateUserToken = async (
   }
 }
 
+/**
+ * Wraps environment secrets for a user.
+ *
+ * @param {{ seed: string; salt: string }} envSecrets - The environment secrets to be wrapped.
+ * @param {OrganisationMemberType} user - The user for whom the secrets are wrapped.
+ * @returns {Promise<{ user: OrganisationMemberType; wrappedSeed: string; wrappedSalt: string }>} - An object containing the wrapped environment secrets and user information.
+ */
 const wrapEnvSecretsForUser = async (
   envSecrets: { seed: string; salt: string },
   user: OrganisationMemberType
@@ -204,6 +239,35 @@ const wrapEnvSecretsForUser = async (
   }
 }
 
+/**
+ * Wraps environment secrets for a service token.
+ *
+ * @param {{ seed: string; salt: string }} envSecrets - The environment secrets to be wrapped.
+ * @param {string} publicKey - The public key of the service token.
+ * @returns {Promise<{ wrappedSeed: string; wrappedSalt: string }>} - An object containing the wrapped environment secrets.
+ */
+export const wrapEnvSecretsForServiceToken = async (
+  envSecrets: { seed: string; salt: string },
+  publicKey: string
+) => {
+  //const servicePubKey = await getUserKxPublicKey(publicKey)
+  const wrappedSeed = await encryptAsymmetric(envSecrets.seed, publicKey)
+  const wrappedSalt = await encryptAsymmetric(envSecrets.salt, publicKey)
+
+  return {
+    wrappedSeed,
+    wrappedSalt,
+  }
+}
+
+/**
+ * Unwraps environment secrets for a user.
+ *
+ * @param {string} wrappedSeed - The wrapped environment seed.
+ * @param {string} wrappedSalt - The wrapped environment salt.
+ * @param {OrganisationKeyring} keyring - The keyring of the user.
+ * @returns {Promise<{ publicKey: string; privateKey: string; salt: string }>} - An object containing the unwrapped environment secrets.
+ */
 export const unwrapEnvSecretsForUser = async (
   wrappedSeed: string,
   wrappedSalt: string,
@@ -220,12 +284,20 @@ export const unwrapEnvSecretsForUser = async (
   const { publicKey, privateKey } = await envKeyring(seed)
 
   return {
+    seed,
     publicKey,
     privateKey,
     salt,
   }
 }
 
+/**
+ * Decrypts environment secret names.
+ *
+ * @param {SecretType[]} encryptedSecrets - An array of encrypted secrets.
+ * @param {{ publicKey: string; privateKey: string }} envKeys - The environment keys for decryption.
+ * @returns {Promise<SecretType[]>} - An array of decrypted secrets.
+ */
 export const decryptEnvSecretNames = async (
   encryptedSecrets: SecretType[],
   envKeys: { publicKey: string; privateKey: string }
@@ -245,6 +317,13 @@ export const decryptEnvSecretNames = async (
   return decryptedSecrets
 }
 
+/**
+ * Decrypts environment secrets.
+ *
+ * @param {SecretType[]} encryptedSecrets - An array of encrypted secrets.
+ * @param {{ publicKey: string; privateKey: string }} envKeys - The environment keys for decryption.
+ * @returns {Promise<SecretType[]>} - An array of decrypted secrets.
+ */
 export const decryptEnvSecrets = async (
   encryptedSecrets: SecretType[],
   envKeys: { publicKey: string; privateKey: string }
@@ -268,6 +347,15 @@ export const decryptEnvSecrets = async (
   return decryptedSecrets
 }
 
+/**
+ * Creates a new environment payload.
+ *
+ * @param {string} appId - The ID of the application.
+ * @param {string} name - The name of the environment.
+ * @param {ApiEnvironmentEnvTypeChoices} envType - The type of environment.
+ * @param {OrganisationMemberType} user - The user for whom the environment is created.
+ * @returns {Promise<object>} - An object containing the environment payload.
+ */
 export const createNewEnvPayload = async (
   appId: string,
   name: string,
@@ -291,6 +379,13 @@ export const createNewEnvPayload = async (
   }
 }
 
+/**
+ * Compares two arrays for equality.
+ *
+ * @param {any[]} arr1 - The first array.
+ * @param {any[]} arr2 - The second array.
+ * @returns {boolean} - True if the arrays are equal, false otherwise.
+ */
 export const arraysEqual = (arr1: any[], arr2: any[]) => {
   if (arr1.length !== arr2.length) {
     return false

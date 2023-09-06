@@ -2,7 +2,7 @@ import graphene
 from enum import Enum
 from graphene import ObjectType, relay
 from graphene_django import DjangoObjectType
-from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag, UserToken
+from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag, ServiceToken, UserToken
 from logs.dynamodb_models import KMSLog
 
 
@@ -65,6 +65,13 @@ class UserTokenType(DjangoObjectType):
                   'wrapped_key_share', 'created_at', 'updated_at')
 
 
+class ServiceTokenType(DjangoObjectType):
+    class Meta:
+        model = ServiceToken
+        fields = ('id', 'keys', 'identity_key',
+                  'token', 'wrapped_key_share', 'name', 'created_by', 'created_at', 'expires_at')
+
+
 class SecretFolderType(DjangoObjectType):
     class Meta:
         model = SecretFolder
@@ -81,7 +88,7 @@ class SecretTagType(DjangoObjectType):
 class SecretEventType(DjangoObjectType):
     class Meta:
         model = SecretEvent
-        fields = ('id', 'secret', 'collection', 'key', 'value',
+        fields = ('id', 'secret', 'key', 'value',
                   'version', 'tags', 'comment', 'event_type', 'timestamp', 'user')
 
 

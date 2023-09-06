@@ -208,6 +208,22 @@ class EnvironmentToken(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
 
 
+class ServiceToken(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    app = models.ForeignKey(App, on_delete=models.CASCADE)
+    keys = models.ManyToManyField(EnvironmentKey)
+    identity_key = models.CharField(max_length=256)
+    token = models.CharField(max_length=64)
+    wrapped_key_share = models.CharField(max_length=406)
+    name = models.CharField(max_length=64)
+    created_by = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+    expires_at = models.DateTimeField(null=True)
+
+
 class UserToken(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     user = models.ForeignKey(

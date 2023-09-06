@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import CustomUser, Environment, EnvironmentKey, Organisation, Secret, UserToken
+from .models import CustomUser, Environment, EnvironmentKey, Organisation, Secret, ServiceToken, UserToken
 
 
 def find_index_by_id(dictionaries, target_id):
@@ -99,5 +99,38 @@ class UserTokenSerializer(serializers.ModelSerializer):
                     apps[index]['environment_keys'].append(serializer.data)
 
             representation['apps'] = apps
+
+        return representation
+
+
+class ServiceTokenSerializer(serializers.ModelSerializer):
+    apps = EnvironmentKeySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ServiceToken
+        fields = ['wrapped_key_share', 'apps']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+
+        environment_keys = instance.keys.all()
+        apps = []
+        for key in environment_keys:
+            serializer = EnvironmentKeySerializer(key)
+            index = find_index_by_id(apps, key.environment.app.id)
+
+            app_data = {
+                'id': key.environment.app.id,
+                'name': key.environment.app.name,
+                'encryption': 'E2E',  # Adding encryption to each app
+            }
+
+            if index == -1:
+                app_data['environment_keys'] = [serializer.data]
+                apps.append(app_data)
+            else:
+                apps[index]['environment_keys'].append(serializer.data)
+
+        representation['apps'] = apps
 
         return representation

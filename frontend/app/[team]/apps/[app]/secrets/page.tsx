@@ -6,31 +6,42 @@ import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
+import { CreateNewServiceToken } from '@/graphql/mutations/environments/createServiceToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
+import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
+import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useCallback, useContext, useEffect, useState } from 'react'
 import {
   createNewEnvPayload,
   decryptEnvSecretNames,
   generateUserToken,
+  newEnvToken,
+  newEnvWrapKey,
+  newServiceTokenKeys,
   unwrapEnvSecretsForUser,
+  wrapEnvSecretsForServiceToken,
 } from '@/utils/environments'
 import { Button } from '@/components/common/Button'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationMemberRoleChoices,
+  EnvironmentKeyInput,
   EnvironmentType,
   OrganisationMemberType,
   SecretType,
+  ServiceTokenType,
   UserTokenType,
 } from '@/apollo/graphql'
-import { getUserKxPrivateKey, getUserKxPublicKey } from '@/utils/crypto'
+import { getUserKxPrivateKey, getUserKxPublicKey, randomKeyPair } from '@/utils/crypto'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { splitSecret } from '@/utils/keyshares'
+import { cryptoUtils } from '@/utils/auth'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -47,9 +58,12 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
   const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
+  const [getServiceTokens, { data: serviceTokensData }] = useLazyQuery(GetServiceTokens)
+  const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
   const [getEnvSecrets] = useLazyQuery(GetSecretNames)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
   const [createUserToken] = useMutation(CreateNewUserToken)
+  const [createServiceToken] = useMutation(CreateNewServiceToken)
   const [commonSecrets, setCommonSecrets] = useState<SecretType[]>([])
   const [envSecrets, setEnvSecrets] = useState<EnvSecrets[]>([])
 
@@ -62,13 +76,9 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   })
 
   const [userToken, setUserToken] = useState<string>('')
+  const [serviceToken, setServiceToken] = useState<string>('')
 
   const { keyring } = useContext(KeyringContext)
-
-  useEffect(() => {
-    if (keyring === null) {
-    }
-  })
 
   useEffect(() => {
     if (orgsData) {
@@ -83,8 +93,13 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           organisationId,
         },
       })
+      getServiceTokens({
+        variables: {
+          appId: params.app,
+        },
+      })
     }
-  }, [getOrgAdmins, getUserTokens, orgsData, params.app])
+  }, [getOrgAdmins, getServiceTokens, getUserTokens, orgsData, params.app])
 
   const setupRequired = data?.appEnvironments.length === 0 ?? true
 
@@ -202,6 +217,77 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     }
   }
 
+  const handleCreateNewServiceToken = async () => {
+    if (keyring) {
+      const appEnvironments = data.appEnvironments as EnvironmentType[]
+
+      const token = await newEnvToken()
+      const wrapKey = await newEnvWrapKey()
+
+      const tokenKeys = await newServiceTokenKeys()
+      const keyShares = await splitSecret(tokenKeys.privateKey)
+      const wrappedKeyShare = await cryptoUtils.wrappedKeyShare(keyShares[1], wrapKey)
+
+      const pssService = `pss_service:v1:${token}:${tokenKeys.publicKey}:${keyShares[0]}:${wrapKey}`
+
+      const envKeyPromises = appEnvironments.map(async (env: EnvironmentType) => {
+        const { data } = await getEnvKey({
+          variables: {
+            envId: env.id,
+          },
+        })
+
+        const {
+          wrappedSeed: userWrappedSeed,
+          wrappedSalt: userWrappedSalt,
+          identityKey,
+        } = data.environmentKeys[0]
+
+        const { seed, salt } = await unwrapEnvSecretsForUser(
+          userWrappedSeed,
+          userWrappedSalt,
+          keyring!
+        )
+
+        const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForServiceToken(
+          { seed, salt },
+          tokenKeys.publicKey
+        )
+
+        return {
+          envId: env.id,
+          identityKey,
+          wrappedSeed,
+          wrappedSalt,
+        }
+      })
+
+      const envKeyInputs = await Promise.all(envKeyPromises)
+
+      await createServiceToken({
+        variables: {
+          appId: params.app,
+          environmentKeys: envKeyInputs,
+          identityKey: tokenKeys.publicKey,
+          token,
+          wrappedKeyShare,
+          name: 'testServiceToken',
+          expiry: null,
+        },
+        refetchQueries: [
+          {
+            query: GetServiceTokens,
+            variables: {
+              appId: params.app,
+            },
+          },
+        ],
+      })
+
+      setServiceToken(pssService)
+    }
+  }
+
   const EnvCard = (props: { envSecrets: EnvSecrets }) => {
     const { env, secrets } = props.envSecrets
 
@@ -256,34 +342,58 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             </div>
           ) : (
             <>
-              <div className="mt-8 flex flex-row w-full gap-8">
-                <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg flex flex-col gap-4 p-4">
-                  <div className="text-neutral-500 text-2xl px-4">KEY</div>
-                  <div className="flex flex-col gap-4 p-4">
-                    {commonSecretsKeys.map((secret: string, index: number) => (
-                      <div key={index}>
-                        <div className="break-all font-mono">{secret}</div>
-                      </div>
+              <div className="grid grid-cols-3">
+                <div className="mt-8 flex flex-row col-span-2 w-full gap-8">
+                  <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg flex flex-col gap-4 p-4">
+                    <div className="text-neutral-500 text-2xl px-4">KEY</div>
+                    <div className="flex flex-col gap-4 p-4">
+                      {commonSecretsKeys.map((secret: string, index: number) => (
+                        <div key={index}>
+                          <div className="break-all font-mono">{secret}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-8">
+                    {sortedEnvSecrets.map((envS: EnvSecrets) => (
+                      <EnvCard key={envS.env.id} envSecrets={envS} />
                     ))}
                   </div>
                 </div>
-                <div className="flex gap-8">
-                  {sortedEnvSecrets.map((envS: EnvSecrets) => (
-                    <EnvCard key={envS.env.id} envSecrets={envS} />
-                  ))}
-                </div>
-              </div>
-              <div className="col-span-4 flex flex-col gap-2">
-                {userTokensData?.userTokens.map((userToken: UserTokenType) => (
-                  <div key={userToken.id}>
-                    {userToken.name} | {userToken.createdAt}
+                <div className="space-y-6">
+                  <div className="flex flex-col gap-2">
+                    <h3 className="text-xl font-semibold  border-b border-neutral-500">
+                      User tokens
+                    </h3>
+                    {userTokensData?.userTokens.map((userToken: UserTokenType) => (
+                      <div key={userToken.id}>
+                        {userToken.name} | {userToken.createdAt}
+                      </div>
+                    ))}
+                    <code className="break-all p-2">{userToken}</code>
+                    <div>
+                      <Button variant="outline" onClick={handleCreateNewUserToken}>
+                        Create new user token
+                      </Button>
+                    </div>
                   </div>
-                ))}
-                <code className="break-all p-2">{userToken}</code>
-                <div>
-                  <Button variant="outline" onClick={handleCreateNewUserToken}>
-                    Create new user token
-                  </Button>
+
+                  <div className="flex flex-col gap-2">
+                    <h3 className="text-xl font-semibold  border-b border-neutral-500">
+                      Service tokens
+                    </h3>
+                    {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
+                      <div key={serviceToken.id}>
+                        {serviceToken.name} | {serviceToken.createdAt}
+                      </div>
+                    ))}
+                    <code className="break-all p-2">{serviceToken}</code>
+                    <div>
+                      <Button variant="outline" onClick={handleCreateNewServiceToken}>
+                        Create new service token
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </>
