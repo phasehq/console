@@ -315,6 +315,8 @@ class SecretsView(APIView):
                     return HttpResponse(status=403)
             except:
                 return HttpResponse(status=404)
+        else:
+            user = None
 
         if not env:
             return HttpResponse(status=404)
@@ -360,6 +362,9 @@ class SecretsView(APIView):
                     return HttpResponse(status=403)
             except:
                 return HttpResponse(status=404)
+
+        else:
+            user = None
 
         request_body = json.loads(request.body)
 
@@ -407,6 +412,9 @@ class SecretsView(APIView):
             except:
                 return HttpResponse(status=404)
 
+        else:
+            user = None
+
         request_body = json.loads(request.body)
 
         secrets_to_delete = Secret.objects.filter(
@@ -416,7 +424,7 @@ class SecretsView(APIView):
             if not Secret.objects.filter(id=secret.id).exists():
                 return HttpResponse(status=404)
 
-            if not user_can_access_environment(user.user.userId, secret.environment.id):
+            if user is not None and not user_can_access_environment(user.user.userId, secret.environment.id):
                 return HttpResponse(status=403)
 
         for secret in secrets_to_delete:
