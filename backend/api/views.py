@@ -266,9 +266,7 @@ class SecretsView(APIView):
         auth_token = request.headers['authorization']
         token_type = get_token_type(auth_token)
 
-        if token_type == 'Environment':
-            env, org_member = get_env_from_service_token(auth_token)
-        elif token_type == 'User':
+        if token_type == 'User' or token_type == 'Service':
             try:
                 env_id = request.headers['environment']
 
@@ -305,9 +303,8 @@ class SecretsView(APIView):
     def post(self, request):
         auth_token = request.headers['authorization']
         token_type = get_token_type(auth_token)
-        if token_type == 'Environment':
-            env, user = get_env_from_service_token(auth_token)
-        elif token_type == 'User':
+
+        if token_type == 'User' or token_type == 'Service':
             try:
                 env_id = request.headers['environment']
                 env = Environment.objects.get(id=env_id)
@@ -350,9 +347,8 @@ class SecretsView(APIView):
     def put(self, request):
         auth_token = request.headers['authorization']
         token_type = get_token_type(auth_token)
-        if token_type == 'Environment':
-            env, user = get_env_from_service_token(auth_token)
-        elif token_type == 'User':
+
+        if token_type == 'User' or token_type == 'Service':
             try:
                 env_id = request.headers['environment']
                 env = Environment.objects.get(id=env_id)
@@ -397,9 +393,8 @@ class SecretsView(APIView):
     def delete(self, request):
         auth_token = request.headers['authorization']
         token_type = get_token_type(auth_token)
-        if token_type == 'Environment':
-            env, user = get_env_from_service_token(auth_token)
-        elif token_type == 'User':
+
+        if token_type == 'User' or token_type == 'Service':
             try:
                 env_id = request.headers['environment']
                 user = get_org_member_from_user_token(auth_token)
