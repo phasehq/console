@@ -266,11 +266,11 @@ class SecretsView(APIView):
         auth_token = request.headers['authorization']
         token_type = get_token_type(auth_token)
 
-        if token_type == 'User' or token_type == 'Service':
-            try:
-                env_id = request.headers['environment']
+        env_id = request.headers['environment']
+        env = Environment.objects.get(id=env_id)
 
-                env = Environment.objects.get(id=env_id)
+        if token_type == 'User':
+            try:
                 org_member = get_org_member_from_user_token(auth_token)
 
                 if not user_can_access_environment(org_member.user.userId, env_id):
@@ -304,10 +304,11 @@ class SecretsView(APIView):
         auth_token = request.headers['authorization']
         token_type = get_token_type(auth_token)
 
-        if token_type == 'User' or token_type == 'Service':
+        env_id = request.headers['environment']
+        env = Environment.objects.get(id=env_id)
+
+        if token_type == 'User':
             try:
-                env_id = request.headers['environment']
-                env = Environment.objects.get(id=env_id)
                 user = get_org_member_from_user_token(auth_token)
 
                 if not user_can_access_environment(user.user.userId, env_id):
@@ -348,10 +349,11 @@ class SecretsView(APIView):
         auth_token = request.headers['authorization']
         token_type = get_token_type(auth_token)
 
-        if token_type == 'User' or token_type == 'Service':
+        env_id = request.headers['environment']
+        env = Environment.objects.get(id=env_id)
+
+        if token_type == 'User':
             try:
-                env_id = request.headers['environment']
-                env = Environment.objects.get(id=env_id)
                 user = get_org_member_from_user_token(auth_token)
 
                 if not user_can_access_environment(user.user.userId, env_id):
@@ -394,9 +396,10 @@ class SecretsView(APIView):
         auth_token = request.headers['authorization']
         token_type = get_token_type(auth_token)
 
-        if token_type == 'User' or token_type == 'Service':
+        env_id = request.headers['environment']
+
+        if token_type == 'User':
             try:
-                env_id = request.headers['environment']
                 user = get_org_member_from_user_token(auth_token)
 
                 if not user_can_access_environment(user.user.userId, env_id):
