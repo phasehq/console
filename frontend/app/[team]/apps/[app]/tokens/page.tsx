@@ -1,0 +1,323 @@
+'use client'
+
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
+import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
+import { RotateAppKey } from '@/graphql/mutations/rotateAppKeys.gql'
+import { useLazyQuery, useQuery, useMutation } from '@apollo/client'
+import { AppType } from '@/apollo/graphql'
+import { Fragment, useContext, useEffect, useState } from 'react'
+import { Button } from '@/components/common/Button'
+import { copyToClipBoard } from '@/utils/clipboard'
+import { FaCopy, FaExclamationTriangle, FaInfo, FaTimes } from 'react-icons/fa'
+import { MdContentCopy, MdOutlineRotateLeft } from 'react-icons/md'
+import { toast } from 'react-toastify'
+import { Dialog, Transition } from '@headlessui/react'
+import { cryptoUtils } from '@/utils/auth'
+import { splitSecret } from '@/utils/keyshares'
+import { Alert } from '@/components/common/Alert'
+import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import { KeyringContext } from '@/contexts/keyringContext'
+import clsx from 'clsx'
+import { SecretTokens } from '@/components/apps/tokens/SecretTokens'
+
+export default function Tokens({ params }: { params: { team: string; app: string } }) {
+  const { data: orgsData } = useQuery(GetOrganisations)
+  const [getApp, { data }] = useLazyQuery(GetAppDetail)
+
+  const app = data?.apps[0] as AppType
+
+  const [activePanel, setActivePanel] = useState<'secrets' | 'kms'>('secrets')
+
+  const organisationId = orgsData?.organisations[0].id
+
+  const { keyring } = useContext(KeyringContext)
+
+  useEffect(() => {
+    if (orgsData) {
+      const organisationId = orgsData.organisations[0].id
+      getApp({
+        variables: {
+          organisationId,
+          appId: params.app,
+        },
+      })
+    }
+  }, [getApp, orgsData, params.app])
+
+  const handleCopy = (val: string) => {
+    copyToClipBoard(val)
+    toast.info('Copied')
+  }
+
+  const KmsPanel = () => {
+    const appId = `phApp:v${app?.appVersion}:${app?.identityKey}`
+
+    const [appSecret, setAppSecret] = useState<string>('')
+
+    const appSecretPlaceholder = '*'.repeat(295)
+
+    const RotateAppDialog = () => {
+      const [pw, setPw] = useState<string>('')
+      const [showPw, setShowPw] = useState<boolean>(false)
+      const [loading, setLoading] = useState<boolean>(false)
+      const [isOpen, setIsOpen] = useState(false)
+      const [rotateAppKeys] = useMutation(RotateAppKey)
+
+      const closeModal = () => {
+        setPw('')
+        setIsOpen(false)
+      }
+
+      const handleGenerateNewAppKey = async () => {
+        const APP_VERSION = 1
+
+        return new Promise<boolean>(async (resolve, reject) => {
+          setTimeout(async () => {
+            setLoading(true)
+            try {
+              const wrapKey = await cryptoUtils.newAppWrapKey()
+              const newAppToken = await cryptoUtils.newAppToken()
+              // const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
+              // const encryptedKeyring = getLocalKeyring(orgsData.organisations[0].id)
+              // if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
+              // const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(
+              //   encryptedKeyring!,
+              //   deviceKey
+              // )
+              // if (!decryptedKeyring) throw 'Failed to decrypt keys'
+
+              const appSeed = await cryptoUtils.decryptedAppSeed(app.appSeed, keyring!.symmetricKey)
+
+              const appKeys = await cryptoUtils.appKeyring(appSeed)
+              const appKeyShares = await splitSecret(appKeys.privateKey)
+              const wrappedShare = await cryptoUtils.wrappedKeyShare(appKeyShares[1], wrapKey)
+              await rotateAppKeys({
+                variables: {
+                  id: app.id,
+                  appToken: newAppToken,
+                  wrappedKeyShare: wrappedShare,
+                },
+              })
+
+              setAppSecret(`pss:v${APP_VERSION}:${newAppToken}:${appKeyShares[0]}:${wrapKey}`)
+
+              setLoading(false)
+              resolve(true)
+            } catch (error) {
+              console.log(error)
+              setLoading(false)
+              reject()
+            }
+          }, 500)
+        })
+      }
+
+      const handleSubmit = async (event: { preventDefault: () => void }) => {
+        event.preventDefault()
+        toast
+          .promise(handleGenerateNewAppKey, {
+            pending: 'Generating app keys',
+            success: 'Success!',
+            error: 'Something went wrong! Please check your password and try again.',
+          })
+          .then(() => closeModal())
+      }
+
+      return (
+        <>
+          <Button variant="outline" onClick={() => setIsOpen(true)}>
+            <MdOutlineRotateLeft /> Rotate app secret
+          </Button>
+          <Transition appear show={isOpen} as={Fragment}>
+            <Dialog as="div" className="relative z-10" onClose={() => {}}>
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0"
+                enterTo="opacity-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100"
+                leaveTo="opacity-0"
+              >
+                <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
+              </Transition.Child>
+
+              <div className="fixed inset-0 overflow-y-auto">
+                <div className="flex min-h-full items-center justify-center p-4 text-center">
+                  <Transition.Child
+                    as={Fragment}
+                    enter="ease-out duration-300"
+                    enterFrom="opacity-0 scale-95"
+                    enterTo="opacity-100 scale-100"
+                    leave="ease-in duration-200"
+                    leaveFrom="opacity-100 scale-100"
+                    leaveTo="opacity-0 scale-95"
+                  >
+                    <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                      <Dialog.Title as="div" className="flex w-full justify-between">
+                        <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                          Genereate new app secret
+                        </h3>
+                        <Button variant="text" onClick={closeModal}>
+                          <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
+                        </Button>
+                      </Dialog.Title>
+
+                      <Dialog.Description as="p" className="text-sm text-gray-500">
+                        Generate a new app secret for {app.name}
+                      </Dialog.Description>
+
+                      <form onSubmit={handleSubmit}>
+                        <div className="mt-6 space-y-8">
+                          <div className="space-y-4 text-sm">
+                            <Alert variant="warning">
+                              <div className="flex items-center gap-4">
+                                <FaExclamationTriangle />
+                                <div>
+                                  Warning: This will revoke your current app keys. Your application
+                                  won&apos;t be able to decrypt data using the current keys.
+                                </div>
+                              </div>
+                            </Alert>
+
+                            <Alert variant="info">
+                              <div className="flex items-center gap-4">
+                                <FaInfo />
+                                <div>
+                                  Your new keys will be available to use immediately. You will be
+                                  able to decrypt any existing data with your new keys. Please allow
+                                  up to 60 seconds for your old keys to be revoked.
+                                </div>
+                              </div>
+                            </Alert>
+                          </div>
+
+                          {/* <div className="flex flex-col justify-center max-w-md mx-auto">
+                            <label
+                              className="block text-gray-700 text-sm font-bold mb-2"
+                              htmlFor="password"
+                            >
+                              Sudo password
+                            </label>
+                            <div className="relative">
+                              <input
+                                id="password"
+                                value={pw}
+                                onChange={(e) => setPw(e.target.value)}
+                                type={showPw ? 'text' : 'password'}
+                                minLength={16}
+                                required
+                                className="w-full "
+                              />
+                              <button
+                                className="absolute inset-y-0 right-4"
+                                type="button"
+                                onClick={() => setShowPw(!showPw)}
+                                tabIndex={-1}
+                              >
+                                {showPw ? <FaEyeSlash /> : <FaEye />}
+                              </button>
+                            </div>
+                          </div> */}
+                          <div className="mt-10 flex items-center w-full justify-between">
+                            <Button variant="secondary" type="button" onClick={closeModal}>
+                              Cancel
+                            </Button>
+                            <Button type="submit" variant="primary" disabled={loading}>
+                              Generate
+                            </Button>
+                          </div>
+                        </div>
+                      </form>
+                    </Dialog.Panel>
+                  </Transition.Child>
+                </div>
+              </div>
+            </Dialog>
+          </Transition>
+        </>
+      )
+    }
+
+    return (
+      <div className="w-full break-all space-y-8 col-span-2">
+        <div className="bg-emerald-200/60 dark:bg-emerald-400/10 shadow-inner p-3 rounded-lg">
+          <div className="uppercase text-xs tracking-widest text-gray-500 w-full flex items-center justify-between pb-4">
+            app id
+            <Button variant="outline" onClick={() => handleCopy(appId)}>
+              <FaCopy /> Copy
+            </Button>
+          </div>
+          <code className="text-xs text-emerald-500 font-medium">{appId}</code>
+        </div>
+
+        <div className="bg-red-200 dark:bg-red-400/10 shadow-inner p-3 rounded-lg">
+          <div className="w-full flex items-center justify-between pb-4">
+            <span className="uppercase text-xs tracking-widest text-gray-500">app secret</span>
+            <div className="flex gap-4">
+              {appSecret && (
+                <div className="rounded-lg bg-orange-800/30 text-orange-500 p-2 flex items-center gap-4">
+                  <FaExclamationTriangle />
+                  <div className="text-2xs">{"Copy this value. You won't see it again!"}</div>
+                </div>
+              )}
+              {appSecret && (
+                <Button variant="outline" onClick={() => handleCopy(appSecret)}>
+                  <MdContentCopy /> Copy
+                </Button>
+              )}
+            </div>
+            {!appSecret && <RotateAppDialog />}
+          </div>
+          <code className="text-xs text-red-500">{appSecret || appSecretPlaceholder}</code>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full overflow-y-auto relative text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-16">
+      <section className="md:col-span-3 max-w-screen-2xl">
+        {orgsData?.organisations && (
+          <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
+        )}
+        {keyring !== null && (
+          <div className="grid grid-cols-3 mt-6 divide-x divide-neutral-500/20">
+            <div className="space-y-4 px-4 sticky top-[238px]">
+              <div
+                role="button"
+                onClick={() => setActivePanel('secrets')}
+                className={clsx(
+                  'p-4 cursor-pointer rounded-md transition ease',
+                  activePanel === 'secrets'
+                    ? 'bg-zinc-400 dark:bg-zinc-700 font-semibold'
+                    : 'bg-zinc-200 hover:bg-zinc-400 dark:bg-zinc-800 hover:dark:bg-zinc-700'
+                )}
+              >
+                Secrets
+              </div>
+              <div
+                role="button"
+                onClick={() => setActivePanel('kms')}
+                className={clsx(
+                  'p-4 cursor-pointer rounded-md transition ease',
+                  activePanel === 'kms'
+                    ? 'bg-zinc-400 dark:bg-zinc-700 font-semibold'
+                    : 'bg-zinc-200 hover:bg-zinc-400 dark:bg-zinc-800 hover:dark:bg-zinc-700'
+                )}
+              >
+                KMS
+              </div>
+            </div>
+            <div className="col-span-2 overflow-y-auto px-4">
+              {app && activePanel === 'secrets' && (
+                <SecretTokens organisationId={organisationId} appId={params.app} />
+              )}
+              {app && activePanel === 'kms' && <KmsPanel />}
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}

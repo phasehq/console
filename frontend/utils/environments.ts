@@ -194,7 +194,8 @@ export const generateEnvironmentToken = async (
  */
 export const generateUserToken = async (
   orgId: string,
-  userKeyring: { publicKey: string; privateKey: string }
+  userKeyring: { publicKey: string; privateKey: string },
+  name: string
 ) => {
   const wrapKey = await newEnvWrapKey()
   const token = await newEnvToken()
@@ -205,7 +206,7 @@ export const generateUserToken = async (
   const pssUser = `pss_user:v1:${token}:${userKeyring.publicKey}:${keyShares[0]}:${wrapKey}`
   const mutationPayload = {
     orgId,
-    name: 'testUserToken',
+    name,
     identityKey: userKeyring.publicKey,
     token,
     wrappedKeyShare,

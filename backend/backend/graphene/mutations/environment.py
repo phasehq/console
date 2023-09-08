@@ -131,6 +131,7 @@ class CreateUserTokenMutation(graphene.Mutation):
         token = graphene.String(required=True)
         wrapped_key_share = graphene.String(required=True)
 
+    ok = graphene.Boolean()
     user_token = graphene.Field(UserTokenType)
 
     @classmethod
@@ -144,7 +145,33 @@ class CreateUserTokenMutation(graphene.Mutation):
             user_token = UserToken.objects.create(
                 user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share)
 
-            return CreateUserTokenMutation(user_token=user_token)
+            return CreateUserTokenMutation(user_token=user_token, ok=True)
+
+        else:
+            raise GraphQLError(
+                "You don't have permission to perform this action")
+
+
+class DeleteUserTokenMutation(graphene.Mutation):
+    class Arguments:
+        token_id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, token_id):
+        user = info.context.user
+        token = UserToken.objects.get(id=token_id)
+        org = token.user.organisation
+
+        if user_is_org_member(user.userId, org.id):
+            token.deleted_at = timezone.now()
+            token.save()
+
+            return DeleteUserTokenMutation(ok=True)
+        else:
+            raise GraphQLError(
+                "You don't have permission to perform this action")
 
 
 class CreateServiceTokenMutation(graphene.Mutation):
@@ -183,6 +210,28 @@ class CreateServiceTokenMutation(graphene.Mutation):
             service_token.keys.set(env_keys)
 
             return CreateServiceTokenMutation(service_token=service_token)
+
+
+class DeleteServiceTokenMutation(graphene.Mutation):
+    class Arguments:
+        token_id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, token_id):
+        user = info.context.user
+        token = ServiceToken.objects.get(id=token_id)
+        org = token.app.organisation
+
+        if user_is_org_member(user.userId, org.id):
+            token.deleted_at = timezone.now()
+            token.save()
+
+            return DeleteServiceTokenMutation(ok=True)
+        else:
+            raise GraphQLError(
+                "You don't have permission to perform this action")
 
 
 class CreateSecretFolderMutation(graphene.Mutation):

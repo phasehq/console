@@ -15,33 +15,22 @@ import { useCallback, useContext, useEffect, useState } from 'react'
 import {
   createNewEnvPayload,
   decryptEnvSecretNames,
-  generateUserToken,
-  newEnvToken,
-  newEnvWrapKey,
-  newServiceTokenKeys,
   unwrapEnvSecretsForUser,
-  wrapEnvSecretsForServiceToken,
 } from '@/utils/environments'
 import { Button } from '@/components/common/Button'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationMemberRoleChoices,
-  EnvironmentKeyInput,
   EnvironmentType,
   OrganisationMemberType,
   SecretType,
-  ServiceTokenType,
-  UserTokenType,
 } from '@/apollo/graphql'
-import { getUserKxPrivateKey, getUserKxPublicKey, randomKeyPair } from '@/utils/crypto'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { splitSecret } from '@/utils/keyshares'
-import { cryptoUtils } from '@/utils/auth'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -187,107 +176,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     })
   }
 
-  const handleCreateNewUserToken = async () => {
-    if (keyring) {
-      const userKxKeys = {
-        publicKey: await getUserKxPublicKey(keyring.publicKey),
-        privateKey: await getUserKxPrivateKey(keyring.privateKey),
-      }
-
-      const { pssUser, mutationPayload } = await generateUserToken(
-        orgsData.organisations[0].id,
-        userKxKeys
-      )
-
-      await createUserToken({
-        variables: mutationPayload,
-        refetchQueries: [
-          {
-            query: GetUserTokens,
-            variables: {
-              organisationId: orgsData.organisations[0].id,
-            },
-          },
-        ],
-      })
-
-      setUserToken(pssUser)
-    } else {
-      console.log('keyring unavailable')
-    }
-  }
-
-  const handleCreateNewServiceToken = async () => {
-    if (keyring) {
-      const appEnvironments = data.appEnvironments as EnvironmentType[]
-
-      const token = await newEnvToken()
-      const wrapKey = await newEnvWrapKey()
-
-      const tokenKeys = await newServiceTokenKeys()
-      const keyShares = await splitSecret(tokenKeys.privateKey)
-      const wrappedKeyShare = await cryptoUtils.wrappedKeyShare(keyShares[1], wrapKey)
-
-      const pssService = `pss_service:v1:${token}:${tokenKeys.publicKey}:${keyShares[0]}:${wrapKey}`
-
-      const envKeyPromises = appEnvironments.map(async (env: EnvironmentType) => {
-        const { data } = await getEnvKey({
-          variables: {
-            envId: env.id,
-          },
-        })
-
-        const {
-          wrappedSeed: userWrappedSeed,
-          wrappedSalt: userWrappedSalt,
-          identityKey,
-        } = data.environmentKeys[0]
-
-        const { seed, salt } = await unwrapEnvSecretsForUser(
-          userWrappedSeed,
-          userWrappedSalt,
-          keyring!
-        )
-
-        const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForServiceToken(
-          { seed, salt },
-          tokenKeys.publicKey
-        )
-
-        return {
-          envId: env.id,
-          identityKey,
-          wrappedSeed,
-          wrappedSalt,
-        }
-      })
-
-      const envKeyInputs = await Promise.all(envKeyPromises)
-
-      await createServiceToken({
-        variables: {
-          appId: params.app,
-          environmentKeys: envKeyInputs,
-          identityKey: tokenKeys.publicKey,
-          token,
-          wrappedKeyShare,
-          name: 'testServiceToken',
-          expiry: null,
-        },
-        refetchQueries: [
-          {
-            query: GetServiceTokens,
-            variables: {
-              appId: params.app,
-            },
-          },
-        ],
-      })
-
-      setServiceToken(pssService)
-    }
-  }
-
   const EnvCard = (props: { envSecrets: EnvSecrets }) => {
     const { env, secrets } = props.envSecrets
 
@@ -358,41 +246,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                     {sortedEnvSecrets.map((envS: EnvSecrets) => (
                       <EnvCard key={envS.env.id} envSecrets={envS} />
                     ))}
-                  </div>
-                </div>
-                <div className="space-y-6">
-                  <div className="flex flex-col gap-2">
-                    <h3 className="text-xl font-semibold  border-b border-neutral-500">
-                      User tokens
-                    </h3>
-                    {userTokensData?.userTokens.map((userToken: UserTokenType) => (
-                      <div key={userToken.id}>
-                        {userToken.name} | {userToken.createdAt}
-                      </div>
-                    ))}
-                    <code className="break-all p-2">{userToken}</code>
-                    <div>
-                      <Button variant="outline" onClick={handleCreateNewUserToken}>
-                        Create new user token
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <h3 className="text-xl font-semibold  border-b border-neutral-500">
-                      Service tokens
-                    </h3>
-                    {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
-                      <div key={serviceToken.id}>
-                        {serviceToken.name} | {serviceToken.createdAt}
-                      </div>
-                    ))}
-                    <code className="break-all p-2">{serviceToken}</code>
-                    <div>
-                      <Button variant="outline" onClick={handleCreateNewServiceToken}>
-                        Create new service token
-                      </Button>
-                    </div>
                   </div>
                 </div>
               </div>
