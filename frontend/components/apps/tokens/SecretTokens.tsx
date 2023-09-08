@@ -58,7 +58,13 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
   const [userToken, setUserToken] = useState<string>('')
   const [createUserToken] = useMutation(CreateNewUserToken)
 
+  const reset = () => {
+    setName('')
+    setUserToken('')
+  }
+
   const closeModal = () => {
+    reset()
     setIsOpen(false)
   }
 
@@ -222,9 +228,11 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
   const reset = () => {
     setName('')
     setEnvScope([])
+    setServiceToken('')
   }
 
   const closeModal = () => {
+    reset()
     setIsOpen(false)
   }
 
