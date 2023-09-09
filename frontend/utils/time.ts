@@ -31,3 +31,15 @@ export const relativeTimeFromDates = (relative: Date | null, pivot: Date = new D
   const elapsed = relative.getTime() - pivot.getTime()
   return relativeTimeFromElapsed(elapsed)
 }
+
+/**
+ * Get a Unix timestamp for a future date.
+ *
+ * @param {number} days - The number of days in the future.
+ * @returns {number} The Unix timestamp for the future date.
+ */
+export const getUnixTimestampInFuture = (days: number): number => {
+  const currentDate = new Date()
+  currentDate.setDate(currentDate.getDate() + days)
+  return Math.floor(currentDate.getTime())
+}

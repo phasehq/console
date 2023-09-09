@@ -23,6 +23,7 @@ const documents = {
     "mutation CreateNewSecretTag($orgId: ID!, $name: String!, $color: String!) {\n  createSecretTag(orgId: $orgId, name: $name, color: $color) {\n    tag {\n      id\n    }\n  }\n}": types.CreateNewSecretTagDocument,
     "mutation CreateNewServiceToken($appId: ID!, $environmentKeys: [EnvironmentKeyInput], $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $name: String!, $expiry: BigInt) {\n  createServiceToken(\n    appId: $appId\n    environmentKeys: $environmentKeys\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    name: $name\n    expiry: $expiry\n  ) {\n    serviceToken {\n      id\n      createdAt\n      expiresAt\n    }\n  }\n}": types.CreateNewServiceTokenDocument,
     "mutation DeleteSecretOp($id: ID!) {\n  deleteSecret(id: $id) {\n    secret {\n      id\n    }\n  }\n}": types.DeleteSecretOpDocument,
+    "mutation RevokeServiceToken($tokenId: ID!) {\n  deleteServiceToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeServiceTokenDocument,
     "mutation UpdateSecret($id: ID!, $secretData: SecretInput!) {\n  editSecret(id: $id, secretData: $secretData) {\n    secret {\n      id\n      updatedAt\n    }\n  }\n}": types.UpdateSecretDocument,
     "mutation InitAppEnvironments($devEnv: EnvironmentInput!, $stagingEnv: EnvironmentInput!, $prodEnv: EnvironmentInput!) {\n  devEnvironment: createEnvironment(environmentData: $devEnv) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  stagingEnvironment: createEnvironment(environmentData: $stagingEnv) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  prodEnvironment: createEnvironment(environmentData: $prodEnv) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.InitAppEnvironmentsDocument,
     "mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}": types.RotateAppKeyDocument,
@@ -100,6 +101,10 @@ export function graphql(source: "mutation CreateNewServiceToken($appId: ID!, $en
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation DeleteSecretOp($id: ID!) {\n  deleteSecret(id: $id) {\n    secret {\n      id\n    }\n  }\n}"): (typeof documents)["mutation DeleteSecretOp($id: ID!) {\n  deleteSecret(id: $id) {\n    secret {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation RevokeServiceToken($tokenId: ID!) {\n  deleteServiceToken(tokenId: $tokenId) {\n    ok\n  }\n}"): (typeof documents)["mutation RevokeServiceToken($tokenId: ID!) {\n  deleteServiceToken(tokenId: $tokenId) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

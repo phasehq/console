@@ -62,14 +62,14 @@ class UserTokenType(DjangoObjectType):
     class Meta:
         model = UserToken
         fields = ('id', 'name', 'identity_key', 'token',
-                  'wrapped_key_share', 'created_at', 'updated_at')
+                  'wrapped_key_share', 'created_at', 'updated_at', 'expires_at')
 
 
 class ServiceTokenType(DjangoObjectType):
     class Meta:
         model = ServiceToken
         fields = ('id', 'keys', 'identity_key',
-                  'token', 'wrapped_key_share', 'name', 'created_by', 'created_at', 'expires_at')
+                  'token', 'wrapped_key_share', 'name', 'created_by', 'created_at', 'updated_at', 'expires_at')
 
 
 class SecretFolderType(DjangoObjectType):

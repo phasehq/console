@@ -195,7 +195,8 @@ export const generateEnvironmentToken = async (
 export const generateUserToken = async (
   orgId: string,
   userKeyring: { publicKey: string; privateKey: string },
-  name: string
+  name: string,
+  expiry: number | null
 ) => {
   const wrapKey = await newEnvWrapKey()
   const token = await newEnvToken()
@@ -210,6 +211,7 @@ export const generateUserToken = async (
     identityKey: userKeyring.publicKey,
     token,
     wrappedKeyShare,
+    expiry,
   }
 
   return {

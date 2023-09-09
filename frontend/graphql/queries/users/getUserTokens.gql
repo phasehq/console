@@ -4,5 +4,6 @@ query GetUserTokens($organisationId: ID!) {
     name
     wrappedKeyShare
     createdAt
+    expiresAt
   }
 }

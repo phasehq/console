@@ -25,6 +25,8 @@ import { Button } from '@/components/common/Button'
 import {
   FaCheckSquare,
   FaChevronDown,
+  FaCircle,
+  FaDotCircle,
   FaExclamationTriangle,
   FaKey,
   FaPlus,
@@ -32,14 +34,18 @@ import {
   FaTimes,
   FaTrashAlt,
   FaUserLock,
-  FaUserSecret,
 } from 'react-icons/fa'
-import { relativeTimeFromDates } from '@/utils/time'
-import { Dialog, Listbox, Transition } from '@headlessui/react'
+import { getUnixTimestampInFuture, relativeTimeFromDates } from '@/utils/time'
+import { Dialog, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { MdContentCopy } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
+
+interface ExpiryOptionT {
+  name: string
+  value: number | null
+}
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -48,6 +54,34 @@ const handleCopy = (val: string) => {
   })
 }
 
+const tokenExpiryOptions: ExpiryOptionT[] = [
+  {
+    name: 'Never',
+    value: null,
+  },
+  {
+    name: '7 days',
+    value: getUnixTimestampInFuture(7),
+  },
+  {
+    name: '30 days',
+    value: getUnixTimestampInFuture(30),
+  },
+  {
+    name: '60 days',
+    value: getUnixTimestampInFuture(60),
+  },
+  {
+    name: '90 days',
+    value: getUnixTimestampInFuture(90),
+  },
+]
+
+const humanReadableExpiry = (expiry: ExpiryOptionT) =>
+  expiry.value === null
+    ? 'This token will never expire.'
+    : `This token will expire on ${new Date(expiry.value).toLocaleDateString()}.`
+
 const CreateUserTokenDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
 
@@ -55,6 +89,8 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')
+  const [expiry, setExpiry] = useState<ExpiryOptionT>(tokenExpiryOptions[0])
+
   const [userToken, setUserToken] = useState<string>('')
   const [createUserToken] = useMutation(CreateNewUserToken)
 
@@ -84,7 +120,12 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
         privateKey: await getUserKxPrivateKey(keyring.privateKey),
       }
 
-      const { pssUser, mutationPayload } = await generateUserToken(organisationId, userKxKeys, name)
+      const { pssUser, mutationPayload } = await generateUserToken(
+        organisationId,
+        userKxKeys,
+        name,
+        expiry.value
+      )
 
       await createUserToken({
         variables: mutationPayload,
@@ -187,6 +228,42 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
                         </label>
                         <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
                       </div>
+
+                      <div>
+                        <RadioGroup value={expiry} by="name" onChange={setExpiry}>
+                          <RadioGroup.Label as={Fragment}>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">
+                              Expiry
+                            </label>
+                          </RadioGroup.Label>
+                          <div className="flex items-center gap-2">
+                            {tokenExpiryOptions.map((option) => (
+                              <RadioGroup.Option key={option.name} value={option} as={Fragment}>
+                                {({ active, checked }) => (
+                                  <div
+                                    className={clsx(
+                                      'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full',
+                                      active && 'border-zinc-700',
+                                      checked && 'bg-zinc-700'
+                                    )}
+                                  >
+                                    {checked ? (
+                                      <FaDotCircle className="text-emerald-500" />
+                                    ) : (
+                                      <FaCircle />
+                                    )}
+                                    {option.name}
+                                  </div>
+                                )}
+                              </RadioGroup.Option>
+                            ))}
+                          </div>
+                        </RadioGroup>
+                        <span className="text-sm text-neutral-500">
+                          {humanReadableExpiry(expiry)}
+                        </span>
+                      </div>
+
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>
                           Cancel
@@ -215,6 +292,8 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')
   const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
+  const [expiry, setExpiry] = useState<ExpiryOptionT>(tokenExpiryOptions[0])
+
   const [serviceToken, setServiceToken] = useState<string>('')
 
   const { data } = useQuery(GetAppEnvironments, {
@@ -317,7 +396,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
           token,
           wrappedKeyShare,
           name,
-          expiry: null,
+          expiry: expiry.value,
         },
         refetchQueries: [
           {
@@ -451,7 +530,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                                 leaveTo="transform scale-95 opacity-0"
                               >
                                 <Listbox.Options>
-                                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl">
+                                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
                                     {envOptions.map((env: Partial<EnvironmentType>) => (
                                       <Listbox.Option key={env.id} value={env} as={Fragment}>
                                         {({ active, selected }) => (
@@ -478,6 +557,42 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                           )}
                         </Listbox>
                       </div>
+
+                      <div>
+                        <RadioGroup value={expiry} by="name" onChange={setExpiry}>
+                          <RadioGroup.Label as={Fragment}>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">
+                              Expiry
+                            </label>
+                          </RadioGroup.Label>
+                          <div className="flex items-center gap-2">
+                            {tokenExpiryOptions.map((option) => (
+                              <RadioGroup.Option key={option.name} value={option} as={Fragment}>
+                                {({ active, checked }) => (
+                                  <div
+                                    className={clsx(
+                                      'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full',
+                                      active && 'border-zinc-700',
+                                      checked && 'bg-zinc-700'
+                                    )}
+                                  >
+                                    {checked ? (
+                                      <FaDotCircle className="text-emerald-500" />
+                                    ) : (
+                                      <FaCircle />
+                                    )}
+                                    {option.name}
+                                  </div>
+                                )}
+                              </RadioGroup.Option>
+                            ))}
+                          </div>
+                        </RadioGroup>
+                        <span className="text-sm text-neutral-500">
+                          {humanReadableExpiry(expiry)}
+                        </span>
+                      </div>
+
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>
                           Cancel
@@ -654,8 +769,13 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           <FaUserLock className="text-sky-500/30 text-lg" />
           <div className="space-y-0">
             <div className="text-lg font-medium">{token.name}</div>
-            <div className="text-base text-neutral-500">
-              Created {relativeTimeFromDates(new Date(token.createdAt))}
+            <div className="flex items-center gap-8 text-sm text-neutral-500">
+              <div>Created {relativeTimeFromDates(new Date(token.createdAt))}</div>
+
+              <div>
+                Expires{' '}
+                {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
+              </div>
             </div>
           </div>
         </div>
@@ -673,8 +793,13 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           <FaKey className="text-purple-500/30 text-lg" />
           <div className="space-y-0">
             <div className="text-lg font-medium">{token.name}</div>
-            <div className="text-base text-neutral-500">
-              Created {relativeTimeFromDates(new Date(token.createdAt))}
+            <div className="flex items-center gap-8 text-sm text-neutral-500">
+              <div>Created {relativeTimeFromDates(new Date(token.createdAt))}</div>
+
+              <div>
+                Expires{' '}
+                {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
+              </div>
             </div>
           </div>
         </div>
@@ -684,7 +809,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-6">
       <div className="space-y-4">
         <div>
           <h3 className="text-2xl font-semibold border-neutral-500/40">User tokens</h3>

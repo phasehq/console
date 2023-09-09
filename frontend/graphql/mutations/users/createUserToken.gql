@@ -1,5 +1,5 @@
-mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {
-  createUserToken(orgId: $orgId, name: $name, identityKey: $identityKey, token: $token, wrappedKeyShare: $wrappedKeyShare) {
+mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {
+  createUserToken(orgId: $orgId, name: $name, identityKey: $identityKey, token: $token, wrappedKeyShare: $wrappedKeyShare, expiry: $expiry) {
     ok
   }
 }

@@ -227,6 +227,7 @@ type UserTokenType {
   wrappedKeyShare: String!
   createdAt: DateTime
   updatedAt: DateTime!
+  expiresAt: DateTime
 }
 
 type ServiceTokenType {
@@ -238,6 +239,7 @@ type ServiceTokenType {
   name: String!
   createdBy: OrganisationMemberType
   createdAt: DateTime
+  updatedAt: DateTime!
   expiresAt: DateTime
 }
 
@@ -249,7 +251,7 @@ type Mutation {
   createEnvironment(environmentData: EnvironmentInput!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
-  createUserToken(identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
+  createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
   deleteServiceToken(tokenId: ID!): DeleteServiceTokenMutation

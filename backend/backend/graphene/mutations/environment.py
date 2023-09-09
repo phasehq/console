@@ -130,20 +130,26 @@ class CreateUserTokenMutation(graphene.Mutation):
         identity_key = graphene.String(required=True)
         token = graphene.String(required=True)
         wrapped_key_share = graphene.String(required=True)
+        expiry = graphene.BigInt(required=False)
 
     ok = graphene.Boolean()
     user_token = graphene.Field(UserTokenType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, name, identity_key, token, wrapped_key_share):
+    def mutate(cls, root, info, org_id, name, identity_key, token, wrapped_key_share, expiry):
         user = info.context.user
         if user_is_org_member(user.userId, org_id):
 
             org_member = OrganisationMember.objects.get(
                 organisation_id=org_id, user_id=user.userId)
 
+            if expiry is not None:
+                expires_at = datetime.fromtimestamp(expiry / 1000)
+            else:
+                expires_at = None
+
             user_token = UserToken.objects.create(
-                user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share)
+                user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share, expires_at=expires_at)
 
             return CreateUserTokenMutation(user_token=user_token, ok=True)
 
@@ -200,7 +206,7 @@ class CreateServiceTokenMutation(graphene.Mutation):
                 environment_id=key.env_id, identity_key=key.identity_key, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt) for key in environment_keys])
 
             if expiry is not None:
-                expires_at = datetime.fromtimestamp(expiry)
+                expires_at = datetime.fromtimestamp(expiry / 1000)
             else:
                 expires_at = None
 

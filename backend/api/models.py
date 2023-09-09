@@ -235,6 +235,7 @@ class UserToken(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+    expires_at = models.DateTimeField(null=True)
 
 
 class SecretFolder(models.Model):
