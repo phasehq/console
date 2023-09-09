@@ -17,6 +17,7 @@ import {
   FaTags,
   FaCheckSquare,
   FaSquare,
+  FaKey,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Dialog, Transition } from '@headlessui/react'
@@ -392,8 +393,8 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                               </div>{' '}
                               <span className="text-sm text-neutral-500">by</span>
                               <div className="text-sm flex items-center gap-2 text-neutral-500">
-                                <FaUser />
-                                {historyItem!.user!.username}
+                                {historyItem!.user ? <FaUser /> : <FaKey />}
+                                {historyItem!.user?.username || 'Service token'}
                               </div>
                             </div>
                             {index > 0 && (
