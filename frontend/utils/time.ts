@@ -43,3 +43,15 @@ export const getUnixTimestampInFuture = (days: number): number => {
   currentDate.setDate(currentDate.getDate() + days)
   return Math.floor(currentDate.getTime())
 }
+
+/**
+ * Get a Unix timestamp for a future time, specified in minutes.
+ *
+ * @param {number} minutes - The number of minutes in the future.
+ * @returns {number} The Unix timestamp for the future time.
+ */
+export const getUnixTimestampInFutureMinutes = (minutes: number): number => {
+  const currentDate = new Date()
+  const futureDate = new Date(currentDate.getTime() + minutes * 60000) // Convert minutes to milliseconds
+  return Math.floor(futureDate.getTime())
+}

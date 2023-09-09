@@ -35,7 +35,11 @@ import {
   FaTrashAlt,
   FaUserLock,
 } from 'react-icons/fa'
-import { getUnixTimestampInFuture, relativeTimeFromDates } from '@/utils/time'
+import {
+  getUnixTimestampInFuture,
+  getUnixTimestampInFutureMinutes,
+  relativeTimeFromDates,
+} from '@/utils/time'
 import { Dialog, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { MdContentCopy } from 'react-icons/md'
@@ -58,6 +62,10 @@ const tokenExpiryOptions: ExpiryOptionT[] = [
   {
     name: 'Never',
     value: null,
+  },
+  {
+    name: '2 min',
+    value: getUnixTimestampInFutureMinutes(2),
   },
   {
     name: '7 days',
@@ -763,6 +771,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
   const UserToken = (props: { token: UserTokenType }) => {
     const { token } = props
 
+    const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
+
     return (
       <div className="flex items-center w-full justify-between p-2">
         <div className="flex items-center gap-4">
@@ -772,8 +782,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
             <div className="flex items-center gap-8 text-sm text-neutral-500">
               <div>Created {relativeTimeFromDates(new Date(token.createdAt))}</div>
 
-              <div>
-                Expires{' '}
+              <div className={clsx(isExpired && 'text-red-500')}>
+                {isExpired ? 'Expired' : 'Expires'}{' '}
                 {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
               </div>
             </div>
@@ -787,6 +797,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
   const ServiceToken = (props: { token: ServiceTokenType }) => {
     const { token } = props
 
+    const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
+
     return (
       <div className="flex items-center w-full justify-between p-2">
         <div className="flex items-center gap-4">
@@ -796,8 +808,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
             <div className="flex items-center gap-8 text-sm text-neutral-500">
               <div>Created {relativeTimeFromDates(new Date(token.createdAt))}</div>
 
-              <div>
-                Expires{' '}
+              <div className={clsx(isExpired && 'text-red-500')}>
+                {isExpired ? 'Expired' : 'Expires'}{' '}
                 {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
               </div>
             </div>
