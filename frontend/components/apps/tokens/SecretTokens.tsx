@@ -85,6 +85,10 @@ const tokenExpiryOptions: ExpiryOptionT[] = [
   },
 ]
 
+const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
+  return a.value === b.value
+}
+
 const humanReadableExpiry = (expiry: ExpiryOptionT) =>
   expiry.value === null
     ? 'This token will never expire.'
@@ -238,7 +242,7 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
                       </div>
 
                       <div>
-                        <RadioGroup value={expiry} by="name" onChange={setExpiry}>
+                        <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
                           <RadioGroup.Label as={Fragment}>
                             <label className="block text-gray-700 text-sm font-bold mb-2">
                               Expiry
@@ -567,7 +571,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                       </div>
 
                       <div>
-                        <RadioGroup value={expiry} by="name" onChange={setExpiry}>
+                        <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
                           <RadioGroup.Label as={Fragment}>
                             <label className="block text-gray-700 text-sm font-bold mb-2">
                               Expiry
