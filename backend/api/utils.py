@@ -1,4 +1,4 @@
-from api.models import EnvironmentToken, UserToken
+from api.models import EnvironmentToken, ServiceToken, UserToken
 
 
 def get_client_ip(request):
@@ -38,3 +38,14 @@ def get_org_member_from_user_token(auth_token):
         return user_token.user
     except Exception as ex:
         return False
+
+
+def token_is_expired(auth_token):
+    token_type = get_token_type(auth_token)
+    if token_type == 'User':
+        user_token = UserToken.objects.get(token=auth_token.split(" ")[2])
+        return user_token.deleted_at != None
+    else:
+        service_token = ServiceToken.objects.get(
+            token=auth_token.split(" ")[2])
+        return service_token.deleted_at != None
