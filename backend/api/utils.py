@@ -52,4 +52,4 @@ def token_is_expired(auth_token):
     print('token expiry: ', token.expires_at,
           ' Current time: ', timezone.now())
 
-    return token.deleted_at is not None or token.expires_at < timezone.now()
+    return token.deleted_at is not None or (token.expires_at is not None and token.expires_at < timezone.now())
