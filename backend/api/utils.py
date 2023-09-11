@@ -49,4 +49,7 @@ def token_is_expired(auth_token):
     else:
         token = ServiceToken.objects.get(token=token_value)
 
+    print('token expiry: ', token.expires_at,
+          ' Current time: ', timezone.now())
+
     return token.deleted_at is not None or token.expires_at < timezone.now()
