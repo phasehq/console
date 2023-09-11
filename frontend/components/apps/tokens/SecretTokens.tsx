@@ -35,11 +35,7 @@ import {
   FaTrashAlt,
   FaUserLock,
 } from 'react-icons/fa'
-import {
-  getUnixTimestampInFuture,
-  getUnixTimestampInFutureMinutes,
-  relativeTimeFromDates,
-} from '@/utils/time'
+import { getUnixTimeStampinFuture, relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { MdContentCopy } from 'react-icons/md'
@@ -65,23 +61,23 @@ const tokenExpiryOptions: ExpiryOptionT[] = [
   },
   {
     name: '2 min',
-    value: getUnixTimestampInFutureMinutes(2),
+    value: getUnixTimeStampinFuture(0, 0, 2),
   },
   {
     name: '7 days',
-    value: getUnixTimestampInFuture(7),
+    value: getUnixTimeStampinFuture(7),
   },
   {
     name: '30 days',
-    value: getUnixTimestampInFuture(30),
+    value: getUnixTimeStampinFuture(30),
   },
   {
     name: '60 days',
-    value: getUnixTimestampInFuture(60),
+    value: getUnixTimeStampinFuture(60),
   },
   {
     name: '90 days',
-    value: getUnixTimestampInFuture(90),
+    value: getUnixTimeStampinFuture(90),
   },
 ]
 

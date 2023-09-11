@@ -33,25 +33,17 @@ export const relativeTimeFromDates = (relative: Date | null, pivot: Date = new D
 }
 
 /**
- * Get a Unix timestamp for a future date.
+ * Get a Unix timestamp for a future time, specified in days, hours, and minutes.
  *
- * @param {number} days - The number of days in the future.
- * @returns {number} The Unix timestamp for the future date.
- */
-export const getUnixTimestampInFuture = (days: number): number => {
-  const currentDate = new Date()
-  currentDate.setDate(currentDate.getDate() + days)
-  return Math.floor(currentDate.getTime())
-}
-
-/**
- * Get a Unix timestamp for a future time, specified in minutes.
- *
- * @param {number} minutes - The number of minutes in the future.
+ * @param {number} [days=0] - The number of days in the future.
+ * @param {number} [hours=0] - The number of hours in the future.
+ * @param {number} [minutes=0] - The number of minutes in the future.
  * @returns {number} The Unix timestamp for the future time.
  */
-export const getUnixTimestampInFutureMinutes = (minutes: number): number => {
-  const currentDate = new Date()
-  const futureDate = new Date(currentDate.getTime() + minutes * 60000) // Convert minutes to milliseconds
-  return Math.floor(futureDate.getTime())
+export const getUnixTimeStampinFuture = (
+  days: number = 0,
+  hours: number = 0,
+  minutes: number = 0
+): number => {
+  return Date.now() + days * 86400000 + hours * 3600000 + minutes * 60000
 }
