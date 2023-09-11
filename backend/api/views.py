@@ -218,6 +218,10 @@ def kms(request, app_id):
 @permission_classes([AllowAny])
 def user_token_kms(request):
     auth_token = request.headers['authorization']
+
+    if token_is_expired(auth_token):
+        return HttpResponse(status=403)
+
     token_type = get_token_type(auth_token)
 
     if token_type != 'User':
@@ -238,6 +242,10 @@ def user_token_kms(request):
 @permission_classes([AllowAny])
 def service_token_kms(request):
     auth_token = request.headers['authorization']
+
+    if token_is_expired(auth_token):
+        return HttpResponse(status=403)
+
     token_type = get_token_type(auth_token)
 
     if token_type != 'Service':
