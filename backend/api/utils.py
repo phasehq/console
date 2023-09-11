@@ -41,15 +41,12 @@ def get_org_member_from_user_token(auth_token):
         return False
 
 
-def token_is_expired(auth_token):
+def token_is_expired_or_deleted(auth_token):
     prefix, token_type, token_value = auth_token.split(" ")
 
     if token_type == 'User':
         token = UserToken.objects.get(token=token_value)
     else:
         token = ServiceToken.objects.get(token=token_value)
-
-    print('token expiry: ', token.expires_at,
-          ' Current time: ', timezone.now())
 
     return token.deleted_at is not None or (token.expires_at is not None and token.expires_at < timezone.now())

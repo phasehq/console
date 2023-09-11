@@ -11,7 +11,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
-from api.utils import get_client_ip, get_env_from_service_token, get_org_member_from_user_token, get_token_type, token_is_expired
+from api.utils import get_client_ip, get_env_from_service_token, get_org_member_from_user_token, get_token_type, token_is_expired_or_deleted
 from logs.models import KMSDBLog
 from .models import App, Environment, EnvironmentKey, EnvironmentToken, Secret, SecretEvent, SecretTag, ServiceToken, UserToken
 import jwt
@@ -214,52 +214,46 @@ def kms(request, app_id):
         return HttpResponse(status=404)
 
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
 def user_token_kms(request):
     auth_token = request.headers['authorization']
-
-    if token_is_expired(auth_token):
-        return HttpResponse(status=403)
-
-    token_type = get_token_type(auth_token)
-
-    if token_type != 'User':
-        return HttpResponse(status=403)
 
     token = auth_token.split(' ')[2]
 
     user_token = UserToken.objects.get(token=token)
-    if user_token.deleted_at != None:
-        return HttpResponse(status=403)
 
     serializer = UserTokenSerializer(user_token)
 
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
 def service_token_kms(request):
     auth_token = request.headers['authorization']
-
-    if token_is_expired(auth_token):
-        return HttpResponse(status=403)
-
-    token_type = get_token_type(auth_token)
-
-    if token_type != 'Service':
-        return HttpResponse(status=403)
 
     token = auth_token.split(' ')[2]
 
     service_token = ServiceToken.objects.get(token=token)
-    if service_token.deleted_at != None:
-        return HttpResponse(status=403)
 
     serializer = ServiceTokenSerializer(service_token)
 
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def secrets_tokens(request):
+    auth_token = request.headers['authorization']
+
+    if token_is_expired_or_deleted(auth_token):
+        return HttpResponse(status=403)
+
+    token_type = get_token_type(auth_token)
+
+    if token_type == 'Service':
+        return service_token_kms(request)
+    elif token_type == 'User':
+        return user_token_kms(request)
+    else:
+        return HttpResponse(status=403)
 
 
 class PrivateGraphQLView(LoginRequiredMixin, GraphQLView):
@@ -277,7 +271,7 @@ class SecretsView(APIView):
     def get(self, request):
         auth_token = request.headers['authorization']
 
-        if token_is_expired(auth_token):
+        if token_is_expired_or_deleted(auth_token):
             return HttpResponse(status=403)
 
         token_type = get_token_type(auth_token)
@@ -319,7 +313,7 @@ class SecretsView(APIView):
     def post(self, request):
         auth_token = request.headers['authorization']
 
-        if token_is_expired(auth_token):
+        if token_is_expired_or_deleted(auth_token):
             return HttpResponse(status=403)
 
         token_type = get_token_type(auth_token)
@@ -370,7 +364,7 @@ class SecretsView(APIView):
     def put(self, request):
         auth_token = request.headers['authorization']
 
-        if token_is_expired(auth_token):
+        if token_is_expired_or_deleted(auth_token):
             return HttpResponse(status=403)
 
         token_type = get_token_type(auth_token)
@@ -424,7 +418,7 @@ class SecretsView(APIView):
     def delete(self, request):
         auth_token = request.headers['authorization']
 
-        if token_is_expired(auth_token):
+        if token_is_expired_or_deleted(auth_token):
             return HttpResponse(status=403)
 
         token_type = get_token_type(auth_token)
