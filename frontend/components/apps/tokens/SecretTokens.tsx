@@ -116,7 +116,9 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
     setIsOpen(true)
   }
 
-  const handleCreateNewUserToken = async () => {
+  const handleCreateNewUserToken = async (event: { preventDefault: () => void }) => {
+    event.preventDefault()
+
     if (name.length === 0) {
       toast.error('You must enter a name for the token')
       return false
@@ -226,7 +228,7 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-6 p-4">
+                    <form className="space-y-6 p-4" onSubmit={handleCreateNewUserToken}>
                       <div className="space-y-2 w-full">
                         <label
                           className="block text-gray-700 text-sm font-bold mb-2"
@@ -234,7 +236,12 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
                         >
                           Token name
                         </label>
-                        <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+                        <input
+                          required
+                          id="name"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                        />
                       </div>
 
                       <div>
@@ -244,7 +251,7 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
                               Expiry
                             </label>
                           </RadioGroup.Label>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             {tokenExpiryOptions.map((option) => (
                               <RadioGroup.Option key={option.name} value={option} as={Fragment}>
                                 {({ active, checked }) => (
@@ -276,11 +283,11 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
                         <Button variant="secondary" type="button" onClick={closeModal}>
                           Cancel
                         </Button>
-                        <Button variant="primary" onClick={handleCreateNewUserToken}>
+                        <Button variant="primary" type="submit">
                           Create
                         </Button>
                       </div>
-                    </div>
+                    </form>
                   )}
                 </Dialog.Panel>
               </Transition.Child>
@@ -301,6 +308,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
   const [name, setName] = useState<string>('')
   const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
   const [expiry, setExpiry] = useState<ExpiryOptionT>(tokenExpiryOptions[0])
+  const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
 
   const [serviceToken, setServiceToken] = useState<string>('')
 
@@ -316,6 +324,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
     setName('')
     setEnvScope([])
     setServiceToken('')
+    setShowEnvHint(false)
   }
 
   const closeModal = () => {
@@ -337,14 +346,11 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
       }
     }) ?? []
 
-  const handleCreateNewServiceToken = async () => {
-    if (name.length === 0) {
-      toast.error('You must enter a name for the token')
-      return false
-    }
+  const handleCreateNewServiceToken = async (event: { preventDefault: () => void }) => {
+    event.preventDefault()
 
     if (envScope.length === 0) {
-      toast.error('The token must be scoped to atleast one environment')
+      setShowEnvHint(true)
       return false
     }
 
@@ -468,7 +474,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
 
                   {serviceToken ? (
                     <div className="py-4">
-                      <div className="bg-purple-200 dark:bg-purple-400/10 shadow-inner p-3 rounded-lg">
+                      <div className="bg-teal-200 dark:bg-teal-400/10 shadow-inner p-3 rounded-lg">
                         <div className="w-full flex items-center justify-between pb-4">
                           <span className="uppercase text-xs tracking-widest text-gray-500">
                             service token
@@ -489,11 +495,11 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                             )}
                           </div>
                         </div>
-                        <code className="text-xs break-all text-purple-500">{serviceToken}</code>
+                        <code className="text-xs break-all text-teal-500">{serviceToken}</code>
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-6 p-4">
+                    <form className="space-y-6 p-4" onSubmit={handleCreateNewServiceToken}>
                       <div className="space-y-1 w-full">
                         <label
                           className="block text-gray-700 text-sm font-bold mb-2"
@@ -501,11 +507,27 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                         >
                           Token name
                         </label>
-                        <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+                        <input
+                          id="name"
+                          required
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                        />
                       </div>
 
-                      <div className="space-y-1 w-full">
-                        <Listbox value={envScope} by="id" onChange={setEnvScope} multiple>
+                      <div className="space-y-1 w-full relative">
+                        {envScope.length === 0 && showEnvHint && (
+                          <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
+                            Select an environment scope
+                          </span>
+                        )}
+                        <Listbox
+                          value={envScope}
+                          by="id"
+                          onChange={setEnvScope}
+                          multiple
+                          name="environments"
+                        >
                           {({ open }) => (
                             <>
                               <Listbox.Label as={Fragment}>
@@ -516,14 +538,16 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                                   Environment scope
                                 </label>
                               </Listbox.Label>
-                              <Listbox.Button as={Fragment}>
+                              <Listbox.Button as={Fragment} aria-required>
                                 <div className="p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md cursor-pointer h-10">
-                                  {envScope
-                                    .map((env: Partial<EnvironmentType>) => env.name)
-                                    .join(' + ')}
+                                  <span className="text-black dark:text-white">
+                                    {envScope
+                                      .map((env: Partial<EnvironmentType>) => env.name)
+                                      .join(' + ')}
+                                  </span>
                                   <FaChevronDown
                                     className={clsx(
-                                      'transition-transform ease duration-300',
+                                      'transition-transform ease duration-300 text-neutral-500',
                                       open ? 'rotate-180' : 'rotate-0'
                                     )}
                                   />
@@ -553,7 +577,9 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                                             ) : (
                                               <FaSquare />
                                             )}
-                                            {env.name}
+                                            <span className="text-black dark:text-white">
+                                              {env.name}
+                                            </span>
                                           </div>
                                         )}
                                       </Listbox.Option>
@@ -573,7 +599,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                               Expiry
                             </label>
                           </RadioGroup.Label>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             {tokenExpiryOptions.map((option) => (
                               <RadioGroup.Option key={option.name} value={option} as={Fragment}>
                                 {({ active, checked }) => (
@@ -602,14 +628,14 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                       </div>
 
                       <div className="flex items-center gap-4">
-                        <Button variant="secondary" type="button" onClick={closeModal}>
+                        <Button variant="secondary" onClick={closeModal}>
                           Cancel
                         </Button>
-                        <Button variant="primary" onClick={handleCreateNewServiceToken}>
+                        <Button variant="primary" type="submit">
                           Create
                         </Button>
                       </div>
-                    </div>
+                    </form>
                   )}
                 </Dialog.Panel>
               </Transition.Child>
@@ -768,15 +794,22 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
     )
   }
 
-  const UserToken = (props: { token: UserTokenType }) => {
-    const { token } = props
+  const CreatedToken = (props: {
+    token: ServiceTokenType | UserTokenType
+    deleteHandler: Function
+  }) => {
+    const { token, deleteHandler } = props
 
     const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
 
     return (
-      <div className="flex items-center w-full justify-between p-2">
+      <div className="flex items-center w-full justify-between p-2 group">
         <div className="flex items-center gap-4">
-          <FaUserLock className="text-sky-500/30 text-lg" />
+          {token.__typename === 'UserTokenType' ? (
+            <FaUserLock className="text-sky-500/40 text-lg" />
+          ) : (
+            <FaKey className="text-teal-500/50 text-lg" />
+          )}
           <div className="space-y-0">
             <div className="text-lg font-medium">{token.name}</div>
             <div className="flex items-center gap-8 text-sm text-neutral-500">
@@ -789,33 +822,9 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
             </div>
           </div>
         </div>
-        <DeleteConfirmDialog token={token} onDelete={handleDeleteUserToken} />
-      </div>
-    )
-  }
-
-  const ServiceToken = (props: { token: ServiceTokenType }) => {
-    const { token } = props
-
-    const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
-
-    return (
-      <div className="flex items-center w-full justify-between p-2">
-        <div className="flex items-center gap-4">
-          <FaKey className="text-purple-500/30 text-lg" />
-          <div className="space-y-0">
-            <div className="text-lg font-medium">{token.name}</div>
-            <div className="flex items-center gap-8 text-sm text-neutral-500">
-              <div>Created {relativeTimeFromDates(new Date(token.createdAt))}</div>
-
-              <div className={clsx(isExpired && 'text-red-500')}>
-                {isExpired ? 'Expired' : 'Expires'}{' '}
-                {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
-              </div>
-            </div>
-          </div>
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+          <DeleteConfirmDialog token={token} onDelete={deleteHandler} />
         </div>
-        <DeleteConfirmDialog token={token} onDelete={handleDeleteServiceToken} />
       </div>
     )
   }
@@ -830,9 +839,13 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
             manual configuration.
           </p>
         </div>
-        <div className="space-y-2 divide-y divide-neutral-500">
+        <div className="space-y-2 divide-y divide-neutral-500/50">
           {userTokensData?.userTokens.map((userToken: UserTokenType) => (
-            <UserToken key={userToken.id} token={userToken} />
+            <CreatedToken
+              key={userToken.id}
+              token={userToken}
+              deleteHandler={handleDeleteUserToken}
+            />
           ))}
         </div>
 
@@ -849,9 +862,13 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
             production environments.
           </p>
         </div>
-        <div className="space-y-2 divide-y divide-neutral-500">
+        <div className="space-y-2 divide-y divide-neutral-500/50">
           {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
-            <ServiceToken key={serviceToken.id} token={serviceToken} />
+            <CreatedToken
+              key={serviceToken.id}
+              token={serviceToken}
+              deleteHandler={handleDeleteServiceToken}
+            />
           ))}
         </div>
 
