@@ -2,6 +2,7 @@ type Query {
   organisations: [OrganisationType]
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
   organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
+  organisationInvites(orgId: ID): [OrganisationMemberInviteType]
   apps(organisationId: ID, appId: ID): [AppType]
   logs(appId: ID, start: BigInt, end: BigInt): [KMSLogType]
   logsCount(appId: ID, thisMonth: Boolean): Int
@@ -64,6 +65,16 @@ enum ApiOrganisationMemberRoleChoices {
 
   """Developer"""
   DEV
+}
+
+type OrganisationMemberInviteType {
+  id: String!
+  invitedBy: OrganisationMemberType!
+  inviteeEmail: String!
+  valid: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime!
 }
 
 type AppType {
@@ -245,6 +256,7 @@ type ServiceTokenType {
 
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
+  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!): InviteOrganisationMemberMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
@@ -264,6 +276,10 @@ type Mutation {
 
 type CreateOrganisationMutation {
   organisation: OrganisationType
+}
+
+type InviteOrganisationMemberMutation {
+  invite: OrganisationMemberInviteType
 }
 
 type CreateAppMutation {

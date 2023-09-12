@@ -26,8 +26,9 @@ const documents = {
     "mutation RevokeServiceToken($tokenId: ID!) {\n  deleteServiceToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeServiceTokenDocument,
     "mutation UpdateSecret($id: ID!, $secretData: SecretInput!) {\n  editSecret(id: $id, secretData: $secretData) {\n    secret {\n      id\n      updatedAt\n    }\n  }\n}": types.UpdateSecretDocument,
     "mutation InitAppEnvironments($devEnv: EnvironmentInput!, $stagingEnv: EnvironmentInput!, $prodEnv: EnvironmentInput!) {\n  devEnvironment: createEnvironment(environmentData: $devEnv) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  stagingEnvironment: createEnvironment(environmentData: $stagingEnv) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  prodEnvironment: createEnvironment(environmentData: $prodEnv) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.InitAppEnvironmentsDocument,
+    "mutation InviteMember($orgId: ID!, $email: String!, $apps: [String]) {\n  inviteOrganisationMember(orgId: $orgId, email: $email, apps: $apps) {\n    invite {\n      id\n    }\n  }\n}": types.InviteMemberDocument,
     "mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}": types.RotateAppKeyDocument,
-    "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n  ) {\n    ok\n  }\n}": types.CreateNewUserTokenDocument,
+    "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}": types.CreateNewUserTokenDocument,
     "mutation RevokeUserToken($tokenId: ID!) {\n  deleteUserToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeUserTokenDocument,
     "query GetAppActivityChart($appId: ID!, $period: TimeRange) {\n  appActivityChart(appId: $appId, period: $period) {\n    index\n    date\n    data\n  }\n}": types.GetAppActivityChartDocument,
     "query GetAppDetail($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n    appToken\n    appSeed\n    appVersion\n  }\n}": types.GetAppDetailDocument,
@@ -35,6 +36,7 @@ const documents = {
     "query GetAppLogs($appId: ID!, $start: BigInt, $end: BigInt) {\n  logs(appId: $appId, start: $start, end: $end) {\n    id\n    timestamp\n    phaseNode\n    eventType\n    ipAddress\n    country\n    city\n    phSize\n  }\n  logsCount(appId: $appId)\n}": types.GetAppLogsDocument,
     "query GetApps($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n  }\n}": types.GetAppsDocument,
     "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n  }\n}": types.GetOrganisationsDocument,
+    "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n    }\n    inviteeEmail\n  }\n}": types.GetInvitesDocument,
     "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role\n    identityKey\n  }\n}": types.GetOrganisationAdminsAndSelfDocument,
     "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    role\n    identityKey\n  }\n}": types.GetOrganisationMembersDocument,
     "query GetAppEnvironments($appId: ID!) {\n  appEnvironments(appId: $appId, environmentId: null) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n  }\n}": types.GetAppEnvironmentsDocument,
@@ -44,7 +46,7 @@ const documents = {
     "query GetSecretTags($orgId: ID!) {\n  secretTags(orgId: $orgId) {\n    id\n    name\n    color\n  }\n}": types.GetSecretTagsDocument,
     "query GetSecrets($appId: ID!, $envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n    value\n    tags {\n      id\n      name\n      color\n    }\n    comment\n    createdAt\n    history {\n      id\n      key\n      value\n      tags {\n        id\n        name\n        color\n      }\n      version\n      comment\n      timestamp\n      user {\n        email\n        username\n      }\n      eventType\n    }\n  }\n  appEnvironments(appId: $appId, environmentId: $envId) {\n    id\n    name\n    envType\n    identityKey\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetSecretsDocument,
     "query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    expiresAt\n    keys {\n      id\n    }\n  }\n}": types.GetServiceTokensDocument,
-    "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n  }\n}": types.GetUserTokensDocument,
+    "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
 };
 
 /**
@@ -116,11 +118,15 @@ export function graphql(source: "mutation InitAppEnvironments($devEnv: Environme
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation InviteMember($orgId: ID!, $email: String!, $apps: [String]) {\n  inviteOrganisationMember(orgId: $orgId, email: $email, apps: $apps) {\n    invite {\n      id\n    }\n  }\n}"): (typeof documents)["mutation InviteMember($orgId: ID!, $email: String!, $apps: [String]) {\n  inviteOrganisationMember(orgId: $orgId, email: $email, apps: $apps) {\n    invite {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n  ) {\n    ok\n  }\n}"): (typeof documents)["mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n  ) {\n    ok\n  }\n}"];
+export function graphql(source: "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}"): (typeof documents)["mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -149,6 +155,10 @@ export function graphql(source: "query GetApps($organisationId: ID!, $appId: ID!
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n  }\n}"): (typeof documents)["query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n    }\n    inviteeEmail\n  }\n}"): (typeof documents)["query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n    }\n    inviteeEmail\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -188,7 +198,7 @@ export function graphql(source: "query GetServiceTokens($appId: ID!) {\n  servic
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n  }\n}"): (typeof documents)["query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n  }\n}"];
+export function graphql(source: "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}"): (typeof documents)["query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};
