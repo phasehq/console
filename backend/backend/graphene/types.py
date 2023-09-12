@@ -2,7 +2,7 @@ import graphene
 from enum import Enum
 from graphene import ObjectType, relay
 from graphene_django import DjangoObjectType
-from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag, ServiceToken, UserToken
+from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, OrganisationMemberInvite, Secret, SecretEvent, SecretFolder, SecretTag, ServiceToken, UserToken
 from logs.dynamodb_models import KMSLog
 
 
@@ -28,6 +28,13 @@ class OrganisationMemberType(DjangoObjectType):
     def resolve_username(self, info):
         org_member = OrganisationMember.objects.get(id=self.id)
         return org_member.user.username
+
+
+class OrganisationMemberInviteType(DjangoObjectType):
+    class Meta:
+        model = OrganisationMemberInvite
+        fields = ('id', 'invited_by', 'invitee_email', 'valid',
+                  'created_at', 'updated_at', 'expires_at')
 
 
 class AppType(DjangoObjectType):

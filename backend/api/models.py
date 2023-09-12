@@ -152,6 +152,20 @@ class App(models.Model):
         return self.name
 
 
+class OrganisationMemberInvite(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, related_name='invites', on_delete=models.CASCADE)
+    apps = models.ManyToManyField(App)
+    invited_by = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE)
+    invitee_email = models.EmailField()
+    valid = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField()
+
+
 class Environment(models.Model):
 
     DEVELOPMENT = "dev"
