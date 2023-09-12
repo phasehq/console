@@ -44,7 +44,7 @@ import clsx from 'clsx'
 
 interface ExpiryOptionT {
   name: string
-  value: number | null
+  getExpiry: () => number | null
 }
 
 const handleCopy = (val: string) => {
@@ -57,38 +57,38 @@ const handleCopy = (val: string) => {
 const tokenExpiryOptions: ExpiryOptionT[] = [
   {
     name: 'Never',
-    value: null,
+    getExpiry: () => null,
   },
   {
     name: '2 min',
-    value: getUnixTimeStampinFuture(0, 0, 2),
+    getExpiry: () => getUnixTimeStampinFuture(0, 0, 2),
   },
   {
     name: '7 days',
-    value: getUnixTimeStampinFuture(7),
+    getExpiry: () => getUnixTimeStampinFuture(7),
   },
   {
     name: '30 days',
-    value: getUnixTimeStampinFuture(30),
+    getExpiry: () => getUnixTimeStampinFuture(30),
   },
   {
     name: '60 days',
-    value: getUnixTimeStampinFuture(60),
+    getExpiry: () => getUnixTimeStampinFuture(60),
   },
   {
     name: '90 days',
-    value: getUnixTimeStampinFuture(90),
+    getExpiry: () => getUnixTimeStampinFuture(90),
   },
 ]
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
-  return a.value === b.value
+  return a.getExpiry() === b.getExpiry()
 }
 
-const humanReadableExpiry = (expiry: ExpiryOptionT) =>
-  expiry.value === null
+const humanReadableExpiry = (expiryOption: ExpiryOptionT) =>
+  expiryOption.getExpiry() === null
     ? 'This token will never expire.'
-    : `This token will expire on ${new Date(expiry.value).toLocaleDateString()}.`
+    : `This token will expire on ${new Date(expiryOption.getExpiry()!).toLocaleDateString()}.`
 
 const CreateUserTokenDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
@@ -134,7 +134,7 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
         organisationId,
         userKxKeys,
         name,
-        expiry.value
+        expiry.getExpiry()
       )
 
       await createUserToken({
@@ -410,7 +410,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
           token,
           wrappedKeyShare,
           name,
-          expiry: expiry.value,
+          expiry: expiry.getExpiry(),
         },
         refetchQueries: [
           {

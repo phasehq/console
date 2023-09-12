@@ -45,5 +45,14 @@ export const getUnixTimeStampinFuture = (
   hours: number = 0,
   minutes: number = 0
 ): number => {
-  return Date.now() + days * 86400000 + hours * 3600000 + minutes * 60000
+  const millisecondsInADay = 86400000
+  const millisecondsInAnHour = 3600000
+  const millisecondsInAMinute = 60000
+
+  return (
+    Date.now() +
+    days * millisecondsInADay +
+    hours * millisecondsInAnHour +
+    minutes * millisecondsInAMinute
+  )
 }
