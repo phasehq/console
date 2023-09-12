@@ -60,10 +60,6 @@ const tokenExpiryOptions: ExpiryOptionT[] = [
     getExpiry: () => null,
   },
   {
-    name: '2 min',
-    getExpiry: () => getUnixTimeStampinFuture(0, 0, 2),
-  },
-  {
     name: '7 days',
     getExpiry: () => getUnixTimeStampinFuture(7),
   },
