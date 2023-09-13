@@ -18,7 +18,7 @@ import {
 import { splitSecret } from '@/utils/keyshares'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 
-const FREE_APP_LIMIT = 1
+const FREE_APP_LIMIT = 5
 const PRO_APP_LIMIT = 10
 
 export default function NewAppDialog(props: {
