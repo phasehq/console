@@ -36,11 +36,12 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
         org_id = graphene.ID(required=True)
         email = graphene.String(required=True)
         apps = graphene.List(graphene.String)
+        role = graphene.String()
 
     invite = graphene.Field(OrganisationMemberInviteType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, email, apps):
+    def mutate(cls, root, info, org_id, email, apps, role):
         if user_is_admin(info.context.user, org_id):
             user_already_exists = OrganisationMember.objects.filter(
                 organisation_id=org_id, user__email=email).exists()
@@ -56,11 +57,31 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
             app_scope = App.objects.filter(id__in=apps)
 
             invite = OrganisationMemberInvite.objects.create(
-                organisation_id=org_id, invited_by=invited_by, invitee_email=email, expires_at=expiry)
+                organisation_id=org_id, invited_by=invited_by, role=role, invitee_email=email, expires_at=expiry)
 
             invite.apps.set(app_scope)
 
             return InviteOrganisationMemberMutation(invite=invite)
+        else:
+            raise GraphQLError(
+                "You don't have permission to perform this action")
+
+
+class DeleteInviteMutation(graphene.Mutation):
+    class Arguments:
+        invite_id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, rooot, info, invite_id):
+        invite = OrganisationMemberInvite.objects.get(id=invite_id)
+
+        if user_is_admin(info.context.user, invite.organisation.id):
+            invite.delete()
+
+            return DeleteInviteMutation(ok=True)
+
         else:
             raise GraphQLError(
                 "You don't have permission to perform this action")

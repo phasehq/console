@@ -33,7 +33,7 @@ class OrganisationMemberType(DjangoObjectType):
 class OrganisationMemberInviteType(DjangoObjectType):
     class Meta:
         model = OrganisationMemberInvite
-        fields = ('id', 'invited_by', 'invitee_email', 'valid',
+        fields = ('id', 'invited_by', 'invitee_email', 'valid', 'organisation', 'apps', 'role',
                   'created_at', 'updated_at', 'expires_at')
 
 

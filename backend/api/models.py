@@ -157,6 +157,11 @@ class OrganisationMemberInvite(models.Model):
     organisation = models.ForeignKey(
         Organisation, related_name='invites', on_delete=models.CASCADE)
     apps = models.ManyToManyField(App)
+    role = models.CharField(
+        max_length=5,
+        choices=OrganisationMember.USER_ROLES,
+        default=OrganisationMember.DEVELOPER,
+    )
     invited_by = models.ForeignKey(
         OrganisationMember, on_delete=models.CASCADE)
     invitee_email = models.EmailField()
