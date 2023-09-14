@@ -1,7 +1,7 @@
 from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation
 from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_admin, user_is_org_member
 from .graphene.mutations.app import CreateAppMutation, DeleteAppMutation, RotateAppKeysMutation
-from .graphene.mutations.organisation import CreateOrganisationMutation, InviteOrganisationMemberMutation
+from .graphene.mutations.organisation import CreateOrganisationMutation, DeleteInviteMutation, InviteOrganisationMemberMutation
 from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, KMSLogType, OrganisationMemberInviteType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, ServiceTokenType, TimeRange, UserTokenType
 import graphene
 from graphql import GraphQLError
@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
 from itertools import chain
+from django.utils import timezone
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
@@ -23,6 +24,8 @@ class Query(graphene.ObjectType):
         OrganisationMemberType, organisation_id=graphene.ID())
     organisation_invites = graphene.List(
         OrganisationMemberInviteType, org_id=graphene.ID())
+    validate_invite = graphene.Field(
+        OrganisationMemberInviteType, invite_id=graphene.ID())
     apps = graphene.List(
         AppType, organisation_id=graphene.ID(), app_id=graphene.ID())
     logs = graphene.List(KMSLogType, app_id=graphene.ID(),
@@ -54,9 +57,15 @@ class Query(graphene.ObjectType):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
 
-        roles = [user_role.lower() for user_role in role]
+        filter = {
+            "organisation_id": organisation_id
+        }
 
-        return OrganisationMember.objects.filter(organisation_id=organisation_id, role__in=roles)
+        if role:
+            roles = [user_role.lower() for user_role in role]
+            filter["roles__in"] = roles
+
+        return OrganisationMember.objects.filter(**filter)
 
     def resolve_organisation_admins_and_self(root, info, organisation_id):
         if not user_is_org_member(info.context.user.userId, organisation_id):
@@ -82,6 +91,21 @@ class Query(graphene.ObjectType):
             organisation_id=org_id, valid=True)
 
         return invites
+
+    def resolve_validate_invite(root, info, invite_id):
+        try:
+            invite = OrganisationMemberInvite.objects.get(
+                id=invite_id, valid=True)
+        except:
+            raise GraphQLError("This invite is invalid")
+
+        if invite.expires_at < timezone.now():
+            raise GraphQLError("This invite has expired")
+
+        if invite.invitee_email == info.context.user.email:
+            return invite
+        else:
+            raise GraphQLError("This invite is for another user")
 
     def resolve_apps(root, info, organisation_id, app_id):
         filter = {
@@ -278,6 +302,7 @@ class Query(graphene.ObjectType):
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
     invite_organisation_member = InviteOrganisationMemberMutation.Field()
+    delete_invitation = DeleteInviteMutation.Field()
     create_app = CreateAppMutation.Field()
     rotate_app_keys = RotateAppKeysMutation.Field()
     delete_app = DeleteAppMutation.Field()
