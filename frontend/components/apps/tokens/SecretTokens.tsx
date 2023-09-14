@@ -425,7 +425,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
   return (
     <>
       <div className="flex items-center">
-        <Button variant="primary" onClick={openModal} title="Delete secret">
+        <Button variant="primary" onClick={openModal} title="Create Service Token">
           <div className="flex items-center gap-1">
             <FaPlus /> Create Service Token
           </div>
@@ -721,7 +721,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
     return (
       <>
         <div className="flex items-center justify-center">
-          <Button variant="danger" onClick={openModal} title="Delete secret">
+          <Button variant="danger" onClick={openModal} title="Delete Token">
             <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
               <FaTrashAlt />
             </div>
