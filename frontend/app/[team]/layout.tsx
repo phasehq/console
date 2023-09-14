@@ -4,9 +4,11 @@ import '@/app/globals.css'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { NavBar } from '@/components/layout/Navbar'
 import Sidebar from '@/components/layout/Sidebar'
-import { OrganisationProvider } from '@/contexts/organisationContext'
+import { OrganisationProvider, organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
 import { usePathname } from 'next/navigation'
+import { useContext, useEffect } from 'react'
+import { notFound } from 'next/navigation'
 
 export default function RootLayout({
   children,
@@ -15,6 +17,22 @@ export default function RootLayout({
   children: React.ReactNode
   params: { team: string }
 }) {
+  const { activeOrganisation, setActiveOrganisation, organisations } =
+    useContext(organisationContext)
+
+  useEffect(() => {
+    console.log(activeOrganisation, params.team)
+    if (organisations.length > 0 && activeOrganisation!.name !== params.team) {
+      const altOrg = organisations.find((org) => org.name === params.team)
+
+      if (altOrg !== undefined) {
+        setActiveOrganisation(altOrg)
+      } else {
+        return notFound()
+      }
+    }
+  }, [activeOrganisation, organisations, params.team])
+
   const path = usePathname()
 
   const showNav = !path?.split('/').includes('newdevice')

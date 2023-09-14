@@ -6,13 +6,13 @@ import { useQuery } from '@apollo/client'
 interface OrganisationContextValue {
   activeOrganisation: OrganisationType | null
   organisations: OrganisationType[]
-  setOrganisation: (organisation: OrganisationType) => void
+  setActiveOrganisation: (organisation: OrganisationType) => void
 }
 
 export const organisationContext = createContext<OrganisationContextValue>({
   activeOrganisation: null,
   organisations: [],
-  setOrganisation: () => {},
+  setActiveOrganisation: () => {},
 })
 
 interface OrganisationProviderProps {
@@ -35,7 +35,7 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
       value={{
         activeOrganisation: organisation,
         organisations: orgsData?.organisations ?? [],
-        setOrganisation,
+        setActiveOrganisation: setOrganisation,
       }}
     >
       {children}
