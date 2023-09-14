@@ -3,6 +3,7 @@ type Query {
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
   organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
+  validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
   logs(appId: ID, start: BigInt, end: BigInt): [KMSLogType]
   logsCount(appId: ID, thisMonth: Boolean): Int
@@ -69,6 +70,9 @@ enum ApiOrganisationMemberRoleChoices {
 
 type OrganisationMemberInviteType {
   id: String!
+  organisation: OrganisationType!
+  apps: [AppType!]!
+  role: ApiOrganisationMemberInviteRoleChoices!
   invitedBy: OrganisationMemberType!
   inviteeEmail: String!
   valid: Boolean!
@@ -86,6 +90,18 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiOrganisationMemberInviteRoleChoices {
+  """Owner"""
+  OWNER
+
+  """Admin"""
+  ADMIN
+
+  """Developer"""
+  DEV
 }
 
 type KMSLogType implements Node {
@@ -256,7 +272,8 @@ type ServiceTokenType {
 
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
-  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!): InviteOrganisationMemberMutation
+  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
+  deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
@@ -280,6 +297,10 @@ type CreateOrganisationMutation {
 
 type InviteOrganisationMemberMutation {
   invite: OrganisationMemberInviteType
+}
+
+type DeleteInviteMutation {
+  ok: Boolean
 }
 
 type CreateAppMutation {
