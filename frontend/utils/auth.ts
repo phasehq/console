@@ -131,10 +131,7 @@ export namespace cryptoUtils {
     await _sodium.ready
     const sodium = _sodium
 
-    return sodium.to_base64(
-      await encryptRaw(plaintext, key),
-      sodium.base64_variants.ORIGINAL
-    )
+    return sodium.to_base64(await encryptRaw(plaintext, key), sodium.base64_variants.ORIGINAL)
   }
 
   /**
@@ -386,5 +383,19 @@ export namespace cryptoUtils {
     const keyBytes = sodium.from_hex(wrapKey)
     const wrappedKey = await encryptRaw(keyShare, keyBytes)
     return sodium.to_hex(wrappedKey)
+  }
+
+  export const getInviteLink = (inviteId: string) => {
+    const sodium = _sodium
+
+    const hostname = `${window.location.protocol}/${window.location.host}`
+    const encodedInvite = sodium.to_base64(inviteId, sodium.base64_variants.ORIGINAL)
+    return `${hostname}/invite/${encodedInvite}`
+  }
+
+  export const decodeInvite = (hash: string) => {
+    const sodium = _sodium
+
+    return sodium.to_string(sodium.from_base64(hash, sodium.base64_variants.ORIGINAL))
   }
 }

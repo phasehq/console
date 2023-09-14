@@ -4,7 +4,7 @@ import Link from 'next/link'
 import UserMenu from '../UserMenu'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { FaCog, FaCubes, FaHome } from 'react-icons/fa'
+import { FaCog, FaCubes, FaHome, FaUsersCog } from 'react-icons/fa'
 
 export type SidebarLinkT = {
   name: string
@@ -48,6 +48,12 @@ const Sidebar = () => {
       active: usePathname() === `/${team}/apps`,
     },
     {
+      name: 'Members',
+      href: `/${team}/members`,
+      icon: <FaUsersCog size="20" className="text-neutral-800 dark:text-neutral-300" />,
+      active: usePathname() === `/${team}/apps`,
+    },
+    {
       name: 'Settings',
       href: `/${team}/settings`,
       icon: <FaCog size="20" className="text-neutral-800 dark:text-neutral-300" />,
@@ -58,7 +64,7 @@ const Sidebar = () => {
   return (
     <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-center justify-between pt-20 bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white">
       <div className="gap-4 p-4 grid grid-cols-1 ">
-        {links.slice(0, 2).map((link) => (
+        {links.slice(0, 3).map((link) => (
           <SidebarLink
             key={link.name}
             name={link.name}
@@ -71,11 +77,11 @@ const Sidebar = () => {
       <div className="py-4">
         {
           <SidebarLink
-            key={links[2].name}
-            name={links[2].name}
-            href={links[2].href}
-            icon={links[2].icon}
-            active={links[2].active}
+            key={links[3].name}
+            name={links[3].name}
+            href={links[3].href}
+            icon={links[3].icon}
+            active={links[3].active}
           />
         }
       </div>
