@@ -53,7 +53,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
                                                  identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
 
         org_owner = OrganisationMember.objects.get(
-            organisation=environment.app.organisation, role=OrganisationMember.OWNER)
+            organisation=environment.app.organisation, role=OrganisationMember.OWNER, deleted_at=None)
 
         EnvironmentKey.objects.create(environment=environment, user=org_owner,
                                       identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
@@ -115,7 +115,7 @@ class CreateEnvironmentTokenMutation(graphene.Mutation):
 
             env = Environment.objects.get(id=env_id)
             org_member = OrganisationMember.objects.get(
-                organisation=env.app.organisation, user_id=user.userId)
+                organisation=env.app.organisation, user_id=user.userId, deleted_at=None)
 
             environment_token = EnvironmentToken.objects.create(
                 environment_id=env_id, user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share)
@@ -141,7 +141,7 @@ class CreateUserTokenMutation(graphene.Mutation):
         if user_is_org_member(user.userId, org_id):
 
             org_member = OrganisationMember.objects.get(
-                organisation_id=org_id, user_id=user.userId)
+                organisation_id=org_id, user_id=user.userId, deleted_at=None)
 
             if expiry is not None:
                 expires_at = datetime.fromtimestamp(expiry / 1000)
@@ -200,7 +200,7 @@ class CreateServiceTokenMutation(graphene.Mutation):
         if user_is_org_member(user.userId, app.organisation.id):
 
             org_member = OrganisationMember.objects.get(
-                organisation_id=app.organisation.id, user_id=user.userId)
+                organisation_id=app.organisation.id, user_id=user.userId, deleted_at=None)
 
             env_keys = EnvironmentKey.objects.bulk_create([EnvironmentKey(
                 environment_id=key.env_id, identity_key=key.identity_key, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt) for key in environment_keys])
@@ -316,7 +316,7 @@ class CreateSecretMutation(graphene.Mutation):
         secret.tags.set(tags)
 
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org)
+            user=info.context.user, organisation=org, deleted_at=None)
 
         event = SecretEvent.objects.create(
             **{**secret_obj_data, **{'user': org_member, 'secret': secret, 'event_type': SecretEvent.CREATE}})
@@ -361,7 +361,7 @@ class EditSecretMutation(graphene.Mutation):
         secret.save()
 
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org)
+            user=info.context.user, organisation=org, deleted_at=None)
 
         event = SecretEvent.objects.create(
             **{**secret_obj_data, **{'user': org_member, 'environment': env, 'secret': secret, 'event_type': SecretEvent.UPDATE}})
