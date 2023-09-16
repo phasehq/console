@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ZXCVBNResult } from 'zxcvbn'
-import { FaEye, FaEyeSlash, FaInfo } from 'react-icons/fa'
+import { FaCheck, FaEye, FaEyeSlash, FaInfo } from 'react-icons/fa'
+import clsx from 'clsx'
 
 interface AccountPasswordProps {
   pw: string
@@ -27,23 +28,23 @@ export const AccountPassword = (props: AccountPasswordProps) => {
    * @returns {string}
    */
   const pwStrengthColor = (): string => {
-    let color = 'red'
+    let color = 'bg-red-500'
     if (!pw) return color
     switch (pwStrength.score) {
       case 1:
-        color = 'orange'
+        color = 'bg-orange-500'
         break
       case 2:
-        color = 'yellow'
+        color = 'bg-yellow-500'
         break
       case 3:
-        color = 'blue'
+        color = 'bg-blue-500'
         break
       case 4:
-        color = 'green'
+        color = 'bg-emerald-500'
         break
       default:
-        color = 'red'
+        color = 'bg-red-500'
         break
     }
 
@@ -55,6 +56,8 @@ export const AccountPassword = (props: AccountPasswordProps) => {
     if (pw) score = `${(pwStrength.score / 4) * 100}%`
     return score
   }
+
+  const passwordIsStrong = pwStrength?.feedback?.suggestions?.length == 0 || false
 
   return (
     <div className="flex flex-col gap-4 max-w-md mx-auto">
@@ -104,16 +107,19 @@ export const AccountPassword = (props: AccountPasswordProps) => {
       </div>
       <div className="mb-6 h-1 w-full bg-neutral-200 dark:bg-neutral-600">
         <div
-          className="h-1 w-full ml-0 transition-all ease-in-out float-left"
+          className={clsx(
+            'h-1 w-full ml-0 transition-all ease-in-out float-left',
+            pwStrengthColor()
+          )}
           style={{
-            transform: `scale(${pwStrengthPercent()}, 1)`,
-            backgroundColor: pwStrengthColor(),
+            transform: `scaleX(${pwStrengthPercent()})`,
+            transformOrigin: '0%',
           }}
         ></div>
-        {pwStrength.feedback && (
+        {pwStrength.feedback?.suggestions && (
           <div className="flex w-full items-center gap-4 p-3 bg-white dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-black/50 dark:text-white/50">
-            <FaInfo />
-            {pwStrength.feedback.suggestions}
+            {passwordIsStrong ? <FaCheck /> : <FaInfo />}
+            {passwordIsStrong ? 'Strong password' : pwStrength.feedback.suggestions}
           </div>
         )}
       </div>
