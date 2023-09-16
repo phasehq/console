@@ -1,0 +1,5 @@
+mutation RemoveMember($memberId: ID!) {
+  deleteOrganisationMember(memberId: $memberId) {
+    ok
+  }
+}

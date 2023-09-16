@@ -1,0 +1,10 @@
+mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $inviteId: ID!) {
+  createOrganisationMember(orgId: $orgId, identityKey: $identityKey, wrappedKeyring: $wrappedKeyring, inviteId: $inviteId) {
+    orgMember{
+      id
+      email
+      createdAt
+      role
+    }
+  }
+}
