@@ -5,6 +5,7 @@ import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import GetApps from '@/graphql/queries/getApps.gql'
 import InviteMember from '@/graphql/mutations/organisation/inviteNewMember.gql'
 import DeleteInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
+import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import {
@@ -32,6 +33,7 @@ import clsx from 'clsx'
 import { cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
+import { useSession } from 'next-auth/react'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -47,7 +49,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
     variables: { organisationId, appId: '' },
   })
-  const [createInvite, { data }] = useMutation(InviteMember)
+  const [createInvite] = useMutation(InviteMember)
   const [deleteInvite] = useMutation(DeleteInvite)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -86,7 +88,7 @@ const InviteDialog = (props: { organisationId: string }) => {
 
   const handleInvite = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
-    await createInvite({
+    const { data } = await createInvite({
       variables: {
         email,
         orgId: organisationId,
@@ -469,6 +471,8 @@ export default function Members({ params }: { params: { team: string } }) {
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const { data: session } = useSession()
+
   useEffect(() => {
     if (organisation) {
       getMembers({
@@ -479,6 +483,104 @@ export default function Members({ params }: { params: { team: string } }) {
       })
     }
   }, [organisation])
+
+  const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberType }) => {
+    const { member } = props
+
+    const { activeOrganisation: organisation } = useContext(organisationContext)
+
+    const [removeMember] = useMutation(RemoveMember)
+
+    const [isOpen, setIsOpen] = useState<boolean>(false)
+
+    const closeModal = () => {
+      setIsOpen(false)
+    }
+
+    const openModal = () => {
+      setIsOpen(true)
+    }
+
+    const handleRemoveMember = async () => {
+      await removeMember({
+        variables: { memberId: member.id },
+        refetchQueries: [
+          {
+            query: GetOrganisationMembers,
+            variables: { organisationId: organisation?.id, role: null },
+          },
+        ],
+      })
+    }
+
+    return (
+      <>
+        <div className="flex items-center justify-center">
+          <Button variant="danger" onClick={openModal} title="Remove member">
+            <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
+              <FaTrashAlt />
+            </div>
+          </Button>
+        </div>
+
+        <Transition appear show={isOpen} as={Fragment}>
+          <Dialog as="div" className="relative z-10" onClose={closeModal}>
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0"
+              enterTo="opacity-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
+            </Transition.Child>
+
+            <div className="fixed inset-0 overflow-y-auto">
+              <div className="flex min-h-full items-center justify-center p-4 text-center">
+                <Transition.Child
+                  as={Fragment}
+                  enter="ease-out duration-300"
+                  enterFrom="opacity-0 scale-95"
+                  enterTo="opacity-100 scale-100"
+                  leave="ease-in duration-200"
+                  leaveFrom="opacity-100 scale-100"
+                  leaveTo="opacity-0 scale-95"
+                >
+                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                    <Dialog.Title as="div" className="flex w-full justify-between">
+                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                        Remove member
+                      </h3>
+
+                      <Button variant="text" onClick={closeModal}>
+                        <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
+                      </Button>
+                    </Dialog.Title>
+
+                    <div className="space-y-6 p-4">
+                      <p className="text-neutral-500">
+                        Are you sure you want to remove {member.email} from this organisation?
+                      </p>
+                      <div className="flex items-center gap-4">
+                        <Button variant="secondary" type="button" onClick={closeModal}>
+                          Cancel
+                        </Button>
+                        <Button variant="danger" onClick={handleRemoveMember}>
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </Dialog.Panel>
+                </Transition.Child>
+              </div>
+            </div>
+          </Dialog>
+        </Transition>
+      </>
+    )
+  }
 
   return (
     <div className="w-full space-y-10 p-8 text-black dark:text-white">
@@ -504,6 +606,7 @@ export default function Members({ params }: { params: { team: string } }) {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Joined
               </th>
+              <th className="px-6 py-3"></th>
             </tr>
           </thead>
           <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y divide-zinc-500/40">
@@ -514,6 +617,11 @@ export default function Members({ params }: { params: { team: string } }) {
                 <td className="px-6 py-4 whitespace-nowrap">{member.role}</td>
                 <td className="px-6 py-4 whitespace-nowrap capitalize">
                   {relativeTimeFromDates(new Date(member.createdAt))}
+                </td>
+                <td>
+                  {member.email !== session?.user?.email && (
+                    <DeleteMemberConfirmDialog member={member} />
+                  )}
                 </td>
               </tr>
             ))}
