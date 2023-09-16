@@ -25,7 +25,7 @@ export const AccountSeedGen = (props: { mnemonic: string }) => {
       {props.mnemonic.split(' ').map((word: string, index: number) => (
         <div
           className="font-mono text-medium text-black dark:text-white flex gap-2 items-center border dark:border-violet-200/10 border-zinc-500/10 rounded-xl px-2 py-1 group"
-          key={word}
+          key={word + index}
         >
           <span className="text-zinc-400 dark:text-zinc-700">{index + 1}</span>
           <span className="hidden group-hover:block">{word}</span>
