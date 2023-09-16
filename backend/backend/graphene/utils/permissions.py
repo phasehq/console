@@ -5,7 +5,7 @@ admin_roles = [OrganisationMember.OWNER, OrganisationMember.ADMIN]
 
 def user_is_admin(user_id, org_id):
     member = OrganisationMember.objects.get(
-        user_id=user_id, organisation_id=org_id)
+        user_id=user_id, organisation_id=org_id, deleted_at=None)
     return member.role in admin_roles
 
 
@@ -22,7 +22,7 @@ def user_can_access_app(user_id, app_id):
 def user_can_access_environment(user_id, env_id):
     env = Environment.objects.get(id=env_id)
     org_member = OrganisationMember.objects.get(
-        organisation=env.app.organisation, user_id=user_id)
+        organisation=env.app.organisation, user_id=user_id, deleted_at=None)
     return EnvironmentKey.objects.filter(user_id=org_member, environment_id=env_id).exists()
 
 

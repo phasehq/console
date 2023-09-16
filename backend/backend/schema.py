@@ -127,7 +127,7 @@ class Query(graphene.ObjectType):
         app = App.objects.get(id=app_id)
 
         org_member = OrganisationMember.objects.get(
-            organisation=app.organisation, user_id=info.context.user.userId)
+            organisation=app.organisation, user_id=info.context.user.userId, deleted_at=None)
 
         filter = {
             'app_id': app_id
@@ -163,7 +163,7 @@ class Query(graphene.ObjectType):
 
         env = Environment.objects.get(id=environment_id)
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=env.app.organisation)
+            user=info.context.user, organisation=env.app.organisation, deleted_at=None)
         return EnvironmentKey.objects.filter(environment=env, user=org_member)
 
     def resolve_environment_tokens(root, info, environment_id):
@@ -172,7 +172,7 @@ class Query(graphene.ObjectType):
 
         env = Environment.objects.get(id=environment_id)
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=env.app.organisation)
+            user=info.context.user, organisation=env.app.organisation, deleted_at=None)
         return EnvironmentToken.objects.filter(environment=env, user=org_member)
 
     def resolve_user_tokens(root, info, organisation_id):
@@ -180,7 +180,7 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have access to this organisation")
 
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation_id=organisation_id)
+            user=info.context.user, organisation_id=organisation_id, deleted_at=None)
         return UserToken.objects.filter(user=org_member, deleted_at=None)
 
     def resolve_service_tokens(root, info, app_id):

@@ -55,7 +55,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
                     "An active invitiation already exists for this user.")
 
             invited_by = OrganisationMember.objects.get(
-                user=info.context.user, organisation_id=org_id)
+                user=info.context.user, organisation_id=org_id, deleted_at=None)
 
             expiry = datetime.now() + timedelta(days=3)
 
@@ -167,7 +167,7 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
                 raise GraphQLError(
                     'You cannot set this user as the organisation owner')
             org_member = OrganisationMember.objects.get(
-                organisation__id=org_id, user__id=user_id)
+                organisation__id=org_id, user__id=user_id, deleted_at=None)
             org_member.role = role
             org_member.save()
 
