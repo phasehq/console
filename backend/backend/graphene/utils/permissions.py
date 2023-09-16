@@ -10,7 +10,7 @@ def user_is_admin(user_id, org_id):
 
 
 def user_is_org_member(user_id, org_id):
-    return OrganisationMember.objects.filter(user_id=user_id, organisation_id=org_id).exists()
+    return OrganisationMember.objects.filter(user_id=user_id, organisation_id=org_id, deleted_at=None).exists()
 
 
 def user_can_access_app(user_id, app_id):
@@ -27,4 +27,4 @@ def user_can_access_environment(user_id, env_id):
 
 
 def member_can_access_org(member_id, org_id):
-    return OrganisationMember.objects.filter(id=member_id, organisation_id=org_id).exists()
+    return OrganisationMember.objects.filter(id=member_id, organisation_id=org_id, deleted_at=None).exists()

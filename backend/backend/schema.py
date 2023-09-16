@@ -1,7 +1,7 @@
 from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation
 from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_admin, user_is_org_member
 from .graphene.mutations.app import CreateAppMutation, DeleteAppMutation, RotateAppKeysMutation
-from .graphene.mutations.organisation import CreateOrganisationMutation, DeleteInviteMutation, InviteOrganisationMemberMutation
+from .graphene.mutations.organisation import CreateOrganisationMemberMutation, CreateOrganisationMutation, DeleteInviteMutation, DeleteOrganisationMemberMutation, InviteOrganisationMemberMutation
 from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, KMSLogType, OrganisationMemberInviteType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, ServiceTokenType, TimeRange, UserTokenType
 import graphene
 from graphql import GraphQLError
@@ -50,7 +50,10 @@ class Query(graphene.ObjectType):
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
     def resolve_organisations(root, info):
-        memberships = OrganisationMember.objects.filter(user=info.context.user)
+
+        memberships = OrganisationMember.objects.filter(
+            user=info.context.user, deleted_at=None)
+
         return [membership.organisation for membership in memberships]
 
     def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
@@ -58,7 +61,8 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have access to this organisation")
 
         filter = {
-            "organisation_id": organisation_id
+            "organisation_id": organisation_id,
+            "deleted_at": None
         }
 
         if role:
@@ -74,7 +78,7 @@ class Query(graphene.ObjectType):
         roles = ['owner', 'admin']
 
         members = OrganisationMember.objects.filter(
-            organisation_id=organisation_id, role__in=roles)
+            organisation_id=organisation_id, role__in=roles, deleted_at=None)
 
         if not info.context.user.userId in [member.user_id for member in members]:
             self_member = OrganisationMember.objects.filter(
@@ -302,6 +306,8 @@ class Query(graphene.ObjectType):
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
     invite_organisation_member = InviteOrganisationMemberMutation.Field()
+    create_organisation_member = CreateOrganisationMemberMutation.Field()
+    delete_organisation_member = DeleteOrganisationMemberMutation.Field()
     delete_invitation = DeleteInviteMutation.Field()
     create_app = CreateAppMutation.Field()
     rotate_app_keys = RotateAppKeysMutation.Field()
