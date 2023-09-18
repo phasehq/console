@@ -76,7 +76,7 @@ export const AccountPassword = (props: AccountPasswordProps) => {
             className="w-full "
           />
           <button
-            className="absolute inset-y-0 right-4"
+            className="absolute inset-y-0 right-4 text-neutral-500"
             type="button"
             onClick={() => setShowPw(!showPw)}
             tabIndex={-1}
@@ -101,7 +101,7 @@ export const AccountPassword = (props: AccountPasswordProps) => {
             className="w-full"
           />
           <button
-            className="absolute inset-y-0 right-4"
+            className="absolute inset-y-0 right-4 text-neutral-500"
             type="button"
             onClick={() => setShowPw2(!showPw2)}
             tabIndex={-1}
