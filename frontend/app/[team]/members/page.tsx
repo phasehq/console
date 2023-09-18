@@ -145,7 +145,12 @@ const InviteDialog = (props: { organisationId: string }) => {
         ) : (
           <FaSquare className="text-zinc-300 dark:text-zinc-700" />
         )}
-        <div className={clsx(isSelected ? 'opacity-100' : 'opacity-70', 'transition-opacity ease')}>
+        <div
+          className={clsx(
+            isSelected ? 'opacity-100 font-medium' : 'opacity-70',
+            'transition-opacity ease text-black dark:text-white'
+          )}
+        >
           <span>{appName}</span>
         </div>
       </div>
@@ -385,7 +390,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                           {({ open }) => (
                             <>
                               <Disclosure.Button as={Fragment}>
-                                <div className="py-2 cursor-pointer font-medium flex items-center gap-4">
+                                <div className="py-2 cursor-pointer font-medium flex items-center gap-4 text-black dark:text-white">
                                   <FaChevronDown
                                     className={clsx(
                                       'transition-transform ease duration-300 text-neutral-500',
@@ -423,7 +428,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
                                         </tr>
                                       </thead>
-                                      <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y divide-zinc-500/40">
+                                      <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y text-black dark:text-white divide-zinc-500/40">
                                         {sortedInvites.map(
                                           (invite: OrganisationMemberInviteType) => (
                                             <tr key={invite.id}>
@@ -439,7 +444,18 @@ const InviteDialog = (props: { organisationId: string }) => {
                                               <td className="px-6 py-4 whitespace-nowrap capitalize">
                                                 {relativeTimeFromDates(new Date(invite.expiresAt))}
                                               </td>
-                                              <td className="px-6 py-4">
+                                              <td className="px-6 py-4 flex items-center gap-2">
+                                                <Button
+                                                  variant="outline"
+                                                  title="Copy invite link"
+                                                  onClick={() =>
+                                                    handleCopy(cryptoUtils.getInviteLink(invite.id))
+                                                  }
+                                                >
+                                                  <div className="p-1">
+                                                    <FaCopy />
+                                                  </div>
+                                                </Button>
                                                 <DeleteInviteConfirmDialog inviteId={invite.id} />
                                               </td>
                                             </tr>
