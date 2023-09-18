@@ -112,10 +112,15 @@ class Query(graphene.ObjectType):
             raise GraphQLError("This invite is for another user")
 
     def resolve_apps(root, info, organisation_id, app_id):
+        org_member = OrganisationMember.objects.get(
+            organisation_id=organisation_id, user_id=info.context.user.userId, deleted_at=None)
+
         filter = {
             'organisation_id': organisation_id,
+            'id__in': org_member.apps.all(),
             'is_deleted': False
         }
+
         if app_id != '':
             filter['id'] = app_id
         return App.objects.filter(**filter)
