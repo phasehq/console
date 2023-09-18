@@ -18,6 +18,7 @@ import { toast } from 'react-toastify'
 import { OrganisationMemberInviteType } from '@/apollo/graphql'
 import { useSession } from 'next-auth/react'
 import { setLocalOrg } from '@/utils/localStorage'
+import { Logo } from '@/components/common/Logo'
 
 const bip39 = require('bip39')
 
@@ -201,6 +202,10 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const WelcomePane = () => (
     <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
       <div className="space-y-2">
+        <div className="flex justify-center">
+          <Logo boxSize={80} />
+        </div>
+
         <h1 className="font-bold text-3xl">Welcome to Phase</h1>
         <p className="text-lg text-neutral-500">
           You have been invited by{' '}
@@ -220,6 +225,26 @@ export default function Invite({ params }: { params: { invite: string } }) {
     </div>
   )
 
+  const SuccessPane = () => {
+    return (
+      <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
+        <div className="flex flex-col gap-y-2 items-center">
+          <h1 className="text-4xl text-black dark:text-white text-center font-bold">Success!</h1>
+          <p className="text-black/30 dark:text-white/40 text-center">Your account is setup!</p>
+          <div className="mx-auto pt-8">
+            <Button
+              variant="primary"
+              arrow="right"
+              onClick={() => (window.location.href = `/${invite.organisation.name}`)}
+            >
+              Go to Console
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <div>
@@ -231,10 +256,12 @@ export default function Invite({ params }: { params: { invite: string } }) {
           ) : invite ? (
             showWelcome ? (
               <WelcomePane />
+            ) : success ? (
+              <SuccessPane />
             ) : (
               <form
                 onSubmit={incrementStep}
-                className="space-y-16 p-8 border border-violet-200/10 rounded-lg bg-white/30 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
+                className="space-y-16 p-8 border border-violet-200/10 rounded-lg bg-neutral-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
               >
                 <div className="flex flex-col w-full">
                   <Stepper steps={steps} activeStep={step} />
@@ -265,7 +292,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
                         Skip
                       </Button>
                     )}
-                    <Button variant="primary" type="submit" isLoading={loading}>
+                    <Button variant="primary" type="submit" isLoading={isloading}>
                       Next
                     </Button>
                   </div>
