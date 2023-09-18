@@ -20,7 +20,7 @@ const SidebarLink = (props: SidebarLinkT) => {
     <Link href={href} title={name}>
       <div
         className={clsx(
-          'flex items-center gap-2 hover:text-emerald-500 text-xs rounded-md px-2 py-1',
+          'flex items-center gap-2 hover:text-emerald-500 text-sm font-medium rounded-md p-2 w-56',
           active && 'bg-neutral-300 dark:bg-neutral-800'
         )}
       >
@@ -38,32 +38,32 @@ const Sidebar = () => {
     {
       name: 'Home',
       href: `/${team}`,
-      icon: <FaHome size="20" className="text-neutral-800 dark:text-neutral-300" />,
+      icon: <FaHome size="20" />,
       active: usePathname() === `/${team}`,
     },
     {
       name: 'Apps',
       href: `/${team}/apps`,
-      icon: <FaCubes size="20" className="text-neutral-800 dark:text-neutral-300" />,
+      icon: <FaCubes size="20" />,
       active: usePathname() === `/${team}/apps`,
     },
     {
       name: 'Members',
       href: `/${team}/members`,
-      icon: <FaUsersCog size="20" className="text-neutral-800 dark:text-neutral-300" />,
-      active: usePathname() === `/${team}/apps`,
+      icon: <FaUsersCog size="20" />,
+      active: usePathname() === `/${team}/members`,
     },
     {
       name: 'Settings',
       href: `/${team}/settings`,
-      icon: <FaCog size="20" className="text-neutral-800 dark:text-neutral-300" />,
+      icon: <FaCog size="20" />,
       active: usePathname() === `/${team}/settings`,
     },
   ]
 
   return (
-    <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-center justify-between pt-20 bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white">
-      <div className="gap-4 p-4 grid grid-cols-1 ">
+    <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between pt-20 bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
+      <div className="gap-4 p-4 grid grid-cols-1">
         {links.slice(0, 3).map((link) => (
           <SidebarLink
             key={link.name}
@@ -74,7 +74,7 @@ const Sidebar = () => {
           />
         ))}
       </div>
-      <div className="py-4">
+      <div className="p-4">
         {
           <SidebarLink
             key={links[3].name}
