@@ -7,6 +7,7 @@ import { useSession, signIn, signOut } from 'next-auth/react'
 import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
+import { Avatar } from './common/Avatar'
 
 export default function UserMenu() {
   const { data: session } = useSession()
@@ -18,10 +19,7 @@ export default function UserMenu() {
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button as="div">
           <Button variant="secondary">
-          <div
-              className="h-5 w-5 mr-1 rounded-full bg-center bg-cover bg-no-repeat ring-white"
-              style={{ backgroundImage: `url(${session?.user?.image})` }}
-            ></div>
+            <Avatar imagePath={session?.user?.image!} size="sm" />
             <div className="flex flex-col">{firstName}</div>
           </Button>
         </Menu.Button>
