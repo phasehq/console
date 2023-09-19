@@ -6,6 +6,7 @@ import GetApps from '@/graphql/queries/getApps.gql'
 import InviteMember from '@/graphql/mutations/organisation/inviteNewMember.gql'
 import DeleteInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
 import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
+import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import {
@@ -17,7 +18,7 @@ import {
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
-import { Dialog, Disclosure, RadioGroup, Transition } from '@headlessui/react'
+import { Dialog, Disclosure, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import {
   FaCheckSquare,
   FaChevronDown,
@@ -34,10 +35,97 @@ import { cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
+import { Avatar } from '@/components/common/Avatar'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
   toast.info('Copied', { autoClose: 2000 })
+}
+
+const RoleSelector = (props: { member: OrganisationMemberType }) => {
+  const { member } = props
+
+  const [updateRole] = useMutation(UpdateMemberRole)
+
+  const [role, setRole] = useState<string>(member.role)
+
+  const isOwner = role.toLowerCase() === 'owner'
+
+  const handleUpdateRole = async (newRole: string) => {
+    setRole(newRole)
+    await updateRole({
+      variables: {
+        memberId: member.id,
+        role: newRole,
+      },
+    })
+    toast.success('Updated member role', { autoClose: 2000 })
+  }
+
+  const roleOptions = Object.keys(ApiOrganisationMemberRoleChoices).filter(
+    (option) => option !== 'Owner'
+  )
+
+  return (
+    <Listbox disabled={isOwner} value={role} onChange={handleUpdateRole}>
+      {({ open }) => (
+        <>
+          <Listbox.Button as={Fragment} aria-required>
+            <div
+              className={clsx(
+                'p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md h-10',
+                isOwner ? 'cursor-not-allowed' : 'cursor-pointer'
+              )}
+            >
+              <span
+                className={clsx(
+                  'capitalize',
+                  isOwner ? 'text-neutral-500' : 'text-black dark:text-white'
+                )}
+              >
+                {role.toLowerCase()}
+              </span>
+              {!isOwner && (
+                <FaChevronDown
+                  className={clsx(
+                    'transition-transform ease duration-300 text-neutral-500',
+                    open ? 'rotate-180' : 'rotate-0'
+                  )}
+                />
+              )}
+            </div>
+          </Listbox.Button>
+          <Transition
+            enter="transition duration-100 ease-out"
+            enterFrom="transform scale-95 opacity-0"
+            enterTo="transform scale-100 opacity-100"
+            leave="transition duration-75 ease-out"
+            leaveFrom="transform scale-100 opacity-100"
+            leaveTo="transform scale-95 opacity-0"
+          >
+            <Listbox.Options>
+              <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-20 w-full">
+                {roleOptions.map((role: string) => (
+                  <Listbox.Option key={role} value={role} as={Fragment}>
+                    {({ active, selected }) => (
+                      <div
+                        className={clsx(
+                          'flex items-center gap-2 p-2 cursor-pointer',
+                          active && 'font-semibold'
+                        )}
+                      >
+                        <span className="text-black dark:text-white">{role}</span>
+                      </div>
+                    )}
+                  </Listbox.Option>
+                ))}
+              </div>
+            </Listbox.Options>
+          </Transition>
+        </>
+      )}
+    </Listbox>
+  )
 }
 
 const InviteDialog = (props: { organisationId: string }) => {
@@ -611,11 +699,9 @@ export default function Members({ params }: { params: { team: string } }) {
           <thead>
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Email
+                User
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Username
-              </th>
+
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Role
               </th>
@@ -628,9 +714,16 @@ export default function Members({ params }: { params: { team: string } }) {
           <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y divide-zinc-500/40">
             {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
               <tr key={member.id}>
-                <td className="px-6 py-4 whitespace-nowrap">{member.email}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{member.username}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{member.role}</td>
+                <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                  <Avatar imagePath={member.avatarUrl!} size="lg" />
+                  <div className="flex flex-col">
+                    <span className="text-lg font-medium">{member.fullName}</span>
+                    <span className="text-neutral-500 text-sm">{member.email}</span>
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <RoleSelector member={member} />
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap capitalize">
                   {relativeTimeFromDates(new Date(member.createdAt))}
                 </td>
