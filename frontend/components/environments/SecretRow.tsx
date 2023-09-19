@@ -27,6 +27,7 @@ import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
+import { Avatar } from '../common/Avatar'
 
 export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
@@ -393,8 +394,16 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                               </div>{' '}
                               <span className="text-sm text-neutral-500">by</span>
                               <div className="text-sm flex items-center gap-2 text-neutral-500">
-                                {historyItem!.user ? <FaUser /> : <FaKey />}
-                                {historyItem!.user?.username || 'Service token'}
+                                {historyItem!.user ? (
+                                  <div className="flex items-center gap-1 text-sm">
+                                    <Avatar imagePath={historyItem!.user.avatarUrl!} size="sm" />
+                                    {historyItem?.user.fullName}
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-sm">
+                                    <FaKey /> Service token
+                                  </div>
+                                )}
                               </div>
                             </div>
                             {index > 0 && (
