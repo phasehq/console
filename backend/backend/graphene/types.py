@@ -4,6 +4,7 @@ from graphene import ObjectType, relay
 from graphene_django import DjangoObjectType
 from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, OrganisationMemberInvite, Secret, SecretEvent, SecretFolder, SecretTag, ServiceToken, UserToken
 from logs.dynamodb_models import KMSLog
+from allauth.socialaccount.models import SocialAccount
 
 
 class OrganisationType(DjangoObjectType):
@@ -15,19 +16,33 @@ class OrganisationType(DjangoObjectType):
 class OrganisationMemberType(DjangoObjectType):
     email = graphene.String()
     username = graphene.String()
+    full_name = graphene.String()
+    avatar_url = graphene.String()
 
     class Meta:
         model = OrganisationMember
-        fields = ('id', 'email', 'username', 'role', 'identity_key',
-                  'wrapped_keyring', 'created_at', 'updated_at')
+        fields = ('id', 'email', 'username', 'full_name', 'avatar_url', 'role',
+                  'identity_key', 'wrapped_keyring', 'created_at', 'updated_at')
 
     def resolve_email(self, info):
-        org_member = OrganisationMember.objects.get(id=self.id)
-        return org_member.user.email
+        return self.user.email
 
     def resolve_username(self, info):
-        org_member = OrganisationMember.objects.get(id=self.id)
-        return org_member.user.username
+        return self.user.username
+
+    def resolve_full_name(self, info):
+        social_acc = self.user.socialaccount_set.first()
+        if social_acc:
+            return social_acc.extra_data.get('name')
+        return None
+
+    def resolve_avatar_url(self, info):
+        social_acc = self.user.socialaccount_set.first()
+        if social_acc:
+            if social_acc.provider == 'google':
+                return social_acc.extra_data.get('picture')
+            return social_acc.extra_data.get('avatar_url')
+        return None
 
 
 class OrganisationMemberInviteType(DjangoObjectType):
