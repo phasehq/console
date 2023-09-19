@@ -1,7 +1,7 @@
 from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation
 from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_admin, user_is_org_member
 from .graphene.mutations.app import CreateAppMutation, DeleteAppMutation, RotateAppKeysMutation
-from .graphene.mutations.organisation import CreateOrganisationMemberMutation, CreateOrganisationMutation, DeleteInviteMutation, DeleteOrganisationMemberMutation, InviteOrganisationMemberMutation
+from .graphene.mutations.organisation import CreateOrganisationMemberMutation, CreateOrganisationMutation, DeleteInviteMutation, DeleteOrganisationMemberMutation, InviteOrganisationMemberMutation, UpdateOrganisationMemberRole
 from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, KMSLogType, OrganisationMemberInviteType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, ServiceTokenType, TimeRange, UserTokenType
 import graphene
 from graphql import GraphQLError
@@ -313,6 +313,7 @@ class Mutation(graphene.ObjectType):
     invite_organisation_member = InviteOrganisationMemberMutation.Field()
     create_organisation_member = CreateOrganisationMemberMutation.Field()
     delete_organisation_member = DeleteOrganisationMemberMutation.Field()
+    update_organisation_member_role = UpdateOrganisationMemberRole.Field()
     delete_invitation = DeleteInviteMutation.Field()
     create_app = CreateAppMutation.Field()
     rotate_app_keys = RotateAppKeysMutation.Field()

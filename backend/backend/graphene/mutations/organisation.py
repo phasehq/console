@@ -154,21 +154,23 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
 
 class UpdateOrganisationMemberRole(graphene.Mutation):
     class Arguments:
-        org_id = graphene.ID(required=True)
-        user_id = graphene.ID(required=True)
+        member_id = graphene.ID(required=True)
         role = graphene.String(required=True)
 
     org_member = graphene.Field(OrganisationMemberType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, user_id, role):
-        if user_is_admin(info.context.user, org_id):
-            if role == OrganisationMember.OWNER:
+    def mutate(cls, root, info, member_id, role):
+
+        org_member = OrganisationMember.objects.get(
+            id=member_id, deleted_at=None)
+
+        if user_is_admin(info.context.user.userId, org_member.organisation.id):
+            if role.lower() == OrganisationMember.OWNER.lower():
                 raise GraphQLError(
                     'You cannot set this user as the organisation owner')
-            org_member = OrganisationMember.objects.get(
-                organisation__id=org_id, user__id=user_id, deleted_at=None)
-            org_member.role = role
+
+            org_member.role = role.lower()
             org_member.save()
 
             return UpdateOrganisationMemberRole(org_member=org_member)
