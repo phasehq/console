@@ -4,7 +4,8 @@ query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
     role
     identityKey
     email
-    username
+    fullName
+    avatarUrl
     createdAt
   }
 }
