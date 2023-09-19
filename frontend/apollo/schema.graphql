@@ -54,6 +54,8 @@ type OrganisationMemberType {
   updatedAt: DateTime!
   email: String
   username: String
+  fullName: String
+  avatarUrl: String
 }
 
 """An enumeration."""
@@ -275,6 +277,7 @@ type Mutation {
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
+  updateOrganisationMemberRole(memberId: ID!, role: String!): UpdateOrganisationMemberRole
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -307,6 +310,10 @@ type CreateOrganisationMemberMutation {
 
 type DeleteOrganisationMemberMutation {
   ok: Boolean
+}
+
+type UpdateOrganisationMemberRole {
+  orgMember: OrganisationMemberType
 }
 
 type DeleteInviteMutation {

@@ -30,6 +30,7 @@ const documents = {
     "mutation DeleteInvite($inviteId: ID!) {\n  deleteInvitation(inviteId: $inviteId) {\n    ok\n  }\n}": types.DeleteInviteDocument,
     "mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}": types.RemoveMemberDocument,
     "mutation InviteMember($orgId: ID!, $email: String!, $apps: [String], $role: String) {\n  inviteOrganisationMember(orgId: $orgId, email: $email, apps: $apps, role: $role) {\n    invite {\n      id\n    }\n  }\n}": types.InviteMemberDocument,
+    "mutation UpdateMemberRole($memberId: ID!, $role: String!) {\n  updateOrganisationMemberRole(memberId: $memberId, role: $role) {\n    orgMember {\n      id\n      role\n    }\n  }\n}": types.UpdateMemberRoleDocument,
     "mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}": types.RotateAppKeyDocument,
     "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}": types.CreateNewUserTokenDocument,
     "mutation RevokeUserToken($tokenId: ID!) {\n  deleteUserToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeUserTokenDocument,
@@ -41,7 +42,7 @@ const documents = {
     "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n  }\n}": types.GetOrganisationsDocument,
     "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n    }\n    inviteeEmail\n  }\n}": types.GetInvitesDocument,
     "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role\n    identityKey\n  }\n}": types.GetOrganisationAdminsAndSelfDocument,
-    "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    identityKey\n    email\n    username\n    createdAt\n  }\n}": types.GetOrganisationMembersDocument,
+    "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role\n    identityKey\n    email\n    username\n    createdAt\n  }\n}": types.GetOrganisationMembersDocument,
     "query VerifyInvite($inviteId: ID!) {\n  validateInvite(inviteId: $inviteId) {\n    id\n    organisation {\n      id\n      name\n    }\n    inviteeEmail\n    invitedBy {\n      email\n    }\n    apps {\n      id\n      name\n    }\n  }\n}": types.VerifyInviteDocument,
     "query GetAppEnvironments($appId: ID!) {\n  appEnvironments(appId: $appId, environmentId: null) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n  }\n}": types.GetAppEnvironmentsDocument,
     "query GetEnvironmentKey($envId: ID!) {\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvironmentKeyDocument,
@@ -138,6 +139,10 @@ export function graphql(source: "mutation InviteMember($orgId: ID!, $email: Stri
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation UpdateMemberRole($memberId: ID!, $role: String!) {\n  updateOrganisationMemberRole(memberId: $memberId, role: $role) {\n    orgMember {\n      id\n      role\n    }\n  }\n}"): (typeof documents)["mutation UpdateMemberRole($memberId: ID!, $role: String!) {\n  updateOrganisationMemberRole(memberId: $memberId, role: $role) {\n    orgMember {\n      id\n      role\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -182,7 +187,7 @@ export function graphql(source: "query GetOrganisationAdminsAndSelf($organisatio
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    identityKey\n    email\n    username\n    createdAt\n  }\n}"): (typeof documents)["query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    identityKey\n    email\n    username\n    createdAt\n  }\n}"];
+export function graphql(source: "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role\n    identityKey\n    email\n    username\n    createdAt\n  }\n}"): (typeof documents)["query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role\n    identityKey\n    email\n    username\n    createdAt\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
