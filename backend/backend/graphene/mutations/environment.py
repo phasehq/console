@@ -3,7 +3,7 @@ from backend.graphene.utils.permissions import member_can_access_org, user_can_a
 import graphene
 from graphql import GraphQLError
 from api.models import App, Environment, EnvironmentKey, EnvironmentToken, Organisation, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag, UserToken, ServiceToken
-from backend.graphene.types import EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, SecretFolderType, SecretTagType, SecretType, ServiceTokenType, UserTokenType
+from backend.graphene.types import AppType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, SecretFolderType, SecretTagType, SecretType, ServiceTokenType, UserTokenType
 from datetime import datetime
 
 
@@ -96,6 +96,39 @@ class CreateEnvironmentKeyMutation(graphene.Mutation):
             environment=env, user_id=user_id, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
 
         return CreateEnvironmentKeyMutation(environment_key=environment_key)
+
+
+class UpdateMemberEnvScopeMutation(graphene.Mutation):
+    class Arguments:
+        member_id = graphene.ID()
+        app_id = graphene.ID()
+        env_keys = graphene.List(EnvironmentKeyInput)
+
+    app = graphene.Field(AppType)
+
+    @classmethod
+    def mutate(cls, root, info, member_id, app_id, env_keys):
+        user = info.context.user
+        app = App.objects.get(id=app_id)
+
+        if not user_can_access_app(user.userId, app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        org_member = OrganisationMember.objects.get(
+            id=member_id, deleted_at=None)
+        if org_member not in app.members.all():
+            raise GraphQLError("This user does not have access to this app")
+        else:
+            # delete all existing keys
+            EnvironmentKey.objects.filter(
+                environment__app=app, user_id=member_id).delete()
+
+            # set new keys
+            for key in env_keys:
+                EnvironmentKey.objects.create(
+                    environment_id=key.env_id, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt)
+
+        return UpdateMemberEnvScopeMutation(app=app)
 
 
 class CreateEnvironmentTokenMutation(graphene.Mutation):

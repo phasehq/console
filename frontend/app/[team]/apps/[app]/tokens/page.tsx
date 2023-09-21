@@ -77,15 +77,6 @@ export default function Tokens({ params }: { params: { team: string; app: string
             try {
               const wrapKey = await cryptoUtils.newAppWrapKey()
               const newAppToken = await cryptoUtils.newAppToken()
-              // const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
-              // const encryptedKeyring = getLocalKeyring(orgsData.organisations[0].id)
-              // if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
-              // const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(
-              //   encryptedKeyring!,
-              //   deviceKey
-              // )
-              // if (!decryptedKeyring) throw 'Failed to decrypt keys'
-
               const appSeed = await cryptoUtils.decryptedAppSeed(app.appSeed, keyring!.symmetricKey)
 
               const appKeys = await cryptoUtils.appKeyring(appSeed)

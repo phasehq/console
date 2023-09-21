@@ -145,7 +145,7 @@ class OrganisationMember(models.Model):
         choices=USER_ROLES,
         default=DEVELOPER,
     )
-    apps = models.ManyToManyField(App)
+    apps = models.ManyToManyField(App, related_name='members')
     identity_key = models.CharField(max_length=256, null=True, blank=True)
     wrapped_keyring = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
@@ -219,6 +219,10 @@ class EnvironmentKey(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.save()
 
 
 class EnvironmentToken(models.Model):

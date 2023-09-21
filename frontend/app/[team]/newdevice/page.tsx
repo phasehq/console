@@ -12,7 +12,7 @@ import { OrganisationType } from '@/apollo/graphql'
 import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
-import { setLocalOrg } from '@/utils/localStorage'
+import { setLocalKeyring } from '@/utils/localStorage'
 import { useRouter } from 'next/navigation'
 import UserMenu from '@/components/UserMenu'
 
@@ -66,7 +66,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
         const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
         const encryptedKeyring = await cryptoUtils.encryptAccountKeyring(accountKeyRing, deviceKey)
         const encryptedMnemonic = await cryptoUtils.encryptAccountRecovery(mnemonic, deviceKey)
-        setLocalOrg({
+        setLocalKeyring({
           email: session?.user?.email!,
           org: org!,
           keyring: encryptedKeyring,

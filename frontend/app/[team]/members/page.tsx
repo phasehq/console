@@ -338,7 +338,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="primary" onClick={openModal} title="Update comment">
+        <Button variant="primary" onClick={openModal} title="Add a member">
           <FaPlus /> Add a member
         </Button>
       </div>
@@ -586,7 +586,7 @@ export default function Members({ params }: { params: { team: string } }) {
         },
       })
     }
-  }, [organisation])
+  }, [getMembers, organisation])
 
   const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberType }) => {
     const { member } = props
@@ -665,7 +665,7 @@ export default function Members({ params }: { params: { team: string } }) {
 
                     <div className="space-y-6 p-4">
                       <p className="text-neutral-500">
-                        Are you sure you want to remove {member.email} from this organisation?
+                        Are you sure you want to remove {member.fullName} from this organisation?
                       </p>
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>

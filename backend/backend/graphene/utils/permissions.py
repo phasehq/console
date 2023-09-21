@@ -14,9 +14,10 @@ def user_is_org_member(user_id, org_id):
 
 
 def user_can_access_app(user_id, app_id):
-    org_memberships = OrganisationMember.objects.filter(user_id=user_id)
     app = App.objects.get(id=app_id)
-    return app.organisation.id in [membership.organisation.id for membership in org_memberships]
+    org_member = OrganisationMember.objects.get(
+        user_id=user_id, organisation=app.organisation, deleted_at=None)
+    return org_member in app.members.all()
 
 
 def user_can_access_environment(user_id, env_id):

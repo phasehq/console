@@ -227,7 +227,7 @@ export const generateUserToken = async (
  * @param {OrganisationMemberType} user - The user for whom the secrets are wrapped.
  * @returns {Promise<{ user: OrganisationMemberType; wrappedSeed: string; wrappedSalt: string }>} - An object containing the wrapped environment secrets and user information.
  */
-const wrapEnvSecretsForUser = async (
+export const wrapEnvSecretsForUser = async (
   envSecrets: { seed: string; salt: string },
   user: OrganisationMemberType
 ) => {

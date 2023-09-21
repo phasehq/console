@@ -45,7 +45,8 @@ export default function AppLayout({
         if (currentUrl === 'secrets') return 1
         if (currentUrl === 'tokens') return 2
         if (currentUrl === 'logs') return 3
-        if (currentUrl === 'settings') return 4
+        if (currentUrl === 'members') return 4
+        if (currentUrl === 'settings') return 5
       }
       return 0
     }
@@ -69,7 +70,10 @@ export default function AppLayout({
       name: 'Logs',
       link: 'logs',
     },
-
+    {
+      name: 'Members',
+      link: 'members',
+    },
     {
       name: 'Settings',
       link: 'settings',

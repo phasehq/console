@@ -17,7 +17,7 @@ import { MdKey, MdOutlineVerifiedUser, MdOutlinePassword } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import { OrganisationMemberInviteType } from '@/apollo/graphql'
 import { useSession } from 'next-auth/react'
-import { setLocalOrg } from '@/utils/localStorage'
+import { setLocalKeyring } from '@/utils/localStorage'
 import { Logo } from '@/components/common/Logo'
 
 const bip39 = require('bip39')
@@ -127,7 +127,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
       })
 
       try {
-        setLocalOrg({
+        setLocalKeyring({
           email: session?.user?.email!,
           org: invite.organisation,
           keyring: encryptedKeyring,
