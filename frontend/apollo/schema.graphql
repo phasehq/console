@@ -8,11 +8,12 @@ type Query {
   logs(appId: ID, start: BigInt, end: BigInt): [KMSLogType]
   logsCount(appId: ID, thisMonth: Boolean): Int
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
-  appEnvironments(appId: ID, environmentId: ID): [EnvironmentType]
+  appEnvironments(appId: ID, environmentId: ID, memberId: ID): [EnvironmentType]
+  appUsers(appId: ID): [OrganisationMemberType]
   secrets(envId: ID): [SecretType]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
-  environmentKeys(environmentId: ID): [EnvironmentKeyType]
+  environmentKeys(environmentId: ID, memberId: ID): [EnvironmentKeyType]
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
@@ -231,6 +232,7 @@ enum ApiSecretEventEventTypeChoices {
 
 type EnvironmentKeyType {
   id: String!
+  environment: EnvironmentType!
   identityKey: String!
   wrappedSeed: String!
   wrappedSalt: String!
@@ -282,6 +284,9 @@ type Mutation {
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
+  addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): AddAppMemberMutation
+  removeAppMember(appId: ID, memberId: ID): RemoveAppMemberMutation
+  updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): UpdateMemberEnvScopeMutation
   createEnvironment(environmentData: EnvironmentInput!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
@@ -332,6 +337,26 @@ type DeleteAppMutation {
   app: AppType
 }
 
+type AddAppMemberMutation {
+  app: AppType
+}
+
+input EnvironmentKeyInput {
+  envId: ID!
+  userId: ID
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+}
+
+type RemoveAppMemberMutation {
+  app: AppType
+}
+
+type UpdateMemberEnvScopeMutation {
+  app: AppType
+}
+
 type CreateEnvironmentMutation {
   environment: EnvironmentType
 }
@@ -364,14 +389,6 @@ type DeleteUserTokenMutation {
 
 type CreateServiceTokenMutation {
   serviceToken: ServiceTokenType
-}
-
-input EnvironmentKeyInput {
-  envId: ID!
-  userId: ID
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
 }
 
 type DeleteServiceTokenMutation {

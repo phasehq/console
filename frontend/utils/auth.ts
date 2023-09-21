@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import _sodium from 'libsodium-wrappers-sumo'
+import { getLocalKeyring } from './localStorage'
 
 export type OrganisationKeyring = {
   symmetricKey: string
@@ -397,5 +398,20 @@ export namespace cryptoUtils {
     const sodium = _sodium
 
     return sodium.to_string(sodium.from_base64(hash, sodium.base64_variants.ORIGINAL))
+  }
+
+  export const getKeyring = async (email: string, organisationId: string, password: string) => {
+    return new Promise<OrganisationKeyring>(async (resolve, reject) => {
+      const encryptedKeyring = getLocalKeyring(email, organisationId)
+      if (!encryptedKeyring) reject('Error fetching local encrypted keys from browser')
+
+      try {
+        const deviceKey = await deviceVaultKey(password, email)
+        const decryptedKeyring = await decryptAccountKeyring(encryptedKeyring!, deviceKey)
+        resolve(decryptedKeyring)
+      } catch (e) {
+        reject(`Error unlocking user keyring: ${e}`)
+      }
+    })
   }
 }

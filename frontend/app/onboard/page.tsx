@@ -22,7 +22,7 @@ import { gql, useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
-import { setLocalOrg } from '@/utils/localStorage'
+import { setLocalKeyring } from '@/utils/localStorage'
 
 const bip39 = require('bip39')
 
@@ -147,7 +147,7 @@ const Onboard = () => {
         })
         const { data } = result
         const newOrg = data.createOrganisation.organisation
-        setLocalOrg({
+        setLocalKeyring({
           email: session?.user?.email!,
           org: newOrg,
           keyring: encryptedKeyring,

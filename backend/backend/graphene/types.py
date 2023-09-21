@@ -70,7 +70,7 @@ class EnvironmentKeyType(DjangoObjectType):
     class Meta:
         model = EnvironmentKey
         fields = ('id', 'identity_key', 'wrapped_seed',
-                  'wrapped_salt', 'created_at', 'updated_at')
+                  'wrapped_salt', 'created_at', 'updated_at', 'environment')
 
 
 class EnvironmentTokenType(DjangoObjectType):

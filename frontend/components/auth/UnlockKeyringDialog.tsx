@@ -30,19 +30,18 @@ export default function UnlockKeyringDialog(props: { organisationId: string }) {
 
   const decryptLocalKeyring = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
-    const encryptedKeyring = getLocalKeyring(props.organisationId)
-    if (!encryptedKeyring) {
-      toast.error('Error fetching local encrypted keys from browser')
-      return false
-    }
+
     try {
-      const deviceKey = await cryptoUtils.deviceVaultKey(password, session?.user?.email!)
-      const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(encryptedKeyring!, deviceKey)
+      const decryptedKeyring = await cryptoUtils.getKeyring(
+        session?.user?.email!,
+        props.organisationId,
+        password
+      )
       setKeyring(decryptedKeyring)
-      toast.success('Unlocked user keyring!', { autoClose: 2000 })
+      toast.success('Unlocked user keyring.', { autoClose: 2000 })
       closeModal()
     } catch (e) {
-      console.log(`Error unlocking user keyring: ${e}`)
+      console.error(e)
       toast.error('Failed to decrypt keys. Please verify your sudo password and try again.')
       return false
     }

@@ -79,7 +79,7 @@ export default function NewAppDialog(props: {
 
         try {
           const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
-          const encryptedKeyring = getLocalKeyring(organisation.id)
+          const encryptedKeyring = getLocalKeyring(session?.user?.email!, organisation.id)
           if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
           const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(
             encryptedKeyring!,
