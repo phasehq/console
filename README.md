@@ -3,7 +3,7 @@
   <img height="68" width="306" src="img/phase-console-wordmark-dark.png" alt="Phase">
 </h1>
 
-<h3 align="center">Open Source, self-hostable, end-to-end secrets and environment variable management platform for developers.</h3>
+<h3 align="center">Open Source, end-to-end encrypted, self-hostable all in one platform for developers to manage secrets and environment variables. From their laptop 💻 to the cloud ☁️.</h3>
 
 <div align="center">
   <a href="https://phase.dev">Website</a> |
@@ -13,19 +13,14 @@
 </div>
 
 <hr/>
-
-<img src="img/console-home.png" width="100%" alt="Phase Console" />
-
-<div width="100%">
-  <img src="img/console-logs.png" alt="Phase Console" width="47%">
-  &nbsp; &nbsp; &nbsp; &nbsp;
-</div>
   
 <br>
 
 [Phase Console](https://phase.dev) is an open source, end-to-end encrypted key management solution for developers to seamlessly encrypt production data in their apps.
 
 ## Console
+
+<img src="img/console-home.png" width="100%" alt="Phase Console" />
 
 - **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables
 
@@ -118,9 +113,9 @@ More coming soon!
 
 ## Community vs Enterprise edition
 
-Phase operates on an [open-core](https://en.wikipedia.org/wiki/Open-core_model) model, similar to that of [GitLab](https://gitlab.com), [Infisical](https://infisical.com), [PostHog](https://posthog.com) etc.
+Phase operates on an [open-core](https://en.wikipedia.org/wiki/Open-core_model) model, similar to that of [GitLab](https://gitlab.com).
 
-This repo available under the [MIT expat license](/LICENSE), with the exception of the `ee` directory which will contain premium Pro or Enterprise features requiring a Phase license in the future.
+This repo available under the [MIT expat license](/LICENSE), with the exception of the `ee` directory which will contain Pro or Enterprise features requiring a Phase license.
 
 ---
 
@@ -136,7 +131,7 @@ For more information see: [SECURITY.md](/SECURITY.md)
 
 ## Contributing
 
-Whether it's big or small, we love contributions. See [CONTRIBUTING.md](/CONTRIBUTING.md)
+We love contributions. See [CONTRIBUTING.md](/CONTRIBUTING.md)
 
 You can join our [Slack](https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg) if you have any questions!
 
