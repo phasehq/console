@@ -630,7 +630,12 @@ export default function Members({ params }: { params: { team: string } }) {
     return (
       <>
         <div className="flex items-center justify-center">
-          <Button variant="danger" onClick={openModal} title="Remove member">
+          <Button
+            variant="danger"
+            onClick={openModal}
+            title="Remove member"
+            disabled={member.role.toLowerCase() === 'owner'}
+          >
             <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
               <FaTrashAlt />
             </div>
@@ -718,7 +723,7 @@ export default function Members({ params }: { params: { team: string } }) {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Joined
               </th>
-              <th className="px-6 py-3"></th>
+              {activeUserIsAdmin && <th className="px-6 py-3"></th>}
             </tr>
           </thead>
           <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y divide-zinc-500/40">
@@ -738,7 +743,7 @@ export default function Members({ params }: { params: { team: string } }) {
                   {relativeTimeFromDates(new Date(member.createdAt))}
                 </td>
                 <td>
-                  {member.email !== session?.user?.email && (
+                  {member.email !== session?.user?.email && activeUserIsAdmin && (
                     <DeleteMemberConfirmDialog member={member} />
                   )}
                 </td>
