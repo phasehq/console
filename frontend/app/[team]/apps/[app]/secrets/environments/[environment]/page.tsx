@@ -43,6 +43,7 @@ export default function Environment({
   const [secrets, setSecrets] = useState<SecretType[]>([])
   const [updatedSecrets, updateSecrets] = useState<SecretType[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
+  const [isLoading, setIsloading] = useState(false)
 
   const { data: orgsData } = useQuery(GetOrganisations)
 
@@ -67,6 +68,8 @@ export default function Environment({
     },
     pollInterval: unsavedChanges ? 0 : 5000,
   })
+
+  const savingAndFetching = isLoading || loading
 
   const [createSecret] = useMutation(CreateNewSecret)
   const [updateSecret] = useMutation(UpdateSecret)
@@ -352,20 +355,25 @@ export default function Environment({
   }
 
   const handleSaveChanges = async () => {
+    setIsloading(true)
     const changedSecrets = getUpdatedSecrets()
     if (changedSecrets.some((secret) => secret.key.length === 0)) {
       toast.error('Secret keys cannot be empty!')
+      setIsloading(false)
       return false
     }
 
     if (duplicateKeysExist()) {
       toast.error('Secret keys cannot be repeated!')
+      setIsloading(false)
       return false
     }
 
     const updates = changedSecrets.map((secret) => handleUpdateSecret(secret))
 
     await Promise.all(updates)
+
+    setTimeout(() => setIsloading(false), 500)
 
     toast.success('Changes successfully deployed.')
   }
@@ -485,7 +493,7 @@ export default function Environment({
               )}
               <Button
                 variant={unsavedChanges ? 'warning' : 'primary'}
-                disabled={!unsavedChanges}
+                disabled={!unsavedChanges || savingAndFetching}
                 onClick={handleSaveChanges}
               >
                 <span className="text-lg">{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
