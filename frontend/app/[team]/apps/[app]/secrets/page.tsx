@@ -5,11 +5,6 @@ import { GetSecretNames } from '@/graphql/queries/secrets/getSecretNames.gql'
 import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
-import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
-import { CreateNewServiceToken } from '@/graphql/mutations/environments/createServiceToken.gql'
-import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
-import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
-import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useCallback, useContext, useEffect, useState } from 'react'
 import {
@@ -31,6 +26,8 @@ import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userIsAdmin } from '@/utils/permissions'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -46,13 +43,10 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const { data: orgsData } = useQuery(GetOrganisations)
 
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
-  const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
-  const [getServiceTokens, { data: serviceTokensData }] = useLazyQuery(GetServiceTokens)
-  const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
+
   const [getEnvSecrets] = useLazyQuery(GetSecretNames)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
-  const [createUserToken] = useMutation(CreateNewUserToken)
-  const [createServiceToken] = useMutation(CreateNewServiceToken)
+
   const [commonSecrets, setCommonSecrets] = useState<SecretType[]>([])
   const [envSecrets, setEnvSecrets] = useState<EnvSecrets[]>([])
 
@@ -64,10 +58,10 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     return indexA - indexB
   })
 
-  const [userToken, setUserToken] = useState<string>('')
-  const [serviceToken, setServiceToken] = useState<string>('')
-
   const { keyring } = useContext(KeyringContext)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   useEffect(() => {
     if (orgsData) {
@@ -77,18 +71,8 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           organisationId,
         },
       })
-      getUserTokens({
-        variables: {
-          organisationId,
-        },
-      })
-      getServiceTokens({
-        variables: {
-          appId: params.app,
-        },
-      })
     }
-  }, [getOrgAdmins, getServiceTokens, getUserTokens, orgsData, params.app])
+  }, [getOrgAdmins, orgsData, params.app])
 
   const setupRequired = data?.appEnvironments.length === 0 ?? true
 
@@ -222,11 +206,15 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           {setupRequired ? (
             <div className="flex flex-col gap-4 w-full items-center p-16">
               <h2 className="text-white font-semibold text-xl">
-                {"You don't have any environments for this app yet"}
+                {activeUserIsAdmin
+                  ? "There aren't any environments for this app yet"
+                  : "You don't have access to any environments for this app yet. Contact the organisation owner or admins to get access."}
               </h2>
-              <Button variant="primary" onClick={initAppEnvs}>
-                Get started
-              </Button>
+              {activeUserIsAdmin && (
+                <Button variant="primary" onClick={initAppEnvs}>
+                  Get started
+                </Button>
+              )}
             </div>
           ) : (
             <>

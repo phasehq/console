@@ -34,17 +34,16 @@ import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
-
-const handleCopy = (val: string) => {
-  copyToClipBoard(val)
-  toast.info('Copied', { autoClose: 2000 })
-}
+import { userIsAdmin } from '@/utils/permissions'
+import { RoleLabel } from '@/components/users/RoleLabel'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppMembers, { variables: { appId: params.app } })
 
   const { keyring, setKeyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
@@ -77,7 +76,7 @@ export default function Members({ params }: { params: { team: string; app: strin
           },
         })
       }
-    }, [getMembers, organisation])
+    }, [getMembers])
 
     const memberOptions =
       orgMembersData?.organisationMembers.filter(
@@ -461,8 +460,8 @@ export default function Members({ params }: { params: { team: string; app: strin
       <>
         <div className="flex items-center justify-center">
           <Button variant="danger" onClick={openModal} title="Remove member">
-            <div className="text-white dark:text-red-500 flex items-center gap-1 p-0.5 text-2xl">
-              <FaUserTimes />
+            <div className="text-white dark:text-red-500 flex items-center gap-1">
+              <FaUserTimes /> Remove user
             </div>
           </Button>
         </div>
@@ -839,7 +838,7 @@ export default function Members({ params }: { params: { team: string; app: strin
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Joined
               </th>
-              <th className="px-6 py-3"></th>
+              {activeUserIsAdmin && <th className="px-6 py-3"></th>}
             </tr>
           </thead>
           <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y divide-zinc-500/40">
@@ -848,7 +847,10 @@ export default function Members({ params }: { params: { team: string; app: strin
                 <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
                   <Avatar imagePath={member.avatarUrl!} size="lg" />
                   <div className="flex flex-col">
-                    <span className="text-lg font-medium">{member.fullName}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-medium">{member.fullName}</span>
+                      <RoleLabel role={member.role} />
+                    </div>
                     <span className="text-neutral-500 text-sm">{member.email}</span>
                   </div>
                 </td>
@@ -856,14 +858,16 @@ export default function Members({ params }: { params: { team: string; app: strin
                 <td className="px-6 py-4 whitespace-nowrap capitalize">
                   {relativeTimeFromDates(new Date(member.createdAt))}
                 </td>
-                <td className="px-6 py-4">
-                  {member.email !== session?.user?.email && (
-                    <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
-                      <ManageUserAccessDialog member={member} />
-                      <RemoveMemberConfirmDialog member={member} />
-                    </div>
-                  )}
-                </td>
+                {activeUserIsAdmin && (
+                  <td className="px-6 py-4">
+                    {member.email !== session?.user?.email && (
+                      <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
+                        <ManageUserAccessDialog member={member} />
+                        <RemoveMemberConfirmDialog member={member} />
+                      </div>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

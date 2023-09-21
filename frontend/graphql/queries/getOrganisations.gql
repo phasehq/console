@@ -5,5 +5,7 @@ query GetOrganisations {
     identityKey
     createdAt
     plan
+    role
+    memberId
   }
 }

@@ -502,8 +502,10 @@ export type OrganisationType = {
   createdAt?: Maybe<Scalars['DateTime']>;
   id: Scalars['String'];
   identityKey: Scalars['String'];
+  memberId?: Maybe<Scalars['ID']>;
   name: Scalars['String'];
   plan: ApiOrganisationPlanChoices;
+  role?: Maybe<Scalars['String']>;
 };
 
 export type Query = {

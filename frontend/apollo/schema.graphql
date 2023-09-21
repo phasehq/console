@@ -25,6 +25,8 @@ type OrganisationType {
   identityKey: String!
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
+  role: String
+  memberId: ID
 }
 
 """

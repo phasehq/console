@@ -8,9 +8,23 @@ from allauth.socialaccount.models import SocialAccount
 
 
 class OrganisationType(DjangoObjectType):
+    role = graphene.String()
+    member_id = graphene.ID()
+
     class Meta:
         model = Organisation
-        fields = ('id', 'name', 'identity_key', 'created_at', 'plan')
+        fields = ('id', 'name', 'identity_key',
+                  'created_at', 'plan', 'role', 'member_id')
+
+    def resolve_role(self, info):
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=self, deleted_at=None)
+        return org_member.role
+
+    def resolve_member_id(self, info):
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=self, deleted_at=None)
+        return org_member.id
 
 
 class OrganisationMemberType(DjangoObjectType):

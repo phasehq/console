@@ -36,6 +36,8 @@ import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
+import { userIsAdmin } from '@/utils/permissions'
+import { RoleLabel } from '@/components/users/RoleLabel'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -50,6 +52,10 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const [role, setRole] = useState<string>(member.role)
 
   const isOwner = role.toLowerCase() === 'owner'
+
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const handleUpdateRole = async (newRole: string) => {
     setRole(newRole)
@@ -66,26 +72,30 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
     (option) => option !== 'Owner'
   )
 
-  return (
-    <Listbox disabled={isOwner} value={role} onChange={handleUpdateRole}>
+  const disabled = isOwner || !activeUserIsAdmin
+
+  return disabled ? (
+    <RoleLabel role={role} />
+  ) : (
+    <Listbox disabled={disabled} value={role} onChange={handleUpdateRole}>
       {({ open }) => (
         <>
           <Listbox.Button as={Fragment} aria-required>
             <div
               className={clsx(
                 'p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md h-10',
-                isOwner ? 'cursor-not-allowed' : 'cursor-pointer'
+                disabled ? 'cursor-not-allowed' : 'cursor-pointer'
               )}
             >
               <span
                 className={clsx(
                   'capitalize',
-                  isOwner ? 'text-neutral-500' : 'text-black dark:text-white'
+                  disabled ? 'text-neutral-500' : 'text-black dark:text-white'
                 )}
               >
                 {role.toLowerCase()}
               </span>
-              {!isOwner && (
+              {!disabled && (
                 <FaChevronDown
                   className={clsx(
                     'transition-transform ease duration-300 text-neutral-500',
@@ -575,6 +585,8 @@ export default function Members({ params }: { params: { team: string } }) {
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+
   const { data: session } = useSession()
 
   useEffect(() => {
@@ -590,8 +602,6 @@ export default function Members({ params }: { params: { team: string } }) {
 
   const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberType }) => {
     const { member } = props
-
-    const { activeOrganisation: organisation } = useContext(organisationContext)
 
     const [removeMember] = useMutation(RemoveMember)
 

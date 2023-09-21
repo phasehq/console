@@ -133,7 +133,6 @@ class Query(graphene.ObjectType):
         app = App.objects.get(id=app_id)
 
         if member_id is not None:
-            print("=========MEMBER ID==============")
             org_member = OrganisationMember.objects.get(id=member_id)
         else:
             org_member = OrganisationMember.objects.get(
