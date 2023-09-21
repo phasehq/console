@@ -528,21 +528,13 @@ export default function Members({ params }: { params: { team: string; app: strin
 
   const ManageUserAccessDialog = (props: { member: OrganisationMemberType }) => {
     const [updateScope] = useMutation(UpdateEnvScope)
+    const [getUserEnvScope] = useLazyQuery(GetAppEnvironments)
 
     const { data: appEnvsData } = useQuery(GetAppEnvironments, {
       variables: {
         appId: params.app,
       },
     })
-
-    const [getUserEnvScope] = useLazyQuery(GetAppEnvironments)
-
-    // const { data: existingEnvs } = useQuery(GetAppEnvironments, {
-    //   variables: {
-    //     appId: params.app,
-    //     memberId: props.member.id,
-    //   },
-    // })
 
     const envOptions =
       appEnvsData?.appEnvironments.map((env: EnvironmentType) => {
@@ -553,16 +545,6 @@ export default function Members({ params }: { params: { team: string; app: strin
           name,
         }
       }) ?? []
-
-    // const currentEnvScope =
-    //   existingEnvs?.appEnvironments.map((env: EnvironmentType) => {
-    //     const { id, name } = env
-
-    //     return {
-    //       id,
-    //       name,
-    //     }
-    //   }) ?? []
 
     const [isOpen, setIsOpen] = useState<boolean>(false)
 
