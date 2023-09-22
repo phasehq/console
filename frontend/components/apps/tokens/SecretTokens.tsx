@@ -41,6 +41,9 @@ import { copyToClipBoard } from '@/utils/clipboard'
 import { MdContentCopy } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userIsAdmin } from '@/utils/permissions'
+import { Avatar } from '@/components/common/Avatar'
 
 interface ExpiryOptionT {
   name: string
@@ -646,17 +649,15 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
 export const SecretTokens = (props: { organisationId: string; appId: string }) => {
   const { organisationId, appId } = props
 
-  const { keyring } = useContext(KeyringContext)
-
   const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
   const [getServiceTokens, { data: serviceTokensData }] = useLazyQuery(GetServiceTokens)
 
   const [deleteUserToken] = useMutation(RevokeUserToken)
   const [deleteServiceToken] = useMutation(RevokeServiceToken)
 
-  const [createServiceToken] = useMutation(CreateNewServiceToken)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [serviceToken, setServiceToken] = useState<string>('')
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const handleDeleteUserToken = async (tokenId: string) => {
     await deleteUserToken({
@@ -809,7 +810,16 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           <div className="space-y-0">
             <div className="text-lg font-medium">{token.name}</div>
             <div className="flex items-center gap-8 text-sm text-neutral-500">
-              <div>Created {relativeTimeFromDates(new Date(token.createdAt))}</div>
+              <div className="flex items-center gap-2">
+                <div>Created {relativeTimeFromDates(new Date(token.createdAt))}</div>
+                {token.__typename === 'ServiceTokenType' && (
+                  <div className="flex items-center gap-2">
+                    <span>by</span>
+                    <Avatar imagePath={token.createdBy?.avatarUrl!} size="sm" />
+                    {token.createdBy?.fullName}
+                  </div>
+                )}
+              </div>
 
               <div className={clsx(isExpired && 'text-red-500')}>
                 {isExpired ? 'Expired' : 'Expires'}{' '}
@@ -826,7 +836,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
   }
 
   return (
-    <div className="space-y-6 pb-6">
+    <div className="space-y-6 pb-6 divide-y-2 divide-neutral-500/40">
       <div className="space-y-4">
         <div>
           <h3 className="text-2xl font-semibold border-neutral-500/40">User tokens</h3>
@@ -848,28 +858,28 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
         <CreateUserTokenDialog organisationId={organisationId} />
       </div>
 
-      <hr className="border border-neutral-500/40" />
+      {activeUserIsAdmin && (
+        <div className="space-y-4 py-4">
+          <div>
+            <h3 className="text-2xl font-semibold border-neutral-500/40">Service tokens</h3>
+            <p className="text-neutral-500">
+              Tokens used to authenticate with the CLI from automated machines. Used for CI and
+              production environments.
+            </p>
+          </div>
+          <div className="space-y-2 divide-y divide-neutral-500/50">
+            {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
+              <CreatedToken
+                key={serviceToken.id}
+                token={serviceToken}
+                deleteHandler={handleDeleteServiceToken}
+              />
+            ))}
+          </div>
 
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-2xl font-semibold border-neutral-500/40">Service tokens</h3>
-          <p className="text-neutral-500">
-            Tokens used to authenticate with the CLI from automated machines. Used for CI and
-            production environments.
-          </p>
+          <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
         </div>
-        <div className="space-y-2 divide-y divide-neutral-500/50">
-          {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
-            <CreatedToken
-              key={serviceToken.id}
-              token={serviceToken}
-              deleteHandler={handleDeleteServiceToken}
-            />
-          ))}
-        </div>
-
-        <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
-      </div>
+      )}
     </div>
   )
 }
