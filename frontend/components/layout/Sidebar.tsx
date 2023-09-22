@@ -62,7 +62,7 @@ const Sidebar = () => {
   ]
 
   return (
-    <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between pt-20 bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
+    <nav className="h-screen flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between pt-20 bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
       <div className="gap-4 p-4 grid grid-cols-1">
         {links.slice(0, 3).map((link) => (
           <SidebarLink

@@ -41,7 +41,7 @@ export default function RootLayout({
     <OrganisationProvider>
       <div
         className={clsx(
-          'w-full min-h-screen grid  divide-x divide-neutral-300 dark:divide-neutral-800',
+          'w-full h-screen overflow-hidden grid  divide-x divide-neutral-300 dark:divide-neutral-800',
           showNav && 'grid-cols-[max-content_1fr]'
         )}
       >

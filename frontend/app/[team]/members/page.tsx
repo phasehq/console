@@ -598,99 +598,101 @@ export default function Members({ params }: { params: { team: string } }) {
   }
 
   return (
-    <div className="w-full space-y-10 p-8 text-black dark:text-white">
-      <h1 className="text-2xl font-semibold">{params.team} Members</h1>
+    <section className="h-screen overflow-y-auto">
+      <div className="w-full space-y-10 p-8 text-black dark:text-white">
+        <h1 className="text-2xl font-semibold">{params.team} Members</h1>
 
-      <div className="Space-y-4">
-        <div className="flex justify-end">
-          {organisation && <InviteDialog organisationId={organisation.id} />}
-        </div>
+        <div className="Space-y-4">
+          <div className="flex justify-end">
+            {organisation && <InviteDialog organisationId={organisation.id} />}
+          </div>
 
-        <table className="table-auto min-w-full divide-y divide-zinc-500/40">
-          <thead>
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                User
-              </th>
+          <table className="table-auto min-w-full divide-y divide-zinc-500/40">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  User
+                </th>
 
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Role
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Joined
-              </th>
-              {activeUserIsAdmin && <th className="px-6 py-3"></th>}
-            </tr>
-          </thead>
-          <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y divide-zinc-500/40">
-            {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
-              <tr key={member.id}>
-                <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                  <Avatar imagePath={member.avatarUrl!} size="lg" />
-                  <div className="flex flex-col">
-                    <span className="text-lg font-medium">{member.fullName}</span>
-                    <span className="text-neutral-500 text-sm">{member.email}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <RoleSelector member={member} />
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap capitalize">
-                  {relativeTimeFromDates(new Date(member.createdAt))}
-                </td>
-                <td>
-                  {member.email !== session?.user?.email &&
-                    activeUserIsAdmin &&
-                    member.role.toLowerCase() !== 'owner' && (
-                      <DeleteMemberConfirmDialog member={member} />
-                    )}
-                </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Joined
+                </th>
+                {activeUserIsAdmin && <th className="px-6 py-3"></th>}
               </tr>
-            ))}
-            {sortedInvites.map((invite: OrganisationMemberInviteType) => (
-              <tr key={invite.id} className="opacity-60">
-                <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                  <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
-                    <FaUserAlt />
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="text-base font-medium">
-                      {invite.inviteeEmail}{' '}
-                      <span className="text-neutral-500 text-sm">
-                        (invited by{' '}
-                        {invite.invitedBy.email === session?.user?.email
-                          ? 'You'
-                          : invite.invitedBy.fullName}
-                        )
-                      </span>
+            </thead>
+            <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y divide-zinc-500/40">
+              {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
+                <tr key={member.id}>
+                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                    <Avatar imagePath={member.avatarUrl!} size="lg" />
+                    <div className="flex flex-col">
+                      <span className="text-lg font-medium">{member.fullName}</span>
+                      <span className="text-neutral-500 text-sm">{member.email}</span>
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap"></td>
-                <td className="px-6 py-4 whitespace-nowrap capitalize">
-                  {inviteIsExpired(invite)
-                    ? `expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
-                    : `invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
-                </td>
-                <td className="px-6 py-4 flex items-center gap-2">
-                  <DeleteInviteConfirmDialog inviteId={invite.id} />
-                  {!inviteIsExpired(invite) && (
-                    <Button
-                      variant="outline"
-                      title="Copy invite link"
-                      onClick={() => handleCopy(cryptoUtils.getInviteLink(invite.id))}
-                    >
-                      <div className="p-1">
-                        <FaCopy />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <RoleSelector member={member} />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap capitalize">
+                    {relativeTimeFromDates(new Date(member.createdAt))}
+                  </td>
+                  <td>
+                    {member.email !== session?.user?.email &&
+                      activeUserIsAdmin &&
+                      member.role.toLowerCase() !== 'owner' && (
+                        <DeleteMemberConfirmDialog member={member} />
+                      )}
+                  </td>
+                </tr>
+              ))}
+              {sortedInvites.map((invite: OrganisationMemberInviteType) => (
+                <tr key={invite.id} className="opacity-60">
+                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                    <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
+                      <FaUserAlt />
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="text-base font-medium">
+                        {invite.inviteeEmail}{' '}
+                        <span className="text-neutral-500 text-sm">
+                          (invited by{' '}
+                          {invite.invitedBy.email === session?.user?.email
+                            ? 'You'
+                            : invite.invitedBy.fullName}
+                          )
+                        </span>
                       </div>
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap"></td>
+                  <td className="px-6 py-4 whitespace-nowrap capitalize">
+                    {inviteIsExpired(invite)
+                      ? `expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
+                      : `invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
+                  </td>
+                  <td className="px-6 py-4 flex items-center gap-2">
+                    <DeleteInviteConfirmDialog inviteId={invite.id} />
+                    {!inviteIsExpired(invite) && (
+                      <Button
+                        variant="outline"
+                        title="Copy invite link"
+                        onClick={() => handleCopy(cryptoUtils.getInviteLink(invite.id))}
+                      >
+                        <div className="p-1">
+                          <FaCopy />
+                        </div>
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </section>
   )
 }
