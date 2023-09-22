@@ -233,112 +233,45 @@ export default function Members({ params }: { params: { team: string; app: strin
                       </Button>
                     </Dialog.Title>
 
-                    <form className="space-y-6 p-4" onSubmit={handleAddMember}>
-                      <Combobox value={selectedMember} onChange={setSelectedMember}>
-                        {({ open }) => (
-                          <>
-                            <div className="space-y-1">
-                              <Combobox.Label as={Fragment}>
-                                <label
-                                  className="block text-gray-700 text-sm font-bold"
-                                  htmlFor="name"
-                                >
-                                  User
-                                </label>
-                              </Combobox.Label>
-                              <div className="w-full relative flex items-center">
-                                <Combobox.Input
-                                  className="w-full"
-                                  onChange={(event) => setQuery(event.target.value)}
-                                  required
-                                  displayValue={(person: OrganisationMemberType) =>
-                                    person?.fullName!
-                                  }
-                                />
-                                <div className="absolute inset-y-0 right-2 flex items-center">
-                                  <Combobox.Button>
-                                    <FaChevronDown
-                                      className={clsx(
-                                        'text-neutral-500 transform transition ease cursor-pointer',
-                                        open ? 'rotate-180' : 'rotate-0'
-                                      )}
-                                    />
-                                  </Combobox.Button>
-                                </div>
-                              </div>
-                            </div>
-                            <Transition
-                              enter="transition duration-100 ease-out"
-                              enterFrom="transform scale-95 opacity-0"
-                              enterTo="transform scale-100 opacity-100"
-                              leave="transition duration-75 ease-out"
-                              leaveFrom="transform scale-100 opacity-100"
-                              leaveTo="transform scale-95 opacity-0"
-                            >
-                              <Combobox.Options as={Fragment}>
-                                <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20">
-                                  {filteredPeople.map((person: OrganisationMemberType) => (
-                                    <Combobox.Option key={person.id} value={person}>
-                                      {({ active, selected }) => (
-                                        <div
-                                          className={clsx(
-                                            'flex items-center gap-2 p-1 cursor-pointer',
-                                            active && 'font-semibold'
-                                          )}
-                                        >
-                                          <Avatar imagePath={person.avatarUrl!} size="sm" />
-                                          <span className="text-black dark:text-white">
-                                            {person.fullName}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </Combobox.Option>
-                                  ))}
-                                </div>
-                              </Combobox.Options>
-                            </Transition>
-                          </>
-                        )}
-                      </Combobox>
-
-                      <div className="space-y-1 w-full relative pb-8">
-                        {envScope.length === 0 && showEnvHint && (
-                          <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
-                            Select an environment scope
-                          </span>
-                        )}
-                        <Listbox
-                          value={envScope}
-                          by="id"
-                          onChange={setEnvScope}
-                          multiple
-                          name="environments"
-                        >
+                    {memberOptions.length === 0 ? (
+                      <div className="p-4 text-lg">
+                        All organisation members are added to this App.
+                      </div>
+                    ) : (
+                      <form className="space-y-6 p-4" onSubmit={handleAddMember}>
+                        <Combobox value={selectedMember} onChange={setSelectedMember}>
                           {({ open }) => (
                             <>
-                              <Listbox.Label as={Fragment}>
-                                <label
-                                  className="block text-gray-700 text-sm font-bold mb-2"
-                                  htmlFor="name"
-                                >
-                                  Environment scope
-                                </label>
-                              </Listbox.Label>
-                              <Listbox.Button as={Fragment} aria-required>
-                                <div className="p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md cursor-pointer h-10">
-                                  <span className="text-black dark:text-white">
-                                    {envScope
-                                      .map((env: Partial<EnvironmentType>) => env.name)
-                                      .join(' + ')}
-                                  </span>
-                                  <FaChevronDown
-                                    className={clsx(
-                                      'transition-transform ease duration-300 text-neutral-500',
-                                      open ? 'rotate-180' : 'rotate-0'
-                                    )}
+                              <div className="space-y-1">
+                                <Combobox.Label as={Fragment}>
+                                  <label
+                                    className="block text-gray-700 text-sm font-bold"
+                                    htmlFor="name"
+                                  >
+                                    User
+                                  </label>
+                                </Combobox.Label>
+                                <div className="w-full relative flex items-center">
+                                  <Combobox.Input
+                                    className="w-full"
+                                    onChange={(event) => setQuery(event.target.value)}
+                                    required
+                                    displayValue={(person: OrganisationMemberType) =>
+                                      person?.fullName!
+                                    }
                                   />
+                                  <div className="absolute inset-y-0 right-2 flex items-center">
+                                    <Combobox.Button>
+                                      <FaChevronDown
+                                        className={clsx(
+                                          'text-neutral-500 transform transition ease cursor-pointer',
+                                          open ? 'rotate-180' : 'rotate-0'
+                                        )}
+                                      />
+                                    </Combobox.Button>
+                                  </div>
                                 </div>
-                              </Listbox.Button>
+                              </div>
                               <Transition
                                 enter="transition duration-100 ease-out"
                                 enterFrom="transform scale-95 opacity-0"
@@ -347,10 +280,10 @@ export default function Members({ params }: { params: { team: string; app: strin
                                 leaveFrom="transform scale-100 opacity-100"
                                 leaveTo="transform scale-95 opacity-0"
                               >
-                                <Listbox.Options>
-                                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
-                                    {envOptions.map((env: Partial<EnvironmentType>) => (
-                                      <Listbox.Option key={env.id} value={env} as={Fragment}>
+                                <Combobox.Options as={Fragment}>
+                                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20">
+                                    {filteredPeople.map((person: OrganisationMemberType) => (
+                                      <Combobox.Option key={person.id} value={person}>
                                         {({ active, selected }) => (
                                           <div
                                             className={clsx(
@@ -358,66 +291,139 @@ export default function Members({ params }: { params: { team: string; app: strin
                                               active && 'font-semibold'
                                             )}
                                           >
-                                            {selected ? (
-                                              <FaCheckSquare className="text-emerald-500" />
-                                            ) : (
-                                              <FaSquare />
-                                            )}
+                                            <Avatar imagePath={person.avatarUrl!} size="sm" />
                                             <span className="text-black dark:text-white">
-                                              {env.name}
+                                              {person.fullName}
                                             </span>
                                           </div>
                                         )}
-                                      </Listbox.Option>
+                                      </Combobox.Option>
                                     ))}
                                   </div>
-                                </Listbox.Options>
+                                </Combobox.Options>
                               </Transition>
-
-                              {!keyring && (
-                                <div className="space-y-4 w-full">
-                                  <label
-                                    className="block text-gray-700 text-sm font-bold mb-2"
-                                    htmlFor="password"
-                                  >
-                                    Sudo password
-                                  </label>
-                                  <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
-                                    <input
-                                      id="password"
-                                      value={password}
-                                      onChange={(e) => setPassword(e.target.value)}
-                                      type={showPw ? 'text' : 'password'}
-                                      minLength={16}
-                                      required
-                                      autoFocus
-                                      className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
-                                    />
-                                    <button
-                                      className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
-                                      type="button"
-                                      onClick={() => setShowPw(!showPw)}
-                                      tabIndex={-1}
-                                    >
-                                      {showPw ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
                             </>
                           )}
-                        </Listbox>
-                      </div>
+                        </Combobox>
 
-                      <div className="flex items-center gap-4">
-                        <Button variant="secondary" type="button" onClick={closeModal}>
-                          Cancel
-                        </Button>
-                        <Button variant="primary" type="submit">
-                          Add
-                        </Button>
-                      </div>
-                    </form>
+                        <div className="space-y-1 w-full relative pb-8">
+                          {envScope.length === 0 && showEnvHint && (
+                            <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
+                              Select an environment scope
+                            </span>
+                          )}
+                          <Listbox
+                            value={envScope}
+                            by="id"
+                            onChange={setEnvScope}
+                            multiple
+                            name="environments"
+                          >
+                            {({ open }) => (
+                              <>
+                                <Listbox.Label as={Fragment}>
+                                  <label
+                                    className="block text-gray-700 text-sm font-bold mb-2"
+                                    htmlFor="name"
+                                  >
+                                    Environment scope
+                                  </label>
+                                </Listbox.Label>
+                                <Listbox.Button as={Fragment} aria-required>
+                                  <div className="p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md cursor-pointer h-10">
+                                    <span className="text-black dark:text-white">
+                                      {envScope
+                                        .map((env: Partial<EnvironmentType>) => env.name)
+                                        .join(' + ')}
+                                    </span>
+                                    <FaChevronDown
+                                      className={clsx(
+                                        'transition-transform ease duration-300 text-neutral-500',
+                                        open ? 'rotate-180' : 'rotate-0'
+                                      )}
+                                    />
+                                  </div>
+                                </Listbox.Button>
+                                <Transition
+                                  enter="transition duration-100 ease-out"
+                                  enterFrom="transform scale-95 opacity-0"
+                                  enterTo="transform scale-100 opacity-100"
+                                  leave="transition duration-75 ease-out"
+                                  leaveFrom="transform scale-100 opacity-100"
+                                  leaveTo="transform scale-95 opacity-0"
+                                >
+                                  <Listbox.Options>
+                                    <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
+                                      {envOptions.map((env: Partial<EnvironmentType>) => (
+                                        <Listbox.Option key={env.id} value={env} as={Fragment}>
+                                          {({ active, selected }) => (
+                                            <div
+                                              className={clsx(
+                                                'flex items-center gap-2 p-1 cursor-pointer',
+                                                active && 'font-semibold'
+                                              )}
+                                            >
+                                              {selected ? (
+                                                <FaCheckSquare className="text-emerald-500" />
+                                              ) : (
+                                                <FaSquare />
+                                              )}
+                                              <span className="text-black dark:text-white">
+                                                {env.name}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </Listbox.Option>
+                                      ))}
+                                    </div>
+                                  </Listbox.Options>
+                                </Transition>
+
+                                {!keyring && (
+                                  <div className="space-y-4 w-full">
+                                    <label
+                                      className="block text-gray-700 text-sm font-bold mb-2"
+                                      htmlFor="password"
+                                    >
+                                      Sudo password
+                                    </label>
+                                    <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
+                                      <input
+                                        id="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        type={showPw ? 'text' : 'password'}
+                                        minLength={16}
+                                        required
+                                        autoFocus
+                                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
+                                      />
+                                      <button
+                                        className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
+                                        type="button"
+                                        onClick={() => setShowPw(!showPw)}
+                                        tabIndex={-1}
+                                      >
+                                        {showPw ? <FaEyeSlash /> : <FaEye />}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </Listbox>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          <Button variant="secondary" type="button" onClick={closeModal}>
+                            Cancel
+                          </Button>
+                          <Button variant="primary" type="submit">
+                            Add
+                          </Button>
+                        </div>
+                      </form>
+                    )}
                   </Dialog.Panel>
                 </Transition.Child>
               </div>
