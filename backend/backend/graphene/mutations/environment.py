@@ -126,7 +126,7 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
             # set new keys
             for key in env_keys:
                 EnvironmentKey.objects.create(
-                    environment_id=key.env_id, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt)
+                    environment_id=key.env_id, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt, identity_key=key.identity_key)
 
         return UpdateMemberEnvScopeMutation(app=app)
 
