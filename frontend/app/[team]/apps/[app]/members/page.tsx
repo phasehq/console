@@ -847,7 +847,7 @@ export default function Members({ params }: { params: { team: string; app: strin
               {activeUserIsAdmin && <th className="px-6 py-3"></th>}
             </tr>
           </thead>
-          <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y divide-zinc-500/40">
+          <tbody className="divide-y divide-zinc-500/40">
             {data?.appUsers.map((member: OrganisationMemberType) => (
               <tr className="group" key={member.id}>
                 <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
