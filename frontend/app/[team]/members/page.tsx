@@ -18,7 +18,7 @@ import {
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
-import { Dialog, Disclosure, Listbox, RadioGroup, Transition } from '@headlessui/react'
+import { Dialog, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import {
   FaCheckSquare,
   FaChevronDown,
@@ -29,6 +29,7 @@ import {
   FaSquare,
   FaTimes,
   FaTrashAlt,
+  FaUserAlt,
 } from 'react-icons/fa'
 import clsx from 'clsx'
 import { cryptoUtils } from '@/utils/auth'
@@ -42,6 +43,10 @@ import { RoleLabel } from '@/components/users/RoleLabel'
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
   toast.info('Copied', { autoClose: 2000 })
+}
+
+const inviteIsExpired = (invite: OrganisationMemberInviteType) => {
+  return new Date(invite.expiresAt) < new Date()
 }
 
 const RoleSelector = (props: { member: OrganisationMemberType }) => {
@@ -141,19 +146,14 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
 const InviteDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
 
-  const { data: invitesData, loading: invitesLoading } = useQuery(GetInvites, {
-    variables: { orgId: organisationId },
-  })
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
     variables: { organisationId, appId: '' },
   })
   const [createInvite] = useMutation(InviteMember)
-  const [deleteInvite] = useMutation(DeleteInvite)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const [email, setEmail] = useState<string>('')
-  const [role, setRole] = useState<string>('Dev')
   const [apps, setApps] = useState<Partial<AppType>[]>([])
 
   const [inviteLink, setInviteLink] = useState<string>('')
@@ -162,11 +162,10 @@ const InviteDialog = (props: { organisationId: string }) => {
     (option) => option !== 'Owner'
   )
 
-  const isLoading = invitesLoading || appsLoading
+  const isLoading = appsLoading
 
   const reset = () => {
     setEmail('')
-    setRole('Dev')
     setApps([])
     setInviteLink('')
   }
@@ -191,7 +190,7 @@ const InviteDialog = (props: { organisationId: string }) => {
         email,
         orgId: organisationId,
         apps: apps.map((app) => app.id),
-        role,
+        role: 'dev',
       },
       refetchQueries: [
         {
@@ -204,22 +203,6 @@ const InviteDialog = (props: { organisationId: string }) => {
     })
 
     setInviteLink(cryptoUtils.getInviteLink(data?.inviteOrganisationMember.invite.id))
-  }
-
-  const handleDeleteInvite = async (inviteId: string) => {
-    await deleteInvite({
-      variables: {
-        inviteId,
-      },
-      refetchQueries: [
-        {
-          query: GetInvites,
-          variables: {
-            orgId: organisationId,
-          },
-        },
-      ],
-    })
   }
 
   const AppSelector = (props: { app: AppType }) => {
@@ -255,6 +238,136 @@ const InviteDialog = (props: { organisationId: string }) => {
     )
   }
 
+  return (
+    <>
+      <div className="flex items-center justify-center">
+        <Button variant="primary" onClick={openModal} title="Add a member">
+          <FaPlus /> Add a member
+        </Button>
+      </div>
+
+      <Transition appear show={isOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-screen-lg transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Title as="div" className="flex w-full justify-between">
+                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                      Invite a new member
+                    </h3>
+
+                    <Button variant="text" onClick={handleClose}>
+                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
+                    </Button>
+                  </Dialog.Title>
+
+                  {!isLoading && (
+                    <div className="space-y-4 divide-y divide-neutral-500/40">
+                      <div>
+                        {!inviteLink && (
+                          <form className="space-y-6 p-4" onSubmit={handleInvite}>
+                            <div className="space-y-4">
+                              <div className="space-y-2 w-full">
+                                <label
+                                  className="block text-gray-700 text-sm font-bold mb-2"
+                                  htmlFor="name"
+                                >
+                                  User email
+                                </label>
+                                <input
+                                  required
+                                  id="name"
+                                  type="email"
+                                  value={email}
+                                  onChange={(e) => setEmail(e.target.value)}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="block text-gray-700 text-sm font-bold mb-2">
+                                App access
+                              </label>
+
+                              <div className="flex flex-wrap gap-4">
+                                {appsData.apps.map((appOption: AppType) => (
+                                  <AppSelector key={appOption.id} app={appOption} />
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="col-span-2 flex items-center gap-4 justify-end">
+                              <Button variant="secondary" type="button" onClick={closeModal}>
+                                Cancel
+                              </Button>
+                              <Button variant="primary" type="submit">
+                                Invite
+                              </Button>
+                            </div>
+                          </form>
+                        )}
+                        {inviteLink && (
+                          <div className="py-4 space-y-6">
+                            <div className="text-center max-w-lg mx-auto">
+                              <h3 className="font-semibold text-xl text-black dark:text-white">
+                                Invite sent
+                              </h3>
+                              <p className="text-neutral-500">
+                                An invite link has been sent by email to{' '}
+                                <span className="font-medium">{email}</span>. You can also share the
+                                link below to invite this user to your organisation. This invite
+                                will expire in 72 hours.
+                              </p>
+                            </div>
+                            <div className="p-6 flex items-center justify-between rounded-md bg-zinc-200 dark:bg-zinc-800">
+                              <div className="text-emerald-500 font-mono font-semibold">
+                                {inviteLink}
+                              </div>
+                              <Button variant="outline" onClick={() => handleCopy(inviteLink)}>
+                                Copy <FaCopy />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+    </>
+  )
+}
+
+export default function Members({ params }: { params: { team: string } }) {
+  const [getMembers, { data: membersData }] = useLazyQuery(GetOrganisationMembers)
+  const [getInvites, { data: invitesData }] = useLazyQuery(GetInvites)
+  const [deleteInvite] = useMutation(DeleteInvite)
+
   const sortedInvites: OrganisationMemberInviteType[] =
     invitesData?.organisationInvites
       ?.slice() // Create a shallow copy of the array to avoid modifying the original
@@ -262,6 +375,28 @@ const InviteDialog = (props: { organisationId: string }) => {
         // Compare the createdAt timestamps in descending order
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       }) || []
+
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+
+  const { data: session } = useSession()
+
+  useEffect(() => {
+    if (organisation) {
+      getMembers({
+        variables: {
+          organisationId: organisation.id,
+          role: null,
+        },
+      })
+      getInvites({
+        variables: {
+          orgId: organisation.id,
+        },
+      })
+    }
+  }, [getInvites, getMembers, organisation])
 
   const DeleteInviteConfirmDialog = (props: { inviteId: string }) => {
     const { inviteId } = props
@@ -274,6 +409,22 @@ const InviteDialog = (props: { organisationId: string }) => {
 
     const openModal = () => {
       setIsOpen(true)
+    }
+
+    const handleDeleteInvite = async (inviteId: string) => {
+      await deleteInvite({
+        variables: {
+          inviteId,
+        },
+        refetchQueries: [
+          {
+            query: GetInvites,
+            variables: {
+              orgId: organisation!.id,
+            },
+          },
+        ],
+      })
     }
 
     return (
@@ -344,261 +495,6 @@ const InviteDialog = (props: { organisationId: string }) => {
       </>
     )
   }
-
-  return (
-    <>
-      <div className="flex items-center justify-center">
-        <Button variant="primary" onClick={openModal} title="Add a member">
-          <FaPlus /> Add a member
-        </Button>
-      </div>
-
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="w-full max-w-screen-lg transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Invite a new member
-                    </h3>
-
-                    <Button variant="text" onClick={handleClose}>
-                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                    </Button>
-                  </Dialog.Title>
-
-                  {!isLoading && (
-                    <div className="space-y-4 divide-y divide-neutral-500/40">
-                      <div>
-                        {!inviteLink && (
-                          <form className="grid grid-cols-2 gap-10 p-4" onSubmit={handleInvite}>
-                            <div className="space-y-4">
-                              <div className="space-y-2 w-full">
-                                <label
-                                  className="block text-gray-700 text-sm font-bold mb-2"
-                                  htmlFor="name"
-                                >
-                                  User email
-                                </label>
-                                <input
-                                  required
-                                  id="name"
-                                  type="email"
-                                  value={email}
-                                  onChange={(e) => setEmail(e.target.value)}
-                                />
-                              </div>
-                              <div>
-                                <RadioGroup value={role} onChange={setRole}>
-                                  <RadioGroup.Label as={Fragment}>
-                                    <label className="block text-gray-700 text-sm font-bold mb-2">
-                                      Role
-                                    </label>
-                                  </RadioGroup.Label>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    {roleOptions.map((option) => (
-                                      <RadioGroup.Option key={option} value={option} as={Fragment}>
-                                        {({ active, checked }) => (
-                                          <div
-                                            className={clsx(
-                                              'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full',
-                                              active && 'border-zinc-700',
-                                              checked && 'bg-zinc-700'
-                                            )}
-                                          >
-                                            {checked ? (
-                                              <FaDotCircle className="text-emerald-500" />
-                                            ) : (
-                                              <FaCircle />
-                                            )}
-                                            {option}
-                                          </div>
-                                        )}
-                                      </RadioGroup.Option>
-                                    ))}
-                                  </div>
-                                </RadioGroup>
-                              </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <label className="block text-gray-700 text-sm font-bold mb-2">
-                                App access
-                              </label>
-                              {appsData.apps.map((appOption: AppType) => (
-                                <AppSelector key={appOption.id} app={appOption} />
-                              ))}
-                            </div>
-
-                            <div className="col-span-2 flex items-center gap-4 justify-end">
-                              <Button variant="secondary" type="button" onClick={closeModal}>
-                                Cancel
-                              </Button>
-                              <Button variant="primary" type="submit">
-                                Invite
-                              </Button>
-                            </div>
-                          </form>
-                        )}
-                        {inviteLink && (
-                          <div className="py-4 space-y-6">
-                            <div className="text-center max-w-lg mx-auto">
-                              <h3 className="font-semibold text-xl">Invite sent</h3>
-                              <p className="text-neutral-500">
-                                An invite link has been sent by email to {email}. You can also share
-                                the link below to invite the user to your organisation.
-                              </p>
-                            </div>
-                            <div className="p-6 flex items-center justify-between rounded-md bg-zinc-200 dark:bg-zinc-800">
-                              <div className="text-emerald-500 font-mono font-semibold">
-                                {inviteLink}
-                              </div>
-                              <Button variant="outline" onClick={() => handleCopy(inviteLink)}>
-                                Copy <FaCopy />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-6 p-4">
-                        <Disclosure>
-                          {({ open }) => (
-                            <>
-                              <Disclosure.Button as={Fragment}>
-                                <div className="py-2 cursor-pointer font-medium flex items-center gap-4 text-black dark:text-white">
-                                  <FaChevronDown
-                                    className={clsx(
-                                      'transition-transform ease duration-300 text-neutral-500',
-                                      open ? 'rotate-180' : 'rotate-0'
-                                    )}
-                                  />
-                                  Invite history
-                                </div>
-                              </Disclosure.Button>
-                              <Transition
-                                enter="transition duration-100 ease-out"
-                                enterFrom="transform scale-95 opacity-0"
-                                enterTo="transform scale-100 opacity-100"
-                                leave="transition duration-75 ease-out"
-                                leaveFrom="transform scale-100 opacity-100"
-                                leaveTo="transform scale-95 opacity-0"
-                              >
-                                <Disclosure.Panel>
-                                  <div className="max-h-96 overflow-y-auto text-sm">
-                                    <table className="table-auto min-w-full divide-y divide-zinc-500/40">
-                                      <thead className="sticky top-0 bg-zinc-100 dark:bg-zinc-900">
-                                        <tr>
-                                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Email
-                                          </th>
-                                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Invited by
-                                          </th>
-                                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Invited
-                                          </th>
-                                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Expires
-                                          </th>
-                                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="bg-zinc-200 dark:bg-zinc-800 divide-y text-black dark:text-white divide-zinc-500/40">
-                                        {sortedInvites.map(
-                                          (invite: OrganisationMemberInviteType) => (
-                                            <tr key={invite.id}>
-                                              <td className="px-6 py-4 whitespace-nowrap">
-                                                {invite.inviteeEmail}
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap">
-                                                {invite.invitedBy.email}
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap capitalize">
-                                                {relativeTimeFromDates(new Date(invite.createdAt))}
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap capitalize">
-                                                {relativeTimeFromDates(new Date(invite.expiresAt))}
-                                              </td>
-                                              <td className="px-6 py-4 flex items-center gap-2">
-                                                <Button
-                                                  variant="outline"
-                                                  title="Copy invite link"
-                                                  onClick={() =>
-                                                    handleCopy(cryptoUtils.getInviteLink(invite.id))
-                                                  }
-                                                >
-                                                  <div className="p-1">
-                                                    <FaCopy />
-                                                  </div>
-                                                </Button>
-                                                <DeleteInviteConfirmDialog inviteId={invite.id} />
-                                              </td>
-                                            </tr>
-                                          )
-                                        )}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </Disclosure.Panel>
-                              </Transition>
-                            </>
-                          )}
-                        </Disclosure>
-                      </div>
-                    </div>
-                  )}
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
-    </>
-  )
-}
-
-export default function Members({ params }: { params: { team: string } }) {
-  const [getMembers, { data: membersData }] = useLazyQuery(GetOrganisationMembers)
-
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
-
-  const { data: session } = useSession()
-
-  useEffect(() => {
-    if (organisation) {
-      getMembers({
-        variables: {
-          organisationId: organisation.id,
-          role: null,
-        },
-      })
-    }
-  }, [getMembers, organisation])
 
   const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberType }) => {
     const { member } = props
@@ -743,8 +639,51 @@ export default function Members({ params }: { params: { team: string } }) {
                   {relativeTimeFromDates(new Date(member.createdAt))}
                 </td>
                 <td>
-                  {member.email !== session?.user?.email && activeUserIsAdmin && (
-                    <DeleteMemberConfirmDialog member={member} />
+                  {member.email !== session?.user?.email &&
+                    activeUserIsAdmin &&
+                    member.role.toLowerCase() !== 'owner' && (
+                      <DeleteMemberConfirmDialog member={member} />
+                    )}
+                </td>
+              </tr>
+            ))}
+            {sortedInvites.map((invite: OrganisationMemberInviteType) => (
+              <tr key={invite.id} className="opacity-60">
+                <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                  <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
+                    <FaUserAlt />
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="text-base font-medium">
+                      {invite.inviteeEmail}{' '}
+                      <span className="text-neutral-500 text-sm">
+                        (invited by{' '}
+                        {invite.invitedBy.email === session?.user?.email
+                          ? 'You'
+                          : invite.invitedBy.fullName}
+                        )
+                      </span>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap"></td>
+                <td className="px-6 py-4 whitespace-nowrap capitalize">
+                  {inviteIsExpired(invite)
+                    ? `expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
+                    : `invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
+                </td>
+                <td className="px-6 py-4 flex items-center gap-2">
+                  <DeleteInviteConfirmDialog inviteId={invite.id} />
+                  {!inviteIsExpired(invite) && (
+                    <Button
+                      variant="outline"
+                      title="Copy invite link"
+                      onClick={() => handleCopy(cryptoUtils.getInviteLink(invite.id))}
+                    >
+                      <div className="p-1">
+                        <FaCopy />
+                      </div>
+                    </Button>
                   )}
                 </td>
               </tr>
