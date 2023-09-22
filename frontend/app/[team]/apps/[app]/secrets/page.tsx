@@ -219,10 +219,10 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 <div className="mt-8 flex flex-row col-span-2 w-full gap-8">
                   <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg flex flex-col gap-4 p-4">
                     <div className="text-neutral-500 text-2xl px-4">KEY</div>
-                    <div className="flex flex-col gap-4 p-4">
+                    <div className="flex flex-col gap-4 p-4 w-max">
                       {commonSecretsKeys.map((secret: string, index: number) => (
                         <div key={index}>
-                          <div className="break-all font-mono">{secret}</div>
+                          <div className="font-mono">{secret}</div>
                         </div>
                       ))}
                     </div>
