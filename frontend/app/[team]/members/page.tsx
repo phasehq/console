@@ -639,7 +639,7 @@ export default function Members({ params }: { params: { team: string } }) {
                   <td className="px-6 py-4 whitespace-nowrap capitalize">
                     {relativeTimeFromDates(new Date(member.createdAt))}
                   </td>
-                  <td>
+                  <td className="px-6 py-4 flex items-center justify-end gap-2">
                     {member.email !== session?.user?.email &&
                       activeUserIsAdmin &&
                       member.role.toLowerCase() !== 'owner' && (
@@ -668,13 +668,17 @@ export default function Members({ params }: { params: { team: string } }) {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap"></td>
-                  <td className="px-6 py-4 whitespace-nowrap capitalize">
+                  <td
+                    className={clsx(
+                      'px-6 py-4 whitespace-nowrap',
+                      inviteIsExpired(invite) && 'text-red-500'
+                    )}
+                  >
                     {inviteIsExpired(invite)
-                      ? `expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
-                      : `invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
+                      ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
+                      : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
                   </td>
-                  <td className="px-6 py-4 flex items-center gap-2">
-                    <DeleteInviteConfirmDialog inviteId={invite.id} />
+                  <td className="px-6 py-4 flex items-center justify-end gap-2">
                     {!inviteIsExpired(invite) && (
                       <Button
                         variant="outline"
@@ -686,6 +690,7 @@ export default function Members({ params }: { params: { team: string } }) {
                         </div>
                       </Button>
                     )}
+                    <DeleteInviteConfirmDialog inviteId={invite.id} />
                   </td>
                 </tr>
               ))}
