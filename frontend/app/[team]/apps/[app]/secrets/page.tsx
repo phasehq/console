@@ -5,13 +5,10 @@ import { GetSecretNames } from '@/graphql/queries/secrets/getSecretNames.gql'
 import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
+import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useCallback, useContext, useEffect, useState } from 'react'
-import {
-  createNewEnvPayload,
-  decryptEnvSecretNames,
-  unwrapEnvSecretsForUser,
-} from '@/utils/environments'
+import { createNewEnv, decryptEnvSecretNames, unwrapEnvSecretsForUser } from '@/utils/environments'
 import { Button } from '@/components/common/Button'
 import {
   ApiEnvironmentEnvTypeChoices,
@@ -46,6 +43,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const [getEnvSecrets] = useLazyQuery(GetSecretNames)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
+  const [updateScope] = useMutation(UpdateEnvScope)
 
   const [commonSecrets, setCommonSecrets] = useState<SecretType[]>([])
   const [envSecrets, setEnvSecrets] = useState<EnvSecrets[]>([])
@@ -118,36 +116,35 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   }, [data?.appEnvironments, keyring])
 
   const initAppEnvs = async () => {
-    const owner = orgAdminsData.organisationAdminsAndSelf.find(
-      (user: OrganisationMemberType) => user.role === ApiOrganisationMemberRoleChoices.Owner
-    )
-
     const mutationPayload = {
-      devEnv: await createNewEnvPayload(
+      devEnv: await createNewEnv(
         params.app,
         'Development',
         ApiEnvironmentEnvTypeChoices.Dev,
-        owner
+        orgAdminsData.organisationAdminsAndSelf
       ),
-      stagingEnv: await createNewEnvPayload(
+      stagingEnv: await createNewEnv(
         params.app,
         'Staging',
         ApiEnvironmentEnvTypeChoices.Staging,
-        owner
+        orgAdminsData.organisationAdminsAndSelf
       ),
-      prodEnv: await createNewEnvPayload(
+      prodEnv: await createNewEnv(
         params.app,
         'Production',
         ApiEnvironmentEnvTypeChoices.Prod,
-        owner
+        orgAdminsData.organisationAdminsAndSelf
       ),
     }
 
     await initAppEnvironments({
       variables: {
-        devEnv: mutationPayload.devEnv,
-        stagingEnv: mutationPayload.stagingEnv,
-        prodEnv: mutationPayload.prodEnv,
+        devEnv: mutationPayload.devEnv.createEnvPayload,
+        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
+        prodEnv: mutationPayload.prodEnv.createEnvPayload,
+        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
+        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
+        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
       },
       refetchQueries: [
         {

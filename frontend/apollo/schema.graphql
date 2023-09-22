@@ -289,7 +289,7 @@ type Mutation {
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): AddAppMemberMutation
   removeAppMember(appId: ID, memberId: ID): RemoveAppMemberMutation
   updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): UpdateMemberEnvScopeMutation
-  createEnvironment(environmentData: EnvironmentInput!): CreateEnvironmentMutation
+  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation

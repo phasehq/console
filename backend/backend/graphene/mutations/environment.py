@@ -37,11 +37,12 @@ class SecretInput(graphene.InputObjectType):
 class CreateEnvironmentMutation(graphene.Mutation):
     class Arguments:
         environment_data = EnvironmentInput(required=True)
+        admin_keys = graphene.List(EnvironmentKeyInput)
 
     environment = graphene.Field(EnvironmentType)
 
     @classmethod
-    def mutate(cls, root, info, environment_data):
+    def mutate(cls, root, info, environment_data, admin_keys):
         user_id = info.context.user.userId
 
         if not user_can_access_app(user_id, environment_data.app_id):
@@ -57,6 +58,9 @@ class CreateEnvironmentMutation(graphene.Mutation):
 
         EnvironmentKey.objects.create(environment=environment, user=org_owner,
                                       identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
+        for key in admin_keys:
+            EnvironmentKey.objects.create(
+                environment=environment, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt, identity_key=key.identity_key)
 
         return CreateEnvironmentMutation(environment=environment)
 

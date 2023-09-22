@@ -42,6 +42,12 @@ class CreateAppMutation(graphene.Mutation):
         app = App.objects.create(id=id, organisation=org, name=name, identity_key=identity_key,
                                  app_token=app_token, app_seed=app_seed, wrapped_key_share=wrapped_key_share, app_version=app_version)
 
+        admin_roles = [OrganisationMember.ADMIN, OrganisationMember.OWNER]
+
+        org_admins = org.users.filter(role__in=admin_roles)
+        for admin in org_admins:
+            admin.apps.add(app)
+
         return CreateAppMutation(app=app)
 
 
