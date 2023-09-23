@@ -24,10 +24,8 @@ import {
   FaTimes,
   FaUserCog,
   FaUserTimes,
-  FaUsersCog,
 } from 'react-icons/fa'
 import clsx from 'clsx'
-import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
@@ -36,6 +34,8 @@ import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environm
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { userIsAdmin } from '@/utils/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { Alert } from '@/components/common/Alert'
+import Link from 'next/link'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppMembers, { variables: { appId: params.app } })
@@ -558,6 +558,8 @@ export default function Members({ params }: { params: { team: string; app: strin
     const [password, setPassword] = useState<string>('')
     const [showPw, setShowPw] = useState<boolean>(false)
 
+    const memberIsAdmin = userIsAdmin(props.member.role) || false
+
     const closeModal = () => {
       setIsOpen(false)
     }
@@ -699,8 +701,11 @@ export default function Members({ params }: { params: { team: string; app: strin
                       </Button>
                     </Dialog.Title>
 
-                    <form className="space-y-6 p-4" onSubmit={handleUpdateScope}>
-                      <div className="space-y-1 w-full relative pb-8">
+                    <form
+                      className={clsx('space-y-6 p-4', memberIsAdmin && 'opacity-60')}
+                      onSubmit={handleUpdateScope}
+                    >
+                      <div className="space-y-6 w-full relative">
                         {envScope.length === 0 && showEnvHint && (
                           <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
                             Select an environment scope
@@ -712,6 +717,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                           onChange={setEnvScope}
                           multiple
                           name="environments"
+                          disabled={memberIsAdmin}
                         >
                           {({ open }) => (
                             <>
@@ -724,7 +730,12 @@ export default function Members({ params }: { params: { team: string; app: strin
                                 </label>
                               </Listbox.Label>
                               <Listbox.Button as={Fragment} aria-required>
-                                <div className="p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md cursor-pointer h-10">
+                                <div
+                                  className={clsx(
+                                    'p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md h-10',
+                                    memberIsAdmin ? 'cursor-not-allowed' : 'cursor-pointer'
+                                  )}
+                                >
                                   <span className="text-black dark:text-white">
                                     {envScope
                                       .map((env: Partial<EnvironmentType>) => env.name)
@@ -772,40 +783,57 @@ export default function Members({ params }: { params: { team: string; app: strin
                                   </div>
                                 </Listbox.Options>
                               </Transition>
-
-                              {!keyring && (
-                                <div className="space-y-2 w-full">
-                                  <label
-                                    className="block text-gray-700 text-sm font-bold mb-2"
-                                    htmlFor="password"
-                                  >
-                                    Sudo password
-                                  </label>
-                                  <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
-                                    <input
-                                      id="password"
-                                      value={password}
-                                      onChange={(e) => setPassword(e.target.value)}
-                                      type={showPw ? 'text' : 'password'}
-                                      minLength={16}
-                                      required
-                                      autoFocus
-                                      className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
-                                    />
-                                    <button
-                                      className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
-                                      type="button"
-                                      onClick={() => setShowPw(!showPw)}
-                                      tabIndex={-1}
-                                    >
-                                      {showPw ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
                             </>
                           )}
                         </Listbox>
+
+                        {!keyring && !memberIsAdmin && (
+                          <div className="space-y-2 w-full">
+                            <label
+                              className="block text-gray-700 text-sm font-bold mb-2"
+                              htmlFor="password"
+                            >
+                              Sudo password
+                            </label>
+                            <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
+                              <input
+                                id="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                type={showPw ? 'text' : 'password'}
+                                minLength={16}
+                                required
+                                autoFocus
+                                className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
+                              />
+                              <button
+                                className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
+                                type="button"
+                                onClick={() => setShowPw(!showPw)}
+                                tabIndex={-1}
+                              >
+                                {showPw ? <FaEyeSlash /> : <FaEye />}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {memberIsAdmin && (
+                          <Alert variant="info">
+                            <p>
+                              This user is an admin, and has access to all environments in this App.
+                              To restrict their access, change their role to{' '}
+                              <RoleLabel role="dev" /> from the{' '}
+                              <Link
+                                className="font-semibold hover:underline"
+                                href={`/${params.team}/members`}
+                              >
+                                organisation members
+                              </Link>{' '}
+                              page.
+                            </p>
+                          </Alert>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-4">
