@@ -819,11 +819,11 @@ export default function Members({ params }: { params: { team: string; app: strin
                         )}
 
                         {memberIsAdmin && (
-                          <Alert variant="info">
+                          <Alert variant="info" icon={true}>
                             <p>
-                              This user is an admin, and has access to all environments in this App.
-                              To restrict their access, change their role to{' '}
-                              <RoleLabel role="dev" /> from the{' '}
+                              This user is an <RoleLabel role="admin" />, and has access to all
+                              environments in this App. To restrict their access, change their role
+                              to <RoleLabel role="dev" /> from the{' '}
                               <Link
                                 className="font-semibold hover:underline"
                                 href={`/${params.team}/members`}
