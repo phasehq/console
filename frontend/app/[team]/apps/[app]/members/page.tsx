@@ -705,7 +705,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                       className={clsx('space-y-6 p-4', memberIsAdmin && 'opacity-60')}
                       onSubmit={handleUpdateScope}
                     >
-                      <div className="space-y-6 w-full relative">
+                      <div className="space-y-1 w-full relative">
                         {envScope.length === 0 && showEnvHint && (
                           <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
                             Select an environment scope
@@ -786,55 +786,54 @@ export default function Members({ params }: { params: { team: string; app: strin
                             </>
                           )}
                         </Listbox>
-
-                        {!keyring && !memberIsAdmin && (
-                          <div className="space-y-2 w-full">
-                            <label
-                              className="block text-gray-700 text-sm font-bold mb-2"
-                              htmlFor="password"
-                            >
-                              Sudo password
-                            </label>
-                            <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
-                              <input
-                                id="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                type={showPw ? 'text' : 'password'}
-                                minLength={16}
-                                required
-                                autoFocus
-                                className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
-                              />
-                              <button
-                                className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
-                                type="button"
-                                onClick={() => setShowPw(!showPw)}
-                                tabIndex={-1}
-                              >
-                                {showPw ? <FaEyeSlash /> : <FaEye />}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {memberIsAdmin && (
-                          <Alert variant="info" icon={true}>
-                            <p>
-                              This user is an <RoleLabel role="admin" />, and has access to all
-                              environments in this App. To restrict their access, change their role
-                              to <RoleLabel role="dev" /> from the{' '}
-                              <Link
-                                className="font-semibold hover:underline"
-                                href={`/${params.team}/members`}
-                              >
-                                organisation members
-                              </Link>{' '}
-                              page.
-                            </p>
-                          </Alert>
-                        )}
                       </div>
+                      {!keyring && !memberIsAdmin && (
+                        <div className="space-y-2 w-full">
+                          <label
+                            className="block text-gray-700 text-sm font-bold mb-2"
+                            htmlFor="password"
+                          >
+                            Sudo password
+                          </label>
+                          <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
+                            <input
+                              id="password"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              type={showPw ? 'text' : 'password'}
+                              minLength={16}
+                              required
+                              autoFocus
+                              className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
+                            />
+                            <button
+                              className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
+                              type="button"
+                              onClick={() => setShowPw(!showPw)}
+                              tabIndex={-1}
+                            >
+                              {showPw ? <FaEyeSlash /> : <FaEye />}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {memberIsAdmin && (
+                        <Alert variant="info" icon={true}>
+                          <p>
+                            This user is an <RoleLabel role="admin" />, and has access to all
+                            environments in this App. To restrict their access, change their role to{' '}
+                            <RoleLabel role="dev" /> from the{' '}
+                            <Link
+                              className="font-semibold hover:underline"
+                              href={`/${params.team}/members`}
+                            >
+                              organisation members
+                            </Link>{' '}
+                            page.
+                          </p>
+                        </Alert>
+                      )}
 
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>
