@@ -866,13 +866,13 @@ export default function Members({ params }: { params: { team: string; app: strin
                 </td>
                 {activeUserIsAdmin && (
                   <td className="px-6 py-4">
-                    {member.email !== session?.user?.email ||
-                      (member.role.toLowerCase() === 'owner' && (
+                    {member.email !== session?.user?.email &&
+                      member.role.toLowerCase() !== 'owner' && (
                         <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
                           <ManageUserAccessDialog member={member} />
                           <RemoveMemberConfirmDialog member={member} />
                         </div>
-                      ))}
+                      )}
                   </td>
                 )}
               </tr>
