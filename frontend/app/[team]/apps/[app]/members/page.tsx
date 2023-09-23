@@ -840,7 +840,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                         <Button variant="secondary" type="button" onClick={closeModal}>
                           Cancel
                         </Button>
-                        <Button variant="primary" type="submit">
+                        <Button variant="primary" type="submit" disabled={memberIsAdmin}>
                           Save
                         </Button>
                       </div>
