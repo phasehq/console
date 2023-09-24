@@ -446,7 +446,7 @@ const InviteDialog = (props: { organisationId: string }) => {
 export default function Members({ params }: { params: { team: string } }) {
   const [getMembers, { data: membersData }] = useLazyQuery(GetOrganisationMembers)
   const [getInvites, { data: invitesData }] = useLazyQuery(GetInvites)
-  const [deleteInvite] = useMutation(DeleteInvite)
+  const [deleteInvite] = useMutation(DeleteOrgInvite)
 
   const sortedInvites: OrganisationMemberInviteType[] =
     invitesData?.organisationInvites
