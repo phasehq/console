@@ -680,8 +680,10 @@ export default function Members({ params }: { params: { team: string } }) {
   return (
     <section className="h-screen overflow-y-auto">
       <div className="w-full space-y-10 p-8 text-black dark:text-white">
-        <h1 className="text-2xl font-semibold">{params.team} Members</h1>
-
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold">{params.team} Members</h1>
+          <p className="text-neutral-500">Manage organisation members and roles.</p>
+        </div>
         <div className="Space-y-4">
           <div className="flex justify-end">
             {organisation && <InviteDialog organisationId={organisation.id} />}

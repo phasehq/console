@@ -868,7 +868,7 @@ export default function Members({ params }: { params: { team: string; app: strin
 
   return (
     <div className="w-full space-y-10 pt-8 text-black dark:text-white">
-      <div className="Space-y-4">
+      <div className="space-y-4">
         <div className="flex justify-end">
           <AddMemberDialog />
         </div>
