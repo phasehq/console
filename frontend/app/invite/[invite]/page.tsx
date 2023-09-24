@@ -3,7 +3,7 @@
 import { cryptoUtils } from '@/utils/auth'
 import VerifyInvite from '@/graphql/queries/organisation/validateOrganisationInvite.gql'
 import AcceptOrganisationInvite from '@/graphql/mutations/organisation/acceptInvite.gql'
-import { useMutation, useQuery } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
@@ -39,9 +39,7 @@ const InvalidInvite = () => (
 )
 
 export default function Invite({ params }: { params: { invite: string } }) {
-  const { data, loading } = useQuery(VerifyInvite, {
-    variables: { inviteId: cryptoUtils.decodeInvite(params.invite) },
-  })
+  const [verifyInvite, { data, loading }] = useLazyQuery(VerifyInvite)
 
   const [acceptInvite] = useMutation(AcceptOrganisationInvite)
 
@@ -58,6 +56,19 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const [pw2, setPw2] = useState<string>('')
   const [mnemonic, setMnemonic] = useState('')
   const [isloading, setIsLoading] = useState<boolean>(false)
+
+  useEffect(() => {
+    const handleVerifyInvite = async () => {
+      const inviteId = await cryptoUtils.decodeInvite(params.invite)
+
+      await verifyInvite({
+        variables: { inviteId },
+      })
+    }
+
+    if (params.invite) handleVerifyInvite()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.invite])
 
   const steps: Step[] = [
     {
