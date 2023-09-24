@@ -538,7 +538,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                                 </label>
                               </Listbox.Label>
                               <Listbox.Button as={Fragment} aria-required>
-                                <div className="p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md cursor-pointer h-10">
+                                <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 rounded-md border border-neutral-500/40 cursor-pointer h-10">
                                   <span className="text-black dark:text-white">
                                     {envScope
                                       .map((env: Partial<EnvironmentType>) => env.name)
@@ -561,7 +561,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                                 leaveTo="transform scale-95 opacity-0"
                               >
                                 <Listbox.Options>
-                                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
+                                  <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
                                     {envOptions.map((env: Partial<EnvironmentType>) => (
                                       <Listbox.Option key={env.id} value={env} as={Fragment}>
                                         {({ active, selected }) => (
@@ -574,7 +574,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                                             {selected ? (
                                               <FaCheckSquare className="text-emerald-500" />
                                             ) : (
-                                              <FaSquare />
+                                              <FaSquare className="text-neutral-500" />
                                             )}
                                             <span className="text-black dark:text-white">
                                               {env.name}
