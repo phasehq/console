@@ -234,8 +234,20 @@ export default function Members({ params }: { params: { team: string; app: strin
                     </Dialog.Title>
 
                     {memberOptions.length === 0 ? (
-                      <div className="p-4 text-lg">
-                        All organisation members are added to this App.
+                      <div className="py-4">
+                        <Alert variant="info" icon={true}>
+                          <p>
+                            All organisation members are added to this App. You can invite more
+                            users from the{' '}
+                            <Link
+                              className="font-semibold hover:underline"
+                              href={`/${params.team}/members`}
+                            >
+                              organisation members
+                            </Link>{' '}
+                            page.
+                          </p>
+                        </Alert>
                       </div>
                     ) : (
                       <form className="space-y-6 p-4" onSubmit={handleAddMember}>
@@ -330,7 +342,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                   </label>
                                 </Listbox.Label>
                                 <Listbox.Button as={Fragment} aria-required>
-                                  <div className="p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md cursor-pointer h-10">
+                                  <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
                                     <span className="text-black dark:text-white">
                                       {envScope
                                         .map((env: Partial<EnvironmentType>) => env.name)
@@ -353,7 +365,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                   leaveTo="transform scale-95 opacity-0"
                                 >
                                   <Listbox.Options>
-                                    <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
+                                    <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
                                       {envOptions.map((env: Partial<EnvironmentType>) => (
                                         <Listbox.Option key={env.id} value={env} as={Fragment}>
                                           {({ active, selected }) => (
@@ -387,7 +399,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                     >
                                       Sudo password
                                     </label>
-                                    <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
+                                    <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
                                       <input
                                         id="password"
                                         value={password}
@@ -396,10 +408,10 @@ export default function Members({ params }: { params: { team: string; app: strin
                                         minLength={16}
                                         required
                                         autoFocus
-                                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
+                                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
                                       />
                                       <button
-                                        className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
+                                        className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
                                         type="button"
                                         onClick={() => setShowPw(!showPw)}
                                         tabIndex={-1}
@@ -732,7 +744,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                               <Listbox.Button as={Fragment} aria-required>
                                 <div
                                   className={clsx(
-                                    'p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md h-10',
+                                    'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md h-10',
                                     memberIsAdmin ? 'cursor-not-allowed' : 'cursor-pointer'
                                   )}
                                 >
@@ -758,7 +770,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                 leaveTo="transform scale-95 opacity-0"
                               >
                                 <Listbox.Options>
-                                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
+                                  <div className="bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 p-2 rounded-md shadow-2xl absolute z-10 w-full">
                                     {envOptions.map((env: Partial<EnvironmentType>) => (
                                       <Listbox.Option key={env.id} value={env} as={Fragment}>
                                         {({ active, selected }) => (
@@ -795,7 +807,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                           >
                             Sudo password
                           </label>
-                          <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
+                          <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
                             <input
                               id="password"
                               value={password}
@@ -804,10 +816,10 @@ export default function Members({ params }: { params: { team: string; app: strin
                               minLength={16}
                               required
                               autoFocus
-                              className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
+                              className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
                             />
                             <button
-                              className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
+                              className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
                               type="button"
                               onClick={() => setShowPw(!showPw)}
                               tabIndex={-1}
