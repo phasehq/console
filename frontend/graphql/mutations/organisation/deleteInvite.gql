@@ -1,4 +1,4 @@
-mutation DeleteInvite($inviteId: ID!) {
+mutation DeleteOrgInvite($inviteId: ID!) {
   deleteInvitation(inviteId: $inviteId) {
     ok
   }
