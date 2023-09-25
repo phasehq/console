@@ -2,6 +2,7 @@
 from datetime import datetime
 import json
 from api.serializers import EnvironmentKeySerializer, SecretSerializer, ServiceTokenSerializer, UserTokenSerializer
+from api.emails import send_login_email
 from backend.graphene.utils.permissions import user_can_access_environment
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -30,22 +31,12 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from backend.api.email import send_email
+
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
 # for custom gitlab adapter class
 
-def get_client_ip(request):
-    """
-    Get client IP address from request.
-    """
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
 
 def _check_errors(response):
     #  403 error's are presented as user-facing errors
@@ -96,7 +87,7 @@ class CustomGoogleOAuth2Adapter(GoogleOAuth2Adapter):
             raise OAuth2Error("Invalid id_token") from e
         login = self.get_provider().sociallogin_from_response(request, identity_data)
         email = login.email_addresses[0]
-        
+
         if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
             try:
                 # Notify Slack
@@ -104,28 +95,8 @@ class CustomGoogleOAuth2Adapter(GoogleOAuth2Adapter):
             except Exception as e:
                 print(f"Error notifying Slack: {e}")
 
-        # Grabbing metadata
-        user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
-        ip_address = get_client_ip(request)
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        # Creating context dictionary
-        context = {
-            'auth': 'GitHub',
-            'email': email,
-            'ip': ip_address,
-            'user_agent': user_agent,
-            'timestamp': timestamp
-        }
-
         try:
-            # Calling send_email function
-            send_email(
-                'New Login Alert - Phase Console',
-                [email],
-                'backend/api/email_templates/login.html',
-                context
-            )
+            send_login_email(request, email)
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -157,7 +128,7 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
             extra_data["email"] = self.get_email(headers)
 
         email = extra_data["email"]
-        
+
         if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
             try:
                 # Notify Slack
@@ -165,30 +136,10 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
             except Exception as e:
                 print(f"Error notifying Slack: {e}")
 
-            # Grabbing metadata
-            user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
-            ip_address = get_client_ip(request)
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-            # Creating context dictionary
-            context = {
-                'auth': 'GitHub',
-                'email': email,
-                'ip': ip_address,
-                'user_agent': user_agent,
-                'timestamp': timestamp
-            }
-
-            try:
-                # Calling send_email function
-                send_email(
-                    'New Login Alert - Phase Console',
-                    [email],
-                    'backend/api/email_templates/login.html',
-                    context
-                )
-            except Exception as e:
-                print(f"Error sending email: {e}")
+        try:
+            send_login_email(request, email)
+        except Exception as e:
+            print(f"Error sending email: {e}")
 
         return self.get_provider().sociallogin_from_response(request, extra_data)
 
@@ -223,30 +174,10 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
                 except Exception as e:
                     print(f"Error notifying Slack: {e}")
 
-                # Grabbing metadata
-                user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
-                ip_address = get_client_ip(request)
-                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-                # Creating context dictionary
-                context = {
-                    'auth': 'GitLab',
-                    'email': email,
-                    'ip': ip_address,
-                    'user_agent': user_agent,
-                    'timestamp': timestamp
-                }
-
-                try:
-                    # Calling send_email function
-                    send_email(
-                        'New Login Alert - Phase Console',
-                        [email],
-                        'backend/api/email_templates/login.html',
-                        context
-                    )
-                except Exception as e:
-                    print(f"Error sending email: {e}")
+        try:
+            send_login_email(request, email)
+        except Exception as e:
+            print(f"Error sending email: {e}")
 
         return login
 
