@@ -21,7 +21,6 @@ export default function RootLayout({
     useContext(organisationContext)
 
   useEffect(() => {
-    console.log(activeOrganisation, params.team)
     if (organisations.length > 0 && activeOrganisation!.name !== params.team) {
       const altOrg = organisations.find((org) => org.name === params.team)
 

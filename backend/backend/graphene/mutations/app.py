@@ -138,13 +138,11 @@ class AddAppMemberMutation(graphene.Mutation):
 
         org_member = OrganisationMember.objects.get(
             id=member_id, deleted_at=None)
-        if org_member in app.members.all():
-            raise GraphQLError("This user already has access to this app")
-        else:
-            app.members.add(org_member)
-            for key in env_keys:
-                EnvironmentKey.objects.create(
-                    environment_id=key.env_id, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt, identity_key=key.identity_key)
+
+        app.members.add(org_member)
+        for key in env_keys:
+            EnvironmentKey.objects.create(
+                environment_id=key.env_id, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt, identity_key=key.identity_key)
 
         return AddAppMemberMutation(app=app)
 

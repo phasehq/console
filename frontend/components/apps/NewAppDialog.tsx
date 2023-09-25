@@ -1,9 +1,9 @@
-import { cryptoUtils } from '@/utils/auth'
+import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { getLocalKeyring } from '@/utils/localStorage'
 import { Dialog, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
-import { Fragment, ReactNode, useEffect, useState } from 'react'
+import { Fragment, ReactNode, useContext, useEffect, useState } from 'react'
 import { FaCopy, FaCross, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
@@ -17,6 +17,7 @@ import {
 } from '@/apollo/graphql'
 import { splitSecret } from '@/utils/keyshares'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
+import { KeyringContext } from '@/contexts/keyringContext'
 
 const FREE_APP_LIMIT = 5
 const PRO_APP_LIMIT = 10
@@ -44,6 +45,8 @@ export default function NewAppDialog(props: {
     variant: 'primary',
   }
 
+  const { keyring, setKeyring } = useContext(KeyringContext)
+
   const complete = () => appId && appSecret
 
   const reset = () => {
@@ -67,6 +70,21 @@ export default function NewAppDialog(props: {
     toast.info('Copied')
   }
 
+  const validateKeyring = async (password: string) => {
+    return new Promise<OrganisationKeyring>(async (resolve) => {
+      if (keyring) resolve(keyring)
+      else {
+        const decryptedKeyring = await cryptoUtils.getKeyring(
+          session?.user?.email!,
+          organisation!.id,
+          password
+        )
+        setKeyring(decryptedKeyring)
+        resolve(decryptedKeyring)
+      }
+    })
+  }
+
   const handleCreateApp = async () => {
     const APP_VERSION = 1
 
@@ -78,18 +96,8 @@ export default function NewAppDialog(props: {
         const id = crypto.randomUUID()
 
         try {
-          const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
-          const encryptedKeyring = getLocalKeyring(session?.user?.email!, organisation.id)
-          if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
-          const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(
-            encryptedKeyring!,
-            deviceKey
-          )
-          if (!decryptedKeyring) throw 'Failed to decrypt keys'
-          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(
-            appSeed,
-            decryptedKeyring.symmetricKey
-          )
+          const keyring = await validateKeyring(pw)
+          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(appSeed, keyring.symmetricKey)
           const appKeys = await cryptoUtils.appKeyring(appSeed)
           const appKeyShares = await splitSecret(appKeys.privateKey)
 
@@ -121,6 +129,7 @@ export default function NewAppDialog(props: {
           setAppId(`phApp:v${APP_VERSION}:${appKeys.publicKey}`)
 
           resolve(true)
+          closeModal()
         } catch (error) {
           reject(error)
         }
@@ -235,33 +244,35 @@ export default function NewAppDialog(props: {
                           />
                         </div>
 
-                        <div className="flex flex-col justify-center max-w-md mx-auto">
-                          <label
-                            className="block text-gray-700 text-sm font-bold mb-2"
-                            htmlFor="password"
-                          >
-                            Sudo password
-                          </label>
-                          <div className="relative">
-                            <input
-                              id="password"
-                              value={pw}
-                              onChange={(e) => setPw(e.target.value)}
-                              type={showPw ? 'text' : 'password'}
-                              minLength={16}
-                              required
-                              className="w-full "
-                            />
-                            <button
-                              className="absolute inset-y-0 right-4"
-                              type="button"
-                              onClick={() => setShowPw(!showPw)}
-                              tabIndex={-1}
+                        {!keyring && (
+                          <div className="flex flex-col justify-center max-w-md mx-auto">
+                            <label
+                              className="block text-gray-700 text-sm font-bold mb-2"
+                              htmlFor="password"
                             >
-                              {showPw ? <FaEyeSlash /> : <FaEye />}
-                            </button>
+                              Sudo password
+                            </label>
+                            <div className="relative">
+                              <input
+                                id="password"
+                                value={pw}
+                                onChange={(e) => setPw(e.target.value)}
+                                type={showPw ? 'text' : 'password'}
+                                minLength={16}
+                                required
+                                className="w-full "
+                              />
+                              <button
+                                className="absolute inset-y-0 right-4"
+                                type="button"
+                                onClick={() => setShowPw(!showPw)}
+                                tabIndex={-1}
+                              >
+                                {showPw ? <FaEyeSlash /> : <FaEye />}
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
 
                       <div className="mt-8 flex items-center w-full justify-between">

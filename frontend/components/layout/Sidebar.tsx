@@ -1,10 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import UserMenu from '../UserMenu'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { FaCog, FaCubes, FaHome, FaUsersCog } from 'react-icons/fa'
+import { FaCog, FaCubes, FaHome, FaKey, FaUsersCog } from 'react-icons/fa'
 
 export type SidebarLinkT = {
   name: string
@@ -54,6 +53,12 @@ const Sidebar = () => {
       active: usePathname() === `/${team}/members`,
     },
     {
+      name: 'Tokens',
+      href: `/${team}/tokens`,
+      icon: <FaKey size="20" />,
+      active: usePathname() === `/${team}/tokens`,
+    },
+    {
       name: 'Settings',
       href: `/${team}/settings`,
       icon: <FaCog size="20" />,
@@ -64,7 +69,7 @@ const Sidebar = () => {
   return (
     <nav className="h-screen flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between pt-20 bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
       <div className="gap-4 p-4 grid grid-cols-1">
-        {links.slice(0, 3).map((link) => (
+        {links.slice(0, 4).map((link) => (
           <SidebarLink
             key={link.name}
             name={link.name}
@@ -77,11 +82,11 @@ const Sidebar = () => {
       <div className="p-4">
         {
           <SidebarLink
-            key={links[3].name}
-            name={links[3].name}
-            href={links[3].href}
-            icon={links[3].icon}
-            active={links[3].active}
+            key={links[4].name}
+            name={links[4].name}
+            href={links[4].href}
+            icon={links[4].icon}
+            active={links[4].active}
           />
         }
       </div>

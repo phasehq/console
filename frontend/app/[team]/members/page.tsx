@@ -3,10 +3,13 @@
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import GetApps from '@/graphql/queries/getApps.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import InviteMember from '@/graphql/mutations/organisation/inviteNewMember.gql'
-import DeleteInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
+import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
 import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
+import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import {
@@ -14,17 +17,16 @@ import {
   OrganisationMemberType,
   AppType,
   ApiOrganisationMemberRoleChoices,
+  EnvironmentType,
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
-import { Dialog, Listbox, RadioGroup, Transition } from '@headlessui/react'
+import { Dialog, Listbox, Transition } from '@headlessui/react'
 import {
   FaCheckSquare,
   FaChevronDown,
-  FaCircle,
   FaCopy,
-  FaDotCircle,
   FaPlus,
   FaSquare,
   FaTimes,
@@ -39,6 +41,9 @@ import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { userIsAdmin } from '@/utils/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { KeyringContext } from '@/contexts/keyringContext'
+import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
+import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -52,25 +57,114 @@ const inviteIsExpired = (invite: OrganisationMemberInviteType) => {
 const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const { member } = props
 
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+  const { keyring } = useContext(KeyringContext)
+
+  const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
+    variables: { organisationId: organisation!.id, appId: '' },
+  })
+  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
+  const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
   const [updateRole] = useMutation(UpdateMemberRole)
+  const [addMemberToApp] = useMutation(AddMemberToApp)
 
   const [role, setRole] = useState<string>(member.role)
 
   const isOwner = role.toLowerCase() === 'owner'
 
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+
+  /**
+   * Handles the upgrade of a user from 'dev' to 'admin'.
+   * Env keys for all apps, are fetched and decrypted by the active user, then each key is re-encrypted for the new user and saved on the backend via the addMemberToApp mutation
+   *
+   * @returns {void}
+   */
+  const upgradeDevToAdmin = () => {
+    if (appsData) {
+      const apps = appsData.apps
+
+      // Function to process an individual app
+      const processApp = async (app: AppType) => {
+        //const keyring = await validateKeyring(password);
+        const { data: appEnvsData } = await getAppEnvs({ variables: { appId: app.id } })
+
+        const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
+
+        const envKeyPromises = appEnvironments.map(async (env: EnvironmentType) => {
+          const { data } = await getEnvKey({
+            variables: {
+              envId: env.id,
+            },
+          })
+
+          const {
+            wrappedSeed: userWrappedSeed,
+            wrappedSalt: userWrappedSalt,
+            identityKey,
+          } = data.environmentKeys[0]
+
+          const { seed, salt } = await unwrapEnvSecretsForUser(
+            userWrappedSeed,
+            userWrappedSalt,
+            keyring!
+          )
+
+          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForUser({ seed, salt }, member)
+
+          return {
+            envId: env.id,
+            userId: member.id,
+            identityKey,
+            wrappedSeed,
+            wrappedSalt,
+          }
+        })
+
+        const envKeyInputs = await Promise.all(envKeyPromises)
+
+        await addMemberToApp({
+          variables: { memberId: member.id, appId: app.id, envKeys: envKeyInputs },
+        })
+      }
+
+      // Process each app sequentially
+      const processAppsSequentially = async () => {
+        for (const app of apps) {
+          await processApp(app)
+        }
+      }
+
+      // Call the function to process all apps sequentially
+      processAppsSequentially()
+        .then(async () => {
+          // All apps have been processed
+          await updateRole({
+            variables: {
+              memberId: member.id,
+              role: 'admin',
+            },
+          })
+          toast.success('Updated member role', { autoClose: 2000 })
+        })
+        .catch((error) => {
+          console.error('Error processing apps:', error)
+        })
+    }
+  }
 
   const handleUpdateRole = async (newRole: string) => {
     setRole(newRole)
-    await updateRole({
-      variables: {
-        memberId: member.id,
-        role: newRole,
-      },
-    })
-    toast.success('Updated member role', { autoClose: 2000 })
+    if (newRole.toLowerCase() === 'admin') upgradeDevToAdmin()
+    else {
+      await updateRole({
+        variables: {
+          memberId: member.id,
+          role: newRole,
+        },
+      })
+      toast.success('Updated member role', { autoClose: 2000 })
+    }
   }
 
   const roleOptions = Object.keys(ApiOrganisationMemberRoleChoices).filter(
@@ -82,64 +176,50 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   return disabled ? (
     <RoleLabel role={role} />
   ) : (
-    <Listbox disabled={disabled} value={role} onChange={handleUpdateRole}>
-      {({ open }) => (
-        <>
-          <Listbox.Button as={Fragment} aria-required>
-            <div
-              className={clsx(
-                'p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md h-10',
-                disabled ? 'cursor-not-allowed' : 'cursor-pointer'
-              )}
-            >
-              <span
+    <div className="space-y-1 w-full relative">
+      <Listbox disabled={disabled} value={role} onChange={handleUpdateRole}>
+        {({ open }) => (
+          <>
+            <Listbox.Button as={Fragment} aria-required>
+              <div
                 className={clsx(
-                  'capitalize',
-                  disabled ? 'text-neutral-500' : 'text-black dark:text-white'
+                  'p-2 flex items-center justify-between  rounded-md h-10',
+                  disabled ? 'cursor-not-allowed' : 'cursor-pointer'
                 )}
               >
-                {role.toLowerCase()}
-              </span>
-              {!disabled && (
-                <FaChevronDown
-                  className={clsx(
-                    'transition-transform ease duration-300 text-neutral-500',
-                    open ? 'rotate-180' : 'rotate-0'
-                  )}
-                />
-              )}
-            </div>
-          </Listbox.Button>
-          <Transition
-            enter="transition duration-100 ease-out"
-            enterFrom="transform scale-95 opacity-0"
-            enterTo="transform scale-100 opacity-100"
-            leave="transition duration-75 ease-out"
-            leaveFrom="transform scale-100 opacity-100"
-            leaveTo="transform scale-95 opacity-0"
-          >
+                <RoleLabel role={role} />
+                {!disabled && (
+                  <FaChevronDown
+                    className={clsx(
+                      'transition-transform ease duration-300 text-neutral-500',
+                      open ? 'rotate-180' : 'rotate-0'
+                    )}
+                  />
+                )}
+              </div>
+            </Listbox.Button>
             <Listbox.Options>
-              <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-20 w-full">
+              <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
                 {roleOptions.map((role: string) => (
                   <Listbox.Option key={role} value={role} as={Fragment}>
                     {({ active, selected }) => (
                       <div
                         className={clsx(
-                          'flex items-center gap-2 p-2 cursor-pointer',
-                          active && 'font-semibold'
+                          'flex items-center gap-2 p-2 cursor-pointer rounded-full',
+                          active && 'bg-zinc-400 dark:bg-zinc-700'
                         )}
                       >
-                        <span className="text-black dark:text-white">{role}</span>
+                        <RoleLabel role={role} />
                       </div>
                     )}
                   </Listbox.Option>
                 ))}
               </div>
             </Listbox.Options>
-          </Transition>
-        </>
-      )}
-    </Listbox>
+          </>
+        )}
+      </Listbox>
+    </div>
   )
 }
 
@@ -307,7 +387,7 @@ const InviteDialog = (props: { organisationId: string }) => {
 
                             <div className="space-y-2">
                               <label className="block text-gray-700 text-sm font-bold mb-2">
-                                App access
+                                App access (optional)
                               </label>
 
                               <div className="flex flex-wrap gap-4">
@@ -366,7 +446,7 @@ const InviteDialog = (props: { organisationId: string }) => {
 export default function Members({ params }: { params: { team: string } }) {
   const [getMembers, { data: membersData }] = useLazyQuery(GetOrganisationMembers)
   const [getInvites, { data: invitesData }] = useLazyQuery(GetInvites)
-  const [deleteInvite] = useMutation(DeleteInvite)
+  const [deleteInvite] = useMutation(DeleteOrgInvite)
 
   const sortedInvites: OrganisationMemberInviteType[] =
     invitesData?.organisationInvites
@@ -600,8 +680,10 @@ export default function Members({ params }: { params: { team: string } }) {
   return (
     <section className="h-screen overflow-y-auto">
       <div className="w-full space-y-10 p-8 text-black dark:text-white">
-        <h1 className="text-2xl font-semibold">{params.team} Members</h1>
-
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold">{params.team} Members</h1>
+          <p className="text-neutral-500">Manage organisation members and roles.</p>
+        </div>
         <div className="Space-y-4">
           <div className="flex justify-end">
             {organisation && <InviteDialog organisationId={organisation.id} />}
@@ -634,7 +716,9 @@ export default function Members({ params }: { params: { team: string } }) {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <RoleSelector member={member} />
+                    <div>
+                      <RoleSelector member={member} />
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap capitalize">
                     {relativeTimeFromDates(new Date(member.createdAt))}
@@ -698,6 +782,9 @@ export default function Members({ params }: { params: { team: string } }) {
           </table>
         </div>
       </div>
+      {activeUserIsAdmin && organisation && (
+        <UnlockKeyringDialog organisationId={organisation.id} />
+      )}
     </section>
   )
 }

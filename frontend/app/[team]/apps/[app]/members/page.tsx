@@ -24,10 +24,8 @@ import {
   FaTimes,
   FaUserCog,
   FaUserTimes,
-  FaUsersCog,
 } from 'react-icons/fa'
 import clsx from 'clsx'
-import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
@@ -36,6 +34,8 @@ import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environm
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { userIsAdmin } from '@/utils/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { Alert } from '@/components/common/Alert'
+import Link from 'next/link'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppMembers, { variables: { appId: params.app } })
@@ -234,8 +234,20 @@ export default function Members({ params }: { params: { team: string; app: strin
                     </Dialog.Title>
 
                     {memberOptions.length === 0 ? (
-                      <div className="p-4 text-lg">
-                        All organisation members are added to this App.
+                      <div className="py-4">
+                        <Alert variant="info" icon={true}>
+                          <p>
+                            All organisation members are added to this App. You can invite more
+                            users from the{' '}
+                            <Link
+                              className="font-semibold hover:underline"
+                              href={`/${params.team}/members`}
+                            >
+                              organisation members
+                            </Link>{' '}
+                            page.
+                          </p>
+                        </Alert>
                       </div>
                     ) : (
                       <form className="space-y-6 p-4" onSubmit={handleAddMember}>
@@ -330,7 +342,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                   </label>
                                 </Listbox.Label>
                                 <Listbox.Button as={Fragment} aria-required>
-                                  <div className="p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md cursor-pointer h-10">
+                                  <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
                                     <span className="text-black dark:text-white">
                                       {envScope
                                         .map((env: Partial<EnvironmentType>) => env.name)
@@ -353,7 +365,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                   leaveTo="transform scale-95 opacity-0"
                                 >
                                   <Listbox.Options>
-                                    <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
+                                    <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
                                       {envOptions.map((env: Partial<EnvironmentType>) => (
                                         <Listbox.Option key={env.id} value={env} as={Fragment}>
                                           {({ active, selected }) => (
@@ -387,7 +399,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                     >
                                       Sudo password
                                     </label>
-                                    <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
+                                    <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
                                       <input
                                         id="password"
                                         value={password}
@@ -396,10 +408,10 @@ export default function Members({ params }: { params: { team: string; app: strin
                                         minLength={16}
                                         required
                                         autoFocus
-                                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
+                                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
                                       />
                                       <button
-                                        className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
+                                        className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
                                         type="button"
                                         onClick={() => setShowPw(!showPw)}
                                         tabIndex={-1}
@@ -558,6 +570,8 @@ export default function Members({ params }: { params: { team: string; app: strin
     const [password, setPassword] = useState<string>('')
     const [showPw, setShowPw] = useState<boolean>(false)
 
+    const memberIsAdmin = userIsAdmin(props.member.role) || false
+
     const closeModal = () => {
       setIsOpen(false)
     }
@@ -699,8 +713,11 @@ export default function Members({ params }: { params: { team: string; app: strin
                       </Button>
                     </Dialog.Title>
 
-                    <form className="space-y-6 p-4" onSubmit={handleUpdateScope}>
-                      <div className="space-y-1 w-full relative pb-8">
+                    <form
+                      className={clsx('space-y-6 p-4', memberIsAdmin && 'opacity-60')}
+                      onSubmit={handleUpdateScope}
+                    >
+                      <div className="space-y-1 w-full relative">
                         {envScope.length === 0 && showEnvHint && (
                           <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
                             Select an environment scope
@@ -712,6 +729,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                           onChange={setEnvScope}
                           multiple
                           name="environments"
+                          disabled={memberIsAdmin}
                         >
                           {({ open }) => (
                             <>
@@ -724,7 +742,12 @@ export default function Members({ params }: { params: { team: string; app: strin
                                 </label>
                               </Listbox.Label>
                               <Listbox.Button as={Fragment} aria-required>
-                                <div className="p-2 flex items-center justify-between bg-zinc-300 dark:bg-zinc-800 rounded-md cursor-pointer h-10">
+                                <div
+                                  className={clsx(
+                                    'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md h-10',
+                                    memberIsAdmin ? 'cursor-not-allowed' : 'cursor-pointer'
+                                  )}
+                                >
                                   <span className="text-black dark:text-white">
                                     {envScope
                                       .map((env: Partial<EnvironmentType>) => env.name)
@@ -747,7 +770,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                 leaveTo="transform scale-95 opacity-0"
                               >
                                 <Listbox.Options>
-                                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
+                                  <div className="bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 p-2 rounded-md shadow-2xl absolute z-10 w-full">
                                     {envOptions.map((env: Partial<EnvironmentType>) => (
                                       <Listbox.Option key={env.id} value={env} as={Fragment}>
                                         {({ active, selected }) => (
@@ -772,47 +795,63 @@ export default function Members({ params }: { params: { team: string; app: strin
                                   </div>
                                 </Listbox.Options>
                               </Transition>
-
-                              {!keyring && (
-                                <div className="space-y-2 w-full">
-                                  <label
-                                    className="block text-gray-700 text-sm font-bold mb-2"
-                                    htmlFor="password"
-                                  >
-                                    Sudo password
-                                  </label>
-                                  <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-sm p-px">
-                                    <input
-                                      id="password"
-                                      value={password}
-                                      onChange={(e) => setPassword(e.target.value)}
-                                      type={showPw ? 'text' : 'password'}
-                                      minLength={16}
-                                      required
-                                      autoFocus
-                                      className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800"
-                                    />
-                                    <button
-                                      className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500"
-                                      type="button"
-                                      onClick={() => setShowPw(!showPw)}
-                                      tabIndex={-1}
-                                    >
-                                      {showPw ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
                             </>
                           )}
                         </Listbox>
                       </div>
+                      {!keyring && !memberIsAdmin && (
+                        <div className="space-y-2 w-full">
+                          <label
+                            className="block text-gray-700 text-sm font-bold mb-2"
+                            htmlFor="password"
+                          >
+                            Sudo password
+                          </label>
+                          <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
+                            <input
+                              id="password"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              type={showPw ? 'text' : 'password'}
+                              minLength={16}
+                              required
+                              autoFocus
+                              className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
+                            />
+                            <button
+                              className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
+                              type="button"
+                              onClick={() => setShowPw(!showPw)}
+                              tabIndex={-1}
+                            >
+                              {showPw ? <FaEyeSlash /> : <FaEye />}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {memberIsAdmin && (
+                        <Alert variant="info" icon={true}>
+                          <p>
+                            This user is an <RoleLabel role="admin" />, and has access to all
+                            environments in this App. To restrict their access, change their role to{' '}
+                            <RoleLabel role="dev" /> from the{' '}
+                            <Link
+                              className="font-semibold hover:underline"
+                              href={`/${params.team}/members`}
+                            >
+                              organisation members
+                            </Link>{' '}
+                            page.
+                          </p>
+                        </Alert>
+                      )}
 
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>
                           Cancel
                         </Button>
-                        <Button variant="primary" type="submit">
+                        <Button variant="primary" type="submit" disabled={memberIsAdmin}>
                           Save
                         </Button>
                       </div>
@@ -829,7 +868,7 @@ export default function Members({ params }: { params: { team: string; app: strin
 
   return (
     <div className="w-full space-y-10 pt-8 text-black dark:text-white">
-      <div className="Space-y-4">
+      <div className="space-y-4">
         <div className="flex justify-end">
           <AddMemberDialog />
         </div>
