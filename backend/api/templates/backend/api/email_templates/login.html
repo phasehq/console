@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>New Login Alert</title>
+    <style>
+        body {
+            background-color: #18181b;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .logo {
+            width: 24px;
+            height: 24px;
+        }
+        .content {
+            text-align: left;
+            padding-top: 20px;
+        }
+        table.centered {
+            margin-left: auto;
+            margin-right: auto;
+        }
+        th, td {
+            padding: 10px;
+        }
+        table.details {
+            border-collapse: collapse;
+            border: 2px solid white;
+        }
+        table.details th, table.details td {
+            border: 1px solid white;
+        }
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .footer a {
+            color: #148862;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <table class="centered">
+        <tr>
+            <td>
+                <svg class="logo" width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M22 146.495C85.6927 18.9856 85.313 24.9378 116.746 147.947C149.419 269.955 204 155.947 204 147.947" stroke="white" stroke-opacity="0.2" stroke-width="4"></path>
+                  <path d="M36 147.947C99.6927 20.4374 100.313 24.9377 131.746 147.947C164.419 269.955 219 155.947 219 147.947" stroke="white" stroke-opacity="0.5" stroke-width="4"></path>
+                  <path d="M20 146.995C23.5834 146.995 165.493 146.995 236 146.995" stroke="white" stroke-width="4"></path>
+                  <path d="M52 145.995C115.693 18.4856 115.313 24.9377 146.746 147.947C179.419 269.955 234 155.947 234 147.947" stroke="#F2FF26" stroke-width="4"></path>
+                  <line x1="48" y1="145.995" x2="57" y2="145.995" stroke="white" stroke-width="2"></line>
+                  <line x1="228" y1="147.995" x2="236" y2="147.995" stroke="white" stroke-width="2"></line>
+                </svg>
+            </td>
+            <td>
+                <h2>Login alert</h2>
+            </td>
+        </tr>
+    </table>
+    <div class="content">
+        <p>You have logged into the <strong>Phase Console</strong> via <strong>{{ auth }}</strong> on <strong>{{ email }}</strong>.</p>
+        <br>
+        <table class="details">
+            <tr>
+                <td>IP address:</td>
+                <td><strong>{{ ip }}</strong></td>
+            </tr>
+            <tr>
+                <td>User Agent:</td>
+                <td><strong>{{ user_agent }}</strong></td>
+            </tr>
+            <tr>
+                <td>Timestamp:</td>
+                <td><strong>{{ timestamp }}</strong></td>
+            </tr>
+        </table>
+        <br>
+        <p>If this wasn't you, please check your account security or contact support.</p>
+    </div>
+    <div class="footer">
+        <a href="https://phase.dev">Phase</a> | 
+        <a href="https://docs.phase.dev">Docs</a> | 
+        <a href="https://github.com/phasehq/console">GitHub</a> | 
+        <a href="https://slack.phase.dev">Slack</a>
+    </div>
+</body>
+</html>
