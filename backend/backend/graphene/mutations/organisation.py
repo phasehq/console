@@ -43,7 +43,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, org_id, email, apps, role):
-        if user_is_admin(info.context.user, org_id):
+        if user_is_org_member(info.context.user, org_id):
             user_already_exists = OrganisationMember.objects.filter(
                 organisation_id=org_id, user__email=email, deleted_at=None).exists()
             if user_already_exists:
