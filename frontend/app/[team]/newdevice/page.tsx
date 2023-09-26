@@ -51,7 +51,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
 
   useEffect(() => {
     if (org) {
-      setRecoveryRequired(org.keyring === null)
+      setRecoveryRequired(org.keyring === null || org.keyring === '')
     }
   }, [org])
 
@@ -196,14 +196,21 @@ export default function NewDevice({ params }: { params: { team: string } }) {
                 <Stepper steps={steps} activeStep={step} />
               </div>
             )}
-            {step === 0 && recoveryRequired ? (
+
+            {step === 0 && recoveryRequired && (
               <AccountSeedChecker
                 mnemonic={''}
                 inputs={inputs}
                 updateInputs={handleInputUpdate}
                 required={true}
               />
-            ) : (
+            )}
+
+            {step === 1 && recoveryRequired && (
+              <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />
+            )}
+
+            {!recoveryRequired && (
               <div className="flex flex-col gap-12">
                 <div className="space-y-1 w-full max-w-md mx-auto">
                   <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
@@ -241,7 +248,6 @@ export default function NewDevice({ params }: { params: { team: string } }) {
                 </div>
               </div>
             )}
-            {step === 1 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
             <div className="flex justify-between w-full">
               <div>
                 {step !== 0 && (
