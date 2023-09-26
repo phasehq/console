@@ -82,7 +82,7 @@ class DeleteInviteMutation(graphene.Mutation):
     def mutate(cls, rooot, info, invite_id):
         invite = OrganisationMemberInvite.objects.get(id=invite_id)
 
-        if user_is_admin(info.context.user, invite.organisation.id):
+        if user_is_org_member(info.context.user, invite.organisation.id):
             invite.delete()
 
             return DeleteInviteMutation(ok=True)
