@@ -17,7 +17,8 @@ export const getLocalOrgs = () => {
 export const setLocalKeyring = (org: LocalOrganisation) => {
   let localOrgs: LocalOrganisation[] = getLocalOrgs() || []
   // Org already exists locally
-  if (localOrgs.find((orgData) => orgData.email === org.email)) return
+  if (localOrgs.find((orgData) => orgData.email === org.email && orgData.org.id === org.org.id))
+    return
   // Add Org to local storage
   else {
     localOrgs.push(org)
