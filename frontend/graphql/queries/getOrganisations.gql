@@ -7,5 +7,6 @@ query GetOrganisations {
     plan
     role
     memberId
+    keyring
   }
 }

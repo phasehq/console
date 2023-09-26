@@ -1,18 +1,21 @@
 import { OrganisationType } from '@/apollo/graphql'
 import { createContext, useEffect, useState } from 'react'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
-import { useQuery } from '@apollo/client'
+import { useLazyQuery, useQuery } from '@apollo/client'
+import { useSession } from 'next-auth/react'
 
 interface OrganisationContextValue {
   activeOrganisation: OrganisationType | null
-  organisations: OrganisationType[]
+  organisations: OrganisationType[] | null
   setActiveOrganisation: (organisation: OrganisationType) => void
+  loading: boolean
 }
 
 export const organisationContext = createContext<OrganisationContextValue>({
   activeOrganisation: null,
-  organisations: [],
+  organisations: null,
   setActiveOrganisation: () => {},
+  loading: true,
 })
 
 interface OrganisationProviderProps {
@@ -20,22 +23,37 @@ interface OrganisationProviderProps {
 }
 
 export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ children }) => {
-  const { data: orgsData } = useQuery(GetOrganisations)
+  const [getOrgs, { data: orgsData, loading: queryLoading }] = useLazyQuery(GetOrganisations)
+
+  const { data: session } = useSession()
 
   const [organisation, setOrganisation] = useState<OrganisationType | null>(null)
+  const [organisations, setOrganisations] = useState<OrganisationType[] | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
-    if (organisation === null && orgsData) {
+    if (session?.user?.email) getOrgs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
+
+  useEffect(() => {
+    if (organisation === null && orgsData?.organisations.length > 0) {
+      setOrganisations(orgsData.organisations)
       setOrganisation(orgsData.organisations[0])
     }
   }, [organisation, orgsData])
+
+  useEffect(() => {
+    setLoading(queryLoading)
+  }, [queryLoading])
 
   return (
     <organisationContext.Provider
       value={{
         activeOrganisation: organisation,
-        organisations: orgsData?.organisations ?? [],
+        organisations,
         setActiveOrganisation: setOrganisation,
+        loading,
       }}
     >
       {children}
