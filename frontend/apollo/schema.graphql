@@ -27,6 +27,7 @@ type OrganisationType {
   plan: ApiOrganisationPlanChoices!
   role: String
   memberId: ID
+  keyring: String
 }
 
 """

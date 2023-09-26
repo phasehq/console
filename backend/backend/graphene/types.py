@@ -10,11 +10,12 @@ from allauth.socialaccount.models import SocialAccount
 class OrganisationType(DjangoObjectType):
     role = graphene.String()
     member_id = graphene.ID()
+    keyring = graphene.String()
 
     class Meta:
         model = Organisation
         fields = ('id', 'name', 'identity_key',
-                  'created_at', 'plan', 'role', 'member_id')
+                  'created_at', 'plan', 'role', 'member_id', 'keyring')
 
     def resolve_role(self, info):
         org_member = OrganisationMember.objects.get(
@@ -25,6 +26,11 @@ class OrganisationType(DjangoObjectType):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self, deleted_at=None)
         return org_member.id
+
+    def resolve_keyring(self, info):
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=self, deleted_at=None)
+        return org_member.wrapped_keyring
 
 
 class OrganisationMemberType(DjangoObjectType):
