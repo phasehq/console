@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
 import Loading from './loading'
 import { OrganisationType } from '@/apollo/graphql'
-import { getLocalOrgs } from '@/utils/localStorage'
+import { getLocalKeyrings } from '@/utils/localStorage'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
@@ -23,7 +23,7 @@ export default function Home() {
   const [showOrgCards, setShowOrgCards] = useState<boolean>(false)
 
   const handleRouteToOrg = (org: OrganisationType) => {
-    const localOrgs = getLocalOrgs()
+    const localOrgs = getLocalKeyrings()
 
     if (
       localOrgs?.find(
@@ -38,7 +38,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading && organisations !== null) {
-      const localOrgs = getLocalOrgs()
+      const localOrgs = getLocalKeyrings()
 
       // if there is no org setup on the server, send to onboarding page
       if (organisations.length === 0) router.push('/onboard')
