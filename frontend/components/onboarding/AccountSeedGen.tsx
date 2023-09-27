@@ -14,7 +14,7 @@ export const AccountSeedGen = (props: { mnemonic: string }) => {
       <div className="col-span-6 flex justify-end items-center mb-8">
         <Button
           variant={'outline'}
-          title="Save your account recovery as a text file"
+          title="Copy recovery phrase to the clipboard"
           onClick={handleCopyClick}
           type="button"
         >

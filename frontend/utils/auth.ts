@@ -288,6 +288,25 @@ export namespace cryptoUtils {
   }
 
   /**
+   * Decrypts an Account recovery phrase
+   *
+   * @param encryptedRecovery - Hex encoded encrypted recovery phrase
+   * @param key - Hex encoded decryption key
+   * @returns {string}
+   */
+  export const decryptAccountRecovery = async (encryptedRecovery: string, key: string) => {
+    await _sodium.ready
+    const sodium = _sodium
+
+    const ciphertextBytes = sodium.from_hex(encryptedRecovery)
+    const keyBytes = sodium.from_hex(key)
+
+    const plaintextBytes = await decryptRaw(ciphertextBytes, keyBytes)
+    const plaintext = sodium.to_string(plaintextBytes)
+    return plaintext
+  }
+
+  /**
    * Create a random seed for a new app
    *
    * @returns {Promise<string>} - hex encoded app seed

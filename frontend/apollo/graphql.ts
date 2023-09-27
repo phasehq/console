@@ -508,6 +508,7 @@ export type OrganisationType = {
   memberId?: Maybe<Scalars['ID']>;
   name: Scalars['String'];
   plan: ApiOrganisationPlanChoices;
+  recovery?: Maybe<Scalars['String']>;
   role?: Maybe<Scalars['String']>;
 };
 

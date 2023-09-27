@@ -8,5 +8,6 @@ query GetOrganisations {
     role
     memberId
     keyring
+    recovery
   }
 }

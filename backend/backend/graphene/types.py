@@ -11,6 +11,7 @@ class OrganisationType(DjangoObjectType):
     role = graphene.String()
     member_id = graphene.ID()
     keyring = graphene.String()
+    recovery = graphene.String()
 
     class Meta:
         model = Organisation

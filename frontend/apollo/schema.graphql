@@ -28,6 +28,7 @@ type OrganisationType {
   role: String
   memberId: ID
   keyring: String
+  recovery: String
 }
 
 """
