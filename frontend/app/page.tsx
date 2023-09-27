@@ -9,6 +9,9 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
 import { useSession } from 'next-auth/react'
+import { HeroPattern } from '@/components/common/HeroPattern'
+import { Logo } from '@/components/common/Logo'
+import { RoleLabel } from '@/components/users/RoleLabel'
 
 export default function Home() {
   const router = useRouter()
@@ -66,19 +69,37 @@ export default function Home() {
     <main className="w-full flex flex-col h-screen">
       {loading && <Loading />}
       {showOrgCards && (
-        <div className="mx-auto my-auto space-y-6">
-          {organisations!.map((org: OrganisationType) => (
-            <div
-              key={org.id}
-              className="p-8 bg-zinc-200 dark:bg-zinc-800 rounded-md flex flex-col gap-2 text-center"
-            >
-              <div className="text-3xl font-bold">{org.name}</div>
-              <Button variant="primary" onClick={() => handleRouteToOrg(org)}>
-                Go to dashboard <FaArrowRight />
-              </Button>
+        <>
+          <HeroPattern />
+
+          <div className="mx-auto my-auto space-y-6 divide-y divide-neutral-500/40 rounded-md bg-zinc-200 dark:bg-zinc-800 text-center">
+            <div className="space-y-2 p-8">
+              <div className="flex justify-center">
+                <Logo boxSize={80} />
+              </div>
+              <p className="text-xl font-semibold text-neutral-500">Choose a workspace</p>
             </div>
-          ))}
-        </div>
+            <div className="divide-y divide-neutral-500/40">
+              {organisations!.map((org: OrganisationType) => (
+                <div
+                  key={org.id}
+                  className="p-8 bg-zinc-200 dark:bg-zinc-800 flex flex-col gap-2 text-center"
+                >
+                  <h2 className="text-3xl font-bold">{org.name}</h2>
+                  <div className="text-neutral-500">
+                    You are {org.role!.toLowerCase() === 'dev' ? 'a' : 'an'}{' '}
+                    <RoleLabel role={org.role!} /> in this organisation
+                  </div>
+                  <div className="pt-4">
+                    <Button variant="primary" onClick={() => handleRouteToOrg(org)}>
+                      Go to dashboard <FaArrowRight />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </main>
   )
