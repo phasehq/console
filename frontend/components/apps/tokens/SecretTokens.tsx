@@ -837,27 +837,6 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
 
   return (
     <div className="space-y-6 pb-6 divide-y-2 divide-neutral-500/40">
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-2xl font-semibold border-neutral-500/40">User tokens</h3>
-          <p className="text-neutral-500">
-            Tokens used to authenticate with the CLI from personal devices. Used for development and
-            manual configuration.
-          </p>
-        </div>
-        <div className="space-y-2 divide-y divide-neutral-500/50">
-          {userTokensData?.userTokens.map((userToken: UserTokenType) => (
-            <CreatedToken
-              key={userToken.id}
-              token={userToken}
-              deleteHandler={handleDeleteUserToken}
-            />
-          ))}
-        </div>
-
-        <CreateUserTokenDialog organisationId={organisationId} />
-      </div>
-
       {activeUserIsAdmin && (
         <div className="space-y-4 py-4">
           <div>
@@ -880,6 +859,27 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
         </div>
       )}
+
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-2xl font-semibold border-neutral-500/40">User tokens</h3>
+          <p className="text-neutral-500">
+            Tokens used to authenticate with the CLI from personal devices. Used for development and
+            manual configuration.
+          </p>
+        </div>
+        <div className="space-y-2 divide-y divide-neutral-500/50">
+          {userTokensData?.userTokens.map((userToken: UserTokenType) => (
+            <CreatedToken
+              key={userToken.id}
+              token={userToken}
+              deleteHandler={handleDeleteUserToken}
+            />
+          ))}
+        </div>
+
+        <CreateUserTokenDialog organisationId={organisationId} />
+      </div>
     </div>
   )
 }
