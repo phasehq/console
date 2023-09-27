@@ -49,7 +49,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
 
   const [showWelcome, setShowWelcome] = useState<boolean>(true)
   const [step, setStep] = useState<number>(0)
-  const [seedDownloaded, setSeedDownloaded] = useState<boolean>(false)
+  const [recoverySkipped, setRecoverySkipped] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
   const [inputs, setInputs] = useState<Array<string>>([])
   const [pw, setPw] = useState<string>('')
@@ -167,10 +167,10 @@ export default function Invite({ params }: { params: { invite: string } }) {
   }
 
   const validateCurrentStep = () => {
-    if (step === 1) {
-      if (inputs.join(' ') !== mnemonic && !seedDownloaded) {
+    if (step === 1 && !recoverySkipped) {
+      if (inputs.join(' ') !== mnemonic && !recoverySkipped) {
         errorToast('Incorrect account recovery key!')
-        return false // TODO: UNCOMMENT THIS!!
+        return false
       }
     } else if (step === 2) {
       if (pw !== pw2) {
@@ -198,8 +198,9 @@ export default function Invite({ params }: { params: { invite: string } }) {
     if (step !== 0) setStep(step - 1)
   }
 
-  const skipSeedCheckerStep = () => {
-    if (seedDownloaded) setStep(3)
+  const skipRecoverySteps = () => {
+    setRecoverySkipped(true)
+    setStep(2)
   }
 
   useEffect(() => {
@@ -285,7 +286,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
                     mnemonic={mnemonic}
                     inputs={inputs}
                     updateInputs={handleInputUpdate}
-                    required={!seedDownloaded}
+                    required={!recoverySkipped}
                   />
                 )}
                 {step === 2 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
@@ -299,8 +300,8 @@ export default function Invite({ params }: { params: { invite: string } }) {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {seedDownloaded && step === 2 && (
-                      <Button variant="secondary" type="button" onClick={skipSeedCheckerStep}>
+                    {step !== 2 && (
+                      <Button variant="secondary" type="button" onClick={skipRecoverySteps}>
                         Skip
                       </Button>
                     )}
