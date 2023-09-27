@@ -1,5 +1,5 @@
-mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $inviteId: ID!) {
-  createOrganisationMember(orgId: $orgId, identityKey: $identityKey, wrappedKeyring: $wrappedKeyring, inviteId: $inviteId) {
+mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {
+  createOrganisationMember(orgId: $orgId, identityKey: $identityKey, wrappedKeyring: $wrappedKeyring, wrappedRecovery: $wrappedRecovery, inviteId: $inviteId) {
     orgMember{
       id
       email

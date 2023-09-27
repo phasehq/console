@@ -97,12 +97,13 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
         org_id = graphene.ID(required=True)
         identity_key = graphene.String(required=True)
         wrapped_keyring = graphene.String(required=False)
+        wrapped_recovery = graphene.String(required=False)
         invite_id = graphene.ID(required=True)
 
     org_member = graphene.Field(OrganisationMemberType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, identity_key, wrapped_keyring, invite_id):
+    def mutate(cls, root, info, org_id, identity_key, wrapped_keyring, wrapped_recovery, invite_id):
         if user_is_org_member(info.context.user.userId, org_id):
             raise GraphQLError(
                 "You are already a member of this organisation")
@@ -115,7 +116,7 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             org = Organisation.objects.get(id=org_id)
 
             org_member = OrganisationMember.objects.create(
-                user_id=info.context.user.userId, organisation=org, role=invite.role, identity_key=identity_key, wrapped_keyring=wrapped_keyring)
+                user_id=info.context.user.userId, organisation=org, role=invite.role, identity_key=identity_key, wrapped_keyring=wrapped_keyring, wrapped_recovery=wrapped_recovery)
 
             org_member.apps.set(invite.apps.all())  # broken
 

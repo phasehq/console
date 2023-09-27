@@ -280,7 +280,7 @@ type ServiceTokenType {
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
-  createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String): CreateOrganisationMemberMutation
+  createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
   updateOrganisationMemberRole(memberId: ID!, role: String!): UpdateOrganisationMemberRole
   deleteInvitation(inviteId: ID!): DeleteInviteMutation

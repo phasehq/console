@@ -148,6 +148,7 @@ class OrganisationMember(models.Model):
     apps = models.ManyToManyField(App, related_name='members')
     identity_key = models.CharField(max_length=256, null=True, blank=True)
     wrapped_keyring = models.TextField(blank=True)
+    wrapped_recovery = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)

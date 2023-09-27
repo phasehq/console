@@ -15,7 +15,7 @@ class OrganisationType(DjangoObjectType):
     class Meta:
         model = Organisation
         fields = ('id', 'name', 'identity_key',
-                  'created_at', 'plan', 'role', 'member_id', 'keyring')
+                  'created_at', 'plan', 'role', 'member_id', 'keyring', 'recovery')
 
     def resolve_role(self, info):
         org_member = OrganisationMember.objects.get(
@@ -31,6 +31,11 @@ class OrganisationType(DjangoObjectType):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self, deleted_at=None)
         return org_member.wrapped_keyring
+
+    def resolve_recovery(self, info):
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=self, deleted_at=None)
+        return org_member.wrapped_recovery
 
 
 class OrganisationMemberType(DjangoObjectType):

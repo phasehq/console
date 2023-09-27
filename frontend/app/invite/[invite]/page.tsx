@@ -133,6 +133,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
           orgId: invite.organisation.id,
           identityKey: publicKey,
           wrappedKeyring: encryptedKeyring,
+          wrappedRecovery: encryptedMnemonic,
           inviteId: invite.id,
         },
       })
