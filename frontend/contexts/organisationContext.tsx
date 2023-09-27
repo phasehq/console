@@ -1,8 +1,10 @@
 import { OrganisationType } from '@/apollo/graphql'
 import { createContext, useEffect, useState } from 'react'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
-import { useLazyQuery, useQuery } from '@apollo/client'
+import UpdateWrappedSecrets from '@/graphql/mutations/organisation/updateUserWrappedSecrets.gql'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useSession } from 'next-auth/react'
+import { getLocalKeyring } from '@/utils/localStorage'
 
 interface OrganisationContextValue {
   activeOrganisation: OrganisationType | null
@@ -24,6 +26,7 @@ interface OrganisationProviderProps {
 
 export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ children }) => {
   const [getOrgs, { data: orgsData, loading: queryLoading }] = useLazyQuery(GetOrganisations)
+  const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
 
   const { data: session } = useSession()
 
@@ -40,7 +43,23 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
     if (organisation === null && orgsData?.organisations.length > 0) {
       setOrganisations(orgsData.organisations)
       setOrganisation(orgsData.organisations[0])
+
+      orgsData.organisations.forEach((org: OrganisationType) => {
+        // Update wrapped secrets on the backend if they are blank
+        if (org.keyring === '' || org.recovery === '') {
+          const localKeyring = getLocalKeyring(session?.user?.email!, org.id)
+
+          updateWrappedSecrets({
+            variables: {
+              orgId: org.id,
+              wrappedKeyring: localKeyring!.keyring,
+              wrappedRecovery: localKeyring!.recovery,
+            },
+          })
+        }
+      })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisation, orgsData])
 
   useEffect(() => {

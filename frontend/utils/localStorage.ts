@@ -36,7 +36,9 @@ export const setLocalKeyring = (keyringData: LocalKeyring) => {
 export const getLocalKeyring = (email: string, orgId: string) => {
   const localKeyrings: LocalKeyring[] | undefined = getLocalKeyrings()
   if (!localKeyrings) return undefined
-  const org = localKeyrings.find((keyring) => keyring.email === email && keyring.org.id === orgId)
-  if (org) return org.keyring
+  const localKeyring = localKeyrings.find(
+    (keyring) => keyring.email === email && keyring.org.id === orgId
+  )
+  if (localKeyring) return localKeyring as LocalKeyring
   else return undefined
 }

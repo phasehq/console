@@ -422,7 +422,7 @@ export namespace cryptoUtils {
 
   export const getKeyring = async (email: string, organisationId: string, password: string) => {
     return new Promise<OrganisationKeyring>(async (resolve, reject) => {
-      const encryptedKeyring = getLocalKeyring(email, organisationId)
+      const encryptedKeyring = getLocalKeyring(email, organisationId)!.keyring
       if (!encryptedKeyring) reject('Error fetching local encrypted keys from browser')
 
       try {

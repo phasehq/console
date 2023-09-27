@@ -143,6 +143,8 @@ const Onboard = () => {
             id: orgId,
             name,
             identityKey: publicKey,
+            wrappedKeyring: encryptedKeyring,
+            wrappedRecovery: encryptedMnemonic,
           },
         })
         const { data } = result

@@ -7,8 +7,9 @@ import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { useContext, useEffect, useState } from 'react'
 import { MdContentPaste, MdOutlineKey } from 'react-icons/md'
 import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
-import { useQuery } from '@apollo/client'
+import { useMutation, useQuery } from '@apollo/client'
 import { OrganisationType } from '@/apollo/graphql'
+import UpdateWrappedSecrets from '@/graphql/mutations/organisation/updateUserWrappedSecrets.gql'
 import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
@@ -36,6 +37,8 @@ export default function NewDevice({ params }: { params: { team: string } }) {
         "Please set up a strong 'sudo' password to continue. This will be used to to perform administrative tasks and to encrypt keys locally on this device.",
     },
   ])
+
+  const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
 
   const [recoveryRequired, setRecoveryRequired] = useState<boolean>(false)
 
@@ -114,6 +117,14 @@ export default function NewDevice({ params }: { params: { team: string } }) {
             recovery: encryptedMnemonic,
           })
 
+          await updateWrappedSecrets({
+            variables: {
+              orgId: org!.id,
+              wrappedKeyring: encryptedKeyring,
+              wrappedRecovery: encryptedMnemonic,
+            },
+          })
+
           resolve({
             publicKey: accountKeyRing.publicKey,
             encryptedKeyring,
@@ -132,7 +143,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
             email: session?.user?.email!,
             org: org!,
             keyring: encryptedKeyring,
-            recovery: '',
+            recovery: org?.recovery!,
           })
 
           resolve({

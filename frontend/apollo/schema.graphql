@@ -279,11 +279,12 @@ type ServiceTokenType {
 }
 
 type Mutation {
-  createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
+  createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
   updateOrganisationMemberRole(memberId: ID!, role: String!): UpdateOrganisationMemberRole
+  updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -322,6 +323,10 @@ type DeleteOrganisationMemberMutation {
 }
 
 type UpdateOrganisationMemberRole {
+  orgMember: OrganisationMemberType
+}
+
+type UpdateUserWrappedSecretsMutation {
   orgMember: OrganisationMemberType
 }
 

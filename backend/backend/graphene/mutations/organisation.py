@@ -12,11 +12,13 @@ class CreateOrganisationMutation(graphene.Mutation):
         id = graphene.ID(required=True)
         name = graphene.String(required=True)
         identity_key = graphene.String(required=True)
+        wrapped_keyring = graphene.String(required=True)
+        wrapped_recovery = graphene.String(required=True)
 
     organisation = graphene.Field(OrganisationType)
 
     @classmethod
-    def mutate(cls, root, info, id, name, identity_key):
+    def mutate(cls, root, info, id, name, identity_key, wrapped_keyring, wrapped_recovery):
         if Organisation.objects.filter(name__iexact=name).exists():
             raise GraphQLError('This organisation name is not available.')
         if OrganisationMember.objects.filter(user_id=info.context.user.userId, role=OrganisationMember.OWNER).exists():
@@ -27,9 +29,30 @@ class CreateOrganisationMutation(graphene.Mutation):
         org = Organisation.objects.create(
             id=id, name=name, identity_key=identity_key)
         OrganisationMember.objects.create(
-            user=owner, organisation=org, role=OrganisationMember.OWNER, identity_key=identity_key)
+            user=owner, organisation=org, role=OrganisationMember.OWNER, identity_key=identity_key, wrapped_keyring=wrapped_keyring, wrapped_recovery=wrapped_recovery)
 
         return CreateOrganisationMutation(organisation=org)
+
+
+class UpdateUserWrappedSecretsMutation(graphene.Mutation):
+    class Arguments:
+        org_id = graphene.ID(required=True)
+        wrapped_keyring = graphene.String(required=True)
+        wrapped_recovery = graphene.String(required=True)
+
+    org_member = graphene.Field(OrganisationMemberType)
+
+    @classmethod
+    def mutate(cls, root, info, org_id, wrapped_keyring, wrapped_recovery):
+
+        org_member = OrganisationMember.objects.get(
+            organisation_id=org_id, user=info.context.user, deleted_at=None)
+
+        org_member.wrapped_keyring = wrapped_keyring
+        org_member.wrapped_recovery = wrapped_recovery
+        org_member.save()
+
+        return UpdateUserWrappedSecretsMutation(org_member=org_member)
 
 
 class InviteOrganisationMemberMutation(graphene.Mutation):
