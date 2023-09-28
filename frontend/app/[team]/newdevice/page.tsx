@@ -130,26 +130,31 @@ export default function NewDevice({ params }: { params: { team: string } }) {
             encryptedKeyring,
           })
         } else {
-          const encryptedKeyring = org!.keyring!
-          const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
-          const accountKeyRing = await cryptoUtils.decryptAccountKeyring(
-            encryptedKeyring,
-            deviceKey
-          )
+          try {
+            const encryptedKeyring = org!.keyring!
+            const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
+            const accountKeyRing = await cryptoUtils.decryptAccountKeyring(
+              encryptedKeyring,
+              deviceKey
+            )
 
-          setKeyring(accountKeyRing)
+            setKeyring(accountKeyRing)
 
-          setLocalKeyring({
-            email: session?.user?.email!,
-            org: org!,
-            keyring: encryptedKeyring,
-            recovery: org?.recovery!,
-          })
+            setLocalKeyring({
+              email: session?.user?.email!,
+              org: org!,
+              keyring: encryptedKeyring,
+              recovery: org?.recovery!,
+            })
 
-          resolve({
-            publicKey: accountKeyRing.publicKey,
-            encryptedKeyring,
-          })
+            resolve({
+              publicKey: accountKeyRing.publicKey,
+              encryptedKeyring,
+            })
+          } catch (error) {
+            toast.error('Something went wrong! Please check your sudo password and try again')
+            reject('Something went wrong! Please check your sudo password and try again')
+          }
         }
       }, 1000)
     })
@@ -222,7 +227,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
             )}
 
             {!recoveryRequired && (
-              <div className="flex flex-col gap-12">
+              <div className="flex items-center justify-between">
                 <div className="space-y-1 w-full max-w-md mx-auto">
                   <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
                     Sudo password
@@ -257,22 +262,29 @@ export default function NewDevice({ params }: { params: { team: string } }) {
                     </button>
                   </div>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="primary" type="submit">
+                    Next
+                  </Button>
+                </div>
               </div>
             )}
-            <div className="flex justify-between w-full">
-              <div>
-                {step !== 0 && (
-                  <Button variant="secondary" onClick={decrementStep} type="button">
-                    Previous
+            {recoveryRequired && (
+              <div className="flex justify-between w-full">
+                <div>
+                  {step !== 0 && (
+                    <Button variant="secondary" onClick={decrementStep} type="button">
+                      Previous
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="primary" type="submit">
+                    Next
                   </Button>
-                )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="primary" type="submit">
-                  Next
-                </Button>
-              </div>
-            </div>
+            )}
           </form>
         </div>
       </div>
