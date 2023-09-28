@@ -26,13 +26,16 @@ interface OrganisationProviderProps {
 
 export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ children }) => {
   const [getOrgs, { data: orgsData, loading: queryLoading }] = useLazyQuery(GetOrganisations)
+
   const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
 
   const { data: session } = useSession()
 
   const [organisation, setOrganisation] = useState<OrganisationType | null>(null)
-  const [organisations, setOrganisations] = useState<OrganisationType[] | null>(null)
+
   const [loading, setLoading] = useState<boolean>(true)
+
+  const { organisations } = orgsData ?? { organisations: null }
 
   useEffect(() => {
     if (session?.user?.email) getOrgs()
@@ -40,8 +43,7 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
   }, [session])
 
   useEffect(() => {
-    if (organisation === null && orgsData?.organisations.length > 0) {
-      setOrganisations(orgsData.organisations)
+    if (organisation === null && orgsData) {
       setOrganisation(orgsData.organisations[0])
 
       orgsData.organisations.forEach((org: OrganisationType) => {
