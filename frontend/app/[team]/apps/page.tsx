@@ -46,7 +46,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
             <AppCard app={app} />
           </Link>
         ))}
-        {organisation && !loading && (
+        {organisation && apps && (
           <div className="bg-white/50 dark:bg-neutral-800 opacity-40 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl p-8 flex flex-col gap-y-20">
             <div className="mx-auto my-auto">
               <NewAppDialog
