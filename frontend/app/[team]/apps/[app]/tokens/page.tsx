@@ -1,9 +1,8 @@
 'use client'
 
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { RotateAppKey } from '@/graphql/mutations/rotateAppKeys.gql'
-import { useLazyQuery, useQuery, useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -22,7 +21,6 @@ import { SecretTokens } from '@/components/apps/tokens/SecretTokens'
 import { organisationContext } from '@/contexts/organisationContext'
 
 export default function Tokens({ params }: { params: { team: string; app: string } }) {
-  const { data: orgsData } = useQuery(GetOrganisations)
   const [getApp, { data }] = useLazyQuery(GetAppDetail)
 
   const app = data?.apps[0] as AppType
@@ -34,16 +32,15 @@ export default function Tokens({ params }: { params: { team: string; app: string
   const { keyring } = useContext(KeyringContext)
 
   useEffect(() => {
-    if (orgsData) {
-      const organisationId = orgsData.organisations[0].id
+    if (organisation) {
       getApp({
         variables: {
-          organisationId,
+          organisationId: organisation.id,
           appId: params.app,
         },
       })
     }
-  }, [getApp, orgsData, params.app])
+  }, [getApp, organisation, params.app])
 
   const handleCopy = (val: string) => {
     copyToClipBoard(val)
@@ -243,9 +240,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
   return (
     <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
       <section className="max-w-screen-xl">
-        {orgsData?.organisations && (
-          <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
-        )}
+        {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
         {keyring !== null && (
           <div className="flex gap-8 mt-6 divide-x divide-neutral-500/20 items-start">
             <div className="space-y-4 border-l border-neutral-500/40 h-min">

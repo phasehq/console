@@ -1,31 +1,28 @@
 import { Logo } from '../common/Logo'
 import UserMenu from '../UserMenu'
-import { useLazyQuery, useQuery } from '@apollo/client'
-import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
+import { useLazyQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { usePathname } from 'next/navigation'
-import { useEffect } from 'react'
+import { useContext, useEffect } from 'react'
 import { AppType } from '@/apollo/graphql'
 import Link from 'next/link'
 import { Button } from '../common/Button'
 import { StatusIndicator } from '../common/StatusIndicator'
-import clsx from 'clsx'
+import { organisationContext } from '@/contexts/organisationContext'
 
 export const NavBar = (props: { team: string }) => {
-  const { data: orgsData } = useQuery(GetOrganisations)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
   const [getApps, { data: appsData }] = useLazyQuery(GetApps)
 
   const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 
   useEffect(() => {
-    if (orgsData?.organisations) {
+    if (organisation) {
       const fetchData = async () => {
-        const org = orgsData.organisations[0]
-
-        const organisationId = org.id
         getApps({
           variables: {
-            organisationId,
+            organisationId: organisation.id,
             appId: '',
           },
         })
@@ -33,7 +30,7 @@ export const NavBar = (props: { team: string }) => {
 
       fetchData()
     }
-  }, [getApps, orgsData])
+  }, [getApps, organisation])
 
   const apps = appsData?.apps as AppType[]
 

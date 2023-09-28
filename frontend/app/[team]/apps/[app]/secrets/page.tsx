@@ -2,7 +2,6 @@
 
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetSecretNames } from '@/graphql/queries/secrets/getSecretNames.gql'
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
@@ -10,13 +9,7 @@ import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useCallback, useContext, useEffect, useState } from 'react'
 import { createNewEnv, decryptEnvSecretNames, unwrapEnvSecretsForUser } from '@/utils/environments'
 import { Button } from '@/components/common/Button'
-import {
-  ApiEnvironmentEnvTypeChoices,
-  ApiOrganisationMemberRoleChoices,
-  EnvironmentType,
-  OrganisationMemberType,
-  SecretType,
-} from '@/apollo/graphql'
+import { ApiEnvironmentEnvTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
@@ -37,7 +30,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
       appId: params.app,
     },
   })
-  const { data: orgsData } = useQuery(GetOrganisations)
 
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
@@ -62,15 +54,14 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   useEffect(() => {
-    if (orgsData) {
-      const organisationId = orgsData.organisations[0].id
+    if (organisation) {
       getOrgAdmins({
         variables: {
-          organisationId,
+          organisationId: organisation.id,
         },
       })
     }
-  }, [getOrgAdmins, orgsData, params.app])
+  }, [getOrgAdmins, organisation, params.app])
 
   const setupRequired = data?.appEnvironments.length === 0 ?? true
 
@@ -195,9 +186,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-16">
-      {orgsData?.organisations && (
-        <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
-      )}
+      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null && (
         <section className="md:col-span-3">
           {setupRequired ? (

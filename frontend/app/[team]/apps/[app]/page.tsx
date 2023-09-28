@@ -1,34 +1,33 @@
 'use client'
 
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { GetAppLogCount } from '@/graphql/queries/getAppLogCount.gql'
-import { useLazyQuery, useQuery } from '@apollo/client'
+import { useLazyQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { useEffect } from 'react'
+import { useContext, useEffect } from 'react'
 import { AppActivityChart } from '@/components/apps/AppActivityChart'
 import { FaArrowRight } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
-import { humanReadableNumber } from '@/utils/dataUnits'
 import { relativeTimeFromDates } from '@/utils/time'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Count } from 'reaviz'
+import { organisationContext } from '@/contexts/organisationContext'
 
 export default function App({ params }: { params: { team: string; app: string } }) {
-  const { data: orgsData } = useQuery(GetOrganisations)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
   const [getAppLogCount, { data: countData, loading: countLoading }] = useLazyQuery(GetAppLogCount)
   const [getApp, { data, loading: appDataLoading }] = useLazyQuery(GetAppDetail)
 
   const app = data?.apps[0] as AppType
 
   useEffect(() => {
-    if (orgsData) {
-      const organisationId = orgsData.organisations[0].id
+    if (organisation) {
       getApp({
         variables: {
-          organisationId,
+          organisationId: organisation.id,
           appId: params.app,
         },
       })
@@ -39,7 +38,8 @@ export default function App({ params }: { params: { team: string; app: string } 
         fetchPolicy: 'cache-and-network',
       })
     }
-  }, [getApp, getAppLogCount, orgsData, params.app])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisation, params.app])
 
   const totalLogCount = countData?.logsCount ?? 0
 

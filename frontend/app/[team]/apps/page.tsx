@@ -1,32 +1,27 @@
 'use client'
 
-import { useLazyQuery, useQuery } from '@apollo/client'
+import { useLazyQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
-import { AppType, OrganisationType } from '@/apollo/graphql'
+import { AppType } from '@/apollo/graphql'
 import NewAppDialog from '@/components/apps/NewAppDialog'
 import { FaPlus } from 'react-icons/fa'
-import { useEffect, useState } from 'react'
+import { useContext, useEffect } from 'react'
 import Link from 'next/link'
 import Spinner from '@/components/common/Spinner'
 import { AppCard } from '@/components/apps/AppCard'
+import { organisationContext } from '@/contexts/organisationContext'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
-  const [organisation, setOrganisation] = useState<OrganisationType | undefined>(undefined)
-
-  const { data: orgsData } = useQuery(GetOrganisations)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [getApps, { data, loading }] = useLazyQuery(GetApps)
 
   useEffect(() => {
-    if (orgsData?.organisations) {
+    if (organisation) {
       const fetchData = async () => {
-        const org = orgsData.organisations[0]
-        setOrganisation(org)
-        const organisationId = org.id
         getApps({
           variables: {
-            organisationId,
+            organisationId: organisation.id,
             appId: '',
           },
         })
@@ -34,7 +29,8 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
       fetchData()
     }
-  }, [getApps, orgsData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisation])
 
   const apps = data?.apps as AppType[]
 

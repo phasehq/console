@@ -1,16 +1,14 @@
 'use client'
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { useQuery, useLazyQuery } from '@apollo/client'
+import { useLazyQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
-import { Button } from '@/components/common/Button'
-import { FaCopy } from 'react-icons/fa'
+import { organisationContext } from '@/contexts/organisationContext'
 
 export default function AppLayout({
   params,
@@ -19,23 +17,23 @@ export default function AppLayout({
   params: { team: string; app: string }
   children: React.ReactNode
 }) {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
   const path = usePathname()
   const [tabIndex, setTabIndex] = useState(0)
-  const { data: orgsData } = useQuery(GetOrganisations)
   const [getApp, { data, loading }] = useLazyQuery(GetAppDetail)
   const app = data?.apps[0] as AppType
 
   useEffect(() => {
-    if (orgsData) {
-      const organisationId = orgsData.organisations[0].id
+    if (organisation) {
       getApp({
         variables: {
-          organisationId,
+          organisationId: organisation.id,
           appId: params.app,
         },
       })
     }
-  }, [getApp, orgsData, params.app])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisation, params.app])
 
   useEffect(() => {
     const activeTabIndex = () => {
