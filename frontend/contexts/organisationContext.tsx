@@ -49,13 +49,15 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
         if (org.keyring === '' || org.recovery === '') {
           const localKeyring = getLocalKeyring(session?.user?.email!, org.id)
 
-          updateWrappedSecrets({
-            variables: {
-              orgId: org.id,
-              wrappedKeyring: localKeyring!.keyring,
-              wrappedRecovery: localKeyring!.recovery,
-            },
-          })
+          if (localKeyring?.keyring && localKeyring?.recovery) {
+            updateWrappedSecrets({
+              variables: {
+                orgId: org.id,
+                wrappedKeyring: localKeyring.keyring,
+                wrappedRecovery: localKeyring.recovery,
+              },
+            })
+          }
         }
       })
     }
