@@ -408,7 +408,7 @@ export namespace cryptoUtils {
   export const getInviteLink = (inviteId: string) => {
     const sodium = _sodium
 
-    const hostname = `${window.location.protocol}/${window.location.host}`
+    const hostname = `${window.location.protocol}//${window.location.host}`
     const encodedInvite = sodium.to_base64(inviteId, sodium.base64_variants.ORIGINAL)
     return `${hostname}/invite/${encodedInvite}`
   }
