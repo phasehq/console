@@ -117,7 +117,7 @@ const Sidebar = () => {
       name: 'Apps',
       href: `/${team}/apps`,
       icon: <FaCubes size="20" />,
-      active: usePathname() === `/${team}/apps`,
+      active: usePathname()?.split('/')[2] === 'apps',
     },
     {
       name: 'Members',
@@ -140,37 +140,39 @@ const Sidebar = () => {
   ]
 
   return (
-    <nav className="h-screen flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between pt-20 bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
-      <div className="gap-4 p-4 grid grid-cols-1">
-        {showOrgsMenu ? (
-          <OrgsMenu />
-        ) : (
-          <div className="p-2 text-neutral-500 font-semibold uppercase tracking-wider">
-            {activeOrganisation?.name}
-          </div>
-        )}
-        {links.slice(0, 4).map((link) => (
-          <SidebarLink
-            key={link.name}
-            name={link.name}
-            href={link.href}
-            icon={link.icon}
-            active={link.active}
-          />
-        ))}
-      </div>
-      <div className="p-4">
-        {
-          <SidebarLink
-            key={links[4].name}
-            name={links[4].name}
-            href={links[4].href}
-            icon={links[4].icon}
-            active={links[4].active}
-          />
-        }
-      </div>
-    </nav>
+    <div className="h-screen flex flex-col pt-[64px]">
+      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
+        <div className="gap-4 p-4 grid grid-cols-1">
+          {showOrgsMenu ? (
+            <OrgsMenu />
+          ) : (
+            <div className="p-2 text-neutral-500 font-semibold uppercase tracking-wider">
+              {activeOrganisation?.name}
+            </div>
+          )}
+          {links.slice(0, 4).map((link) => (
+            <SidebarLink
+              key={link.name}
+              name={link.name}
+              href={link.href}
+              icon={link.icon}
+              active={link.active}
+            />
+          ))}
+        </div>
+        <div className="p-4">
+          {
+            <SidebarLink
+              key={links[4].name}
+              name={links[4].name}
+              href={links[4].href}
+              icon={links[4].icon}
+              active={links[4].active}
+            />
+          }
+        </div>
+      </nav>
+    </div>
   )
 }
 
