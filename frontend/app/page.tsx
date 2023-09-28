@@ -41,7 +41,7 @@ export default function Home() {
       const localOrgs = getLocalKeyrings()
 
       // if there is no org setup on the server, send to onboarding page
-      if (organisations.length === 0) router.push('/onboard')
+      if (organisations.length === 0) router.push('/signup')
       else if (organisations.length === 1) {
         const organisation = organisations[0]
         setActiveOrganisation(organisation)
