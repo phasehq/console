@@ -311,10 +311,11 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                           onChange={setEnvScope}
                           multiple
                           name="environments"
+                          horizontal
                         >
                           {({ open }) => (
                             <>
-                              <Listbox.Label as={Fragment} horizontal>
+                              <Listbox.Label as={Fragment}>
                                 <label
                                   className="block text-gray-700 text-sm font-bold mb-2"
                                   htmlFor="name"
