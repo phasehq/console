@@ -171,7 +171,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
     (option) => option !== 'Owner'
   )
 
-  const disabled = isOwner || !activeUserIsAdmin
+  const disabled = isOwner || !activeUserIsAdmin || member.self!
 
   return disabled ? (
     <RoleLabel role={role} />
@@ -604,20 +604,24 @@ export default function Members({ params }: { params: { team: string } }) {
       })
     }
 
+    const allowDelete = !member.self! && activeUserIsAdmin && member.role.toLowerCase() !== 'owner'
+
     return (
       <>
-        <div className="flex items-center justify-center">
-          <Button
-            variant="danger"
-            onClick={openModal}
-            title="Remove member"
-            disabled={member.role.toLowerCase() === 'owner'}
-          >
-            <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-              <FaTrashAlt />
-            </div>
-          </Button>
-        </div>
+        {allowDelete && (
+          <div className="flex items-center justify-center">
+            <Button
+              variant="danger"
+              onClick={openModal}
+              title="Remove member"
+              disabled={member.role.toLowerCase() === 'owner'}
+            >
+              <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
+                <FaTrashAlt />
+              </div>
+            </Button>
+          </div>
+        )}
 
         <Transition appear show={isOpen} as={Fragment}>
           <Dialog as="div" className="relative z-10" onClose={closeModal}>
@@ -728,7 +732,7 @@ export default function Members({ params }: { params: { team: string } }) {
                     {relativeTimeFromDates(new Date(member.createdAt))}
                   </td>
                   <td className="px-6 py-4 flex items-center justify-end gap-2">
-                    {member.email !== session?.user?.email &&
+                    {!member.self! &&
                       activeUserIsAdmin &&
                       member.role.toLowerCase() !== 'owner' && (
                         <DeleteMemberConfirmDialog member={member} />
@@ -747,7 +751,7 @@ export default function Members({ params }: { params: { team: string } }) {
                         {invite.inviteeEmail}{' '}
                         <span className="text-neutral-500 text-sm">
                           (invited by{' '}
-                          {invite.invitedBy.email === session?.user?.email
+                          {invite.invitedBy.self
                             ? 'You'
                             : invite.invitedBy.fullName || invite.invitedBy.email}
                           )
