@@ -270,7 +270,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                     onChange={(event) => setQuery(event.target.value)}
                                     required
                                     displayValue={(person: OrganisationMemberType) =>
-                                      person?.fullName || person.email!
+                                      person?.fullName || person?.email!
                                     }
                                   />
                                   <div className="absolute inset-y-0 right-2 flex items-center">
