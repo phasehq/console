@@ -116,7 +116,8 @@ export default function Members({ params }: { params: { team: string; app: strin
       query === ''
         ? memberOptions
         : memberOptions.filter((member: OrganisationMemberType) => {
-            return member.fullName!.toLowerCase().includes(query.toLowerCase())
+            const memberQueryableName = member.fullName || member.email!
+            return memberQueryableName.toLowerCase().includes(query.toLowerCase())
           })
 
     const closeModal = () => {
@@ -269,7 +270,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                     onChange={(event) => setQuery(event.target.value)}
                                     required
                                     displayValue={(person: OrganisationMemberType) =>
-                                      person?.fullName!
+                                      person?.fullName || person.email!
                                     }
                                   />
                                   <div className="absolute inset-y-0 right-2 flex items-center">
@@ -305,7 +306,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                           >
                                             <Avatar imagePath={person.avatarUrl!} size="sm" />
                                             <span className="text-black dark:text-white">
-                                              {person.fullName}
+                                              {person.fullName || person.email}
                                             </span>
                                           </div>
                                         )}
@@ -522,7 +523,8 @@ export default function Members({ params }: { params: { team: string; app: strin
 
                     <div className="space-y-6 p-4">
                       <p className="text-neutral-500">
-                        Are you sure you want to remove {member.fullName} from this app?
+                        Are you sure you want to remove {member.fullName || member.email} from this
+                        app?
                       </p>
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>
@@ -705,7 +707,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                   <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                     <Dialog.Title as="div" className="flex w-full justify-between">
                       <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                        Manage access for {props.member.fullName}
+                        Manage access for {props.member.fullName || props.member.email}
                       </h3>
 
                       <Button variant="text" onClick={closeModal}>
@@ -893,10 +895,12 @@ export default function Members({ params }: { params: { team: string; app: strin
                   <Avatar imagePath={member.avatarUrl!} size="lg" />
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-medium">{member.fullName}</span>
+                      <span className="text-lg font-medium">{member.fullName || member.email}</span>
                       <RoleLabel role={member.role} />
                     </div>
-                    <span className="text-neutral-500 text-sm">{member.email}</span>
+                    {member.fullName && (
+                      <span className="text-neutral-500 text-sm">{member.email}</span>
+                    )}
                   </div>
                 </td>
 

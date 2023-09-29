@@ -657,7 +657,8 @@ export default function Members({ params }: { params: { team: string } }) {
 
                     <div className="space-y-6 p-4">
                       <p className="text-neutral-500">
-                        Are you sure you want to remove {member.fullName} from this organisation?
+                        Are you sure you want to remove {member.fullName || member.email} from this
+                        organisation?
                       </p>
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>
@@ -712,8 +713,10 @@ export default function Members({ params }: { params: { team: string } }) {
                   <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
                     <Avatar imagePath={member.avatarUrl!} size="lg" />
                     <div className="flex flex-col">
-                      <span className="text-lg font-medium">{member.fullName}</span>
-                      <span className="text-neutral-500 text-sm">{member.email}</span>
+                      <span className="text-lg font-medium">{member.fullName || member.email}</span>
+                      {member.fullName && (
+                        <span className="text-neutral-500 text-sm">{member.email}</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -746,7 +749,7 @@ export default function Members({ params }: { params: { team: string } }) {
                           (invited by{' '}
                           {invite.invitedBy.email === session?.user?.email
                             ? 'You'
-                            : invite.invitedBy.fullName}
+                            : invite.invitedBy.fullName || invite.invitedBy.email}
                           )
                         </span>
                       </div>

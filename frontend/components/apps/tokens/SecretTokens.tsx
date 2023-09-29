@@ -816,7 +816,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                   <div className="flex items-center gap-2">
                     <span>by</span>
                     <Avatar imagePath={token.createdBy?.avatarUrl!} size="sm" />
-                    {token.createdBy?.fullName}
+                    {token.createdBy?.fullName || token.createdBy?.email}
                   </div>
                 )}
               </div>

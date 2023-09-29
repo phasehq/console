@@ -397,7 +397,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                                 {historyItem!.user ? (
                                   <div className="flex items-center gap-1 text-sm">
                                     <Avatar imagePath={historyItem!.user.avatarUrl!} size="sm" />
-                                    {historyItem?.user.fullName}
+                                    {historyItem?.user.fullName || historyItem?.user.email}
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-1 text-sm">
