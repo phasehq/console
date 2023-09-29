@@ -1,6 +1,6 @@
 from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import EnvironmentKeyInput
-from backend.graphene.utils.permissions import user_can_access_app, user_is_org_member
+from backend.graphene.utils.permissions import user_can_access_app, user_is_admin, user_is_org_member
 from ee.feature_flags import allow_new_app
 import graphene
 from django.utils import timezone
@@ -103,6 +103,9 @@ class DeleteAppMutation(graphene.Mutation):
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
+        if not user_is_admin(user.userId, app.organisation.id):
+            raise GraphQLError(
+                "You don't have permission to perform that action.")
 
         if CLOUD_HOSTED:
             # delete current keys from cloudflare KV
