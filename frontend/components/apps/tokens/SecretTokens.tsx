@@ -860,7 +860,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
         </div>
       )}
 
-      <div className="space-y-4">
+      {/* <div className="space-y-4">
         <div>
           <h3 className="text-2xl font-semibold border-neutral-500/40">User tokens</h3>
           <p className="text-neutral-500">
@@ -879,7 +879,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
         </div>
 
         <CreateUserTokenDialog organisationId={organisationId} />
-      </div>
+      </div> */}
     </div>
   )
 }
