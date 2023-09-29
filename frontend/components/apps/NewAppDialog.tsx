@@ -1,16 +1,19 @@
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
-import { getLocalKeyring } from '@/utils/localStorage'
 import { Dialog, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
 import { Fragment, ReactNode, useContext, useEffect, useState } from 'react'
-import { FaCopy, FaCross, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
+import { FaCopy, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
-import { useMutation } from '@apollo/client'
+import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { useLazyQuery, useMutation } from '@apollo/client'
 import {
+  ApiEnvironmentEnvTypeChoices,
   ApiOrganisationPlanChoices,
   MutationCreateAppArgs,
   OrganisationType,
@@ -18,6 +21,7 @@ import {
 import { splitSecret } from '@/utils/keyshares'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { KeyringContext } from '@/contexts/keyringContext'
+import { createNewEnv } from '@/utils/environments'
 
 const FREE_APP_LIMIT = 5
 const PRO_APP_LIMIT = 10
@@ -36,7 +40,11 @@ export default function NewAppDialog(props: {
   const [appId, setAppId] = useState<string>('')
   const [appSecret, setAppSecret] = useState<string>('')
   const { data: session } = useSession()
-  const [createApp, { data, loading, error }] = useMutation(CreateApplication)
+  const [createApp] = useMutation(CreateApplication)
+
+  const [initAppEnvironments] = useMutation(InitAppEnvironments)
+
+  const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
   const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 
@@ -46,6 +54,16 @@ export default function NewAppDialog(props: {
   }
 
   const { keyring, setKeyring } = useContext(KeyringContext)
+
+  useEffect(() => {
+    if (organisation) {
+      getOrgAdmins({
+        variables: {
+          organisationId: organisation.id,
+        },
+      })
+    }
+  }, [getOrgAdmins, organisation])
 
   const complete = () => appId && appSecret
 
@@ -71,17 +89,63 @@ export default function NewAppDialog(props: {
   }
 
   const validateKeyring = async (password: string) => {
-    return new Promise<OrganisationKeyring>(async (resolve) => {
+    return new Promise<OrganisationKeyring>(async (resolve, reject) => {
       if (keyring) resolve(keyring)
       else {
-        const decryptedKeyring = await cryptoUtils.getKeyring(
-          session?.user?.email!,
-          organisation!.id,
-          password
-        )
-        setKeyring(decryptedKeyring)
-        resolve(decryptedKeyring)
+        try {
+          const decryptedKeyring = await cryptoUtils.getKeyring(
+            session?.user?.email!,
+            organisation!.id,
+            password
+          )
+          setKeyring(decryptedKeyring)
+          resolve(decryptedKeyring)
+        } catch (error) {
+          reject(error)
+        }
       }
+    })
+  }
+
+  const initAppEnvs = async (appId: string) => {
+    const mutationPayload = {
+      devEnv: await createNewEnv(
+        appId,
+        'Development',
+        ApiEnvironmentEnvTypeChoices.Dev,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+      stagingEnv: await createNewEnv(
+        appId,
+        'Staging',
+        ApiEnvironmentEnvTypeChoices.Staging,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+      prodEnv: await createNewEnv(
+        appId,
+        'Production',
+        ApiEnvironmentEnvTypeChoices.Prod,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+    }
+
+    await initAppEnvironments({
+      variables: {
+        devEnv: mutationPayload.devEnv.createEnvPayload,
+        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
+        prodEnv: mutationPayload.prodEnv.createEnvPayload,
+        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
+        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
+        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
+      },
+      refetchQueries: [
+        {
+          query: GetAppEnvironments,
+          variables: {
+            appId,
+          },
+        },
+      ],
     })
   }
 
@@ -103,7 +167,7 @@ export default function NewAppDialog(props: {
 
           const wrappedShare = await cryptoUtils.wrappedKeyShare(appKeyShares[1], wrapKey)
 
-          await createApp({
+          const { data } = await createApp({
             variables: {
               id,
               name,
@@ -125,6 +189,8 @@ export default function NewAppDialog(props: {
             ],
           })
 
+          await initAppEnvs(data.createApp.app.id)
+
           setAppSecret(`pss:v${APP_VERSION}:${appToken}:${appKeyShares[0]}:${wrapKey}`)
           setAppId(`phApp:v${APP_VERSION}:${appKeys.publicKey}`)
 
@@ -142,9 +208,7 @@ export default function NewAppDialog(props: {
     toast.promise(handleCreateApp, {
       pending: 'Setting up your app',
       success: 'App created!',
-      error: error?.message
-        ? undefined
-        : 'Something went wrong! Please check your password and try again.',
+      error: 'Something went wrong! Please check your sudo password and try again.',
     })
   }
 
@@ -240,7 +304,7 @@ export default function NewAppDialog(props: {
                             maxLength={64}
                             value={name}
                             placeholder="MyApp"
-                            onChange={(e) => setName(e.target.value.replace(/[^a-z0-9]/gi, ''))}
+                            onChange={(e) => setName(e.target.value)}
                           />
                         </div>
 
