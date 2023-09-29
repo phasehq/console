@@ -23,6 +23,29 @@ export default function AppLayout({
   const [getApp, { data, loading }] = useLazyQuery(GetAppDetail)
   const app = data?.apps[0] as AppType
 
+  const [tabs, setTabs] = useState([
+    {
+      name: 'Home',
+      link: '',
+    },
+    {
+      name: 'Secrets',
+      link: 'secrets',
+    },
+    {
+      name: 'Service tokens',
+      link: 'tokens',
+    },
+    {
+      name: 'Logs',
+      link: 'logs',
+    },
+    {
+      name: 'Members',
+      link: 'members',
+    },
+  ])
+
   useEffect(() => {
     if (organisation) {
       getApp({
@@ -31,6 +54,14 @@ export default function AppLayout({
           appId: params.app,
         },
       })
+
+      if (organisation.role!.toLowerCase() !== 'dev') {
+        setTabs((prevTabs) =>
+          prevTabs.some((tab) => tab.name === 'Settings')
+            ? prevTabs
+            : [...prevTabs, { name: 'Settings', link: 'settings' }]
+        )
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisation, params.app])
@@ -50,33 +81,6 @@ export default function AppLayout({
     }
     setTabIndex(activeTabIndex())
   }, [app, path])
-
-  const tabs = [
-    {
-      name: 'Home',
-      link: '',
-    },
-    {
-      name: 'Secrets',
-      link: 'secrets',
-    },
-    {
-      name: 'Tokens',
-      link: 'tokens',
-    },
-    {
-      name: 'Logs',
-      link: 'logs',
-    },
-    {
-      name: 'Members',
-      link: 'members',
-    },
-    {
-      name: 'Settings',
-      link: 'settings',
-    },
-  ]
 
   return (
     <div
