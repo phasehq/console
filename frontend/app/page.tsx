@@ -72,8 +72,8 @@ export default function Home() {
         <>
           <HeroPattern />
 
-          <div className="mx-auto my-auto space-y-6 divide-y divide-neutral-500/40 rounded-md bg-zinc-200 dark:bg-zinc-800 text-center">
-            <div className="space-y-2 p-8">
+          <div className="mx-auto my-auto space-y-6 divide-y divide-neutral-500/40 rounded-md bg-zinc-100 dark:bg-zinc-800 text-center">
+            <div className="space-y-0 p-2">
               <div className="flex justify-center">
                 <Logo boxSize={80} />
               </div>
@@ -83,9 +83,9 @@ export default function Home() {
               {organisations!.map((org: OrganisationType) => (
                 <div
                   key={org.id}
-                  className="p-8 bg-zinc-200 dark:bg-zinc-800 flex flex-col gap-2 text-center"
+                  className="p-8 bg-zinc-100 dark:bg-zinc-800 flex flex-col gap-2 text-center"
                 >
-                  <h2 className="text-3xl font-bold">{org.name}</h2>
+                  <h2 className="text-3xl font-bold text-black dark:text-white">{org.name}</h2>
                   <div className="text-neutral-500">
                     You are {org.role!.toLowerCase() === 'dev' ? 'a' : 'an'}{' '}
                     <RoleLabel role={org.role!} /> in this organisation
