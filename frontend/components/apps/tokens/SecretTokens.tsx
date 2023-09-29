@@ -1,13 +1,9 @@
-import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
-import { RevokeUserToken } from '@/graphql/mutations/users/deleteUserToken.gql'
 import { RevokeServiceToken } from '@/graphql/mutations/environments/deleteServiceToken.gql'
 import { CreateNewServiceToken } from '@/graphql/mutations/environments/createServiceToken.gql'
-import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
 import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import {
-  generateUserToken,
   newEnvToken,
   newEnvWrapKey,
   newServiceTokenKeys,
@@ -16,7 +12,6 @@ import {
 } from '@/utils/environments'
 import { EnvironmentType, ServiceTokenType, UserTokenType } from '@/apollo/graphql'
 import { cryptoUtils } from '@/utils/auth'
-import { getUserKxPublicKey, getUserKxPrivateKey } from '@/utils/crypto'
 import { splitSecret } from '@/utils/keyshares'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useState, useEffect, useContext, Fragment } from 'react'
@@ -33,7 +28,6 @@ import {
   FaSquare,
   FaTimes,
   FaTrashAlt,
-  FaUserLock,
 } from 'react-icons/fa'
 import { getUnixTimeStampinFuture, relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, RadioGroup, Transition } from '@headlessui/react'
@@ -88,215 +82,6 @@ const humanReadableExpiry = (expiryOption: ExpiryOptionT) =>
   expiryOption.getExpiry() === null
     ? 'This token will never expire.'
     : `This token will expire on ${new Date(expiryOption.getExpiry()!).toLocaleDateString()}.`
-
-const CreateUserTokenDialog = (props: { organisationId: string }) => {
-  const { organisationId } = props
-
-  const { keyring } = useContext(KeyringContext)
-
-  const [isOpen, setIsOpen] = useState<boolean>(false)
-  const [name, setName] = useState<string>('')
-  const [expiry, setExpiry] = useState<ExpiryOptionT>(tokenExpiryOptions[0])
-
-  const [userToken, setUserToken] = useState<string>('')
-  const [createUserToken] = useMutation(CreateNewUserToken)
-
-  const reset = () => {
-    setName('')
-    setUserToken('')
-  }
-
-  const closeModal = () => {
-    reset()
-    setIsOpen(false)
-  }
-
-  const openModal = () => {
-    setIsOpen(true)
-  }
-
-  const handleCreateNewUserToken = async (event: { preventDefault: () => void }) => {
-    event.preventDefault()
-
-    if (name.length === 0) {
-      toast.error('You must enter a name for the token')
-      return false
-    }
-
-    if (keyring) {
-      const userKxKeys = {
-        publicKey: await getUserKxPublicKey(keyring.publicKey),
-        privateKey: await getUserKxPrivateKey(keyring.privateKey),
-      }
-
-      const { pssUser, mutationPayload } = await generateUserToken(
-        organisationId,
-        userKxKeys,
-        name,
-        expiry.getExpiry()
-      )
-
-      await createUserToken({
-        variables: mutationPayload,
-        refetchQueries: [
-          {
-            query: GetUserTokens,
-            variables: {
-              organisationId,
-            },
-          },
-        ],
-      })
-
-      setUserToken(pssUser)
-    } else {
-      console.log('keyring unavailable')
-    }
-  }
-
-  return (
-    <>
-      <div className="flex items-center">
-        <Button variant="primary" onClick={openModal} title="Delete secret">
-          <div className="flex items-center gap-1">
-            <FaPlus /> Create User Token
-          </div>
-        </Button>
-      </div>
-
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={() => {}}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Create a new User token
-                    </h3>
-
-                    <Button variant="text" onClick={closeModal}>
-                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                    </Button>
-                  </Dialog.Title>
-
-                  {userToken ? (
-                    <div className="py-4">
-                      <div className="bg-blue-200 dark:bg-blue-400/10 shadow-inner p-3 rounded-lg">
-                        <div className="w-full flex items-center justify-between pb-4">
-                          <span className="uppercase text-xs tracking-widest text-gray-500">
-                            user token
-                          </span>
-                          <div className="flex gap-4">
-                            {userToken && (
-                              <div className="rounded-lg bg-amber-800/30 text-amber-500 p-2 flex items-center gap-4">
-                                <FaExclamationTriangle />
-                                <div className="text-2xs">
-                                  {"Copy this value. You won't see it again!"}
-                                </div>
-                              </div>
-                            )}
-                            {userToken && (
-                              <Button variant="outline" onClick={() => handleCopy(userToken)}>
-                                <MdContentCopy /> Copy
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <code className="text-xs break-all text-blue-500">{userToken}</code>
-                      </div>
-                    </div>
-                  ) : (
-                    <form className="space-y-6 p-4" onSubmit={handleCreateNewUserToken}>
-                      <div className="space-y-2 w-full">
-                        <label
-                          className="block text-gray-700 text-sm font-bold mb-2"
-                          htmlFor="name"
-                        >
-                          Token name
-                        </label>
-                        <input
-                          required
-                          id="name"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                        />
-                      </div>
-
-                      <div>
-                        <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
-                          <RadioGroup.Label as={Fragment}>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">
-                              Expiry
-                            </label>
-                          </RadioGroup.Label>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {tokenExpiryOptions.map((option) => (
-                              <RadioGroup.Option key={option.name} value={option} as={Fragment}>
-                                {({ active, checked }) => (
-                                  <div
-                                    className={clsx(
-                                      'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full',
-                                      active && 'border-zinc-700',
-                                      checked && 'bg-zinc-700'
-                                    )}
-                                  >
-                                    {checked ? (
-                                      <FaDotCircle className="text-emerald-500" />
-                                    ) : (
-                                      <FaCircle />
-                                    )}
-                                    {option.name}
-                                  </div>
-                                )}
-                              </RadioGroup.Option>
-                            ))}
-                          </div>
-                        </RadioGroup>
-                        <span className="text-sm text-neutral-500">
-                          {humanReadableExpiry(expiry)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <Button variant="secondary" type="button" onClick={closeModal}>
-                          Cancel
-                        </Button>
-                        <Button variant="primary" type="submit">
-                          Create
-                        </Button>
-                      </div>
-                    </form>
-                  )}
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
-    </>
-  )
-}
 
 const CreateServiceTokenDialog = (props: { organisationId: string; appId: string }) => {
   const { organisationId, appId } = props
@@ -649,29 +434,11 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
 export const SecretTokens = (props: { organisationId: string; appId: string }) => {
   const { organisationId, appId } = props
 
-  const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
   const [getServiceTokens, { data: serviceTokensData }] = useLazyQuery(GetServiceTokens)
 
-  const [deleteUserToken] = useMutation(RevokeUserToken)
   const [deleteServiceToken] = useMutation(RevokeServiceToken)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
-
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
-
-  const handleDeleteUserToken = async (tokenId: string) => {
-    await deleteUserToken({
-      variables: { tokenId },
-      refetchQueries: [
-        {
-          query: GetUserTokens,
-          variables: {
-            organisationId,
-          },
-        },
-      ],
-    })
-  }
 
   const handleDeleteServiceToken = async (tokenId: string) => {
     await deleteServiceToken({
@@ -690,18 +457,13 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
 
   useEffect(() => {
     if (organisationId && appId) {
-      getUserTokens({
-        variables: {
-          organisationId,
-        },
-      })
       getServiceTokens({
         variables: {
           appId,
         },
       })
     }
-  }, [appId, getServiceTokens, getUserTokens, organisationId])
+  }, [appId, getServiceTokens, organisationId])
 
   const DeleteConfirmDialog = (props: {
     token: UserTokenType | ServiceTokenType
@@ -791,22 +553,19 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
     )
   }
 
-  const CreatedToken = (props: {
-    token: ServiceTokenType | UserTokenType
-    deleteHandler: Function
-  }) => {
+  const CreatedToken = (props: { token: ServiceTokenType; deleteHandler: Function }) => {
     const { token, deleteHandler } = props
 
     const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
 
+    const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+
+    const allowDelete = activeUserIsAdmin || token.createdBy!.self
+
     return (
       <div className="flex items-center w-full justify-between p-2 group">
         <div className="flex items-center gap-4">
-          {token.__typename === 'UserTokenType' ? (
-            <FaUserLock className="text-sky-500/40 text-lg" />
-          ) : (
-            <FaKey className="text-teal-500/50 text-lg" />
-          )}
+          <FaKey className="text-teal-500/50 text-lg" />
           <div className="space-y-0">
             <div className="text-lg font-medium">{token.name}</div>
             <div className="flex items-center gap-8 text-sm text-neutral-500">
@@ -816,7 +575,9 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                   <div className="flex items-center gap-2">
                     <span>by</span>
                     <Avatar imagePath={token.createdBy?.avatarUrl!} size="sm" />
-                    {token.createdBy?.fullName || token.createdBy?.email}
+                    {token.createdBy?.self
+                      ? 'You'
+                      : token.createdBy?.fullName || token.createdBy?.email}
                   </div>
                 )}
               </div>
@@ -828,58 +589,37 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
             </div>
           </div>
         </div>
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-          <DeleteConfirmDialog token={token} onDelete={deleteHandler} />
-        </div>
+        {allowDelete && (
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+            <DeleteConfirmDialog token={token} onDelete={deleteHandler} />
+          </div>
+        )}
       </div>
     )
   }
 
   return (
     <div className="space-y-6 pb-6 divide-y-2 divide-neutral-500/40">
-      {activeUserIsAdmin && (
-        <div className="space-y-4 py-4">
-          <div>
-            <h3 className="text-2xl font-semibold border-neutral-500/40">Service tokens</h3>
-            <p className="text-neutral-500">
-              Tokens used to authenticate with the CLI from automated machines. Used for CI and
-              production environments.
-            </p>
-          </div>
-          <div className="space-y-2 divide-y divide-neutral-500/50">
-            {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
-              <CreatedToken
-                key={serviceToken.id}
-                token={serviceToken}
-                deleteHandler={handleDeleteServiceToken}
-              />
-            ))}
-          </div>
-
-          <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
-        </div>
-      )}
-
-      {/* <div className="space-y-4">
+      <div className="space-y-4 py-4">
         <div>
-          <h3 className="text-2xl font-semibold border-neutral-500/40">User tokens</h3>
+          <h3 className="text-2xl font-semibold border-neutral-500/40">Service tokens</h3>
           <p className="text-neutral-500">
-            Tokens used to authenticate with the CLI from personal devices. Used for development and
-            manual configuration.
+            Tokens used to authenticate with the CLI from automated machines. Used for CI and
+            production environments.
           </p>
         </div>
         <div className="space-y-2 divide-y divide-neutral-500/50">
-          {userTokensData?.userTokens.map((userToken: UserTokenType) => (
+          {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
             <CreatedToken
-              key={userToken.id}
-              token={userToken}
-              deleteHandler={handleDeleteUserToken}
+              key={serviceToken.id}
+              token={serviceToken}
+              deleteHandler={handleDeleteServiceToken}
             />
           ))}
         </div>
 
-        <CreateUserTokenDialog organisationId={organisationId} />
-      </div> */}
+        <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
+      </div>
     </div>
   )
 }
