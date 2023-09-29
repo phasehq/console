@@ -1,5 +1,6 @@
 import { OrganisationKeyring } from '@/utils/auth'
-import { createContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { organisationContext } from './organisationContext'
 
 interface KeyringContextValue {
   keyring: OrganisationKeyring | null
@@ -17,6 +18,12 @@ interface KeyringProviderProps {
 
 export const KeyringProvider: React.FC<KeyringProviderProps> = ({ children }) => {
   const [keyring, setKeyring] = useState<OrganisationKeyring | null>(null)
+
+  const { activeOrganisation } = useContext(organisationContext)
+
+  useEffect(() => {
+    setKeyring(null)
+  }, [activeOrganisation])
 
   return (
     <KeyringContext.Provider value={{ keyring, setKeyring }}>{children}</KeyringContext.Provider>
