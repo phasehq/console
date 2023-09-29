@@ -49,6 +49,7 @@ class OrganisationMemberType(DjangoObjectType):
     username = graphene.String()
     full_name = graphene.String()
     avatar_url = graphene.String()
+    self = graphene.Boolean()
 
     class Meta:
         model = OrganisationMember
@@ -74,6 +75,9 @@ class OrganisationMemberType(DjangoObjectType):
                 return social_acc.extra_data.get('picture')
             return social_acc.extra_data.get('avatar_url')
         return None
+
+    def resolve_self(self, info):
+        return self.user == info.context.user
 
 
 class OrganisationMemberInviteType(DjangoObjectType):

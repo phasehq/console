@@ -61,6 +61,7 @@ type OrganisationMemberType {
   username: String
   fullName: String
   avatarUrl: String
+  self: Boolean
 }
 
 """An enumeration."""
