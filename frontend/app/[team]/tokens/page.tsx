@@ -335,7 +335,7 @@ export default function Tokens({ params }: { params: { team: string } }) {
   }, [getUserTokens, organisationId])
 
   const userTokens =
-    userTokensData?.userTokens.sort((a: UserTokenType, b: UserTokenType) => {
+    [...(userTokensData?.userTokens || [])].sort((a: UserTokenType, b: UserTokenType) => {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     }) || []
 
