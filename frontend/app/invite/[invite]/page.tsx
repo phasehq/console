@@ -77,7 +77,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
       icon: <MdKey />,
       title: 'Recovery',
       description:
-        "This is your 24 word recovery phrase. It's used to derive your account keys. Only you have access to it. Please write it down and store it somewhere safe like a password manager. You will need to enter your recovery phrase when logging in from a new device.",
+        "This is your 24 word recovery phrase. You can use it log in to your Phase account if you forget the sudo password. It's used to derive your encryption keys. Only you have access to it. Please write it down or store it somewhere safe like a password manager.",
     },
     {
       index: 1,
