@@ -314,7 +314,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                         >
                           {({ open }) => (
                             <>
-                              <Listbox.Label as={Fragment}>
+                              <Listbox.Label as={Fragment} horizontal>
                                 <label
                                   className="block text-gray-700 text-sm font-bold mb-2"
                                   htmlFor="name"
@@ -346,7 +346,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                                 leaveTo="transform scale-95 opacity-0"
                               >
                                 <Listbox.Options>
-                                  <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
+                                  <div className="bg-zinc-100 dark:bg-zinc-800 p-2 flex flex-wrap gap-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
                                     {envOptions.map((env: Partial<EnvironmentType>) => (
                                       <Listbox.Option key={env.id} value={env} as={Fragment}>
                                         {({ active, selected }) => (
