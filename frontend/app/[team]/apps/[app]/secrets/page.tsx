@@ -2,35 +2,22 @@
 
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetSecretNames } from '@/graphql/queries/secrets/getSecretNames.gql'
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
-import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
-import { CreateNewServiceToken } from '@/graphql/mutations/environments/createServiceToken.gql'
-import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
-import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
-import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
+import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useCallback, useContext, useEffect, useState } from 'react'
-import {
-  createNewEnvPayload,
-  decryptEnvSecretNames,
-  unwrapEnvSecretsForUser,
-} from '@/utils/environments'
+import { createNewEnv, decryptEnvSecretNames, unwrapEnvSecretsForUser } from '@/utils/environments'
 import { Button } from '@/components/common/Button'
-import {
-  ApiEnvironmentEnvTypeChoices,
-  ApiOrganisationMemberRoleChoices,
-  EnvironmentType,
-  OrganisationMemberType,
-  SecretType,
-} from '@/apollo/graphql'
+import { ApiEnvironmentEnvTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userIsAdmin } from '@/utils/permissions'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -43,16 +30,13 @@ export default function Secrets({ params }: { params: { team: string; app: strin
       appId: params.app,
     },
   })
-  const { data: orgsData } = useQuery(GetOrganisations)
 
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
-  const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
-  const [getServiceTokens, { data: serviceTokensData }] = useLazyQuery(GetServiceTokens)
-  const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
+
   const [getEnvSecrets] = useLazyQuery(GetSecretNames)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
-  const [createUserToken] = useMutation(CreateNewUserToken)
-  const [createServiceToken] = useMutation(CreateNewServiceToken)
+  const [updateScope] = useMutation(UpdateEnvScope)
+
   const [commonSecrets, setCommonSecrets] = useState<SecretType[]>([])
   const [envSecrets, setEnvSecrets] = useState<EnvSecrets[]>([])
 
@@ -64,31 +48,20 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     return indexA - indexB
   })
 
-  const [userToken, setUserToken] = useState<string>('')
-  const [serviceToken, setServiceToken] = useState<string>('')
-
   const { keyring } = useContext(KeyringContext)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   useEffect(() => {
-    if (orgsData) {
-      const organisationId = orgsData.organisations[0].id
+    if (organisation) {
       getOrgAdmins({
         variables: {
-          organisationId,
-        },
-      })
-      getUserTokens({
-        variables: {
-          organisationId,
-        },
-      })
-      getServiceTokens({
-        variables: {
-          appId: params.app,
+          organisationId: organisation.id,
         },
       })
     }
-  }, [getOrgAdmins, getServiceTokens, getUserTokens, orgsData, params.app])
+  }, [getOrgAdmins, organisation, params.app])
 
   const setupRequired = data?.appEnvironments.length === 0 ?? true
 
@@ -134,36 +107,35 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   }, [data?.appEnvironments, keyring])
 
   const initAppEnvs = async () => {
-    const owner = orgAdminsData.organisationAdminsAndSelf.find(
-      (user: OrganisationMemberType) => user.role === ApiOrganisationMemberRoleChoices.Owner
-    )
-
     const mutationPayload = {
-      devEnv: await createNewEnvPayload(
+      devEnv: await createNewEnv(
         params.app,
         'Development',
         ApiEnvironmentEnvTypeChoices.Dev,
-        owner
+        orgAdminsData.organisationAdminsAndSelf
       ),
-      stagingEnv: await createNewEnvPayload(
+      stagingEnv: await createNewEnv(
         params.app,
         'Staging',
         ApiEnvironmentEnvTypeChoices.Staging,
-        owner
+        orgAdminsData.organisationAdminsAndSelf
       ),
-      prodEnv: await createNewEnvPayload(
+      prodEnv: await createNewEnv(
         params.app,
         'Production',
         ApiEnvironmentEnvTypeChoices.Prod,
-        owner
+        orgAdminsData.organisationAdminsAndSelf
       ),
     }
 
     await initAppEnvironments({
       variables: {
-        devEnv: mutationPayload.devEnv,
-        stagingEnv: mutationPayload.stagingEnv,
-        prodEnv: mutationPayload.prodEnv,
+        devEnv: mutationPayload.devEnv.createEnvPayload,
+        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
+        prodEnv: mutationPayload.prodEnv.createEnvPayload,
+        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
+        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
+        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
       },
       refetchQueries: [
         {
@@ -214,19 +186,21 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-16">
-      {orgsData?.organisations && (
-        <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
-      )}
+      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null && (
         <section className="md:col-span-3">
           {setupRequired ? (
             <div className="flex flex-col gap-4 w-full items-center p-16">
               <h2 className="text-white font-semibold text-xl">
-                {"You don't have any environments for this app yet"}
+                {activeUserIsAdmin
+                  ? "There aren't any environments for this app yet"
+                  : "You don't have access to any environments for this app yet. Contact the organisation owner or admins to get access."}
               </h2>
-              <Button variant="primary" onClick={initAppEnvs}>
-                Get started
-              </Button>
+              {activeUserIsAdmin && (
+                <Button variant="primary" onClick={initAppEnvs}>
+                  Get started
+                </Button>
+              )}
             </div>
           ) : (
             <>
@@ -234,10 +208,10 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 <div className="mt-8 flex flex-row col-span-2 w-full gap-8">
                   <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg flex flex-col gap-4 p-4">
                     <div className="text-neutral-500 text-2xl px-4">KEY</div>
-                    <div className="flex flex-col gap-4 p-4">
+                    <div className="flex flex-col gap-4 p-4 w-max">
                       {commonSecretsKeys.map((secret: string, index: number) => (
                         <div key={index}>
-                          <div className="break-all font-mono">{secret}</div>
+                          <div className="font-mono">{secret}</div>
                         </div>
                       ))}
                     </div>

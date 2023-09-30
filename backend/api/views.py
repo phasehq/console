@@ -2,6 +2,7 @@
 from datetime import datetime
 import json
 from api.serializers import EnvironmentKeySerializer, SecretSerializer, ServiceTokenSerializer, UserTokenSerializer
+from api.emails import send_login_email
 from backend.graphene.utils.permissions import user_can_access_environment
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -30,6 +31,7 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
+
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
@@ -85,9 +87,18 @@ class CustomGoogleOAuth2Adapter(GoogleOAuth2Adapter):
             raise OAuth2Error("Invalid id_token") from e
         login = self.get_provider().sociallogin_from_response(request, identity_data)
         email = login.email_addresses[0]
+
         if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
-            # new user
-            notify_slack(f"New user signup: {email}")
+            try:
+                # Notify Slack
+                notify_slack(f"New user signup: {email}")
+            except Exception as e:
+                print(f"Error notifying Slack: {e}")
+
+        try:
+            send_login_email(request, email)
+        except Exception as e:
+            print(f"Error sending email: {e}")
 
         return login
 
@@ -117,9 +128,19 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
             extra_data["email"] = self.get_email(headers)
 
         email = extra_data["email"]
+
         if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
-            # new user
-            notify_slack(f"New user signup: {email}")
+            try:
+                # Notify Slack
+                notify_slack(f"New user signup: {email}")
+            except Exception as e:
+                print(f"Error notifying Slack: {e}")
+
+        try:
+            send_login_email(request, email)
+        except Exception as e:
+            print(f"Error sending email: {e}")
+
         return self.get_provider().sociallogin_from_response(request, extra_data)
 
 
@@ -145,9 +166,19 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
 
         email = login.email_addresses[0]
 
-        if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
-            # new user
-            notify_slack(f"New user signup: {email}")
+        if CLOUD_HOSTED:
+            # Check if user exists and notify Slack for new user signup
+            if not CustomUser.objects.filter(email=email).exists():
+                try:
+                    notify_slack(f"New user signup: {email}")
+                except Exception as e:
+                    print(f"Error notifying Slack: {e}")
+
+        try:
+            send_login_email(request, email)
+        except Exception as e:
+            print(f"Error sending email: {e}")
+
         return login
 
 

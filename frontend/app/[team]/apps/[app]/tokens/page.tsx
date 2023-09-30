@@ -1,9 +1,8 @@
 'use client'
 
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { RotateAppKey } from '@/graphql/mutations/rotateAppKeys.gql'
-import { useLazyQuery, useQuery, useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -19,30 +18,29 @@ import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { KeyringContext } from '@/contexts/keyringContext'
 import clsx from 'clsx'
 import { SecretTokens } from '@/components/apps/tokens/SecretTokens'
+import { organisationContext } from '@/contexts/organisationContext'
 
 export default function Tokens({ params }: { params: { team: string; app: string } }) {
-  const { data: orgsData } = useQuery(GetOrganisations)
   const [getApp, { data }] = useLazyQuery(GetAppDetail)
 
   const app = data?.apps[0] as AppType
 
   const [activePanel, setActivePanel] = useState<'secrets' | 'kms'>('secrets')
 
-  const organisationId = orgsData?.organisations[0].id
+  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { keyring } = useContext(KeyringContext)
 
   useEffect(() => {
-    if (orgsData) {
-      const organisationId = orgsData.organisations[0].id
+    if (organisation) {
       getApp({
         variables: {
-          organisationId,
+          organisationId: organisation.id,
           appId: params.app,
         },
       })
     }
-  }, [getApp, orgsData, params.app])
+  }, [getApp, organisation, params.app])
 
   const handleCopy = (val: string) => {
     copyToClipBoard(val)
@@ -77,15 +75,6 @@ export default function Tokens({ params }: { params: { team: string; app: string
             try {
               const wrapKey = await cryptoUtils.newAppWrapKey()
               const newAppToken = await cryptoUtils.newAppToken()
-              // const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
-              // const encryptedKeyring = getLocalKeyring(orgsData.organisations[0].id)
-              // if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
-              // const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(
-              //   encryptedKeyring!,
-              //   deviceKey
-              // )
-              // if (!decryptedKeyring) throw 'Failed to decrypt keys'
-
               const appSeed = await cryptoUtils.decryptedAppSeed(app.appSeed, keyring!.symmetricKey)
 
               const appKeys = await cryptoUtils.appKeyring(appSeed)
@@ -192,33 +181,6 @@ export default function Tokens({ params }: { params: { team: string; app: string
                             </Alert>
                           </div>
 
-                          {/* <div className="flex flex-col justify-center max-w-md mx-auto">
-                            <label
-                              className="block text-gray-700 text-sm font-bold mb-2"
-                              htmlFor="password"
-                            >
-                              Sudo password
-                            </label>
-                            <div className="relative">
-                              <input
-                                id="password"
-                                value={pw}
-                                onChange={(e) => setPw(e.target.value)}
-                                type={showPw ? 'text' : 'password'}
-                                minLength={16}
-                                required
-                                className="w-full "
-                              />
-                              <button
-                                className="absolute inset-y-0 right-4"
-                                type="button"
-                                onClick={() => setShowPw(!showPw)}
-                                tabIndex={-1}
-                              >
-                                {showPw ? <FaEyeSlash /> : <FaEye />}
-                              </button>
-                            </div>
-                          </div> */}
                           <div className="mt-10 flex items-center w-full justify-between">
                             <Button variant="secondary" type="button" onClick={closeModal}>
                               Cancel
@@ -240,7 +202,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
     }
 
     return (
-      <div className="w-full break-all space-y-8 col-span-2">
+      <div className="break-all space-y-8">
         <div className="bg-emerald-200/60 dark:bg-emerald-400/10 shadow-inner p-3 rounded-lg">
           <div className="uppercase text-xs tracking-widest text-gray-500 w-full flex items-center justify-between pb-4">
             app id
@@ -276,42 +238,42 @@ export default function Tokens({ params }: { params: { team: string; app: string
   }
 
   return (
-    <div className="w-full overflow-y-auto relative text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-16">
-      <section className="md:col-span-3 max-w-screen-2xl">
-        {orgsData?.organisations && (
-          <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
-        )}
+    <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
+      <section className="max-w-screen-xl">
+        {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
         {keyring !== null && (
-          <div className="grid grid-cols-3 mt-6 divide-x divide-neutral-500/20">
-            <div className="space-y-4 px-4 sticky top-[238px]">
+          <div className="flex gap-8 mt-6 divide-x divide-neutral-500/20 items-start">
+            <div className="space-y-4 border-l border-neutral-500/40 h-min">
               <div
                 role="button"
                 onClick={() => setActivePanel('secrets')}
                 className={clsx(
-                  'p-4 cursor-pointer rounded-md transition ease',
+                  'p-4 cursor-pointer border-l transition ease -ml-px w-60',
                   activePanel === 'secrets'
-                    ? 'bg-zinc-400 dark:bg-zinc-700 font-semibold'
-                    : 'bg-zinc-200 hover:bg-zinc-400 dark:bg-zinc-800 hover:dark:bg-zinc-700'
+                    ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
+                    : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
                 )}
               >
                 Secrets
               </div>
-              <div
-                role="button"
-                onClick={() => setActivePanel('kms')}
-                className={clsx(
-                  'p-4 cursor-pointer rounded-md transition ease',
-                  activePanel === 'kms'
-                    ? 'bg-zinc-400 dark:bg-zinc-700 font-semibold'
-                    : 'bg-zinc-200 hover:bg-zinc-400 dark:bg-zinc-800 hover:dark:bg-zinc-700'
-                )}
-              >
-                KMS
-              </div>
+              {organisation?.role?.toLowerCase() === 'owner' && (
+                <div
+                  role="button"
+                  onClick={() => setActivePanel('kms')}
+                  className={clsx(
+                    'p-4 cursor-pointer border-l transition ease -ml-px w-60',
+                    activePanel === 'kms'
+                      ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
+                      : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
+                  )}
+                >
+                  KMS
+                </div>
+              )}
             </div>
-            <div className="col-span-2 overflow-y-auto px-4">
+            <div className="overflow-y-auto px-4">
               {app && activePanel === 'secrets' && (
-                <SecretTokens organisationId={organisationId} appId={params.app} />
+                <SecretTokens organisationId={organisation!.id} appId={params.app} />
               )}
               {app && activePanel === 'kms' && <KmsPanel />}
             </div>

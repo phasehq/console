@@ -1,16 +1,17 @@
-from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation
-from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_org_member
-from .graphene.mutations.app import CreateAppMutation, DeleteAppMutation, RotateAppKeysMutation
-from .graphene.mutations.organisation import CreateOrganisationMutation
-from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, KMSLogType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, ServiceTokenType, TimeRange, UserTokenType
+from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation, UpdateMemberEnvScopeMutation
+from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_admin, user_is_org_member
+from .graphene.mutations.app import AddAppMemberMutation, CreateAppMutation, DeleteAppMutation, RemoveAppMemberMutation, RotateAppKeysMutation
+from .graphene.mutations.organisation import CreateOrganisationMemberMutation, CreateOrganisationMutation, DeleteInviteMutation, DeleteOrganisationMemberMutation, InviteOrganisationMemberMutation, UpdateOrganisationMemberRole, UpdateUserWrappedSecretsMutation
+from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, KMSLogType, OrganisationMemberInviteType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, ServiceTokenType, TimeRange, UserTokenType
 import graphene
 from graphql import GraphQLError
-from api.models import Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, Secret, SecretEvent, SecretTag, ServiceToken, UserToken
+from api.models import Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, OrganisationMemberInvite, Secret, SecretEvent, SecretTag, ServiceToken, UserToken
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
 from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
 from itertools import chain
+from django.utils import timezone
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
@@ -21,6 +22,10 @@ class Query(graphene.ObjectType):
     ), user_id=graphene.ID(), role=graphene.List(graphene.String))
     organisation_admins_and_self = graphene.List(
         OrganisationMemberType, organisation_id=graphene.ID())
+    organisation_invites = graphene.List(
+        OrganisationMemberInviteType, org_id=graphene.ID())
+    validate_invite = graphene.Field(
+        OrganisationMemberInviteType, invite_id=graphene.ID())
     apps = graphene.List(
         AppType, organisation_id=graphene.ID(), app_id=graphene.ID())
     logs = graphene.List(KMSLogType, app_id=graphene.ID(),
@@ -33,28 +38,39 @@ class Query(graphene.ObjectType):
     ), period=graphene.Argument(graphene.Enum.from_enum(TimeRange)))
 
     app_environments = graphene.List(EnvironmentType, app_id=graphene.ID(
-    ), environment_id=graphene.ID(required=False))
+    ), environment_id=graphene.ID(required=False), member_id=graphene.ID(required=False))
+    app_users = graphene.List(OrganisationMemberType, app_id=graphene.ID())
     secrets = graphene.List(SecretType, env_id=graphene.ID())
     secret_history = graphene.List(SecretEventType, secret_id=graphene.ID())
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
     environment_keys = graphene.List(
-        EnvironmentKeyType, environment_id=graphene.ID())
+        EnvironmentKeyType, environment_id=graphene.ID(), member_id=graphene.ID(required=False))
     environment_tokens = graphene.List(
         EnvironmentTokenType, environment_id=graphene.ID())
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
     def resolve_organisations(root, info):
-        memberships = OrganisationMember.objects.filter(user=info.context.user)
+
+        memberships = OrganisationMember.objects.filter(
+            user=info.context.user, deleted_at=None)
+
         return [membership.organisation for membership in memberships]
 
     def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
 
-        roles = [user_role.lower() for user_role in role]
+        filter = {
+            "organisation_id": organisation_id,
+            "deleted_at": None
+        }
 
-        return OrganisationMember.objects.filter(organisation_id=organisation_id, role__in=roles)
+        if role:
+            roles = [user_role.lower() for user_role in role]
+            filter["roles__in"] = roles
+
+        return OrganisationMember.objects.filter(**filter)
 
     def resolve_organisation_admins_and_self(root, info, organisation_id):
         if not user_is_org_member(info.context.user.userId, organisation_id):
@@ -63,32 +79,64 @@ class Query(graphene.ObjectType):
         roles = ['owner', 'admin']
 
         members = OrganisationMember.objects.filter(
-            organisation_id=organisation_id, role__in=roles)
+            organisation_id=organisation_id, role__in=roles, deleted_at=None)
 
         if not info.context.user.userId in [member.user_id for member in members]:
             self_member = OrganisationMember.objects.filter(
-                organisation_id=organisation_id, user_id=info.context.user.userId)
+                organisation_id=organisation_id, user_id=info.context.user.userId, deleted_at=None)
             members = list(chain(members, self_member))
 
         return members
 
+    def resolve_organisation_invites(root, info, org_id):
+        if not user_is_org_member(info.context.user.userId, org_id):
+            raise GraphQLError("You don't have access to this organisation")
+
+        invites = OrganisationMemberInvite.objects.filter(
+            organisation_id=org_id, valid=True)
+
+        return invites
+
+    def resolve_validate_invite(root, info, invite_id):
+        try:
+            invite = OrganisationMemberInvite.objects.get(
+                id=invite_id, valid=True)
+        except:
+            raise GraphQLError("This invite is invalid")
+
+        if invite.expires_at < timezone.now():
+            raise GraphQLError("This invite has expired")
+
+        if invite.invitee_email == info.context.user.email:
+            return invite
+        else:
+            raise GraphQLError("This invite is for another user")
+
     def resolve_apps(root, info, organisation_id, app_id):
+        org_member = OrganisationMember.objects.get(
+            organisation_id=organisation_id, user_id=info.context.user.userId, deleted_at=None)
+
         filter = {
             'organisation_id': organisation_id,
+            'id__in': org_member.apps.all(),
             'is_deleted': False
         }
+
         if app_id != '':
             filter['id'] = app_id
         return App.objects.filter(**filter)
 
-    def resolve_app_environments(root, info, app_id, environment_id):
+    def resolve_app_environments(root, info, app_id, environment_id, member_id=None):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
         app = App.objects.get(id=app_id)
 
-        org_member = OrganisationMember.objects.get(
-            organisation=app.organisation, user_id=info.context.user.userId)
+        if member_id is not None:
+            org_member = OrganisationMember.objects.get(id=member_id)
+        else:
+            org_member = OrganisationMember.objects.get(
+                organisation=app.organisation, user_id=info.context.user.userId, deleted_at=None)
 
         filter = {
             'app_id': app_id
@@ -99,6 +147,13 @@ class Query(graphene.ObjectType):
 
         app_environments = Environment.objects.filter(**filter)
         return [app_env for app_env in app_environments if EnvironmentKey.objects.filter(user=org_member, environment_id=app_env.id).exists()]
+
+    def resolve_app_users(root, info, app_id):
+        if not user_can_access_app(info.context.user.userId, app_id):
+            raise GraphQLError("You don't have access to this app")
+
+        app = App.objects.get(id=app_id)
+        return app.members.filter(deleted_at=None)
 
     def resolve_secrets(root, info, env_id):
         if not user_can_access_environment(info.context.user.userId, env_id):
@@ -118,13 +173,17 @@ class Query(graphene.ObjectType):
 
         return SecretTag.objects.filter(organisation_id=org_id)
 
-    def resolve_environment_keys(root, info, environment_id):
+    def resolve_environment_keys(root, info, environment_id, member_id=None):
         if not user_can_access_environment(info.context.user.userId, environment_id):
-            raise GraphQLError("You don't have access to this secret")
+            raise GraphQLError("You don't have access to this environment")
 
         env = Environment.objects.get(id=environment_id)
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=env.app.organisation)
+        if member_id is not None:
+            org_member = OrganisationMember.objects.get(
+                id=member_id, deleted_at=None)
+        else:
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=env.app.organisation, deleted_at=None)
         return EnvironmentKey.objects.filter(environment=env, user=org_member)
 
     def resolve_environment_tokens(root, info, environment_id):
@@ -133,7 +192,7 @@ class Query(graphene.ObjectType):
 
         env = Environment.objects.get(id=environment_id)
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=env.app.organisation)
+            user=info.context.user, organisation=env.app.organisation, deleted_at=None)
         return EnvironmentToken.objects.filter(environment=env, user=org_member)
 
     def resolve_user_tokens(root, info, organisation_id):
@@ -141,7 +200,7 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have access to this organisation")
 
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation_id=organisation_id)
+            user=info.context.user, organisation_id=organisation_id, deleted_at=None)
         return UserToken.objects.filter(user=org_member, deleted_at=None)
 
     def resolve_service_tokens(root, info, app_id):
@@ -266,16 +325,31 @@ class Query(graphene.ObjectType):
 
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
+    invite_organisation_member = InviteOrganisationMemberMutation.Field()
+    create_organisation_member = CreateOrganisationMemberMutation.Field()
+    delete_organisation_member = DeleteOrganisationMemberMutation.Field()
+    update_organisation_member_role = UpdateOrganisationMemberRole.Field()
+    update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
+
+    delete_invitation = DeleteInviteMutation.Field()
+
     create_app = CreateAppMutation.Field()
     rotate_app_keys = RotateAppKeysMutation.Field()
     delete_app = DeleteAppMutation.Field()
+    add_app_member = AddAppMemberMutation.Field()
+    remove_app_member = RemoveAppMemberMutation.Field()
+    update_member_environment_scope = UpdateMemberEnvScopeMutation.Field()
+
     create_environment = CreateEnvironmentMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
+
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
+
     create_service_token = CreateServiceTokenMutation.Field()
     delete_service_token = DeleteServiceTokenMutation.Field()
+
     create_secret_folder = CreateSecretFolderMutation.Field()
     create_secret_tag = CreateSecretTagMutation.Field()
     create_secret = CreateSecretMutation.Field()

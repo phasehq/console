@@ -22,7 +22,7 @@ import { gql, useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
-import { setLocalOrg } from '@/utils/localStorage'
+import { setLocalKeyring } from '@/utils/localStorage'
 
 const bip39 = require('bip39')
 
@@ -66,7 +66,7 @@ const Onboard = () => {
       icon: <MdKey />,
       title: 'Recovery',
       description:
-        "This is your 24 word recovery phrase. It's used to secure your application keys. Only you have access to it. Please write it down and store it somewhere safe like a password manager. You will need to enter your recovery phrase when logging in from a new device.",
+        "This is your 24 word recovery phrase. You can use it log in to your Phase account if you forget the sudo password. It's used to derive your encryption keys. Only you have access to it. Please write it down or store it somewhere safe like a password manager.",
     },
     {
       index: 2,
@@ -143,11 +143,13 @@ const Onboard = () => {
             id: orgId,
             name,
             identityKey: publicKey,
+            wrappedKeyring: encryptedKeyring,
+            wrappedRecovery: encryptedMnemonic,
           },
         })
         const { data } = result
         const newOrg = data.createOrganisation.organisation
-        setLocalOrg({
+        setLocalKeyring({
           email: session?.user?.email!,
           org: newOrg,
           keyring: encryptedKeyring,

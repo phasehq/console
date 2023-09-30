@@ -3,7 +3,6 @@
 import { EnvironmentType, SecretInput, SecretType } from '@/apollo/graphql'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
 import { UpdateSecret } from '@/graphql/mutations/environments/editSecret.gql'
@@ -25,6 +24,7 @@ import { FaDownload, FaPlus, FaSearch, FaTimesCircle, FaUndo } from 'react-icons
 import SecretRow from '@/components/environments/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
+import { organisationContext } from '@/contexts/organisationContext'
 
 type EnvKeyring = {
   privateKey: string
@@ -45,7 +45,7 @@ export default function Environment({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isLoading, setIsloading] = useState(false)
 
-  const { data: orgsData } = useQuery(GetOrganisations)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const unsavedChanges =
     secrets.length !== updatedSecrets.length ||
@@ -445,9 +445,7 @@ export default function Environment({
 
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white">
-      {orgsData?.organisations && (
-        <UnlockKeyringDialog organisationId={orgsData.organisations[0].id} />
-      )}
+      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null && !loading && (
         <div className="flex flex-col p-4 gap-8">
           <div className="h3 font-semibold text-2xl">
@@ -501,19 +499,20 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            {filteredSecrets.map((secret, index: number) => (
-              <div className="flex items-center gap-2" key={secret.id}>
-                <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
-                <SecretRow
-                  orgId={orgsData.organisations[0].id}
-                  secret={secret as SecretType}
-                  cannonicalSecret={cannonicalSecret(secret.id)}
-                  secretNames={secretNames}
-                  handlePropertyChange={handleUpdateSecretProperty}
-                  handleDelete={handleDeleteSecret}
-                />
-              </div>
-            ))}
+            {organisation &&
+              filteredSecrets.map((secret, index: number) => (
+                <div className="flex items-center gap-2" key={secret.id}>
+                  <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
+                  <SecretRow
+                    orgId={organisation.id}
+                    secret={secret as SecretType}
+                    cannonicalSecret={cannonicalSecret(secret.id)}
+                    secretNames={secretNames}
+                    handlePropertyChange={handleUpdateSecretProperty}
+                    handleDelete={handleDeleteSecret}
+                  />
+                </div>
+              ))}
 
             <div className="col-span-2 flex mt-4">
               <Button variant="primary" onClick={handleAddSecret}>

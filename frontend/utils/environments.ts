@@ -3,6 +3,7 @@ import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { splitSecret } from './keyshares'
 import {
   ApiEnvironmentEnvTypeChoices,
+  ApiOrganisationMemberRoleChoices,
   EnvironmentKeyType,
   EnvironmentType,
   OrganisationMemberType,
@@ -227,7 +228,7 @@ export const generateUserToken = async (
  * @param {OrganisationMemberType} user - The user for whom the secrets are wrapped.
  * @returns {Promise<{ user: OrganisationMemberType; wrappedSeed: string; wrappedSalt: string }>} - An object containing the wrapped environment secrets and user information.
  */
-const wrapEnvSecretsForUser = async (
+export const wrapEnvSecretsForUser = async (
   envSecrets: { seed: string; salt: string },
   user: OrganisationMemberType
 ) => {
@@ -356,29 +357,53 @@ export const decryptEnvSecrets = async (
  * @param {string} appId - The ID of the application.
  * @param {string} name - The name of the environment.
  * @param {ApiEnvironmentEnvTypeChoices} envType - The type of environment.
- * @param {OrganisationMemberType} user - The user for whom the environment is created.
+ * @param {OrganisationMemberType} owner - The user for whom the environment is created.
  * @returns {Promise<object>} - An object containing the environment payload.
  */
-export const createNewEnvPayload = async (
+export const createNewEnv = async (
   appId: string,
   name: string,
   envType: ApiEnvironmentEnvTypeChoices,
-  user: OrganisationMemberType
+  ownerAndAdmins: OrganisationMemberType[]
 ) => {
   const seed = await newEnvSeed()
   const keys = await envKeyring(seed)
 
   const salt = await newEnvSalt()
 
-  const ownerWrappedEnv = await wrapEnvSecretsForUser({ seed, salt }, user)
+  const owner = ownerAndAdmins.find(
+    (user: OrganisationMemberType) => user.role === ApiOrganisationMemberRoleChoices.Owner
+  )
+
+  const ownerWrappedEnv = await wrapEnvSecretsForUser({ seed, salt }, owner!)
+  const adminWrappedEnvSecrets = await Promise.all(
+    ownerAndAdmins
+      .filter((user) => user.role !== ApiOrganisationMemberRoleChoices.Owner)
+      .map(async (admin) => {
+        const adminWrappedEnvSecret = await wrapEnvSecretsForUser({ seed, salt }, admin)
+        return adminWrappedEnvSecret
+      })
+  )
 
   return {
-    appId,
-    name,
-    envType,
-    wrappedSeed: ownerWrappedEnv.wrappedSeed,
-    wrappedSalt: ownerWrappedEnv.wrappedSalt,
-    identityKey: keys.publicKey,
+    createEnvPayload: {
+      appId,
+      name,
+      envType,
+      wrappedSeed: ownerWrappedEnv.wrappedSeed,
+      wrappedSalt: ownerWrappedEnv.wrappedSalt,
+      identityKey: keys.publicKey,
+    },
+    adminKeysPayload: adminWrappedEnvSecrets.map((wrappedSecrets) => {
+      const { wrappedSeed, wrappedSalt, user } = wrappedSecrets
+      return {
+        identityKey: keys.publicKey,
+        wrappedSeed,
+        wrappedSalt,
+        userId: user.id,
+        envId: '',
+      }
+    }),
   }
 }
 

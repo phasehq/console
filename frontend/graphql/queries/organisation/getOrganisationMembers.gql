@@ -1,6 +1,12 @@
 query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
   organisationMembers(organisationId: $organisationId, role: $role) {
+    id
     role
     identityKey
+    email
+    fullName
+    avatarUrl
+    createdAt
+    self
   }
 }

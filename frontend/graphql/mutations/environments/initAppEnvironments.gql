@@ -2,8 +2,11 @@ mutation InitAppEnvironments(
   $devEnv: EnvironmentInput!
   $stagingEnv: EnvironmentInput!
   $prodEnv: EnvironmentInput!
+  $devAdminKeys: [EnvironmentKeyInput],
+  $stagAdminKeys: [EnvironmentKeyInput]
+  $prodAdminKeys: [EnvironmentKeyInput]
 ) {
-  devEnvironment: createEnvironment(environmentData: $devEnv) {
+  devEnvironment: createEnvironment(environmentData: $devEnv, adminKeys: $devAdminKeys) {
     environment {
       id
       name
@@ -11,7 +14,7 @@ mutation InitAppEnvironments(
       identityKey
     }
   }
-  stagingEnvironment: createEnvironment(environmentData: $stagingEnv) {
+  stagingEnvironment: createEnvironment(environmentData: $stagingEnv, adminKeys: $stagAdminKeys) {
     environment {
       id
       name
@@ -19,7 +22,7 @@ mutation InitAppEnvironments(
       identityKey
     }
   }
-  prodEnvironment: createEnvironment(environmentData: $prodEnv) {
+  prodEnvironment: createEnvironment(environmentData: $prodEnv, adminKeys: $prodAdminKeys) {
     environment {
       id
       name

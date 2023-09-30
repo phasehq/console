@@ -75,6 +75,10 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
             }
 
             try {
+              //get client user agent and ip
+              const userAgent = _req.headers['user-agent']
+              const ip = _req.headers['x-forwarded-for']
+
               const response = await axios.post<AccessTokenResponse>(
                 UrlUtils.makeUrl(
                   process.env.BACKEND_API_BASE!,
@@ -83,7 +87,13 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
                   account.provider
                 ),
                 loginPayload,
-                { withCredentials: true }
+                {
+                  withCredentials: true,
+                  headers: {
+                    'User-agent': userAgent,
+                    'X-forwarded-for': ip,
+                  },
+                }
               )
 
               Object.entries(response.headers).forEach(([k, v]) => {
@@ -102,7 +112,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
       },
     },
     pages: {
-      newUser: '/onboard',
+      newUser: '/signup',
       signIn: '/login',
     },
     debug: process.env.DEBUG ? process.env.DEBUG === 'True' : false,

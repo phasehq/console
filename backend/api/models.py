@@ -4,7 +4,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from uuid import uuid4
 from backend.api.kv import write
 import json
-
+from django.utils import timezone
 from django.conf import settings
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
@@ -91,34 +91,6 @@ class Organisation(models.Model):
         return self.name
 
 
-class OrganisationMember(models.Model):
-    OWNER = 'owner'
-    ADMIN = 'admin'
-    DEVELOPER = 'dev'
-
-    USER_ROLES = [
-        (OWNER, 'Owner'),
-        (ADMIN, 'Admin'),
-        (DEVELOPER, 'Developer')
-    ]
-
-    id = models.TextField(default=uuid4, primary_key=True, editable=False)
-    user = models.ForeignKey(
-        CustomUser, related_name='organisation', on_delete=models.CASCADE)
-    organisation = models.ForeignKey(
-        Organisation, related_name='users', on_delete=models.CASCADE)
-    role = models.CharField(
-        max_length=5,
-        choices=USER_ROLES,
-        default=DEVELOPER,
-    )
-    identity_key = models.CharField(max_length=256, null=True, blank=True)
-    wrapped_keyring = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(auto_now=True)
-
-
 class App(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
@@ -150,6 +122,62 @@ class App(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class OrganisationMember(models.Model):
+    OWNER = 'owner'
+    ADMIN = 'admin'
+    DEVELOPER = 'dev'
+
+    USER_ROLES = [
+        (OWNER, 'Owner'),
+        (ADMIN, 'Admin'),
+        (DEVELOPER, 'Developer')
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    user = models.ForeignKey(
+        CustomUser, related_name='organisation', on_delete=models.CASCADE)
+    organisation = models.ForeignKey(
+        Organisation, related_name='users', on_delete=models.CASCADE)
+    role = models.CharField(
+        max_length=5,
+        choices=USER_ROLES,
+        default=DEVELOPER,
+    )
+    apps = models.ManyToManyField(App, related_name='members')
+    identity_key = models.CharField(max_length=256, null=True, blank=True)
+    wrapped_keyring = models.TextField(blank=True)
+    wrapped_recovery = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def delete(self, *args, **kwargs):
+        """
+        Soft delete the object by setting the 'deleted_at' field.
+        """
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+class OrganisationMemberInvite(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, related_name='invites', on_delete=models.CASCADE)
+    apps = models.ManyToManyField(App)
+    role = models.CharField(
+        max_length=5,
+        choices=OrganisationMember.USER_ROLES,
+        default=OrganisationMember.DEVELOPER,
+    )
+    invited_by = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE)
+    invitee_email = models.EmailField()
+    valid = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField()
 
 
 class Environment(models.Model):
@@ -192,6 +220,10 @@ class EnvironmentKey(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.save()
 
 
 class EnvironmentToken(models.Model):

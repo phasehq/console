@@ -2,15 +2,18 @@ type Query {
   organisations: [OrganisationType]
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
   organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
+  organisationInvites(orgId: ID): [OrganisationMemberInviteType]
+  validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
   logs(appId: ID, start: BigInt, end: BigInt): [KMSLogType]
   logsCount(appId: ID, thisMonth: Boolean): Int
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
-  appEnvironments(appId: ID, environmentId: ID): [EnvironmentType]
+  appEnvironments(appId: ID, environmentId: ID, memberId: ID): [EnvironmentType]
+  appUsers(appId: ID): [OrganisationMemberType]
   secrets(envId: ID): [SecretType]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
-  environmentKeys(environmentId: ID): [EnvironmentKeyType]
+  environmentKeys(environmentId: ID, memberId: ID): [EnvironmentKeyType]
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
@@ -22,6 +25,10 @@ type OrganisationType {
   identityKey: String!
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
+  role: String
+  memberId: ID
+  keyring: String
+  recovery: String
 }
 
 """
@@ -52,6 +59,9 @@ type OrganisationMemberType {
   updatedAt: DateTime!
   email: String
   username: String
+  fullName: String
+  avatarUrl: String
+  self: Boolean
 }
 
 """An enumeration."""
@@ -66,6 +76,19 @@ enum ApiOrganisationMemberRoleChoices {
   DEV
 }
 
+type OrganisationMemberInviteType {
+  id: String!
+  organisation: OrganisationType!
+  apps: [AppType!]!
+  role: ApiOrganisationMemberInviteRoleChoices!
+  invitedBy: OrganisationMemberType!
+  inviteeEmail: String!
+  valid: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime!
+}
+
 type AppType {
   id: String!
   name: String!
@@ -75,6 +98,18 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiOrganisationMemberInviteRoleChoices {
+  """Owner"""
+  OWNER
+
+  """Admin"""
+  ADMIN
+
+  """Developer"""
+  DEV
 }
 
 type KMSLogType implements Node {
@@ -202,6 +237,7 @@ enum ApiSecretEventEventTypeChoices {
 
 type EnvironmentKeyType {
   id: String!
+  environment: EnvironmentType!
   identityKey: String!
   wrappedSeed: String!
   wrappedSalt: String!
@@ -244,11 +280,20 @@ type ServiceTokenType {
 }
 
 type Mutation {
-  createOrganisation(id: ID!, identityKey: String!, name: String!): CreateOrganisationMutation
+  createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
+  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
+  createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
+  deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
+  updateOrganisationMemberRole(memberId: ID!, role: String!): UpdateOrganisationMemberRole
+  updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+  deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
-  createEnvironment(environmentData: EnvironmentInput!): CreateEnvironmentMutation
+  addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): AddAppMemberMutation
+  removeAppMember(appId: ID, memberId: ID): RemoveAppMemberMutation
+  updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): UpdateMemberEnvScopeMutation
+  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
@@ -266,6 +311,30 @@ type CreateOrganisationMutation {
   organisation: OrganisationType
 }
 
+type InviteOrganisationMemberMutation {
+  invite: OrganisationMemberInviteType
+}
+
+type CreateOrganisationMemberMutation {
+  orgMember: OrganisationMemberType
+}
+
+type DeleteOrganisationMemberMutation {
+  ok: Boolean
+}
+
+type UpdateOrganisationMemberRole {
+  orgMember: OrganisationMemberType
+}
+
+type UpdateUserWrappedSecretsMutation {
+  orgMember: OrganisationMemberType
+}
+
+type DeleteInviteMutation {
+  ok: Boolean
+}
+
 type CreateAppMutation {
   app: AppType
 }
@@ -275,6 +344,26 @@ type RotateAppKeysMutation {
 }
 
 type DeleteAppMutation {
+  app: AppType
+}
+
+type AddAppMemberMutation {
+  app: AppType
+}
+
+input EnvironmentKeyInput {
+  envId: ID!
+  userId: ID
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+}
+
+type RemoveAppMemberMutation {
+  app: AppType
+}
+
+type UpdateMemberEnvScopeMutation {
   app: AppType
 }
 
@@ -310,14 +399,6 @@ type DeleteUserTokenMutation {
 
 type CreateServiceTokenMutation {
   serviceToken: ServiceTokenType
-}
-
-input EnvironmentKeyInput {
-  envId: ID!
-  userId: ID
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
 }
 
 type DeleteServiceTokenMutation {

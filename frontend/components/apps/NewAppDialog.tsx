@@ -1,24 +1,29 @@
-import { cryptoUtils } from '@/utils/auth'
+import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
-import { getLocalKeyring } from '@/utils/localStorage'
 import { Dialog, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
-import { Fragment, ReactNode, useEffect, useState } from 'react'
-import { FaCopy, FaCross, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
+import { Fragment, ReactNode, useContext, useEffect, useState } from 'react'
+import { FaCopy, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
-import { useMutation } from '@apollo/client'
+import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { useLazyQuery, useMutation } from '@apollo/client'
 import {
+  ApiEnvironmentEnvTypeChoices,
   ApiOrganisationPlanChoices,
   MutationCreateAppArgs,
   OrganisationType,
 } from '@/apollo/graphql'
 import { splitSecret } from '@/utils/keyshares'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
+import { KeyringContext } from '@/contexts/keyringContext'
+import { createNewEnv } from '@/utils/environments'
 
-const FREE_APP_LIMIT = 1
+const FREE_APP_LIMIT = 5
 const PRO_APP_LIMIT = 10
 
 export default function NewAppDialog(props: {
@@ -35,7 +40,11 @@ export default function NewAppDialog(props: {
   const [appId, setAppId] = useState<string>('')
   const [appSecret, setAppSecret] = useState<string>('')
   const { data: session } = useSession()
-  const [createApp, { data, loading, error }] = useMutation(CreateApplication)
+  const [createApp] = useMutation(CreateApplication)
+
+  const [initAppEnvironments] = useMutation(InitAppEnvironments)
+
+  const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
   const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 
@@ -43,6 +52,18 @@ export default function NewAppDialog(props: {
     label: 'Create an app',
     variant: 'primary',
   }
+
+  const { keyring, setKeyring } = useContext(KeyringContext)
+
+  useEffect(() => {
+    if (organisation) {
+      getOrgAdmins({
+        variables: {
+          organisationId: organisation.id,
+        },
+      })
+    }
+  }, [getOrgAdmins, organisation])
 
   const complete = () => appId && appSecret
 
@@ -67,6 +88,67 @@ export default function NewAppDialog(props: {
     toast.info('Copied')
   }
 
+  const validateKeyring = async (password: string) => {
+    return new Promise<OrganisationKeyring>(async (resolve, reject) => {
+      if (keyring) resolve(keyring)
+      else {
+        try {
+          const decryptedKeyring = await cryptoUtils.getKeyring(
+            session?.user?.email!,
+            organisation!.id,
+            password
+          )
+          setKeyring(decryptedKeyring)
+          resolve(decryptedKeyring)
+        } catch (error) {
+          reject(error)
+        }
+      }
+    })
+  }
+
+  const initAppEnvs = async (appId: string) => {
+    const mutationPayload = {
+      devEnv: await createNewEnv(
+        appId,
+        'Development',
+        ApiEnvironmentEnvTypeChoices.Dev,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+      stagingEnv: await createNewEnv(
+        appId,
+        'Staging',
+        ApiEnvironmentEnvTypeChoices.Staging,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+      prodEnv: await createNewEnv(
+        appId,
+        'Production',
+        ApiEnvironmentEnvTypeChoices.Prod,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+    }
+
+    await initAppEnvironments({
+      variables: {
+        devEnv: mutationPayload.devEnv.createEnvPayload,
+        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
+        prodEnv: mutationPayload.prodEnv.createEnvPayload,
+        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
+        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
+        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
+      },
+      refetchQueries: [
+        {
+          query: GetAppEnvironments,
+          variables: {
+            appId,
+          },
+        },
+      ],
+    })
+  }
+
   const handleCreateApp = async () => {
     const APP_VERSION = 1
 
@@ -78,24 +160,14 @@ export default function NewAppDialog(props: {
         const id = crypto.randomUUID()
 
         try {
-          const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
-          const encryptedKeyring = getLocalKeyring(organisation.id)
-          if (!encryptedKeyring) throw 'Error fetching local encrypted keys from browser'
-          const decryptedKeyring = await cryptoUtils.decryptAccountKeyring(
-            encryptedKeyring!,
-            deviceKey
-          )
-          if (!decryptedKeyring) throw 'Failed to decrypt keys'
-          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(
-            appSeed,
-            decryptedKeyring.symmetricKey
-          )
+          const keyring = await validateKeyring(pw)
+          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(appSeed, keyring.symmetricKey)
           const appKeys = await cryptoUtils.appKeyring(appSeed)
           const appKeyShares = await splitSecret(appKeys.privateKey)
 
           const wrappedShare = await cryptoUtils.wrappedKeyShare(appKeyShares[1], wrapKey)
 
-          await createApp({
+          const { data } = await createApp({
             variables: {
               id,
               name,
@@ -117,10 +189,13 @@ export default function NewAppDialog(props: {
             ],
           })
 
+          await initAppEnvs(data.createApp.app.id)
+
           setAppSecret(`pss:v${APP_VERSION}:${appToken}:${appKeyShares[0]}:${wrapKey}`)
           setAppId(`phApp:v${APP_VERSION}:${appKeys.publicKey}`)
 
           resolve(true)
+          closeModal()
         } catch (error) {
           reject(error)
         }
@@ -133,9 +208,7 @@ export default function NewAppDialog(props: {
     toast.promise(handleCreateApp, {
       pending: 'Setting up your app',
       success: 'App created!',
-      error: error?.message
-        ? undefined
-        : 'Something went wrong! Please check your password and try again.',
+      error: 'Something went wrong! Please check your sudo password and try again.',
     })
   }
 
@@ -231,37 +304,39 @@ export default function NewAppDialog(props: {
                             maxLength={64}
                             value={name}
                             placeholder="MyApp"
-                            onChange={(e) => setName(e.target.value.replace(/[^a-z0-9]/gi, ''))}
+                            onChange={(e) => setName(e.target.value)}
                           />
                         </div>
 
-                        <div className="flex flex-col justify-center max-w-md mx-auto">
-                          <label
-                            className="block text-gray-700 text-sm font-bold mb-2"
-                            htmlFor="password"
-                          >
-                            Sudo password
-                          </label>
-                          <div className="relative">
-                            <input
-                              id="password"
-                              value={pw}
-                              onChange={(e) => setPw(e.target.value)}
-                              type={showPw ? 'text' : 'password'}
-                              minLength={16}
-                              required
-                              className="w-full "
-                            />
-                            <button
-                              className="absolute inset-y-0 right-4"
-                              type="button"
-                              onClick={() => setShowPw(!showPw)}
-                              tabIndex={-1}
+                        {!keyring && (
+                          <div className="flex flex-col justify-center max-w-md mx-auto">
+                            <label
+                              className="block text-gray-700 text-sm font-bold mb-2"
+                              htmlFor="password"
                             >
-                              {showPw ? <FaEyeSlash /> : <FaEye />}
-                            </button>
+                              Sudo password
+                            </label>
+                            <div className="relative">
+                              <input
+                                id="password"
+                                value={pw}
+                                onChange={(e) => setPw(e.target.value)}
+                                type={showPw ? 'text' : 'password'}
+                                minLength={16}
+                                required
+                                className="w-full "
+                              />
+                              <button
+                                className="absolute inset-y-0 right-4"
+                                type="button"
+                                onClick={() => setShowPw(!showPw)}
+                                tabIndex={-1}
+                              >
+                                {showPw ? <FaEyeSlash /> : <FaEye />}
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
 
                       <div className="mt-8 flex items-center w-full justify-between">

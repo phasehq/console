@@ -3,5 +3,6 @@ query GetOrganisationAdminsAndSelf($organisationId: ID!) {
     id
     role
     identityKey
+    self
   }
 }
