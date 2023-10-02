@@ -52,10 +52,10 @@ const documents = {
     "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n  }\n}": types.GetAppEnvironmentsDocument,
     "query GetEnvironmentKey($envId: ID!) {\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvironmentKeyDocument,
     "query GetEnvironmentTokens($envId: ID!) {\n  environmentTokens(environmentId: $envId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n  }\n}": types.GetEnvironmentTokensDocument,
-    "query GetSecretNames($envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetSecretNamesDocument,
+    "query GetEnvSecretsKV($envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n    value\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvSecretsKvDocument,
     "query GetSecretTags($orgId: ID!) {\n  secretTags(orgId: $orgId) {\n    id\n    name\n    color\n  }\n}": types.GetSecretTagsDocument,
     "query GetSecrets($appId: ID!, $envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n    value\n    tags {\n      id\n      name\n      color\n    }\n    comment\n    createdAt\n    history {\n      id\n      key\n      value\n      tags {\n        id\n        name\n        color\n      }\n      version\n      comment\n      timestamp\n      user {\n        email\n        username\n        fullName\n        avatarUrl\n      }\n      eventType\n    }\n  }\n  appEnvironments(appId: $appId, environmentId: $envId) {\n    id\n    name\n    envType\n    identityKey\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetSecretsDocument,
-    "query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n    }\n    expiresAt\n    keys {\n      id\n    }\n  }\n}": types.GetServiceTokensDocument,
+    "query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    expiresAt\n    keys {\n      id\n    }\n  }\n}": types.GetServiceTokensDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
 };
 
@@ -232,7 +232,7 @@ export function graphql(source: "query GetEnvironmentTokens($envId: ID!) {\n  en
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetSecretNames($envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}"): (typeof documents)["query GetSecretNames($envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}"];
+export function graphql(source: "query GetEnvSecretsKV($envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n    value\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}"): (typeof documents)["query GetEnvSecretsKV($envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n    value\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -244,7 +244,7 @@ export function graphql(source: "query GetSecrets($appId: ID!, $envId: ID!) {\n 
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n    }\n    expiresAt\n    keys {\n      id\n    }\n  }\n}"): (typeof documents)["query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n    }\n    expiresAt\n    keys {\n      id\n    }\n  }\n}"];
+export function graphql(source: "query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    expiresAt\n    keys {\n      id\n    }\n  }\n}"): (typeof documents)["query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    expiresAt\n    keys {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
