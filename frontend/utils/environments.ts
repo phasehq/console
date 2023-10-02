@@ -296,13 +296,13 @@ export const unwrapEnvSecretsForUser = async (
 }
 
 /**
- * Decrypts environment secret names.
+ * Decrypts environment secret key and value pairs.
  *
  * @param {SecretType[]} encryptedSecrets - An array of encrypted secrets.
  * @param {{ publicKey: string; privateKey: string }} envKeys - The environment keys for decryption.
  * @returns {Promise<SecretType[]>} - An array of decrypted secrets.
  */
-export const decryptEnvSecretNames = async (
+export const decryptEnvSecretKVs = async (
   encryptedSecrets: SecretType[],
   envKeys: { publicKey: string; privateKey: string }
 ) => {
@@ -311,6 +311,12 @@ export const decryptEnvSecretNames = async (
       const decryptedSecret = structuredClone(secret)
       decryptedSecret.key = await decryptAsymmetric(
         secret.key,
+        envKeys?.privateKey,
+        envKeys?.publicKey
+      )
+
+      decryptedSecret.value = await decryptAsymmetric(
+        secret.value,
         envKeys?.privateKey,
         envKeys?.publicKey
       )

@@ -499,6 +499,14 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-2">
+            <div className="flex items-center w-full">
+              <div className="px-9  py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                key
+              </div>
+              <div className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                value
+              </div>
+            </div>
             {organisation &&
               filteredSecrets.map((secret, index: number) => (
                 <div className="flex items-center gap-2" key={secret.id}>

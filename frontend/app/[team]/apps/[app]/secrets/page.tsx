@@ -1,27 +1,32 @@
 'use client'
 
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { GetSecretNames } from '@/graphql/queries/secrets/getSecretNames.gql'
-import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
-import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
-import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { useCallback, useContext, useEffect, useState } from 'react'
-import { createNewEnv, decryptEnvSecretNames, unwrapEnvSecretsForUser } from '@/utils/environments'
-import { Button } from '@/components/common/Button'
-import { ApiEnvironmentEnvTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
+import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql'
+import { useLazyQuery, useQuery } from '@apollo/client'
+import { useContext, useEffect, useState } from 'react'
+import { decryptEnvSecretKVs, unwrapEnvSecretsForUser } from '@/utils/environments'
+import { EnvironmentType, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
-import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
+import { FaArrowRight, FaCheck, FaCheckCircle, FaCircle, FaTimesCircle } from 'react-icons/fa'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userIsAdmin } from '@/utils/permissions'
+import { Button } from '@/components/common/Button'
+import clsx from 'clsx'
 
 type EnvSecrets = {
   env: EnvironmentType
   secrets: SecretType[]
+}
+
+type AppSecret = {
+  key: string
+  envs: Array<{
+    env: Partial<EnvironmentType>
+    secret: SecretType | null
+  }>
 }
 
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
@@ -31,200 +36,162 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     },
   })
 
-  const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
+  const pathname = usePathname()
 
-  const [getEnvSecrets] = useLazyQuery(GetSecretNames)
-  const [initAppEnvironments] = useMutation(InitAppEnvironments)
-  const [updateScope] = useMutation(UpdateEnvScope)
+  const [getEnvSecrets] = useLazyQuery(GetEnvSecretsKV)
 
-  const [commonSecrets, setCommonSecrets] = useState<SecretType[]>([])
-  const [envSecrets, setEnvSecrets] = useState<EnvSecrets[]>([])
-
-  const sortedEnvSecrets = [...envSecrets].sort((a, b) => {
-    const order = ['Development', 'Staging', 'Production']
-    const indexA = order.indexOf(a.env.name)
-    const indexB = order.indexOf(b.env.name)
-
-    return indexA - indexB
-  })
+  const [appSecrets, setAppSecrets] = useState<AppSecret[]>([])
 
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
-
   useEffect(() => {
-    if (organisation) {
-      getOrgAdmins({
-        variables: {
-          organisationId: organisation.id,
-        },
-      })
-    }
-  }, [getOrgAdmins, organisation, params.app])
+    const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {
+      const envSecrets = [] as EnvSecrets[]
 
-  const setupRequired = data?.appEnvironments.length === 0 ?? true
+      for (const env of appEnvironments) {
+        const { data } = await getEnvSecrets({
+          variables: {
+            envId: env.id,
+          },
+        })
 
-  const commonSecretsKeys = Array.from(new Set(commonSecrets.map((secret) => secret.key)))
+        const { wrappedSeed, wrappedSalt } = data.environmentKeys[0]
 
-  const updateCommonSecrets = useCallback((decryptedSecrets: SecretType[]) => {
-    setCommonSecrets((prevCommonSecrets) => [...prevCommonSecrets, ...decryptedSecrets])
-  }, [])
+        const { publicKey, privateKey } = await unwrapEnvSecretsForUser(
+          wrappedSeed,
+          wrappedSalt,
+          keyring!
+        )
 
-  const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {
-    let envCards = [] as EnvSecrets[]
+        const decryptedSecrets = await decryptEnvSecretKVs(data.secrets, {
+          publicKey,
+          privateKey,
+        })
 
-    appEnvironments.forEach(async (env: EnvironmentType) => {
-      const { data } = await getEnvSecrets({
-        variables: {
-          envId: env.id,
-        },
-      })
+        envSecrets.push({ env, secrets: decryptedSecrets })
+      }
 
-      const { wrappedSeed, wrappedSalt } = data.environmentKeys[0]
-
-      const { publicKey, privateKey } = await unwrapEnvSecretsForUser(
-        wrappedSeed,
-        wrappedSalt,
-        keyring!
+      // Create a list of unique secret keys
+      const secretKeys = Array.from(
+        new Set(envSecrets.flatMap((envCard) => envCard.secrets.map((secret) => secret.key)))
       )
 
-      const decryptedSecrets = await decryptEnvSecretNames(data.secrets, {
-        publicKey,
-        privateKey,
+      // Transform envCards into an array of AppSecret objects
+      const appSecrets = secretKeys.map((key) => {
+        const envs = envSecrets.map((envCard) => ({
+          env: envCard.env,
+          secret: envCard.secrets.find((secret) => secret.key === key) || null,
+        }))
+        return { key, envs }
       })
 
-      envCards.push({ env, secrets: decryptedSecrets })
-      updateCommonSecrets(decryptedSecrets)
-    })
+      setAppSecrets(appSecrets)
+    }
 
-    setEnvSecrets(envCards)
-  }
-
-  useEffect(() => {
     if (keyring !== null && data?.appEnvironments) fetchAndDecryptAppEnvs(data?.appEnvironments)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.appEnvironments, keyring])
 
-  const initAppEnvs = async () => {
-    const mutationPayload = {
-      devEnv: await createNewEnv(
-        params.app,
-        'Development',
-        ApiEnvironmentEnvTypeChoices.Dev,
-        orgAdminsData.organisationAdminsAndSelf
-      ),
-      stagingEnv: await createNewEnv(
-        params.app,
-        'Staging',
-        ApiEnvironmentEnvTypeChoices.Staging,
-        orgAdminsData.organisationAdminsAndSelf
-      ),
-      prodEnv: await createNewEnv(
-        params.app,
-        'Production',
-        ApiEnvironmentEnvTypeChoices.Prod,
-        orgAdminsData.organisationAdminsAndSelf
-      ),
+  const AppSecretRow = (props: { appSecret: AppSecret }) => {
+    const { appSecret } = props
+
+    const prodSecret = appSecret.envs.find(
+      (env) => env.env.envType?.toLowerCase() === 'prod'
+    )?.secret
+
+    const secretIsSameAsProd = (env: {
+      env: Partial<EnvironmentType>
+      secret: SecretType | null
+    }) =>
+      prodSecret !== null &&
+      env.secret?.value === prodSecret?.value &&
+      env.env.envType?.toLowerCase() !== 'prod'
+
+    const tooltipText = (env: { env: Partial<EnvironmentType>; secret: SecretType | null }) => {
+      if (env.secret === null) return `This secret is missing in ${env.env.envType}`
+      else if (env.secret.value.length === 0) return `This secret is blank in ${env.env.envType}`
+      else if (secretIsSameAsProd(env)) return `This secret is the same as PROD.`
+      else return 'This secret is present'
     }
-
-    await initAppEnvironments({
-      variables: {
-        devEnv: mutationPayload.devEnv.createEnvPayload,
-        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
-        prodEnv: mutationPayload.prodEnv.createEnvPayload,
-        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
-        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
-        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
-      },
-      refetchQueries: [
-        {
-          query: GetAppEnvironments,
-          variables: {
-            appId: params.app,
-          },
-        },
-      ],
-    })
-  }
-
-  const EnvCard = (props: { envSecrets: EnvSecrets }) => {
-    const { env, secrets } = props.envSecrets
-
-    const secretExistsInEnv = (key: string) => {
-      return secrets.find((s: SecretType) => s.key === key)
-    }
-
-    const pathname = usePathname()
 
     return (
-      <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg flex flex-col gap-4 p-4 w-60">
-        <div className="text-2xl text-center font-light text-neutral-500">
-          <Link href={`${pathname}/environments/${env.id}`}>{env.name}</Link>
-        </div>
-        <div className="flex flex-col gap-4 p-4">
-          {commonSecretsKeys.map((key: string, index: number) => (
-            <div key={index} className="flex h-6 items-center justify-center text-neutral-500">
-              {secretExistsInEnv(key) ? (
-                <div className="break-all flex items-center gap-2 group text-base">
-                  <FaCheckCircle className="text-emerald-500 shrink-0" />
-                </div>
+      <tr className="divide-x divide-neutral-500/40 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition ease duration-100">
+        <td className="px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 font-medium">
+          {appSecret.key}
+        </td>
+        {appSecret.envs.map((env) => (
+          <td key={env.env.id} className="px-6 py-3 whitespace-nowrap ">
+            <div className="flex items-center justify-center" title={tooltipText(env)}>
+              {env.secret !== null ? (
+                env.secret.value.length === 0 ? (
+                  <FaCircle className="text-neutral-500 shrink-0" />
+                ) : (
+                  <FaCheckCircle
+                    className={clsx(
+                      'shrink-0',
+                      secretIsSameAsProd(env) ? 'text-amber-500' : 'text-emerald-500'
+                    )}
+                  />
+                )
               ) : (
-                <FaTimesCircle className="text-red-500" />
+                <FaTimesCircle className="text-red-500 shrink-0" />
               )}
             </div>
-          ))}
-        </div>
-        <div className="flex w-full justify-center">
-          <Link href={`${pathname}/environments/${env.id}`}>
-            <Button variant="primary">Manage</Button>
-          </Link>
-        </div>
-      </div>
+          </td>
+        ))}
+      </tr>
     )
   }
 
   return (
-    <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-16">
+    <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid gap-16 relative">
       {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null && (
-        <section className="md:col-span-3">
-          {setupRequired ? (
-            <div className="flex flex-col gap-4 w-full items-center p-16">
-              <h2 className="text-white font-semibold text-xl">
-                {activeUserIsAdmin
-                  ? "There aren't any environments for this app yet"
-                  : "You don't have access to any environments for this app yet. Contact the organisation owner or admins to get access."}
-              </h2>
-              {activeUserIsAdmin && (
-                <Button variant="primary" onClick={initAppEnvs}>
-                  Get started
-                </Button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-3">
-                <div className="mt-8 flex flex-row col-span-2 w-full gap-8">
-                  <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg flex flex-col gap-4 p-4">
-                    <div className="text-neutral-500 text-2xl px-4">KEY</div>
-                    <div className="flex flex-col gap-4 p-4 w-max">
-                      {commonSecretsKeys.map((secret: string, index: number) => (
-                        <div key={index}>
-                          <div className="font-mono">{secret}</div>
+        <section className="space-y-6 divide-y divide-neutral-500/40">
+          <table className="table-auto min-w-full divide-y divide-neutral-500/40">
+            <thead id="table-head" className="sticky top-0 bg-zinc-200 dark:bg-zinc-800">
+              <tr className="divide-x divide-neutral-500/40">
+                <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
+                  key
+                </th>
+                {data?.appEnvironments.map((env: EnvironmentType) => (
+                  <th
+                    key={env.id}
+                    className="group text-center text-sm font-semibold uppercase tracking-widest"
+                  >
+                    <Link href={`${pathname}/environments/${env.id}`}>
+                      <div className="flex items-center justify-center gap-2 px-6 py-3 text-black dark:text-white group-hover:text-emerald-500">
+                        {env.envType}
+                        <div className="opacity-0 group-hover:opacity-100 transform -translate-x-8 group-hover:translate-x-0 transition ease">
+                          <FaArrowRight />
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-8">
-                    {sortedEnvSecrets.map((envS: EnvSecrets) => (
-                      <EnvCard key={envS.env.id} envSecrets={envS} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+                      </div>
+                    </Link>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-500/40">
+              {appSecrets.map((appSecret, index) => (
+                <AppSecretRow key={`${appSecret.key}${index}`} appSecret={appSecret} />
+              ))}
+            </tbody>
+          </table>
+          <div className="flex items-center justify-end gap-8 p-4 text-neutral-500">
+            <div className="flex items-center gap-2">
+              <FaCheckCircle className="text-emerald-500 shrink-0" /> Secret is present
+            </div>
+            <div className="flex items-center gap-2">
+              <FaCheckCircle className="text-amber-500 shrink-0" /> Secret is the same as Production
+            </div>
+            <div className="flex items-center gap-2">
+              <FaCircle className="text-neutral-500 shrink-0" /> Secret is blank
+            </div>
+            <div className="flex items-center gap-2">
+              <FaTimesCircle className="text-red-500 shrink-0" /> Secret is missing
+            </div>
+          </div>
         </section>
       )}
     </div>
