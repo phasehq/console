@@ -549,7 +549,7 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <div className="flex items-center w-full sticky top-0 z-20 shadow-2xl bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
+            <div className="flex items-center w-full sticky top-0 z-20 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
               <div className="px-9 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                 key
               </div>

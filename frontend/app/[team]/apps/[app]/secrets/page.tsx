@@ -348,7 +348,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           </div>
 
           <table className="table-fixed w-full border border-t-0 border-neutral-500/40">
-            <thead id="table-head" className="sticky top-0 bg-zinc-200 dark:bg-zinc-800 shadow-2xl">
+            <thead id="table-head" className="sticky top-0 bg-zinc-200 dark:bg-zinc-800">
               <tr className="divide-x divide-neutral-500/40">
                 <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
                   key
