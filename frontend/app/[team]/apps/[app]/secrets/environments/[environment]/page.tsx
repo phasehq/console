@@ -324,11 +324,13 @@ export default function Environment({
     const changedElements = []
 
     for (let i = 0; i < updatedSecrets.length; i++) {
-      const originalSecret = secrets[i]
       const updatedSecret = updatedSecrets[i]
+      const originalSecret = secrets.find((secret) => secret.id === updatedSecret.id)
 
-      if (updatedSecret.id.split('-')[0] === 'new') changedElements.push(updatedSecret)
-      else if (
+      // this is a newly created secret that doesn't exist on the server yet
+      if (!originalSecret) {
+        changedElements.push(updatedSecret)
+      } else if (
         originalSecret.comment !== updatedSecret.comment ||
         originalSecret.key !== updatedSecret.key ||
         !arraysEqual(originalSecret.tags, updatedSecret.tags) ||
