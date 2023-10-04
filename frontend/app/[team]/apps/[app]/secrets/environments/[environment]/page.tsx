@@ -7,8 +7,8 @@ import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
 import { UpdateSecret } from '@/graphql/mutations/environments/editSecret.gql'
 import { DeleteSecretOp } from '@/graphql/mutations/environments/deleteSecret.gql'
-import { GetEnvironmentTokens } from '@/graphql/queries/secrets/getEnvironmentTokens.gql'
 import { CreateEnvToken } from '@/graphql/mutations/environments/createEnvironmentToken.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import {
   getUserKxPublicKey,
   getUserKxPrivateKey,
@@ -16,15 +16,27 @@ import {
   digest,
   encryptAsymmetric,
 } from '@/utils/crypto'
-import { arraysEqual, envKeyring, generateEnvironmentToken } from '@/utils/environments'
+import { arraysEqual, envKeyring } from '@/utils/environments'
 import { useMutation, useQuery } from '@apollo/client'
-import { useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '@/components/common/Button'
-import { FaDownload, FaPlus, FaSearch, FaTimesCircle, FaUndo } from 'react-icons/fa'
+import {
+  FaChevronRight,
+  FaDownload,
+  FaExchangeAlt,
+  FaPlus,
+  FaSearch,
+  FaTimesCircle,
+  FaUndo,
+} from 'react-icons/fa'
 import SecretRow from '@/components/environments/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
+import { Menu, Transition } from '@headlessui/react'
+import { usePathname } from 'next/navigation'
+import Link from 'next/link'
+import { Alert } from '@/components/common/Alert'
 
 type EnvKeyring = {
   privateKey: string
@@ -38,6 +50,7 @@ export default function Environment({
   params: { team: string; app: string; environment: string }
 }) {
   const { keyring } = useContext(KeyringContext)
+  const pathname = usePathname()
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
   const [secrets, setSecrets] = useState<SecretType[]>([])
@@ -61,6 +74,12 @@ export default function Environment({
       )
     })
 
+  const { data: appEnvsData } = useQuery(GetAppEnvironments, {
+    variables: {
+      appId: params.app,
+    },
+  })
+
   const { data, loading } = useQuery(GetSecrets, {
     variables: {
       appId: params.app,
@@ -77,15 +96,25 @@ export default function Environment({
 
   const [createEnvironmentToken] = useMutation(CreateEnvToken)
 
-  const { data: envTokensData } = useQuery(GetEnvironmentTokens, {
-    variables: {
-      envId: params.environment,
-    },
-  })
+  const envPath = (env: EnvironmentType) => {
+    const pathSegments = pathname!.split('/')
+    pathSegments[pathSegments.length - 1] = env.id
+    return pathSegments?.join('/')
+  }
 
   const environment = data?.appEnvironments[0] as EnvironmentType
 
-  const handleAddSecret = () => {
+  const envLinks =
+    appEnvsData?.appEnvironments
+      .filter((env: EnvironmentType) => env.name !== environment?.name)
+      .map((env: EnvironmentType) => {
+        return {
+          label: env.name,
+          href: envPath(env),
+        }
+      }) ?? []
+
+  const handleAddSecret = (start: boolean = true) => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
@@ -95,7 +124,9 @@ export default function Environment({
       tags: [],
       comment: '',
     } as SecretType
-    updateSecrets([...updatedSecrets, newSecret])
+    start
+      ? updateSecrets([newSecret, ...updatedSecrets])
+      : updateSecrets([...updatedSecrets, newSecret])
   }
 
   const handleUpdateSecret = async (secret: SecretType) => {
@@ -176,37 +207,6 @@ export default function Environment({
       })
     }
     toast.success('Secret deleted.')
-  }
-
-  const handleCreateNewEnvToken = async () => {
-    if (keyring) {
-      const userKxKeys = {
-        publicKey: await getUserKxPublicKey(keyring.publicKey),
-        privateKey: await getUserKxPrivateKey(keyring.privateKey),
-      }
-
-      const { pssEnv, mutationPayload } = await generateEnvironmentToken(
-        environment,
-        data.environmentKeys[0],
-        userKxKeys
-      )
-
-      await createEnvironmentToken({
-        variables: mutationPayload,
-        refetchQueries: [
-          {
-            query: GetEnvironmentTokens,
-            variables: {
-              envId: environment.id,
-            },
-          },
-        ],
-      })
-
-      console.log(pssEnv)
-    } else {
-      console.log('keyring unavailable')
-    }
   }
 
   useEffect(() => {
@@ -448,14 +448,64 @@ export default function Environment({
       {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null && !loading && (
         <div className="flex flex-col p-4 gap-8">
-          <div className="h3 font-semibold text-2xl">
-            {environment.name}
+          <div className="flex items-center gap-8">
+            <Menu as="div" className="relative group">
+              {({ open }) => (
+                <>
+                  <Menu.Button as={Fragment}>
+                    <div className="cursor-pointer flex items-center gap-2">
+                      <h3 className="font-semibold text-2xl">{environment.name}</h3>
+                      <FaChevronRight
+                        className={clsx(
+                          'transition transform ease',
+                          open
+                            ? 'rotate-90 opacity-100'
+                            : 'rotate-0 opacity-0 group-hover:opacity-100'
+                        )}
+                      />
+                    </div>
+                  </Menu.Button>
+                  <Transition
+                    enter="transition duration-100 ease-out"
+                    enterFrom="transform scale-95 opacity-0"
+                    enterTo="transform scale-100 opacity-100"
+                    leave="transition duration-75 ease-out"
+                    leaveFrom="transform scale-100 opacity-100"
+                    leaveTo="transform scale-95 opacity-0"
+                    as="div"
+                    className="absolute z-30 left-0 origin-bottom-left mt-2"
+                  >
+                    <Menu.Items as={Fragment}>
+                      <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                        {envLinks.map((link: { label: string; href: string }) => (
+                          <Menu.Item key={link.href} as={Fragment}>
+                            {({ active }) => (
+                              <Link
+                                href={link.href}
+                                className={clsx(
+                                  'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
+                                  active && 'bg-zinc-200 dark:bg-zinc-700'
+                                )}
+                              >
+                                <div className="text-lg">{link.label}</div>
+                                <FaExchangeAlt className="text-neutral-500" />
+                              </Link>
+                            )}
+                          </Menu.Item>
+                        ))}
+                      </div>
+                    </Menu.Items>
+                  </Transition>
+                </>
+              )}
+            </Menu>
             {unsavedChanges && (
-              <span className="text-amber-500 cursor-default" title="Environment has been modified">
-                *
-              </span>
+              <Alert variant="warning" icon={true} size="sm">
+                You have undeployed changes to this environment.
+              </Alert>
             )}
           </div>
+
           <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
             <div className="relative flex items-center bg-white dark:bg-zinc-800 rounded-md px-2">
               <div className="">
@@ -499,12 +549,17 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <div className="flex items-center w-full">
-              <div className="px-9  py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+            <div className="flex items-center w-full sticky top-0 z-20 shadow-2xl bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
+              <div className="px-9 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                 key
               </div>
-              <div className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+              <div className="pl-3 pr-14 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
                 value
+                <Button variant="primary" onClick={() => handleAddSecret(true)}>
+                  <div className="flex items-center gap-2">
+                    <FaPlus /> Create new secret
+                  </div>
+                </Button>
               </div>
             </div>
             {organisation &&
@@ -523,7 +578,7 @@ export default function Environment({
               ))}
 
             <div className="col-span-2 flex mt-4">
-              <Button variant="primary" onClick={handleAddSecret}>
+              <Button variant="primary" onClick={() => handleAddSecret(false)}>
                 <div className="flex items-center gap-2">
                   <FaPlus /> Create new secret
                 </div>

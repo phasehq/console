@@ -16,7 +16,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Fragment, useContext } from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
-import { MdLogout } from 'react-icons/md'
 
 export type SidebarLinkT = {
   name: string
