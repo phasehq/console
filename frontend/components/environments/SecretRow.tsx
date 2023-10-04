@@ -458,7 +458,7 @@ const CommentDialog = (props: {
       </div>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal}>
+        <Dialog as="div" className="relative z-10" onClose={handleClose}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -499,10 +499,17 @@ const CommentDialog = (props: {
 
                   <div className="space-y-6 p-4">
                     <textarea
+                      cols={10}
                       value={commentValue}
                       className="w-full"
                       onChange={(e) => setCommentValue(e.target.value)}
                     ></textarea>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button variant="secondary" onClick={handleClose}>
+                      Done
+                    </Button>
                   </div>
                 </Dialog.Panel>
               </Transition.Child>
