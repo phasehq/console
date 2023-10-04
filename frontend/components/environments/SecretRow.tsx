@@ -499,7 +499,7 @@ const CommentDialog = (props: {
 
                   <div className="space-y-6 p-4">
                     <textarea
-                      cols={10}
+                      rows={5}
                       value={commentValue}
                       className="w-full"
                       onChange={(e) => setCommentValue(e.target.value)}
