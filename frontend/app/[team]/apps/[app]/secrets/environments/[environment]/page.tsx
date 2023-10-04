@@ -451,56 +451,60 @@ export default function Environment({
       {keyring !== null && !loading && (
         <div className="flex flex-col p-4 gap-8">
           <div className="flex items-center gap-8">
-            <Menu as="div" className="relative group">
-              {({ open }) => (
-                <>
-                  <Menu.Button as={Fragment}>
-                    <div className="cursor-pointer flex items-center gap-2">
-                      <h3 className="font-semibold text-2xl">{environment.name}</h3>
-                      <FaChevronDown
-                        className={clsx(
-                          'transition transform ease',
-                          open
-                            ? 'rotate-180 text-black dark:text-white'
-                            : 'rotate-0 text-neutral-500 group-hover:text-black group-hover:dark:text-white'
-                        )}
-                      />
-                    </div>
-                  </Menu.Button>
-                  <Transition
-                    enter="transition duration-100 ease-out"
-                    enterFrom="transform scale-95 opacity-0"
-                    enterTo="transform scale-100 opacity-100"
-                    leave="transition duration-75 ease-out"
-                    leaveFrom="transform scale-100 opacity-100"
-                    leaveTo="transform scale-95 opacity-0"
-                    as="div"
-                    className="absolute z-10 left-0 origin-bottom-left mt-2"
-                  >
-                    <Menu.Items as={Fragment}>
-                      <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                        {envLinks.map((link: { label: string; href: string }) => (
-                          <Menu.Item key={link.href} as={Fragment}>
-                            {({ active }) => (
-                              <Link
-                                href={link.href}
-                                className={clsx(
-                                  'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
-                                  active && 'bg-zinc-200 dark:bg-zinc-700'
-                                )}
-                              >
-                                <div className="text-lg">{link.label}</div>
-                                <FaExchangeAlt className="text-neutral-500" />
-                              </Link>
-                            )}
-                          </Menu.Item>
-                        ))}
+            {envLinks.length > 1 ? (
+              <Menu as="div" className="relative group">
+                {({ open }) => (
+                  <>
+                    <Menu.Button as={Fragment}>
+                      <div className="cursor-pointer flex items-center gap-2">
+                        <h3 className="font-semibold text-2xl">{environment.name}</h3>
+                        <FaChevronDown
+                          className={clsx(
+                            'transition transform ease',
+                            open
+                              ? 'rotate-180 text-black dark:text-white'
+                              : 'rotate-0 text-neutral-500 group-hover:text-black group-hover:dark:text-white'
+                          )}
+                        />
                       </div>
-                    </Menu.Items>
-                  </Transition>
-                </>
-              )}
-            </Menu>
+                    </Menu.Button>
+                    <Transition
+                      enter="transition duration-100 ease-out"
+                      enterFrom="transform scale-95 opacity-0"
+                      enterTo="transform scale-100 opacity-100"
+                      leave="transition duration-75 ease-out"
+                      leaveFrom="transform scale-100 opacity-100"
+                      leaveTo="transform scale-95 opacity-0"
+                      as="div"
+                      className="absolute z-10 left-0 origin-bottom-left mt-2"
+                    >
+                      <Menu.Items as={Fragment}>
+                        <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                          {envLinks.map((link: { label: string; href: string }) => (
+                            <Menu.Item key={link.href} as={Fragment}>
+                              {({ active }) => (
+                                <Link
+                                  href={link.href}
+                                  className={clsx(
+                                    'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
+                                    active && 'bg-zinc-200 dark:bg-zinc-700'
+                                  )}
+                                >
+                                  <div className="text-lg">{link.label}</div>
+                                  <FaExchangeAlt className="text-neutral-500" />
+                                </Link>
+                              )}
+                            </Menu.Item>
+                          ))}
+                        </div>
+                      </Menu.Items>
+                    </Transition>
+                  </>
+                )}
+              </Menu>
+            ) : (
+              <h3 className="font-semibold text-2xl">{environment.name}</h3>
+            )}
             {unsavedChanges && (
               <Alert variant="warning" icon={true} size="sm">
                 You have undeployed changes to this environment.
