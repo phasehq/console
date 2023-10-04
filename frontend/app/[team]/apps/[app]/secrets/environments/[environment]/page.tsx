@@ -21,7 +21,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import {
-  FaChevronRight,
+  FaChevronDown,
   FaDownload,
   FaExchangeAlt,
   FaPlus,
@@ -457,12 +457,12 @@ export default function Environment({
                   <Menu.Button as={Fragment}>
                     <div className="cursor-pointer flex items-center gap-2">
                       <h3 className="font-semibold text-2xl">{environment.name}</h3>
-                      <FaChevronRight
+                      <FaChevronDown
                         className={clsx(
                           'transition transform ease',
                           open
-                            ? 'rotate-90 opacity-100'
-                            : 'rotate-0 opacity-0 group-hover:opacity-100'
+                            ? 'rotate-180 text-black dark:text-white'
+                            : 'rotate-0 text-neutral-500 group-hover:text-black group-hover:dark:text-white'
                         )}
                       />
                     </div>
@@ -475,7 +475,7 @@ export default function Environment({
                     leaveFrom="transform scale-100 opacity-100"
                     leaveTo="transform scale-95 opacity-0"
                     as="div"
-                    className="absolute z-30 left-0 origin-bottom-left mt-2"
+                    className="absolute z-10 left-0 origin-bottom-left mt-2"
                   >
                     <Menu.Items as={Fragment}>
                       <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
@@ -551,7 +551,7 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <div className="flex items-center w-full sticky top-0 z-20 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
+            <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
               <div className="px-9 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                 key
               </div>

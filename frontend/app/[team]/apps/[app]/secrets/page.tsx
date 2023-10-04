@@ -27,7 +27,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import clsx from 'clsx'
 import { Disclosure, Transition } from '@headlessui/react'
-import { Alert } from '@/components/common/Alert'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 
@@ -167,11 +166,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
             {envSecret.secret !== null && (
               <div className="flex items-center gap-2">
-                {sameAsProd && (
-                  <Alert variant="warning" icon={true} size="sm">
-                    This secret is the same as PROD
-                  </Alert>
-                )}
                 <Button variant="outline" onClick={() => handleCopy(envSecret.secret!.value)}>
                   <FaCopy /> Copy
                 </Button>
@@ -237,7 +231,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 />
               </td>
               {appSecret.envs.map((env) => (
-                <td key={env.env.id} className="px-6 py-3 whitespace-nowrap w-40">
+                <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
                   <div className="flex items-center justify-center" title={tooltipText(env)}>
                     {env.secret !== null ? (
                       env.secret.value.length === 0 ? (
@@ -347,8 +341,8 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             </div>
           </div>
 
-          <table className="table-fixed w-full border border-t-0 border-neutral-500/40">
-            <thead id="table-head" className="sticky top-0 bg-zinc-200 dark:bg-zinc-800">
+          <table className="table-auto w-full border border-t-0 border-neutral-500/40">
+            <thead id="table-head" className="sticky top-0 bg-zinc-200 dark:bg-zinc-800 z-10">
               <tr className="divide-x divide-neutral-500/40">
                 <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
                   key
@@ -356,7 +350,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 {data?.appEnvironments.map((env: EnvironmentType) => (
                   <th
                     key={env.id}
-                    className="group text-center text-sm font-semibold uppercase tracking-widest w-40 py-3"
+                    className="group text-center text-sm font-semibold uppercase tracking-widest py-3"
                   >
                     <Link href={`${pathname}/environments/${env.id}`}>
                       <Button variant="outline">
