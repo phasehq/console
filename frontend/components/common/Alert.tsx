@@ -4,7 +4,7 @@ import { FaCheck, FaExclamationTriangle, FaInfoCircle } from 'react-icons/fa'
 
 export const Alert = (props: {
   children: ReactNode
-  variant: 'success' | 'warning' | 'info'
+  variant: 'success' | 'warning' | 'info' | 'danger'
   icon?: boolean
   size?: 'sm' | 'md'
 }) => {
@@ -13,6 +13,7 @@ export const Alert = (props: {
     warning:
       'bg-amber-300/40 dark:bg-amber-400/10 ring-amber-500/40 text-black dark:text-amber-400',
     info: 'bg-cyan-300/40 dark:bg-cyan-800/30 ring-cyan-400/10 text-black dark:text-cyan-400',
+    danger: 'bg-red-300/40 dark:bg-red-400/10 ring-red-500/40 text-black dark:text-red-400',
   }
 
   const sizeStyles = {
@@ -23,6 +24,7 @@ export const Alert = (props: {
   const variantIcons = {
     success: <FaCheck />,
     warning: <FaExclamationTriangle className="shrink-0" />,
+    danger: <FaExclamationTriangle className="shrink-0" />,
     info: <FaInfoCircle className="shrink-0" />,
   }
 
