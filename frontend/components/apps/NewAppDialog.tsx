@@ -308,14 +308,13 @@ export default function NewAppDialog(props: {
       return {
         planName: 'Free',
         dialogTitle: 'Upgrade to Pro',
-        description:
-          'The Free plan is limited to a single application. To create more applications please upgrade to Pro.',
+        description: `The Free plan is limited to ${FREE_APP_LIMIT} Apps. To create more Apps, please upgrade to Pro.`,
       }
     else if (organisation.plan === ApiOrganisationPlanChoices.Pr)
       return {
         planName: 'Pro',
         dialogTitle: 'Upgrade to Enterprise',
-        description: `The Pro plan is limited to ${PRO_APP_LIMIT} applications. To create more applications please upgrade to Enterprise.`,
+        description: `The Pro plan is limited to ${PRO_APP_LIMIT} Apps. To create more Apps, please upgrade to Enterprise.`,
       }
   }
 
