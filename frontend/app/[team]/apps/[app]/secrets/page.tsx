@@ -2,10 +2,12 @@
 
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql'
-import { useLazyQuery, useQuery } from '@apollo/client'
+import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
+import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
-import { decryptEnvSecretKVs, unwrapEnvSecretsForUser } from '@/utils/environments'
-import { EnvironmentType, SecretType } from '@/apollo/graphql'
+import { createNewEnv, decryptEnvSecretKVs, unwrapEnvSecretsForUser } from '@/utils/environments'
+import { ApiEnvironmentEnvTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
@@ -29,6 +31,7 @@ import clsx from 'clsx'
 import { Disclosure, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
+import { userIsAdmin } from '@/utils/permissions'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -58,12 +61,15 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const pathname = usePathname()
 
   const [getEnvSecrets] = useLazyQuery(GetEnvSecretsKV)
-
+  const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
   const [appSecrets, setAppSecrets] = useState<AppSecret[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
+  const [initAppEnvironments] = useMutation(InitAppEnvironments)
 
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const filteredSecrets =
     searchQuery === ''
@@ -72,6 +78,16 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           const searchRegex = new RegExp(searchQuery, 'i')
           return searchRegex.test(secret.key)
         })
+
+  useEffect(() => {
+    if (organisation) {
+      getOrgAdmins({
+        variables: {
+          organisationId: organisation.id,
+        },
+      })
+    }
+  }, [getOrgAdmins, organisation, params.app])
 
   useEffect(() => {
     const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {
@@ -121,6 +137,50 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.appEnvironments, keyring])
 
+  const initAppEnvs = async () => {
+    const mutationPayload = {
+      devEnv: await createNewEnv(
+        params.app,
+        'Development',
+        ApiEnvironmentEnvTypeChoices.Dev,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+      stagingEnv: await createNewEnv(
+        params.app,
+        'Staging',
+        ApiEnvironmentEnvTypeChoices.Staging,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+      prodEnv: await createNewEnv(
+        params.app,
+        'Production',
+        ApiEnvironmentEnvTypeChoices.Prod,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+    }
+
+    await initAppEnvironments({
+      variables: {
+        devEnv: mutationPayload.devEnv.createEnvPayload,
+        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
+        prodEnv: mutationPayload.prodEnv.createEnvPayload,
+        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
+        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
+        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
+      },
+      refetchQueries: [
+        {
+          query: GetAppEnvironments,
+          variables: {
+            appId: params.app,
+          },
+        },
+      ],
+    })
+  }
+
+  const setupRequired = data?.appEnvironments.length === 0 ?? true
+
   const EnvSecret = (props: {
     envSecret: {
       env: Partial<EnvironmentType>
@@ -153,7 +213,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           <div className="flex justify-between items-center w-full">
             <code
               className={clsx(
-                'break-all whitespace-pre-wrap max-w-full w-2/3',
+                'break-all whitespace-break-spaces max-w-full',
                 sameAsProd ? 'text-amber-500' : 'text-emerald-500'
               )}
             >
@@ -292,88 +352,102 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid gap-16 relative">
       {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
-      {keyring !== null && (
-        <section className="space-y-8 p-4">
-          <div className="space-y-2">
-            <div className="space-y-1">
-              <h1 className="h3 font-semibold text-2xl">Secrets</h1>
-              <p className="text-neutral-500">
-                An overview of Secrets for this App. Click on an environment to manage secrets.
-              </p>
-            </div>
+      {keyring !== null &&
+        (setupRequired ? (
+          <div className="flex flex-col gap-4 w-full items-center p-16">
+            <h2 className="text-white font-semibold text-xl">
+              {activeUserIsAdmin
+                ? "There aren't any environments for this app yet"
+                : "You don't have access to any environments for this app yet. Contact the organisation owner or admins to get access."}
+            </h2>
+            {activeUserIsAdmin && (
+              <Button variant="primary" onClick={initAppEnvs}>
+                Get started
+              </Button>
+            )}
           </div>
-
-          <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
-            <div className="relative flex items-center bg-white dark:bg-zinc-800 rounded-md px-2">
-              <div className="">
-                <FaSearch className="text-neutral-500" />
-              </div>
-              <input
-                placeholder="Search"
-                className="custom bg-zinc-100 dark:bg-zinc-800"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <FaTimesCircle
-                className={clsx(
-                  'cursor-pointer text-neutral-500 transition-opacity ease',
-                  searchQuery ? 'opacity-100' : 'opacity-0'
-                )}
-                role="button"
-                onClick={() => setSearchQuery('')}
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-8 p-4 text-neutral-500">
-              <div className="flex items-center gap-2">
-                <FaCheckCircle className="text-emerald-500 shrink-0" /> Secret is present
-              </div>
-              <div className="flex items-center gap-2">
-                <FaCheckCircle className="text-amber-500 shrink-0" /> Secret is the same as
-                Production
-              </div>
-              <div className="flex items-center gap-2">
-                <FaCircle className="text-neutral-500 shrink-0" /> Secret is blank
-              </div>
-              <div className="flex items-center gap-2">
-                <FaTimesCircle className="text-red-500 shrink-0" /> Secret is missing
+        ) : (
+          <section className="space-y-8 p-4">
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <h1 className="h3 font-semibold text-2xl">Secrets</h1>
+                <p className="text-neutral-500">
+                  An overview of secrets across all environments in this App.
+                </p>
               </div>
             </div>
-          </div>
 
-          <table className="table-auto w-full border border-t-0 border-neutral-500/40">
-            <thead id="table-head" className="sticky top-0 bg-zinc-200 dark:bg-zinc-800 z-10">
-              <tr className="divide-x divide-neutral-500/40">
-                <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
-                  key
-                </th>
-                {data?.appEnvironments.map((env: EnvironmentType) => (
-                  <th
-                    key={env.id}
-                    className="group text-center text-sm font-semibold uppercase tracking-widest py-3"
-                  >
-                    <Link href={`${pathname}/environments/${env.id}`}>
-                      <Button variant="outline">
-                        <div className="flex items-center gap-2 justify-center ">
-                          {env.envType}
-                          <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
-                            <FaArrowRight />
-                          </div>
-                        </div>
-                      </Button>
-                    </Link>
+            <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
+              <div className="relative flex items-center bg-white dark:bg-zinc-800 rounded-md px-2">
+                <div className="">
+                  <FaSearch className="text-neutral-500" />
+                </div>
+                <input
+                  placeholder="Search"
+                  className="custom bg-zinc-100 dark:bg-zinc-800"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <FaTimesCircle
+                  className={clsx(
+                    'cursor-pointer text-neutral-500 transition-opacity ease',
+                    searchQuery ? 'opacity-100' : 'opacity-0'
+                  )}
+                  role="button"
+                  onClick={() => setSearchQuery('')}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-8 p-4 text-neutral-500">
+                <div className="flex items-center gap-2">
+                  <FaCheckCircle className="text-emerald-500 shrink-0" /> Secret is present
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaCheckCircle className="text-amber-500 shrink-0" /> Secret is the same as
+                  Production
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaCircle className="text-neutral-500 shrink-0" /> Secret is blank
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaTimesCircle className="text-red-500 shrink-0" /> Secret is missing
+                </div>
+              </div>
+            </div>
+
+            <table className="table-auto w-full border border-t-0 border-neutral-500/40">
+              <thead id="table-head" className="sticky top-0 bg-zinc-200 dark:bg-zinc-800 z-10">
+                <tr className="divide-x divide-neutral-500/40">
+                  <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
+                    key
                   </th>
+                  {data?.appEnvironments.map((env: EnvironmentType) => (
+                    <th
+                      key={env.id}
+                      className="group text-center text-sm font-semibold uppercase tracking-widest py-3"
+                    >
+                      <Link href={`${pathname}/environments/${env.id}`}>
+                        <Button variant="outline">
+                          <div className="flex items-center gap-2 justify-center ">
+                            {env.envType}
+                            <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
+                              <FaArrowRight />
+                            </div>
+                          </div>
+                        </Button>
+                      </Link>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-500/40">
+                {filteredSecrets.map((appSecret, index) => (
+                  <AppSecretRow key={`${appSecret.key}${index}`} appSecret={appSecret} />
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-500/40">
-              {filteredSecrets.map((appSecret, index) => (
-                <AppSecretRow key={`${appSecret.key}${index}`} appSecret={appSecret} />
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+              </tbody>
+            </table>
+          </section>
+        ))}
     </div>
   )
 }
