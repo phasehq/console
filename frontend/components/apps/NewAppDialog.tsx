@@ -48,7 +48,7 @@ export default function NewAppDialog(props: {
   const [pw, setPw] = useState<string>('')
   const [showPw, setShowPw] = useState<boolean>(false)
   const [appId, setAppId] = useState<string>('')
-  const [createStarters, setCreateStarters] = useState<boolean>(true)
+  const [createStarters, setCreateStarters] = useState<boolean>(appCount === 0)
   const [appSecret, setAppSecret] = useState<string>('')
   const { data: session } = useSession()
 
@@ -438,7 +438,7 @@ export default function NewAppDialog(props: {
                                 : 'bg-neutral-500/40 ring-neutral-500/30'
                             } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
                           >
-                            <span className="sr-only">Create example secrets</span>
+                            <span className="sr-only">Initialize with example secrets</span>
                             <span
                               className={`${
                                 createStarters
