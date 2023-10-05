@@ -1,6 +1,6 @@
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
-import { Dialog, Transition } from '@headlessui/react'
+import { Dialog, Switch, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
 import { Fragment, ReactNode, useContext, useEffect, useState } from 'react'
 import { FaCopy, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
@@ -8,6 +8,7 @@ import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
+import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
@@ -15,13 +16,22 @@ import { useLazyQuery, useMutation } from '@apollo/client'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationPlanChoices,
+  EnvironmentType,
   MutationCreateAppArgs,
   OrganisationType,
+  SecretInput,
 } from '@/apollo/graphql'
 import { splitSecret } from '@/utils/keyshares'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { createNewEnv } from '@/utils/environments'
+import {
+  decryptAsymmetric,
+  digest,
+  encryptAsymmetric,
+  getUserKxPrivateKey,
+  getUserKxPublicKey,
+} from '@/utils/crypto'
 
 const FREE_APP_LIMIT = 5
 const PRO_APP_LIMIT = 10
@@ -38,11 +48,14 @@ export default function NewAppDialog(props: {
   const [pw, setPw] = useState<string>('')
   const [showPw, setShowPw] = useState<boolean>(false)
   const [appId, setAppId] = useState<string>('')
+  const [createStarters, setCreateStarters] = useState<boolean>(true)
   const [appSecret, setAppSecret] = useState<string>('')
   const { data: session } = useSession()
-  const [createApp] = useMutation(CreateApplication)
 
+  const [createApp] = useMutation(CreateApplication)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
+  const [createSecret] = useMutation(CreateNewSecret)
+  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
 
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
@@ -107,6 +120,61 @@ export default function NewAppDialog(props: {
     })
   }
 
+  const createExampleSecrets = async (environment: EnvironmentType, salt: string) => {
+    const secrets = [
+      {
+        key: 'JWT_SECRET',
+        value: 'myjsonwebtoken',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'DJANGO_SECRET_KEY',
+        value: 'your_django_secret_key',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'STRIPE_SECRET_KEY',
+        value: 'your_stripe_secret_key',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'AWS_SECRET_ACCESS_KEY',
+        value: 'your_secret_access_key',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'PORT',
+        value: '3000',
+        comment: 'This is an example secret.',
+      },
+    ]
+
+    const encryptAndCreatePromises = secrets.map(async (secret) => {
+      const { key, value, comment } = secret
+
+      const encryptedKey = await encryptAsymmetric(key, environment.identityKey)
+      const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
+      const keyDigest = await digest(key, salt)
+      const encryptedComment = await encryptAsymmetric(comment, environment.identityKey)
+
+      await createSecret({
+        variables: {
+          newSecret: {
+            envId: environment.id,
+            key: encryptedKey,
+            keyDigest,
+            value: encryptedValue,
+            folderId: null,
+            comment: encryptedComment,
+            tags: [],
+          } as SecretInput,
+        },
+      })
+    })
+
+    await Promise.all(encryptAndCreatePromises)
+  }
+
   const initAppEnvs = async (appId: string) => {
     const mutationPayload = {
       devEnv: await createNewEnv(
@@ -138,15 +206,30 @@ export default function NewAppDialog(props: {
         stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
         prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
       },
-      refetchQueries: [
-        {
-          query: GetAppEnvironments,
-          variables: {
-            appId,
-          },
-        },
-      ],
     })
+
+    if (createStarters) {
+      const { data: appEnvsData } = await getAppEnvs({ variables: { appId } })
+
+      const keyring = await validateKeyring(pw)
+
+      const devEnv = appEnvsData.appEnvironments.find(
+        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Dev
+      )
+
+      const userKxKeys = {
+        publicKey: await getUserKxPublicKey(keyring!.publicKey),
+        privateKey: await getUserKxPrivateKey(keyring!.privateKey),
+      }
+
+      const salt = await decryptAsymmetric(
+        devEnv.wrappedSalt,
+        userKxKeys.privateKey,
+        userKxKeys.publicKey
+      )
+
+      await createExampleSecrets(devEnv, salt)
+    }
   }
 
   const handleCreateApp = async () => {
@@ -285,12 +368,12 @@ export default function NewAppDialog(props: {
                   </Dialog.Title>
                   {!complete() && allowNewApp() && (
                     <form onSubmit={handleSubmit}>
-                      <div className="mt-2 space-y-6">
+                      <div className="mt-2 space-y-6 group">
                         <p className="text-sm text-gray-500">
                           Create a new app by entering an app name below. A new set of encryption
                           keys will be created to secure your app.
                         </p>
-                        <div className="flex flex-col justify-center max-w-md mx-auto">
+                        <div className="flex flex-col justify-center">
                           <label
                             className="block text-gray-700 text-sm font-bold mb-2"
                             htmlFor="appname"
@@ -309,7 +392,7 @@ export default function NewAppDialog(props: {
                         </div>
 
                         {!keyring && (
-                          <div className="flex flex-col justify-center max-w-md mx-auto">
+                          <div className="flex flex-col justify-center">
                             <label
                               className="block text-gray-700 text-sm font-bold mb-2"
                               htmlFor="password"
@@ -337,6 +420,34 @@ export default function NewAppDialog(props: {
                             </div>
                           </div>
                         )}
+
+                        <div className="flex items-center gap-2">
+                          <label
+                            className="block text-neutral-500 text-sm font-bold mb-2"
+                            htmlFor="create-starters"
+                          >
+                            Create example secrets
+                          </label>
+                          <Switch
+                            id="create-starters"
+                            checked={createStarters}
+                            onChange={() => setCreateStarters(!createStarters)}
+                            className={`${
+                              createStarters
+                                ? 'bg-emerald-400/10 ring-emerald-400/20'
+                                : 'bg-neutral-500/40 ring-neutral-500/30'
+                            } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+                          >
+                            <span className="sr-only">Create example secrets</span>
+                            <span
+                              className={`${
+                                createStarters
+                                  ? 'translate-x-6 bg-emerald-400'
+                                  : 'translate-x-1 bg-black'
+                              } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+                            ></span>
+                          </Switch>
+                        </div>
                       </div>
 
                       <div className="mt-8 flex items-center w-full justify-between">
