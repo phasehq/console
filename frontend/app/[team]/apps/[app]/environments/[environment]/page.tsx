@@ -7,7 +7,6 @@ import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
 import { UpdateSecret } from '@/graphql/mutations/environments/editSecret.gql'
 import { DeleteSecretOp } from '@/graphql/mutations/environments/deleteSecret.gql'
-import { CreateEnvToken } from '@/graphql/mutations/environments/createEnvironmentToken.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import {
   getUserKxPublicKey,

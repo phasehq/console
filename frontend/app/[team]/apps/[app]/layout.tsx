@@ -25,12 +25,8 @@ export default function AppLayout({
 
   const [tabs, setTabs] = useState([
     {
-      name: 'Home',
-      link: '',
-    },
-    {
       name: 'Secrets',
-      link: 'secrets',
+      link: '',
     },
     {
       name: 'Service tokens',
@@ -69,18 +65,14 @@ export default function AppLayout({
   useEffect(() => {
     const activeTabIndex = () => {
       if (app) {
-        const currentUrl = path?.split('/')[4]
-        if (currentUrl === '') return 0
-        if (currentUrl === 'secrets') return 1
-        if (currentUrl === 'tokens') return 2
-        if (currentUrl === 'logs') return 3
-        if (currentUrl === 'members') return 4
-        if (currentUrl === 'settings') return 5
+        const currentUrl = path?.split('/')[4] || ''
+        return tabs.findIndex((tab) => tab.link === currentUrl) || 0
       }
       return 0
     }
+
     setTabIndex(activeTabIndex())
-  }, [app, path])
+  }, [app, path, tabs])
 
   return (
     <div

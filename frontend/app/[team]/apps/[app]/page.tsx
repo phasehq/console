@@ -1,120 +1,453 @@
 'use client'
 
-import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
-import { GetAppLogCount } from '@/graphql/queries/getAppLogCount.gql'
-import { useLazyQuery } from '@apollo/client'
-import { AppType } from '@/apollo/graphql'
-import { useContext, useEffect } from 'react'
-import { AppActivityChart } from '@/components/apps/AppActivityChart'
-import { FaArrowRight } from 'react-icons/fa'
-import { Button } from '@/components/common/Button'
-import Spinner from '@/components/common/Spinner'
-import { relativeTimeFromDates } from '@/utils/time'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql'
+import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
+import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
+import { useContext, useEffect, useState } from 'react'
+import { createNewEnv, decryptEnvSecretKVs, unwrapEnvSecretsForUser } from '@/utils/environments'
+import { ApiEnvironmentEnvTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
+import _sodium from 'libsodium-wrappers-sumo'
+import { KeyringContext } from '@/contexts/keyringContext'
+import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import {
+  FaArrowRight,
+  FaCheckCircle,
+  FaChevronRight,
+  FaCircle,
+  FaCopy,
+  FaExternalLinkAlt,
+  FaRegEye,
+  FaRegEyeSlash,
+  FaSearch,
+  FaTimesCircle,
+} from 'react-icons/fa'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Count } from 'reaviz'
 import { organisationContext } from '@/contexts/organisationContext'
+import { Button } from '@/components/common/Button'
+import clsx from 'clsx'
+import { Disclosure, Transition } from '@headlessui/react'
+import { copyToClipBoard } from '@/utils/clipboard'
+import { toast } from 'react-toastify'
+import { userIsAdmin } from '@/utils/permissions'
 
-export default function App({ params }: { params: { team: string; app: string } }) {
+type EnvSecrets = {
+  env: EnvironmentType
+  secrets: SecretType[]
+}
+
+type AppSecret = {
+  key: string
+  envs: Array<{
+    env: Partial<EnvironmentType>
+    secret: SecretType | null
+  }>
+}
+
+const handleCopy = (val: string) => {
+  copyToClipBoard(val)
+  toast.info('Copied', { autoClose: 2000 })
+}
+
+export default function Secrets({ params }: { params: { team: string; app: string } }) {
+  const { data } = useQuery(GetAppEnvironments, {
+    variables: {
+      appId: params.app,
+    },
+  })
+
+  const pathname = usePathname()
+
+  const [getEnvSecrets] = useLazyQuery(GetEnvSecretsKV)
+  const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
+  const [appSecrets, setAppSecrets] = useState<AppSecret[]>([])
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [initAppEnvironments] = useMutation(InitAppEnvironments)
+
+  const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [getAppLogCount, { data: countData, loading: countLoading }] = useLazyQuery(GetAppLogCount)
-  const [getApp, { data, loading: appDataLoading }] = useLazyQuery(GetAppDetail)
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
-  const app = data?.apps[0] as AppType
+  const filteredSecrets =
+    searchQuery === ''
+      ? appSecrets
+      : appSecrets.filter((secret) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(secret.key)
+        })
 
   useEffect(() => {
     if (organisation) {
-      getApp({
+      getOrgAdmins({
         variables: {
           organisationId: organisation.id,
-          appId: params.app,
         },
-      })
-      getAppLogCount({
-        variables: {
-          appId: params.app,
-        },
-        fetchPolicy: 'cache-and-network',
       })
     }
+  }, [getOrgAdmins, organisation, params.app])
+
+  useEffect(() => {
+    const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {
+      const envSecrets = [] as EnvSecrets[]
+
+      for (const env of appEnvironments) {
+        const { data } = await getEnvSecrets({
+          variables: {
+            envId: env.id,
+          },
+        })
+
+        const { wrappedSeed, wrappedSalt } = data.environmentKeys[0]
+
+        const { publicKey, privateKey } = await unwrapEnvSecretsForUser(
+          wrappedSeed,
+          wrappedSalt,
+          keyring!
+        )
+
+        const decryptedSecrets = await decryptEnvSecretKVs(data.secrets, {
+          publicKey,
+          privateKey,
+        })
+
+        envSecrets.push({ env, secrets: decryptedSecrets })
+      }
+
+      // Create a list of unique secret keys
+      const secretKeys = Array.from(
+        new Set(envSecrets.flatMap((envCard) => envCard.secrets.map((secret) => secret.key)))
+      )
+
+      // Transform envCards into an array of AppSecret objects
+      const appSecrets = secretKeys.map((key) => {
+        const envs = envSecrets.map((envCard) => ({
+          env: envCard.env,
+          secret: envCard.secrets.find((secret) => secret.key === key) || null,
+        }))
+        return { key, envs }
+      })
+
+      setAppSecrets(appSecrets)
+    }
+
+    if (keyring !== null && data?.appEnvironments) fetchAndDecryptAppEnvs(data?.appEnvironments)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisation, params.app])
+  }, [data?.appEnvironments, keyring])
 
-  const totalLogCount = countData?.logsCount ?? 0
+  const initAppEnvs = async () => {
+    const mutationPayload = {
+      devEnv: await createNewEnv(
+        params.app,
+        'Development',
+        ApiEnvironmentEnvTypeChoices.Dev,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+      stagingEnv: await createNewEnv(
+        params.app,
+        'Staging',
+        ApiEnvironmentEnvTypeChoices.Staging,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+      prodEnv: await createNewEnv(
+        params.app,
+        'Production',
+        ApiEnvironmentEnvTypeChoices.Prod,
+        orgAdminsData.organisationAdminsAndSelf
+      ),
+    }
 
-  const showTotalLogCountSpinner = countLoading && totalLogCount === 0
+    await initAppEnvironments({
+      variables: {
+        devEnv: mutationPayload.devEnv.createEnvPayload,
+        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
+        prodEnv: mutationPayload.prodEnv.createEnvPayload,
+        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
+        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
+        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
+      },
+      refetchQueries: [
+        {
+          query: GetAppEnvironments,
+          variables: {
+            appId: params.app,
+          },
+        },
+      ],
+    })
+  }
+
+  const setupRequired = data?.appEnvironments.length === 0 ?? true
+
+  const EnvSecret = (props: {
+    envSecret: {
+      env: Partial<EnvironmentType>
+      secret: SecretType | null
+    }
+    sameAsProd: boolean
+  }) => {
+    const { envSecret, sameAsProd } = props
+
+    const [showValue, setShowValue] = useState<boolean>(false)
+
+    return (
+      <div className="py-2 px-4">
+        <div>
+          <Link
+            className="flex items-center gap-2 w-min group font-medium text-gray-500 uppercase tracking-wider text-xs"
+            href={`${pathname}/environments/${envSecret.env.id}`}
+            title={`Manage ${envSecret.env.envType}`}
+          >
+            <div>{envSecret.env.envType}</div>
+            <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
+          </Link>
+        </div>
+
+        {envSecret.secret === null ? (
+          <span className="text-red-500 font-mono uppercase">missing</span>
+        ) : envSecret.secret.value.length === 0 ? (
+          <span className="text-neutral-500 font-mono uppercase">blank</span>
+        ) : (
+          <div className="flex justify-between items-center w-full">
+            <code
+              className={clsx(
+                'break-all whitespace-break-spaces max-w-full',
+                sameAsProd ? 'text-amber-500' : 'text-emerald-500'
+              )}
+            >
+              {showValue ? (
+                <pre>{envSecret.secret.value}</pre>
+              ) : (
+                <span>{'*'.repeat(envSecret.secret.value.length)}</span>
+              )}
+            </code>
+
+            {envSecret.secret !== null && (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => handleCopy(envSecret.secret!.value)}>
+                  <FaCopy /> Copy
+                </Button>
+                <Button variant="outline" onClick={() => setShowValue(!showValue)}>
+                  {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
+                  {showValue ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const AppSecretRow = (props: { appSecret: AppSecret }) => {
+    const { appSecret } = props
+
+    const prodSecret = appSecret.envs.find(
+      (env) => env.env.envType?.toLowerCase() === 'prod'
+    )?.secret
+
+    const secretIsSameAsProd = (env: {
+      env: Partial<EnvironmentType>
+      secret: SecretType | null
+    }) =>
+      prodSecret !== null &&
+      env.secret?.value === prodSecret?.value &&
+      env.env.envType?.toLowerCase() !== 'prod'
+
+    const tooltipText = (env: { env: Partial<EnvironmentType>; secret: SecretType | null }) => {
+      if (env.secret === null) return `This secret is missing in ${env.env.envType}`
+      else if (env.secret.value.length === 0) return `This secret is blank in ${env.env.envType}`
+      else if (secretIsSameAsProd(env)) return `This secret is the same as PROD.`
+      else return 'This secret is present'
+    }
+
+    return (
+      <Disclosure>
+        {({ open }) => (
+          <>
+            <Disclosure.Button
+              as="tr"
+              className={clsx(
+                'group divide-x divide-neutral-500/40 border-x transition ease duration-100 cursor-pointer ',
+                open
+                  ? 'bg-zinc-100 dark:bg-zinc-800 !border-l-emerald-500 !border-r-neutral-500/40'
+                  : ' hover:bg-zinc-100 dark:hover:bg-zinc-800 border-neutral-500/40'
+              )}
+            >
+              <td
+                className={clsx(
+                  'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2',
+                  open ? 'font-bold' : 'font-medium'
+                )}
+              >
+                {appSecret.key}
+                <FaChevronRight
+                  className={clsx(
+                    'transform transition ease font-light',
+                    open ? 'opacity-100 rotate-90' : 'opacity-0 group-hover:opacity-100 rotate-0'
+                  )}
+                />
+              </td>
+              {appSecret.envs.map((env) => (
+                <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
+                  <div className="flex items-center justify-center" title={tooltipText(env)}>
+                    {env.secret !== null ? (
+                      env.secret.value.length === 0 ? (
+                        <FaCircle className="text-neutral-500 shrink-0" />
+                      ) : (
+                        <FaCheckCircle
+                          className={clsx(
+                            'shrink-0',
+                            secretIsSameAsProd(env) ? 'text-amber-500' : 'text-emerald-500'
+                          )}
+                        />
+                      )
+                    ) : (
+                      <FaTimesCircle className="text-red-500 shrink-0" />
+                    )}
+                  </div>
+                </td>
+              ))}
+            </Disclosure.Button>
+            <Transition
+              as="tr"
+              enter="transition duration-100 ease-out"
+              enterFrom="transform scale-95 opacity-0"
+              enterTo="transform scale-100 opacity-100"
+              leave="transition duration-75 ease-out"
+              leaveFrom="transform scale-100 opacity-100"
+              leaveTo="transform scale-95 opacity-0"
+              className={clsx(
+                'border-x',
+                open
+                  ? ' !border-l-emerald-500 !border-r-neutral-500/40 shadow-xl '
+                  : 'border-neutral-500/40'
+              )}
+            >
+              <td
+                colSpan={appSecret.envs.length + 1}
+                className={clsx('p-2 space-y-6 bg-zinc-100 dark:bg-zinc-800')}
+              >
+                <Disclosure.Panel>
+                  <div className="grid gap-2 divide-y divide-neutral-500/20">
+                    {appSecret.envs.map((envSecret) => (
+                      <EnvSecret
+                        key={envSecret.env.id}
+                        envSecret={envSecret}
+                        sameAsProd={secretIsSameAsProd(envSecret)}
+                      />
+                    ))}
+                  </div>
+                </Disclosure.Panel>
+              </td>
+            </Transition>
+          </>
+        )}
+      </Disclosure>
+    )
+  }
 
   return (
-    <div className="w-full text-black dark:text-white grid grid-cols-1 md:grid-cols-3 gap-8 py-8 max-h-screen overflow-y-auto">
-      {!app && (
-        <div className="h-[508px] bg-neutral-100 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/20 dark:ring-0 shadow-lg rounded-lg animate-pulse md:col-span-3"></div>
-      )}
-      {app && (
-        <div className="md:col-span-3 bg-neutral-100 dark:bg-neutral-800 p-8 rounded-lg ring-1 ring-inset ring-neutral-500/20 dark:ring-0 shadow-lg">
-          <div className="w-full ">
-            <AppActivityChart app={app} />
+    <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid gap-16 relative">
+      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
+      {keyring !== null &&
+        (setupRequired ? (
+          <div className="flex flex-col gap-4 w-full items-center p-16">
+            <h2 className="text-white font-semibold text-xl">
+              {activeUserIsAdmin
+                ? "There aren't any environments for this app yet"
+                : "You don't have access to any environments for this app yet. Contact the organisation owner or admins to get access."}
+            </h2>
+            {activeUserIsAdmin && (
+              <Button variant="primary" onClick={initAppEnvs}>
+                Get started
+              </Button>
+            )}
           </div>
-        </div>
-      )}
+        ) : (
+          <section className="space-y-8 p-4">
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <h1 className="h3 font-semibold text-2xl">Secrets</h1>
+                <p className="text-neutral-500">
+                  An overview of secrets across all environments in this App.
+                </p>
+              </div>
+            </div>
 
-      <div className="bg-neutral-100 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/20 dark:ring-0 shadow-lg p-8 rounded-lg flex flex-col justify-between gap-20">
-        <div className="space-y-2">
-          {showTotalLogCountSpinner && <Spinner size="md" />}
-          {!showTotalLogCountSpinner && (
-            <span className="text-4xl font-extralight">
-              <Count from={0} to={totalLogCount} />
-            </span>
-          )}
-          <h2 className="text-2xl font-bold">Total Decrypts</h2>
-        </div>
-        <div className="flex justify-end">
-          <Link href={`${usePathname()}/logs`}>
-            <Button variant="primary">
-              View logs <FaArrowRight />
-            </Button>
-          </Link>
-        </div>
-      </div>
+            <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
+              <div className="relative flex items-center bg-white dark:bg-zinc-800 rounded-md px-2">
+                <div className="">
+                  <FaSearch className="text-neutral-500" />
+                </div>
+                <input
+                  placeholder="Search"
+                  className="custom bg-zinc-100 dark:bg-zinc-800"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <FaTimesCircle
+                  className={clsx(
+                    'cursor-pointer text-neutral-500 transition-opacity ease',
+                    searchQuery ? 'opacity-100' : 'opacity-0'
+                  )}
+                  role="button"
+                  onClick={() => setSearchQuery('')}
+                />
+              </div>
 
-      <div className="bg-neutral-100 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/20 dark:ring-0 shadow-lg p-8 rounded-lg flex flex-col justify-between gap-20">
-        <div className="flex w-full justify-between">
-          <div className="space-y-2">
-            <span className="text-4xl font-extralight">1</span>
-            <h2 className="text-2xl font-bold">Active key</h2>
-          </div>
-          <span
-            className="h-2 w-2 bg-emerald-500 animate-pulse rounded-full"
-            title="App is live"
-          ></span>
-        </div>
-        <div className="flex justify-end">
-          <Link href={`${usePathname()}/keys`}>
-            <Button variant="primary">
-              Manage keys <FaArrowRight />
-            </Button>
-          </Link>
-        </div>
-      </div>
+              <div className="flex items-center justify-end gap-8 p-4 text-neutral-500">
+                <div className="flex items-center gap-2">
+                  <FaCheckCircle className="text-emerald-500 shrink-0" /> Secret is present
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaCheckCircle className="text-amber-500 shrink-0" /> Secret is the same as
+                  Production
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaCircle className="text-neutral-500 shrink-0" /> Secret is blank
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaTimesCircle className="text-red-500 shrink-0" /> Secret is missing
+                </div>
+              </div>
+            </div>
 
-      <div className="bg-neutral-100 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/20 dark:ring-0 shadow-lg p-8 rounded-lg flex flex-col justify-between gap-20">
-        <div className="space-y-2">
-          {appDataLoading && <Spinner size="md" />}
-          {app && (
-            <span className="text-4xl font-extralight">
-              {relativeTimeFromDates(new Date(app.createdAt))}
-            </span>
-          )}
-          <h2 className="text-2xl font-bold">App created</h2>
-        </div>
-        <div className="flex justify-end">
-          <Link href={`${usePathname()}/settings`}>
-            <Button variant="primary">
-              Manage app <FaArrowRight />
-            </Button>
-          </Link>
-        </div>
-      </div>
+            <table className="table-auto w-full border border-t-0 border-neutral-500/40">
+              <thead id="table-head" className="sticky top-0 bg-zinc-200 dark:bg-zinc-800 z-10">
+                <tr className="divide-x divide-neutral-500/40">
+                  <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
+                    key
+                  </th>
+                  {data?.appEnvironments.map((env: EnvironmentType) => (
+                    <th
+                      key={env.id}
+                      className="group text-center text-sm font-semibold uppercase tracking-widest py-3"
+                    >
+                      <Link href={`${pathname}/environments/${env.id}`}>
+                        <Button variant="outline">
+                          <div className="flex items-center gap-2 justify-center ">
+                            {env.envType}
+                            <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
+                              <FaArrowRight />
+                            </div>
+                          </div>
+                        </Button>
+                      </Link>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-500/40">
+                {filteredSecrets.map((appSecret, index) => (
+                  <AppSecretRow key={`${appSecret.key}${index}`} appSecret={appSecret} />
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ))}
     </div>
   )
 }
