@@ -94,8 +94,6 @@ export default function Environment({
   const [updateSecret] = useMutation(UpdateSecret)
   const [deleteSecret] = useMutation(DeleteSecretOp)
 
-  const [createEnvironmentToken] = useMutation(CreateEnvToken)
-
   const envPath = (env: EnvironmentType) => {
     const pathSegments = pathname!.split('/')
     pathSegments[pathSegments.length - 1] = env.id
