@@ -1,4 +1,4 @@
-from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation, UpdateMemberEnvScopeMutation
+from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation, ReadSecretMutation, UpdateMemberEnvScopeMutation
 from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_admin, user_is_org_member
 from .graphene.mutations.app import AddAppMemberMutation, CreateAppMutation, DeleteAppMutation, RemoveAppMemberMutation, RotateAppKeysMutation
 from .graphene.mutations.organisation import CreateOrganisationMemberMutation, CreateOrganisationMutation, DeleteInviteMutation, DeleteOrganisationMemberMutation, InviteOrganisationMemberMutation, UpdateOrganisationMemberRole, UpdateUserWrappedSecretsMutation
@@ -51,7 +51,6 @@ class Query(graphene.ObjectType):
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
     def resolve_organisations(root, info):
-
         memberships = OrganisationMember.objects.filter(
             user=info.context.user, deleted_at=None)
 
@@ -355,6 +354,7 @@ class Mutation(graphene.ObjectType):
     create_secret = CreateSecretMutation.Field()
     edit_secret = EditSecretMutation.Field()
     delete_secret = DeleteSecretMutation.Field()
+    read_secret = ReadSecretMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

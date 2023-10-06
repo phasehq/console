@@ -18,11 +18,13 @@ import {
   FaCheckSquare,
   FaSquare,
   FaKey,
+  FaInfo,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { Dialog, Transition } from '@headlessui/react'
+import { Dialog, Popover, Transition } from '@headlessui/react'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
+import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
 import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation } from '@apollo/client'
@@ -327,6 +329,40 @@ const HistoryDialog = (props: { secret: SecretType }) => {
     )
   }
 
+  // const EventMeta = (props: { historyItem: SecretEventType }) => {
+  //   const { historyItem } = props
+
+  //   const showMeta =
+  //     (historyItem.userAgent?.length > 0 || historyItem.ipAddress?.length > 0) ?? false
+
+  //   return (
+  //     <Popover className="relative">
+  //       {showMeta && (
+  //         <Popover.Button>
+  //           <FaInfo />
+  //         </Popover.Button>
+  //       )}
+  //       <Transition
+  //         enter="transition duration-100 ease-out"
+  //         enterFrom="transform scale-95 opacity-0"
+  //         enterTo="transform scale-100 opacity-100"
+  //         leave="transition duration-75 ease-out"
+  //         leaveFrom="transform scale-100 opacity-100"
+  //         leaveTo="transform scale-95 opacity-0"
+  //       >
+  //         <Popover.Panel className="absolute z-10">
+  //           <div className="grid grid-cols-2 p-2 text-xs font-mono bg-zinc-200 dark:bg-zinc-800 rounded-sm w-40">
+  //             User agent
+  //             <span>{historyItem.userAgent}</span>
+  //             IP address
+  //             <span>{historyItem.ipAddress}</span>
+  //           </div>
+  //         </Popover.Panel>
+  //       </Transition>
+  //     </Popover>
+  //   )
+  // }
+
   return (
     <>
       <div className="flex items-center justify-center">
@@ -620,7 +656,18 @@ export default function SecretRow(props: {
 
   const [isRevealed, setIsRevealed] = useState<boolean>(false)
 
-  const toggleReveal = () => setIsRevealed(!isRevealed)
+  const [readSecret] = useMutation(LogSecretRead)
+
+  const handleRevealSecret = async () => {
+    setIsRevealed(true)
+    await readSecret({ variables: { id: secret.id } })
+  }
+
+  const handleHideSecret = () => setIsRevealed(false)
+
+  const toggleReveal = () => {
+    isRevealed ? handleHideSecret() : handleRevealSecret()
+  }
 
   const INPUT_BASE_STYLE =
     'w-full text-zinc-800 font-mono custom bg-zinc-100 dark:bg-zinc-800 dark:text-white transition ease'

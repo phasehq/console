@@ -11,6 +11,13 @@ def get_client_ip(request):
     return ip
 
 
+def get_resolver_request_meta(request):
+    user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
+    ip_address = get_client_ip(request)
+
+    return ip_address, user_agent
+
+
 def get_token_type(auth_token):
     return auth_token.split(" ")[1]
 

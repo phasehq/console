@@ -146,7 +146,7 @@ class SecretEventType(DjangoObjectType):
     class Meta:
         model = SecretEvent
         fields = ('id', 'secret', 'key', 'value',
-                  'version', 'tags', 'comment', 'event_type', 'timestamp', 'user')
+                  'version', 'tags', 'comment', 'event_type', 'timestamp', 'user', 'ip_address', 'user_agent')
 
 
 class SecretType(DjangoObjectType):
@@ -160,7 +160,7 @@ class SecretType(DjangoObjectType):
         # interfaces = (relay.Node, )
 
     def resolve_history(self, info):
-        return SecretEvent.objects.filter(secret_id=self.id).order_by('version')
+        return SecretEvent.objects.filter(secret_id=self.id).order_by('timestamp')
 
 
 class KMSLogType(ObjectType):

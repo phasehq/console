@@ -4,6 +4,7 @@ import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments
 import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
 import { createNewEnv, decryptEnvSecretKVs, unwrapEnvSecretsForUser } from '@/utils/environments'
@@ -190,7 +191,20 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   }) => {
     const { envSecret, sameAsProd } = props
 
+    const [readSecret] = useMutation(LogSecretRead)
+
     const [showValue, setShowValue] = useState<boolean>(false)
+
+    const handleRevealSecret = async () => {
+      setShowValue(true)
+      await readSecret({ variables: { id: envSecret.secret!.id } })
+    }
+
+    const handleHideSecret = () => setShowValue(false)
+
+    const toggleShowValue = () => {
+      showValue ? handleHideSecret() : handleRevealSecret()
+    }
 
     return (
       <div className="py-2 px-4">
@@ -229,7 +243,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 <Button variant="outline" onClick={() => handleCopy(envSecret.secret!.value)}>
                   <FaCopy /> Copy
                 </Button>
-                <Button variant="outline" onClick={() => setShowValue(!showValue)}>
+                <Button variant="outline" onClick={toggleShowValue}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
                 </Button>

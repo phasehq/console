@@ -218,6 +218,8 @@ type SecretEventType {
   comment: String!
   eventType: ApiSecretEventEventTypeChoices!
   timestamp: DateTime!
+  ipAddress: String
+  userAgent: String
 }
 
 """An enumeration."""
@@ -305,6 +307,7 @@ type Mutation {
   createSecret(secretData: SecretInput): CreateSecretMutation
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
   deleteSecret(id: ID!): DeleteSecretMutation
+  readSecret(id: ID!): ReadSecretMutation
 }
 
 type CreateOrganisationMutation {
@@ -433,4 +436,8 @@ type EditSecretMutation {
 
 type DeleteSecretMutation {
   secret: SecretType
+}
+
+type ReadSecretMutation {
+  ok: Boolean
 }
