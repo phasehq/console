@@ -30,6 +30,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
 import { Avatar } from '../common/Avatar'
+import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 
 export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
@@ -259,75 +260,75 @@ const HistoryDialog = (props: { secret: SecretType }) => {
     if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted'
   }
 
-  const PropertyDiffs = (props: { historyItem: SecretEventType; index: number }) => {
-    const { historyItem, index } = props
+  // const PropertyDiffs = (props: { historyItem: SecretEventType; index: number }) => {
+  //   const { historyItem, index } = props
 
-    const previousItem = secret.history![index - 1]!
+  //   const previousItem = secret.history![index - 1]!
 
-    const getAddedTags = () => {
-      const addedTags = historyItem!.tags.filter((currentTag) =>
-        previousItem.tags.every((previousTag) => previousTag.id !== currentTag.id)
-      )
-      return addedTags
-    }
+  //   const getAddedTags = () => {
+  //     const addedTags = historyItem!.tags.filter((currentTag) =>
+  //       previousItem.tags.every((previousTag) => previousTag.id !== currentTag.id)
+  //     )
+  //     return addedTags
+  //   }
 
-    const getRemovedTags = () => {
-      const removedTags = previousItem.tags.filter((previousTag) =>
-        historyItem.tags.every((currentTag) => currentTag.id !== previousTag.id)
-      )
-      return removedTags
-    }
+  //   const getRemovedTags = () => {
+  //     const removedTags = previousItem.tags.filter((previousTag) =>
+  //       historyItem.tags.every((currentTag) => currentTag.id !== previousTag.id)
+  //     )
+  //     return removedTags
+  //   }
 
-    return (
-      <>
-        {historyItem!.key !== previousItem.key && (
-          <div className="pl-3 font-mono">
-            <span className="text-neutral-500 mr-2">KEY:</span>
-            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.key}</s>
-            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-              {historyItem!.key}
-            </span>
-          </div>
-        )}
+  //   return (
+  //     <>
+  //       {historyItem!.key !== previousItem.key && (
+  //         <div className="pl-3 font-mono">
+  //           <span className="text-neutral-500 mr-2">KEY:</span>
+  //           <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.key}</s>
+  //           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+  //             {historyItem!.key}
+  //           </span>
+  //         </div>
+  //       )}
 
-        {historyItem!.value !== previousItem.value && (
-          <div className="pl-3 font-mono">
-            <span className="text-neutral-500 mr-2">VALUE:</span>
-            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.value}</s>
-            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-              {historyItem!.value}
-            </span>
-          </div>
-        )}
+  //       {historyItem!.value !== previousItem.value && (
+  //         <div className="pl-3 font-mono">
+  //           <span className="text-neutral-500 mr-2">VALUE:</span>
+  //           <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.value}</s>
+  //           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+  //             {historyItem!.value}
+  //           </span>
+  //         </div>
+  //       )}
 
-        {historyItem!.comment !== previousItem.comment && (
-          <div className="pl-3 font-mono">
-            <span className="text-neutral-500 mr-2">COMMENT:</span>
-            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.comment}</s>
-            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-              {historyItem!.comment}
-            </span>
-          </div>
-        )}
+  //       {historyItem!.comment !== previousItem.comment && (
+  //         <div className="pl-3 font-mono">
+  //           <span className="text-neutral-500 mr-2">COMMENT:</span>
+  //           <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.comment}</s>
+  //           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+  //             {historyItem!.comment}
+  //           </span>
+  //         </div>
+  //       )}
 
-        {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
-          <div className="pl-3 font-mono">
-            <span className="text-neutral-500 mr-2">TAGS:</span>
-            <div className="bg-red-200 dark:bg-red-950 text-red-500 flex w-min gap-2 rounded-full">
-              {getRemovedTags().map((tag) => (
-                <Tag key={tag.id} tag={tag} />
-              ))}
-            </div>
-            <div className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 flex w-min gap-2 rounded-full">
-              {getAddedTags().map((tag) => (
-                <Tag key={tag.id} tag={tag} />
-              ))}
-            </div>
-          </div>
-        )}
-      </>
-    )
-  }
+  //       {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
+  //         <div className="pl-3 font-mono">
+  //           <span className="text-neutral-500 mr-2">TAGS:</span>
+  //           <div className="bg-red-200 dark:bg-red-950 text-red-500 flex w-min gap-2 rounded-full">
+  //             {getRemovedTags().map((tag) => (
+  //               <Tag key={tag.id} tag={tag} />
+  //             ))}
+  //           </div>
+  //           <div className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 flex w-min gap-2 rounded-full">
+  //             {getAddedTags().map((tag) => (
+  //               <Tag key={tag.id} tag={tag} />
+  //             ))}
+  //           </div>
+  //         </div>
+  //       )}
+  //     </>
+  //   )
+  // }
 
   // const EventMeta = (props: { historyItem: SecretEventType }) => {
   //   const { historyItem } = props
@@ -443,7 +444,11 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                               </div>
                             </div>
                             {index > 0 && (
-                              <PropertyDiffs historyItem={historyItem!} index={index} />
+                              <SecretPropertyDiffs
+                                secret={secret}
+                                historyItem={historyItem!}
+                                index={index}
+                              />
                             )}
                           </div>
                         ))}

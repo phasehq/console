@@ -146,7 +146,7 @@ class SecretEventType(DjangoObjectType):
     class Meta:
         model = SecretEvent
         fields = ('id', 'secret', 'key', 'value',
-                  'version', 'tags', 'comment', 'event_type', 'timestamp', 'user', 'ip_address', 'user_agent')
+                  'version', 'tags', 'comment', 'event_type', 'timestamp', 'user', 'ip_address', 'user_agent', 'environment')
 
 
 class SecretType(DjangoObjectType):
@@ -199,3 +199,8 @@ class TimeRange(Enum):
     MONTH = 'month'
     YEAR = 'year'
     ALL_TIME = 'allTime'
+
+
+class LogsResponseType(ObjectType):
+    kms = graphene.List(KMSLogType)
+    secrets = graphene.List(SecretEventType)
