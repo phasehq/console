@@ -56,3 +56,14 @@ export const getUnixTimeStampinFuture = (
     minutes * millisecondsInAMinute
   )
 }
+
+/**
+ * Converts a datetime string from python to a unix timestamp
+ *
+ * @param {string} datetime string
+ * @returns {number}
+ */
+export const dateToUnixTimestamp = (dateString: string): number => {
+  const dateObj = new Date(dateString)
+  return Math.floor(dateObj.getTime())
+}

@@ -14,7 +14,7 @@ import { FaChevronRight, FaKey } from 'react-icons/fa'
 import { SiNodedotjs, SiPython } from 'react-icons/si'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import getUnicodeFlagIcon from 'country-flag-icons/unicode'
-import { relativeTimeFromDates } from '@/utils/time'
+import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
 import { humanFileSize } from '@/utils/dataUnits'
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -50,7 +50,9 @@ export default function SecretLogs(props: { app: string }) {
 
   const getCurrentTimeStamp = () => Date.now()
   const getLastLogTimestamp = () =>
-    logList.length > 0 ? logList[logList.length - 1].timestamp : getCurrentTimeStamp()
+    logList.length > 0
+      ? dateToUnixTimestamp(logList[logList.length - 1].timestamp)
+      : getCurrentTimeStamp()
 
   /**
    * Fetches logs for the app with the given start and end timestamps,
@@ -183,15 +185,7 @@ export default function SecretLogs(props: { app: string }) {
 
         const envKeyPair = envKeys.find((envKey) => envKey.envId === event.environment.id)
 
-        if (!envKeyPair) {
-          console.log(
-            event.environment.id,
-            envKeys.map((envKey) => envKey.envId)
-          )
-          return false
-        }
-
-        const { publicKey, privateKey } = envKeyPair.keys
+        const { publicKey, privateKey } = envKeyPair!.keys
 
         // Decrypt event fields
         decryptedEvent!.key = await decryptAsymmetric(event!.key, privateKey, publicKey)
@@ -206,7 +200,7 @@ export default function SecretLogs(props: { app: string }) {
       }
 
       if (log && envKeys.length > 0) decryptSecretEvent()
-    }, [log, envKeys])
+    }, [log])
 
     const relativeTimeStamp = () => {
       return relativeTimeFromDates(new Date(log.timestamp))
@@ -234,10 +228,10 @@ export default function SecretLogs(props: { app: string }) {
     }
 
     const getEventTypeText = (eventType: ApiSecretEventEventTypeChoices) => {
-      if (eventType === ApiSecretEventEventTypeChoices.C) return 'Create'
-      if (eventType === ApiSecretEventEventTypeChoices.U) return 'Update'
-      if (eventType === ApiSecretEventEventTypeChoices.R) return 'Read'
-      if (eventType === ApiSecretEventEventTypeChoices.D) return 'Delete'
+      if (eventType === ApiSecretEventEventTypeChoices.C) return 'Created secret'
+      if (eventType === ApiSecretEventEventTypeChoices.U) return 'Updated secret'
+      if (eventType === ApiSecretEventEventTypeChoices.R) return 'Read secret'
+      if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted secret'
     }
 
     return (

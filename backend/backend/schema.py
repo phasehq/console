@@ -248,8 +248,11 @@ class Query(graphene.ObjectType):
 
         envs = [env_key.environment for env_key in env_keys]
 
+        start_dt = datetime.fromtimestamp(start / 1000)
+        end_dt = datetime.fromtimestamp(end / 1000)
+
         secret_events = SecretEvent.objects.filter(
-            environment__in=envs).order_by('-timestamp')
+            environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt).order_by('-timestamp')[:25]
 
         return LogsResponseType(kms=list(kms_logs.values()), secrets=secret_events)
 
