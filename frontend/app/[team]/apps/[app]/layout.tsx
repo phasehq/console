@@ -66,7 +66,8 @@ export default function AppLayout({
     const activeTabIndex = () => {
       if (app) {
         const currentUrl = path?.split('/')[4] || ''
-        return tabs.findIndex((tab) => tab.link === currentUrl) || 0
+        const index = tabs.findIndex((tab) => tab.link === currentUrl)
+        return index >= 0 ? index : 0
       }
       return 0
     }
