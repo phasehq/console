@@ -33,7 +33,7 @@ import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Menu, Transition } from '@headlessui/react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Alert } from '@/components/common/Alert'
 
@@ -50,6 +50,9 @@ export default function Environment({
 }) {
   const { keyring } = useContext(KeyringContext)
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  const secretToHighlight = searchParams.get('secret')
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
   const [secrets, setSecrets] = useState<SecretType[]>([])
@@ -551,7 +554,7 @@ export default function Environment({
               </Button>
             </div>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1">
             <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
               <div className="px-9 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                 key
@@ -567,7 +570,14 @@ export default function Environment({
             </div>
             {organisation &&
               filteredSecrets.map((secret, index: number) => (
-                <div className="flex items-center gap-2" key={secret.id}>
+                <div
+                  className={clsx(
+                    'flex items-center gap-2 p-1 rounded-md',
+                    secretToHighlight === secret.id &&
+                      'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/10'
+                  )}
+                  key={secret.id}
+                >
                   <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
                   <SecretRow
                     orgId={organisation.id}
@@ -576,6 +586,7 @@ export default function Environment({
                     secretNames={secretNames}
                     handlePropertyChange={handleUpdateSecretProperty}
                     handleDelete={handleDeleteSecret}
+                    //highlight={secretToHighlight === secret.id}
                   />
                 </div>
               ))}

@@ -10,7 +10,7 @@ import {
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaChevronRight, FaKey } from 'react-icons/fa'
+import { FaChevronRight, FaExternalLinkAlt, FaKey } from 'react-icons/fa'
 import { SiNodedotjs, SiPython } from 'react-icons/si'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import getUnicodeFlagIcon from 'country-flag-icons/unicode'
@@ -26,6 +26,8 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { getUserKxPublicKey, getUserKxPrivateKey, decryptAsymmetric } from '@/utils/crypto'
 import { organisationContext } from '@/contexts/organisationContext'
 import UnlockKeyringDialog from '../auth/UnlockKeyringDialog'
+import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
@@ -175,6 +177,8 @@ export default function SecretLogs(props: { app: string }) {
   const LogRow = (props: { log: SecretEventType }) => {
     const { log } = props
 
+    const appPath = usePathname()?.split('/').slice(0, -1).join('/')
+
     const [decryptedEvent, setDecryptedEvent] = useState<SecretEventType | null>(null)
 
     useEffect(() => {
@@ -190,11 +194,11 @@ export default function SecretLogs(props: { app: string }) {
         // Decrypt event fields
         decryptedEvent!.key = await decryptAsymmetric(event!.key, privateKey, publicKey)
 
-        decryptedEvent!.value = await decryptAsymmetric(event!.value, privateKey, publicKey)
+        // decryptedEvent!.value = await decryptAsymmetric(event!.value, privateKey, publicKey)
 
-        if (decryptedEvent!.comment !== '') {
-          decryptedEvent!.comment = await decryptAsymmetric(event!.comment, privateKey, publicKey)
-        }
+        // if (decryptedEvent!.comment !== '') {
+        //   decryptedEvent!.comment = await decryptAsymmetric(event!.comment, privateKey, publicKey)
+        // }
 
         setDecryptedEvent(decryptedEvent)
       }
@@ -286,7 +290,7 @@ export default function SecretLogs(props: { app: string }) {
                 </div>
               </td>
               <td className="whitespace-nowrap px-6 py-4 font-mono">{log.environment.envType}</td>
-              <td className="whitespace-nowrap px-6 py-4 font-mono">{log.ipAddress}</td>
+              <td className="whitespace-nowrap px-6 py-4 font-mono">{decryptedEvent?.key}</td>
               <td className="whitespace-nowrap px-6 py-4 font-medium capitalize">
                 {relativeTimeStamp()}
               </td>
@@ -312,25 +316,30 @@ export default function SecretLogs(props: { app: string }) {
                     <span className="text-neutral-500">Event ID: </span>
                     <span className="font-semibold">{log.id}</span>
                   </div>
-                  {decryptedEvent !== null && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 w-full gap-4 text-sm">
-                      <LogField label="Key">
-                        <div className="flex items-center gap-2">{decryptedEvent.key}</div>
-                      </LogField>
 
-                      <LogField label="Value">
-                        <span className="capitalize">{decryptedEvent.value}</span>
-                      </LogField>
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full gap-4 text-sm">
+                    <LogField label="Key">
+                      <div className="flex items-center gap-2">{decryptedEvent?.key}</div>
+                    </LogField>
 
-                      <LogField label="Comment">{decryptedEvent.comment}</LogField>
+                    <LogField label="IP address"> {log.ipAddress}</LogField>
 
-                      <LogField label="IP address"> {log.ipAddress}</LogField>
+                    <LogField label="User agent"> {log.userAgent}</LogField>
 
-                      <LogField label="User agent"> {log.userAgent}</LogField>
+                    <LogField label="Timestamp">{verboseTimeStamp()}</LogField>
 
-                      <LogField label="Timestamp">{verboseTimeStamp()}</LogField>
+                    <div className="flex justify-end col-span-2">
+                      <Button variant="outline">
+                        <Link
+                          className="flex items-center gap-2"
+                          href={`${appPath}/environments/${log.environment.id}?secret=${log.secret.id}`}
+                        >
+                          View this secret
+                          <FaExternalLinkAlt />
+                        </Link>
+                      </Button>
                     </div>
-                  )}
+                  </div>
                 </Disclosure.Panel>
               </td>
             </Transition>
@@ -393,7 +402,7 @@ export default function SecretLogs(props: { app: string }) {
               <th className="px-6 py-4">User</th>
               <th className="px-6 py-4">Event</th>
               <th className="px-6 py-4">Environment</th>
-              <th className="px-6 py-4">Location</th>
+              <th className="px-6 py-4">Secret</th>
               <th className="px-6 py-4">Time</th>
             </tr>
           </thead>
