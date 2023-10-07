@@ -310,6 +310,8 @@ class SecretsView(APIView):
         env_id = request.headers['environment']
         env = Environment.objects.get(id=env_id)
 
+        ip_address, user_agent = get_resolver_request_meta(request)
+
         if token_type == 'User':
             try:
                 org_member = get_org_member_from_user_token(auth_token)
@@ -336,6 +338,11 @@ class SecretsView(APIView):
             pass
 
         secrets = Secret.objects.filter(**secrets_filter)
+
+        for secret in secrets:
+            read_event = SecretEvent.objects.create(secret=secret, environment=secret.environment, user=org_member, key=secret.key, key_digest=secret.key_digest,
+                                                    value=secret.value, comment=secret.comment, event_type=SecretEvent.READ, ip_address=ip_address, user_agent=user_agent)
+            read_event.tags.set(secret.tags.all())
 
         serializer = SecretSerializer(secrets, many=True)
 
