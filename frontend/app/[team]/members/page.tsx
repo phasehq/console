@@ -95,6 +95,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
           const { data } = await getEnvKey({
             variables: {
               envId: env.id,
+              appId: app.id,
             },
           })
 
