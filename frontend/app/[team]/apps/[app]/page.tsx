@@ -47,11 +47,6 @@ type AppSecret = {
   }>
 }
 
-const handleCopy = (val: string) => {
-  copyToClipBoard(val)
-  toast.info('Copied', { autoClose: 2000 })
-}
-
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppEnvironments, {
     variables: {
@@ -204,6 +199,12 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
     const toggleShowValue = () => {
       showValue ? handleHideSecret() : handleRevealSecret()
+    }
+
+    const handleCopy = async (val: string) => {
+      copyToClipBoard(val)
+      toast.info('Copied', { autoClose: 2000 })
+      await readSecret({ variables: { id: envSecret.secret!.id } })
     }
 
     return (
