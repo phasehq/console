@@ -211,8 +211,14 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         <div>
           <Link
             className="flex items-center gap-2 w-min group font-medium text-gray-500 uppercase tracking-wider text-xs"
-            href={`${pathname}/environments/${envSecret.env.id}?secret=${envSecret.secret?.id}`}
-            title={`Manage ${envSecret.env.envType}`}
+            href={`${pathname}/environments/${envSecret.env.id}${
+              envSecret.secret ? `?secret=${envSecret.secret?.id}` : ``
+            }`}
+            title={
+              envSecret.secret
+                ? `View this secret in ${envSecret.env.envType}`
+                : `Manage ${envSecret.env.envType}`
+            }
           >
             <div>{envSecret.env.envType}</div>
             <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
