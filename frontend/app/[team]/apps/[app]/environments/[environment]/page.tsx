@@ -17,7 +17,7 @@ import {
 } from '@/utils/crypto'
 import { arraysEqual, envKeyring } from '@/utils/environments'
 import { useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import {
   FaChevronDown,
@@ -53,6 +53,7 @@ export default function Environment({
   const searchParams = useSearchParams()
 
   const secretToHighlight = searchParams.get('secret')
+  const highlightedRef = useRef<HTMLDivElement>(null)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
   const [secrets, setSecrets] = useState<SecretType[]>([])
@@ -61,6 +62,17 @@ export default function Environment({
   const [isLoading, setIsloading] = useState(false)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  useEffect(() => {
+    // 2. Scroll into view when secretToHighlight changes
+    if (highlightedRef.current && secrets.length > 0) {
+      highlightedRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest',
+      })
+    }
+  }, [secretToHighlight, secrets])
 
   const unsavedChanges =
     secrets.length !== updatedSecrets.length ||
@@ -571,6 +583,7 @@ export default function Environment({
             {organisation &&
               filteredSecrets.map((secret, index: number) => (
                 <div
+                  ref={secretToHighlight === secret.id ? highlightedRef : null}
                   className={clsx(
                     'flex items-center gap-2 p-1 rounded-md',
                     secretToHighlight === secret.id &&
@@ -586,7 +599,6 @@ export default function Environment({
                     secretNames={secretNames}
                     handlePropertyChange={handleUpdateSecretProperty}
                     handleDelete={handleDeleteSecret}
-                    //highlight={secretToHighlight === secret.id}
                   />
                 </div>
               ))}
