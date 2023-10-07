@@ -47,7 +47,7 @@ class Query(graphene.ObjectType):
     secret_history = graphene.List(SecretEventType, secret_id=graphene.ID())
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
     environment_keys = graphene.List(
-        EnvironmentKeyType, app_id=graphene.ID(), environment_id=graphene.ID(required=False), member_id=graphene.ID(required=False))
+        EnvironmentKeyType, app_id=graphene.ID(required=False), environment_id=graphene.ID(required=False), member_id=graphene.ID(required=False))
     environment_tokens = graphene.List(
         EnvironmentTokenType, environment_id=graphene.ID())
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
@@ -175,11 +175,16 @@ class Query(graphene.ObjectType):
 
         return SecretTag.objects.filter(organisation_id=org_id)
 
-    def resolve_environment_keys(root, info, app_id, environment_id=None, member_id=None):
-        if not user_can_access_app(info.context.user.userId, app_id):
-            raise GraphQLError("You don't have access to this app")
+    def resolve_environment_keys(root, info, app_id=None, environment_id=None, member_id=None):
+        if app_id is None and environment_id is None:
+            return None
+        elif app_id is not None:
+            app = App.objects.get(id=app_id)
+        else:
+            app = Environment.objects.get(id=environment_id).app
 
-        app = App.objects.get(id=app_id)
+        if not user_can_access_app(info.context.user.userId, app.id):
+            raise GraphQLError("You don't have access to this app")
 
         filter = {
             'environment__app': app,
