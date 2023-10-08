@@ -125,7 +125,7 @@ const Sidebar = () => {
       active: usePathname() === `/${team}/members`,
     },
     {
-      name: 'User tokens',
+      name: 'Personal access tokens',
       href: `/${team}/tokens`,
       icon: <FaKey size="20" />,
       active: usePathname() === `/${team}/tokens`,
