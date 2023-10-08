@@ -471,11 +471,13 @@ export default function Members({ params }: { params: { team: string } }) {
           organisationId: organisation.id,
           role: null,
         },
+        pollInterval: 5000,
       })
       getInvites({
         variables: {
           orgId: organisation.id,
         },
+        pollInterval: 5000,
       })
     }
   }, [getInvites, getMembers, organisation])
