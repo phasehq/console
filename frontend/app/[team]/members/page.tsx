@@ -378,6 +378,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                                 </label>
                                 <input
                                   required
+                                  autoFocus
                                   id="name"
                                   type="email"
                                   value={email}

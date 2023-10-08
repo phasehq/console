@@ -90,7 +90,10 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
 
             invite.apps.set(app_scope)
 
-            send_inite_email(invite, info.context)
+            try:
+                send_inite_email(invite)
+            except Exception as e:
+                print(f"Error sending invite email: {e}")
 
             return InviteOrganisationMemberMutation(invite=invite)
         else:
