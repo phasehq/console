@@ -243,8 +243,8 @@ class Query(graphene.ObjectType):
                 f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25)
 
         else:
-            kms_logs = KMSDBLog.objects.filter(
-                app_id=f"phApp:v{app.app_version}:{app.identity_key}", timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25]
+            kms_logs = list(KMSDBLog.objects.filter(
+                app_id=f"phApp:v{app.app_version}:{app.identity_key}", timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25].values())
 
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=app.organisation, deleted_at=None)
@@ -261,7 +261,7 @@ class Query(graphene.ObjectType):
         secret_events = SecretEvent.objects.filter(
             environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt).order_by('-timestamp')[:25]
 
-        return LogsResponseType(kms=list(kms_logs.values()), secrets=secret_events)
+        return LogsResponseType(kms=kms_logs, secrets=secret_events)
 
     def resolve_kms_logs_count(root, info, app_id):
         if not user_can_access_app(info.context.user.userId, app_id):
