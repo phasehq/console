@@ -1,5 +1,6 @@
 import {
   ApiSecretEventEventTypeChoices,
+  Maybe,
   SecretEventType,
   SecretTagType,
   SecretType,
@@ -260,109 +261,9 @@ const HistoryDialog = (props: { secret: SecretType }) => {
     if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted'
   }
 
-  // const PropertyDiffs = (props: { historyItem: SecretEventType; index: number }) => {
-  //   const { historyItem, index } = props
-
-  //   const previousItem = secret.history![index - 1]!
-
-  //   const getAddedTags = () => {
-  //     const addedTags = historyItem!.tags.filter((currentTag) =>
-  //       previousItem.tags.every((previousTag) => previousTag.id !== currentTag.id)
-  //     )
-  //     return addedTags
-  //   }
-
-  //   const getRemovedTags = () => {
-  //     const removedTags = previousItem.tags.filter((previousTag) =>
-  //       historyItem.tags.every((currentTag) => currentTag.id !== previousTag.id)
-  //     )
-  //     return removedTags
-  //   }
-
-  //   return (
-  //     <>
-  //       {historyItem!.key !== previousItem.key && (
-  //         <div className="pl-3 font-mono">
-  //           <span className="text-neutral-500 mr-2">KEY:</span>
-  //           <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.key}</s>
-  //           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-  //             {historyItem!.key}
-  //           </span>
-  //         </div>
-  //       )}
-
-  //       {historyItem!.value !== previousItem.value && (
-  //         <div className="pl-3 font-mono">
-  //           <span className="text-neutral-500 mr-2">VALUE:</span>
-  //           <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.value}</s>
-  //           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-  //             {historyItem!.value}
-  //           </span>
-  //         </div>
-  //       )}
-
-  //       {historyItem!.comment !== previousItem.comment && (
-  //         <div className="pl-3 font-mono">
-  //           <span className="text-neutral-500 mr-2">COMMENT:</span>
-  //           <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.comment}</s>
-  //           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-  //             {historyItem!.comment}
-  //           </span>
-  //         </div>
-  //       )}
-
-  //       {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
-  //         <div className="pl-3 font-mono">
-  //           <span className="text-neutral-500 mr-2">TAGS:</span>
-  //           <div className="bg-red-200 dark:bg-red-950 text-red-500 flex w-min gap-2 rounded-full">
-  //             {getRemovedTags().map((tag) => (
-  //               <Tag key={tag.id} tag={tag} />
-  //             ))}
-  //           </div>
-  //           <div className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 flex w-min gap-2 rounded-full">
-  //             {getAddedTags().map((tag) => (
-  //               <Tag key={tag.id} tag={tag} />
-  //             ))}
-  //           </div>
-  //         </div>
-  //       )}
-  //     </>
-  //   )
-  // }
-
-  // const EventMeta = (props: { historyItem: SecretEventType }) => {
-  //   const { historyItem } = props
-
-  //   const showMeta =
-  //     (historyItem.userAgent?.length > 0 || historyItem.ipAddress?.length > 0) ?? false
-
-  //   return (
-  //     <Popover className="relative">
-  //       {showMeta && (
-  //         <Popover.Button>
-  //           <FaInfo />
-  //         </Popover.Button>
-  //       )}
-  //       <Transition
-  //         enter="transition duration-100 ease-out"
-  //         enterFrom="transform scale-95 opacity-0"
-  //         enterTo="transform scale-100 opacity-100"
-  //         leave="transition duration-75 ease-out"
-  //         leaveFrom="transform scale-100 opacity-100"
-  //         leaveTo="transform scale-95 opacity-0"
-  //       >
-  //         <Popover.Panel className="absolute z-10">
-  //           <div className="grid grid-cols-2 p-2 text-xs font-mono bg-zinc-200 dark:bg-zinc-800 rounded-sm w-40">
-  //             User agent
-  //             <span>{historyItem.userAgent}</span>
-  //             IP address
-  //             <span>{historyItem.ipAddress}</span>
-  //           </div>
-  //         </Popover.Panel>
-  //       </Transition>
-  //     </Popover>
-  //   )
-  // }
+  const secretHistory = secret.history!.filter(
+    (event: Maybe<SecretEventType>) => event?.eventType! !== ApiSecretEventEventTypeChoices.R
+  )
 
   return (
     <>
@@ -414,7 +315,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                   <div className="space-y-8 py-4">
                     <div className="max-h-[800px] overflow-y-auto px-2">
                       <div className="space-y-4 pb-4 border-l border-zinc-300 dark:border-zinc-700">
-                        {secret.history?.map((historyItem, index) => (
+                        {secretHistory?.map((historyItem, index) => (
                           <div key={historyItem!.timestamp} className="pb-8 space-y-2">
                             <div className="flex flex-row items-center gap-2 -ml-1">
                               <span
