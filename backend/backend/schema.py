@@ -256,9 +256,15 @@ class Query(graphene.ObjectType):
         start_dt = datetime.fromtimestamp(start / 1000)
         end_dt = datetime.fromtimestamp(end / 1000)
 
+        print('timestamp limits', start_dt, end_dt)
+
+        print('envs', envs)
+
         # secret_events = SecretEvent.objects.filter(
         #     environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt).order_by('-timestamp')[:25]
         secret_events = SecretEvent.objects.filter(environment__in=envs)
+
+        print('secret events', secret_events)
 
         return LogsResponseType(kms=list(kms_logs.values()), secrets=secret_events)
 
