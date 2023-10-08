@@ -239,10 +239,12 @@ class Query(graphene.ObjectType):
             end = datetime.now().timestamp() * 1000
 
         if CLOUD_HOSTED:
-            return get_app_logs(f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25)
+            kms_logs = get_app_logs(
+                f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25)
 
-        kms_logs = KMSDBLog.objects.filter(
-            app_id=f"phApp:v{app.app_version}:{app.identity_key}", timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25]
+        else:
+            kms_logs = KMSDBLog.objects.filter(
+                app_id=f"phApp:v{app.app_version}:{app.identity_key}", timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25]
 
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=app.organisation, deleted_at=None)
@@ -256,15 +258,8 @@ class Query(graphene.ObjectType):
         start_dt = datetime.fromtimestamp(start / 1000)
         end_dt = datetime.fromtimestamp(end / 1000)
 
-        print('timestamp limits', start_dt, end_dt)
-
-        print('envs', envs)
-
-        # secret_events = SecretEvent.objects.filter(
-        #     environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt).order_by('-timestamp')[:25]
-        secret_events = SecretEvent.objects.filter(environment__in=envs)
-
-        print('secret events', secret_events)
+        secret_events = SecretEvent.objects.filter(
+            environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt).order_by('-timestamp')[:25]
 
         return LogsResponseType(kms=list(kms_logs.values()), secrets=secret_events)
 
