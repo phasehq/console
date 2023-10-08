@@ -53,7 +53,7 @@ def send_inite_email(invite):
     invited_by_social_acc = invite.invited_by.user.socialaccount_set.first()
     invited_by_name = invited_by_social_acc.extra_data.get('name')
     invite_code = encode_string_to_base64(str(invite.id))
-    invite_link = f"{os.getenv('HTTP_PROTOCOL')}{os.getenv('HOST')}/invite/{invite_code}"
+    invite_link = f"{getattr(settings, 'HOSTNAME')}/invite/{invite_code}"
 
     context = {
         'organisation': organisation,
