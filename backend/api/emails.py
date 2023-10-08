@@ -48,12 +48,19 @@ def send_login_email(request, email):
     )
 
 
-def send_inite_email(invite):
+def send_inite_email(invite, request):
     organisation = invite.organisation.name
+
     invited_by_social_acc = invite.invited_by.user.socialaccount_set.first()
+
     invited_by_name = invited_by_social_acc.extra_data.get('name')
+
     invite_code = encode_string_to_base64(str(invite.id))
-    invite_link = f"{getattr(settings, 'HOSTNAME')}/invite/{invite_code}"
+
+    protocol = 'https' if request.is_secure() else 'http'
+    host = request.META.get('HTTP_HOST', 'default_host')
+
+    invite_link = f"{protocol}://{host}/invite/{invite_code}"
 
     context = {
         'organisation': organisation,

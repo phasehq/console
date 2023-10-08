@@ -55,8 +55,6 @@ SESSION_COOKIE_DOMAIN = os.getenv('SESSION_COOKIE_DOMAIN')
 
 SESSION_COOKIE_AGE = 86400  # 24 hours
 
-HOSTNAME = f"{os.getenv('HTTP_PROTOCOL')}{os.getenv('HOST')}"
-
 # Application definition
 
 INSTALLED_APPS = [

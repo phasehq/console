@@ -90,7 +90,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
 
             invite.apps.set(app_scope)
 
-            send_inite_email(invite)
+            send_inite_email(invite, info.context)
 
             return InviteOrganisationMemberMutation(invite=invite)
         else:
