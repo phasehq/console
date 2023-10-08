@@ -146,6 +146,7 @@ export default function Members({ params }: { params: { team: string; app: strin
           const { data } = await getEnvKey({
             variables: {
               envId: env.id,
+              appId: params.app,
             },
           })
 
@@ -627,6 +628,7 @@ export default function Members({ params }: { params: { team: string; app: strin
           const { data } = await getEnvKey({
             variables: {
               envId: env.id,
+              appId: params.app,
             },
           })
 

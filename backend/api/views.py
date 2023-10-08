@@ -12,7 +12,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
-from api.utils import get_client_ip, get_env_from_service_token, get_org_member_from_user_token, get_token_type, token_is_expired_or_deleted
+from api.utils import get_client_ip, get_env_from_service_token, get_org_member_from_user_token, get_resolver_request_meta, get_token_type, token_is_expired_or_deleted
 from logs.models import KMSDBLog
 from .models import App, Environment, EnvironmentKey, EnvironmentToken, Secret, SecretEvent, SecretTag, ServiceToken, UserToken
 import jwt
@@ -310,6 +310,8 @@ class SecretsView(APIView):
         env_id = request.headers['environment']
         env = Environment.objects.get(id=env_id)
 
+        ip_address, user_agent = get_resolver_request_meta(request)
+
         if token_type == 'User':
             try:
                 org_member = get_org_member_from_user_token(auth_token)
@@ -336,6 +338,11 @@ class SecretsView(APIView):
             pass
 
         secrets = Secret.objects.filter(**secrets_filter)
+
+        for secret in secrets:
+            read_event = SecretEvent.objects.create(secret=secret, environment=secret.environment, user=org_member, key=secret.key, key_digest=secret.key_digest,
+                                                    value=secret.value, comment=secret.comment, event_type=SecretEvent.READ, ip_address=ip_address, user_agent=user_agent)
+            read_event.tags.set(secret.tags.all())
 
         serializer = SecretSerializer(secrets, many=True)
 
@@ -368,6 +375,8 @@ class SecretsView(APIView):
 
         request_body = json.loads(request.body)
 
+        ip_address, user_agent = get_resolver_request_meta(request)
+
         for secret in request_body['secrets']:
 
             tags = SecretTag.objects.filter(
@@ -387,7 +396,13 @@ class SecretsView(APIView):
             secret_obj.tags.set(tags)
 
             event = SecretEvent.objects.create(
-                **{**secret_data, **{'user': user, 'secret': secret_obj, 'event_type': SecretEvent.CREATE}})
+                **{**secret_data, **{
+                    'user': user,
+                    'secret': secret_obj,
+                    'event_type': SecretEvent.CREATE,
+                    'ip_address': ip_address,
+                    'user_agent': user_agent
+                }})
             event.tags.set(tags)
 
         return Response(status=status.HTTP_200_OK)
@@ -417,6 +432,8 @@ class SecretsView(APIView):
 
         request_body = json.loads(request.body)
 
+        ip_address, user_agent = get_resolver_request_meta(request)
+
         for secret in request_body['secrets']:
             secret_obj = Secret.objects.get(id=secret['id'])
 
@@ -441,7 +458,13 @@ class SecretsView(APIView):
             secret_obj.save()
 
             event = SecretEvent.objects.create(
-                **{**secret_data, **{'user': user, 'secret': secret_obj, 'event_type': SecretEvent.UPDATE}})
+                **{**secret_data, **{
+                    'user': user,
+                    'secret': secret_obj,
+                    'event_type': SecretEvent.UPDATE,
+                    'ip_address': ip_address,
+                    'user_agent': user_agent
+                }})
             event.tags.set(tags)
 
         return Response(status=status.HTTP_200_OK)
@@ -470,6 +493,8 @@ class SecretsView(APIView):
 
         request_body = json.loads(request.body)
 
+        ip_address, user_agent = get_resolver_request_meta(request)
+
         secrets_to_delete = Secret.objects.filter(
             id__in=request_body['secrets'])
 
@@ -485,12 +510,14 @@ class SecretsView(APIView):
             secret.deleted_at = timezone.now()
             secret.save()
 
-            most_recent_event = SecretEvent.objects.filter(
+            most_recent_event_copy = SecretEvent.objects.filter(
                 secret=secret).order_by('version').last()
 
             # setting the pk to None and then saving it creates a copy of the instance with updated fields
-            most_recent_event.id = None
-            most_recent_event.event_type = SecretEvent.DELETE
-            most_recent_event.save()
+            most_recent_event_copy.id = None
+            most_recent_event_copy.event_type = SecretEvent.DELETE
+            most_recent_event_copy.ip_address = ip_address
+            most_recent_event_copy.user_agent = user_agent
+            most_recent_event_copy.save()
 
         return Response(status=status.HTTP_200_OK)

@@ -1,5 +1,6 @@
 import {
   ApiSecretEventEventTypeChoices,
+  Maybe,
   SecretEventType,
   SecretTagType,
   SecretType,
@@ -18,16 +19,19 @@ import {
   FaCheckSquare,
   FaSquare,
   FaKey,
+  FaInfo,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { Dialog, Transition } from '@headlessui/react'
+import { Dialog, Popover, Transition } from '@headlessui/react'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
+import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
 import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
 import { Avatar } from '../common/Avatar'
+import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 
 export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
@@ -257,75 +261,9 @@ const HistoryDialog = (props: { secret: SecretType }) => {
     if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted'
   }
 
-  const PropertyDiffs = (props: { historyItem: SecretEventType; index: number }) => {
-    const { historyItem, index } = props
-
-    const previousItem = secret.history![index - 1]!
-
-    const getAddedTags = () => {
-      const addedTags = historyItem!.tags.filter((currentTag) =>
-        previousItem.tags.every((previousTag) => previousTag.id !== currentTag.id)
-      )
-      return addedTags
-    }
-
-    const getRemovedTags = () => {
-      const removedTags = previousItem.tags.filter((previousTag) =>
-        historyItem.tags.every((currentTag) => currentTag.id !== previousTag.id)
-      )
-      return removedTags
-    }
-
-    return (
-      <>
-        {historyItem!.key !== previousItem.key && (
-          <div className="pl-3 font-mono">
-            <span className="text-neutral-500 mr-2">KEY:</span>
-            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.key}</s>
-            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-              {historyItem!.key}
-            </span>
-          </div>
-        )}
-
-        {historyItem!.value !== previousItem.value && (
-          <div className="pl-3 font-mono">
-            <span className="text-neutral-500 mr-2">VALUE:</span>
-            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.value}</s>
-            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-              {historyItem!.value}
-            </span>
-          </div>
-        )}
-
-        {historyItem!.comment !== previousItem.comment && (
-          <div className="pl-3 font-mono">
-            <span className="text-neutral-500 mr-2">COMMENT:</span>
-            <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.comment}</s>
-            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
-              {historyItem!.comment}
-            </span>
-          </div>
-        )}
-
-        {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
-          <div className="pl-3 font-mono">
-            <span className="text-neutral-500 mr-2">TAGS:</span>
-            <div className="bg-red-200 dark:bg-red-950 text-red-500 flex w-min gap-2 rounded-full">
-              {getRemovedTags().map((tag) => (
-                <Tag key={tag.id} tag={tag} />
-              ))}
-            </div>
-            <div className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 flex w-min gap-2 rounded-full">
-              {getAddedTags().map((tag) => (
-                <Tag key={tag.id} tag={tag} />
-              ))}
-            </div>
-          </div>
-        )}
-      </>
-    )
-  }
+  const secretHistory = secret.history!.filter(
+    (event: Maybe<SecretEventType>) => event?.eventType! !== ApiSecretEventEventTypeChoices.R
+  )
 
   return (
     <>
@@ -377,7 +315,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                   <div className="space-y-8 py-4">
                     <div className="max-h-[800px] overflow-y-auto px-2">
                       <div className="space-y-4 pb-4 border-l border-zinc-300 dark:border-zinc-700">
-                        {secret.history?.map((historyItem, index) => (
+                        {secretHistory?.map((historyItem, index) => (
                           <div key={historyItem!.timestamp} className="pb-8 space-y-2">
                             <div className="flex flex-row items-center gap-2 -ml-1">
                               <span
@@ -407,7 +345,11 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                               </div>
                             </div>
                             {index > 0 && (
-                              <PropertyDiffs historyItem={historyItem!} index={index} />
+                              <SecretPropertyDiffs
+                                secret={secret}
+                                historyItem={historyItem!}
+                                index={index}
+                              />
                             )}
                           </div>
                         ))}
@@ -458,7 +400,7 @@ const CommentDialog = (props: {
       </div>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal}>
+        <Dialog as="div" className="relative z-10" onClose={handleClose}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -499,10 +441,17 @@ const CommentDialog = (props: {
 
                   <div className="space-y-6 p-4">
                     <textarea
+                      rows={5}
                       value={commentValue}
                       className="w-full"
                       onChange={(e) => setCommentValue(e.target.value)}
                     ></textarea>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button variant="secondary" onClick={handleClose}>
+                      Done
+                    </Button>
                   </div>
                 </Dialog.Panel>
               </Transition.Child>
@@ -613,7 +562,18 @@ export default function SecretRow(props: {
 
   const [isRevealed, setIsRevealed] = useState<boolean>(false)
 
-  const toggleReveal = () => setIsRevealed(!isRevealed)
+  const [readSecret] = useMutation(LogSecretRead)
+
+  const handleRevealSecret = async () => {
+    setIsRevealed(true)
+    await readSecret({ variables: { id: secret.id } })
+  }
+
+  const handleHideSecret = () => setIsRevealed(false)
+
+  const toggleReveal = () => {
+    isRevealed ? handleHideSecret() : handleRevealSecret()
+  }
 
   const INPUT_BASE_STYLE =
     'w-full text-zinc-800 font-mono custom bg-zinc-100 dark:bg-zinc-800 dark:text-white transition ease'
@@ -669,7 +629,7 @@ export default function SecretRow(props: {
       </div>
       <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-zinc-100 dark:bg-zinc-800 p-px">
         <input
-          className={clsx(INPUT_BASE_STYLE, 'w-full z-10 focus:outline-none p-2')}
+          className={clsx(INPUT_BASE_STYLE, 'w-full focus:outline-none p-2')}
           value={secret.value}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}

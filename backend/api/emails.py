@@ -2,8 +2,8 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from datetime import datetime
-
-from api.utils import get_client_ip
+import os
+from api.utils import encode_string_to_base64, get_client_ip
 
 
 def send_email(subject, recipient_list, template_name, context):
@@ -44,5 +44,35 @@ def send_login_email(request, email):
         'New Login Alert - Phase Console',
         [email],
         'backend/api/email_templates/login.html',
+        context
+    )
+
+
+def send_inite_email(invite):
+    organisation = invite.organisation.name
+
+    invited_by_social_acc = invite.invited_by.user.socialaccount_set.first()
+
+    name = invited_by_social_acc.extra_data.get('name')
+
+    if name is not None:
+        invited_by_name = name
+    else:
+        invited_by_name = invite.invited_by.user.email
+
+    invite_code = encode_string_to_base64(str(invite.id))
+
+    invite_link = f"{os.getenv('ALLOWED_ORIGINS')}/invite/{invite_code}"
+
+    context = {
+        'organisation': organisation,
+        'invited_by': invited_by_name,
+        'invite_link': invite_link
+    }
+
+    send_email(
+        f"Invite - {organisation} on Phase",
+        [invite.invitee_email],
+        'backend/api/email_templates/invite.html',
         context
     )

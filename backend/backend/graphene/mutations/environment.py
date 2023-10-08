@@ -1,4 +1,5 @@
 from django.utils import timezone
+from api.utils import get_resolver_request_meta
 from backend.graphene.utils.permissions import member_can_access_org, user_can_access_app, user_can_access_environment, user_is_org_member
 import graphene
 from graphql import GraphQLError
@@ -352,11 +353,19 @@ class CreateSecretMutation(graphene.Mutation):
         secret = Secret.objects.create(**secret_obj_data)
         secret.tags.set(tags)
 
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=org, deleted_at=None)
 
         event = SecretEvent.objects.create(
-            **{**secret_obj_data, **{'user': org_member, 'secret': secret, 'event_type': SecretEvent.CREATE}})
+            **{**secret_obj_data, **{
+                'user': org_member,
+                'secret': secret,
+                'event_type': SecretEvent.CREATE,
+                'ip_address': ip_address,
+                'user_agent': user_agent
+            }})
         event.tags.set(tags)
 
         return CreateSecretMutation(secret=secret)
@@ -397,11 +406,20 @@ class EditSecretMutation(graphene.Mutation):
         secret.tags.set(tags)
         secret.save()
 
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=org, deleted_at=None)
 
         event = SecretEvent.objects.create(
-            **{**secret_obj_data, **{'user': org_member, 'environment': env, 'secret': secret, 'event_type': SecretEvent.UPDATE}})
+            **{**secret_obj_data, **{
+                'user': org_member,
+                'environment': env,
+                'secret': secret,
+                'event_type': SecretEvent.UPDATE,
+                'ip_address': ip_address,
+                'user_agent': user_agent
+            }})
         event.tags.set(tags)
 
         return EditSecretMutation(secret=secret)
@@ -418,6 +436,7 @@ class DeleteSecretMutation(graphene.Mutation):
         secret = Secret.objects.get(id=id)
         env = secret.environment
         org = env.app.organisation
+
         if not user_is_org_member(info.context.user.userId, org.id):
             raise GraphQLError(
                 "You don't have permission to perform this action")
@@ -426,12 +445,46 @@ class DeleteSecretMutation(graphene.Mutation):
         secret.deleted_at = timezone.now()
         secret.save()
 
-        most_recent_event = SecretEvent.objects.filter(
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=org, deleted_at=None)
+
+        most_recent_event_copy = SecretEvent.objects.filter(
             secret=secret).order_by('version').last()
 
         # setting the pk to None and then saving it creates a copy of the instance with updated fields
-        most_recent_event.id = None
-        most_recent_event.event_type = SecretEvent.DELETE
-        most_recent_event.save()
+        most_recent_event_copy.id = None
+        most_recent_event_copy.event_type = SecretEvent.DELETE
+        most_recent_event_copy.user = org_member
+        most_recent_event_copy.ip_address = ip_address
+        most_recent_event_copy.user_agent = user_agent
+        most_recent_event_copy.save()
 
         return DeleteSecretMutation(secret=secret)
+
+
+class ReadSecretMutation(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        secret = Secret.objects.get(id=id)
+        env = secret.environment
+        org = env.app.organisation
+        if not user_is_org_member(info.context.user.userId, org.id):
+            raise GraphQLError(
+                "You don't have permission to perform this action")
+        else:
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=org, deleted_at=None)
+
+            read_event = SecretEvent.objects.create(secret=secret, environment=secret.environment, user=org_member, key=secret.key, key_digest=secret.key_digest,
+                                                    value=secret.value, comment=secret.comment, event_type=SecretEvent.READ, ip_address=ip_address, user_agent=user_agent)
+            read_event.tags.set(secret.tags.all())
+            return ReadSecretMutation(ok=True)

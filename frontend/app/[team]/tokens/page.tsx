@@ -6,7 +6,6 @@ import { RevokeServiceToken } from '@/graphql/mutations/environments/deleteServi
 import { CreateNewServiceToken } from '@/graphql/mutations/environments/createServiceToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
 import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
-import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import {
   generateUserToken,

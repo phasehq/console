@@ -95,6 +95,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
           const { data } = await getEnvKey({
             variables: {
               envId: env.id,
+              appId: app.id,
             },
           })
 
@@ -377,6 +378,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                                 </label>
                                 <input
                                   required
+                                  autoFocus
                                   id="name"
                                   type="email"
                                   value={email}
@@ -470,11 +472,13 @@ export default function Members({ params }: { params: { team: string } }) {
           organisationId: organisation.id,
           role: null,
         },
+        pollInterval: 5000,
       })
       getInvites({
         variables: {
           orgId: organisation.id,
         },
+        pollInterval: 5000,
       })
     }
   }, [getInvites, getMembers, organisation])

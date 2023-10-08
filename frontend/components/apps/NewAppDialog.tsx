@@ -1,6 +1,6 @@
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
-import { Dialog, Transition } from '@headlessui/react'
+import { Dialog, Switch, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
 import { Fragment, ReactNode, useContext, useEffect, useState } from 'react'
 import { FaCopy, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
@@ -8,6 +8,7 @@ import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
+import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
@@ -15,13 +16,23 @@ import { useLazyQuery, useMutation } from '@apollo/client'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationPlanChoices,
+  EnvironmentType,
   MutationCreateAppArgs,
   OrganisationType,
+  SecretInput,
+  SecretType,
 } from '@/apollo/graphql'
 import { splitSecret } from '@/utils/keyshares'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { createNewEnv } from '@/utils/environments'
+import {
+  decryptAsymmetric,
+  digest,
+  encryptAsymmetric,
+  getUserKxPrivateKey,
+  getUserKxPublicKey,
+} from '@/utils/crypto'
 
 const FREE_APP_LIMIT = 5
 const PRO_APP_LIMIT = 10
@@ -38,11 +49,14 @@ export default function NewAppDialog(props: {
   const [pw, setPw] = useState<string>('')
   const [showPw, setShowPw] = useState<boolean>(false)
   const [appId, setAppId] = useState<string>('')
+  const [createStarters, setCreateStarters] = useState<boolean>(appCount === 0)
   const [appSecret, setAppSecret] = useState<string>('')
   const { data: session } = useSession()
-  const [createApp] = useMutation(CreateApplication)
 
+  const [createApp] = useMutation(CreateApplication)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
+  const [createSecret] = useMutation(CreateNewSecret)
+  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
 
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
@@ -107,6 +121,138 @@ export default function NewAppDialog(props: {
     })
   }
 
+  async function processSecrets(
+    appId: string,
+    envType: ApiEnvironmentEnvTypeChoices,
+    secrets: Array<Partial<SecretType>>
+  ) {
+    const { data: appEnvsData } = await getAppEnvs({ variables: { appId } })
+
+    const userKxKeys = {
+      publicKey: await getUserKxPublicKey(keyring!.publicKey),
+      privateKey: await getUserKxPrivateKey(keyring!.privateKey),
+    }
+
+    const env = appEnvsData.appEnvironments.find((env: EnvironmentType) => env.envType === envType)
+
+    const envSalt = await decryptAsymmetric(
+      env.wrappedSalt,
+      userKxKeys.privateKey,
+      userKxKeys.publicKey
+    )
+
+    const promises = secrets.map(async (secret) => {
+      const { key, value, comment } = secret
+
+      const encryptedKey = await encryptAsymmetric(key!, env.identityKey)
+      const encryptedValue = await encryptAsymmetric(value!, env.identityKey)
+      const keyDigest = await digest(key!, envSalt)
+      const encryptedComment = await encryptAsymmetric(comment!, env.identityKey)
+
+      await createSecret({
+        variables: {
+          newSecret: {
+            envId: env.id,
+            key: encryptedKey,
+            keyDigest,
+            value: encryptedValue,
+            folderId: null,
+            comment: encryptedComment,
+            tags: [],
+          } as SecretInput,
+        },
+      })
+    })
+
+    return Promise.all(promises)
+  }
+
+  const createExampleSecrets = async (appId: string) => {
+    const DEV_SECRETS = [
+      {
+        key: 'AWS_ACCESS_KEY_ID',
+        value: 'AKIAIX4ONRSG6ODEFVJA',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'AWS_SECRET_ACCESS_KEY',
+        value: 'aCRAMarEbFC3Q5c24pi7AVMIt6TaCfHeFZ4KCf/a',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'JWT_SECRET',
+        value:
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjMzNjIwMTcxLCJleHAiOjIyMDg5ODUyMDB9.pHnckabbMbwTHAJOkb5Z7G7B4chY6GllJf6K2m96z3A',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'STRIPE_SECRET_KEY',
+        value: 'sk_test_EeHnL644i6zo4Iyq4v1KdV9H',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'DJANGO_SECRET_KEY',
+        value: 'wwf*2#86t64!fgh6yav$aoeuo@u2o@fy&*gg76q!&%6x_wbduad',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'DJANGO_DEBUG',
+        value: 'True',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'POSTGRES_CONNECTION_STRING',
+        value: 'postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'DB_HOST',
+        value: 'mc-laren-prod-db.c9ufzjtplsaq.us-west-1.rds.amazonaws.com',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'DB_NAME',
+        value: 'XP1_LM',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'DB_PASSWORD',
+        value: '6c37810ec6e74ec3228416d2844564fceb99ebd94b29f4334c244db011630b0e',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'DB_PORT',
+        value: '5432',
+        comment: 'This is an example secret.',
+      },
+    ]
+
+    const STAG_SECRETS = [
+      {
+        key: 'DJANGO_DEBUG',
+        value: 'False',
+        comment: 'This is an example secret.',
+      },
+    ]
+
+    const PROD_SECRETS = [
+      {
+        key: 'STRIPE_SECRET_KEY',
+        value: 'sk_live_epISNGSkdeXov2frTey7RHAi',
+        comment: 'This is an example secret.',
+      },
+      {
+        key: 'DJANGO_DEBUG',
+        value: 'False',
+        comment: 'This is an example secret.',
+      },
+    ]
+
+    await processSecrets(appId, ApiEnvironmentEnvTypeChoices.Dev, DEV_SECRETS)
+    await processSecrets(appId, ApiEnvironmentEnvTypeChoices.Staging, STAG_SECRETS)
+    await processSecrets(appId, ApiEnvironmentEnvTypeChoices.Prod, PROD_SECRETS)
+  }
+
   const initAppEnvs = async (appId: string) => {
     const mutationPayload = {
       devEnv: await createNewEnv(
@@ -138,15 +284,11 @@ export default function NewAppDialog(props: {
         stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
         prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
       },
-      refetchQueries: [
-        {
-          query: GetAppEnvironments,
-          variables: {
-            appId,
-          },
-        },
-      ],
     })
+
+    if (createStarters) {
+      await createExampleSecrets(appId)
+    }
   }
 
   const handleCreateApp = async () => {
@@ -225,14 +367,13 @@ export default function NewAppDialog(props: {
       return {
         planName: 'Free',
         dialogTitle: 'Upgrade to Pro',
-        description:
-          'The Free plan is limited to a single application. To create more applications please upgrade to Pro.',
+        description: `The Free plan is limited to ${FREE_APP_LIMIT} Apps. To create more Apps, please upgrade to Pro.`,
       }
     else if (organisation.plan === ApiOrganisationPlanChoices.Pr)
       return {
         planName: 'Pro',
         dialogTitle: 'Upgrade to Enterprise',
-        description: `The Pro plan is limited to ${PRO_APP_LIMIT} applications. To create more applications please upgrade to Enterprise.`,
+        description: `The Pro plan is limited to ${PRO_APP_LIMIT} Apps. To create more Apps, please upgrade to Enterprise.`,
       }
   }
 
@@ -285,12 +426,12 @@ export default function NewAppDialog(props: {
                   </Dialog.Title>
                   {!complete() && allowNewApp() && (
                     <form onSubmit={handleSubmit}>
-                      <div className="mt-2 space-y-6">
+                      <div className="mt-2 space-y-6 group">
                         <p className="text-sm text-gray-500">
                           Create a new app by entering an app name below. A new set of encryption
                           keys will be created to secure your app.
                         </p>
-                        <div className="flex flex-col justify-center max-w-md mx-auto">
+                        <div className="flex flex-col justify-center">
                           <label
                             className="block text-gray-700 text-sm font-bold mb-2"
                             htmlFor="appname"
@@ -309,7 +450,7 @@ export default function NewAppDialog(props: {
                         </div>
 
                         {!keyring && (
-                          <div className="flex flex-col justify-center max-w-md mx-auto">
+                          <div className="flex flex-col justify-center">
                             <label
                               className="block text-gray-700 text-sm font-bold mb-2"
                               htmlFor="password"
@@ -337,6 +478,34 @@ export default function NewAppDialog(props: {
                             </div>
                           </div>
                         )}
+
+                        <div className="flex items-center gap-2">
+                          <label
+                            className="block text-neutral-500 text-sm font-bold mb-2"
+                            htmlFor="create-starters"
+                          >
+                            Create example secrets
+                          </label>
+                          <Switch
+                            id="create-starters"
+                            checked={createStarters}
+                            onChange={() => setCreateStarters(!createStarters)}
+                            className={`${
+                              createStarters
+                                ? 'bg-emerald-400/10 ring-emerald-400/20'
+                                : 'bg-neutral-500/40 ring-neutral-500/30'
+                            } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+                          >
+                            <span className="sr-only">Initialize with example secrets</span>
+                            <span
+                              className={`${
+                                createStarters
+                                  ? 'translate-x-6 bg-emerald-400'
+                                  : 'translate-x-1 bg-black'
+                              } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+                            ></span>
+                          </Switch>
+                        </div>
                       </div>
 
                       <div className="mt-8 flex items-center w-full justify-between">

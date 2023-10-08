@@ -156,6 +156,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
           const { data } = await getEnvKey({
             variables: {
               envId: env.id,
+              appId,
             },
           })
 

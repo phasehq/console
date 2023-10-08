@@ -1,8 +1,8 @@
-from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation, UpdateMemberEnvScopeMutation
+from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation, ReadSecretMutation, UpdateMemberEnvScopeMutation
 from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_admin, user_is_org_member
 from .graphene.mutations.app import AddAppMemberMutation, CreateAppMutation, DeleteAppMutation, RemoveAppMemberMutation, RotateAppKeysMutation
 from .graphene.mutations.organisation import CreateOrganisationMemberMutation, CreateOrganisationMutation, DeleteInviteMutation, DeleteOrganisationMemberMutation, InviteOrganisationMemberMutation, UpdateOrganisationMemberRole, UpdateUserWrappedSecretsMutation
-from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, KMSLogType, OrganisationMemberInviteType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, ServiceTokenType, TimeRange, UserTokenType
+from .graphene.types import AppType, ChartDataPointType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, KMSLogType, LogsResponseType, OrganisationMemberInviteType, OrganisationMemberType, OrganisationType, SecretEventType, SecretTagType, SecretType, ServiceTokenType, TimeRange, UserTokenType
 import graphene
 from graphql import GraphQLError
 from api.models import Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, OrganisationMemberInvite, Secret, SecretEvent, SecretTag, ServiceToken, UserToken
@@ -28,11 +28,14 @@ class Query(graphene.ObjectType):
         OrganisationMemberInviteType, invite_id=graphene.ID())
     apps = graphene.List(
         AppType, organisation_id=graphene.ID(), app_id=graphene.ID())
-    logs = graphene.List(KMSLogType, app_id=graphene.ID(),
 
-                         start=graphene.BigInt(), end=graphene.BigInt())
-    logs_count = graphene.Int(app_id=graphene.ID(),
-                              this_month=graphene.Boolean())
+    logs = graphene.Field(LogsResponseType, app_id=graphene.ID(),
+                          start=graphene.BigInt(), end=graphene.BigInt())
+
+    kms_logs_count = graphene.Int(app_id=graphene.ID(),
+                                  this_month=graphene.Boolean())
+
+    secrets_logs_count = graphene.Int(app_id=graphene.ID())
 
     app_activity_chart = graphene.List(ChartDataPointType, app_id=graphene.ID(
     ), period=graphene.Argument(graphene.Enum.from_enum(TimeRange)))
@@ -44,14 +47,13 @@ class Query(graphene.ObjectType):
     secret_history = graphene.List(SecretEventType, secret_id=graphene.ID())
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
     environment_keys = graphene.List(
-        EnvironmentKeyType, environment_id=graphene.ID(), member_id=graphene.ID(required=False))
+        EnvironmentKeyType, app_id=graphene.ID(required=False), environment_id=graphene.ID(required=False), member_id=graphene.ID(required=False))
     environment_tokens = graphene.List(
         EnvironmentTokenType, environment_id=graphene.ID())
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
     def resolve_organisations(root, info):
-
         memberships = OrganisationMember.objects.filter(
             user=info.context.user, deleted_at=None)
 
@@ -173,18 +175,35 @@ class Query(graphene.ObjectType):
 
         return SecretTag.objects.filter(organisation_id=org_id)
 
-    def resolve_environment_keys(root, info, environment_id, member_id=None):
-        if not user_can_access_environment(info.context.user.userId, environment_id):
-            raise GraphQLError("You don't have access to this environment")
+    def resolve_environment_keys(root, info, app_id=None, environment_id=None, member_id=None):
+        if app_id is None and environment_id is None:
+            return None
+        elif app_id is not None:
+            app = App.objects.get(id=app_id)
+        else:
+            app = Environment.objects.get(id=environment_id).app
 
-        env = Environment.objects.get(id=environment_id)
+        if not user_can_access_app(info.context.user.userId, app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        filter = {
+            'environment__app': app,
+            'deleted_at': None
+        }
+
+        if environment_id:
+            filter['environment_id'] = environment_id
+
         if member_id is not None:
             org_member = OrganisationMember.objects.get(
                 id=member_id, deleted_at=None)
         else:
             org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=env.app.organisation, deleted_at=None)
-        return EnvironmentKey.objects.filter(environment=env, user=org_member)
+                user=info.context.user, organisation=app.organisation, deleted_at=None)
+
+        filter['user'] = org_member
+
+        return EnvironmentKey.objects.filter(**filter)
 
     def resolve_environment_tokens(root, info, environment_id):
         if not user_can_access_environment(info.context.user.userId, environment_id):
@@ -220,14 +239,31 @@ class Query(graphene.ObjectType):
             end = datetime.now().timestamp() * 1000
 
         if CLOUD_HOSTED:
-            return get_app_logs(f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25)
+            kms_logs = get_app_logs(
+                f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25)
 
-        logs = KMSDBLog.objects.filter(
-            app_id=f"phApp:v{app.app_version}:{app.identity_key}", timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25]
+        else:
+            kms_logs = list(KMSDBLog.objects.filter(
+                app_id=f"phApp:v{app.app_version}:{app.identity_key}", timestamp__lte=end, timestamp__gte=start).order_by('-timestamp')[:25].values())
 
-        return list(logs.values())
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=app.organisation, deleted_at=None)
 
-    def resolve_logs_count(root, info, app_id):
+        env_keys = EnvironmentKey.objects.filter(
+            environment__app=app, user=org_member, deleted_at=None
+        ).select_related('environment')
+
+        envs = [env_key.environment for env_key in env_keys]
+
+        start_dt = datetime.fromtimestamp(start / 1000)
+        end_dt = datetime.fromtimestamp(end / 1000)
+
+        secret_events = SecretEvent.objects.filter(
+            environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt).order_by('-timestamp')[:25]
+
+        return LogsResponseType(kms=kms_logs, secrets=secret_events)
+
+    def resolve_kms_logs_count(root, info, app_id):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
@@ -236,6 +272,23 @@ class Query(graphene.ObjectType):
         if CLOUD_HOSTED:
             return get_app_log_count(f"phApp:v{app.app_version}:{app.identity_key}")
         return KMSDBLog.objects.filter(app_id=f"phApp:v{app.app_version}:{app.identity_key}").count()
+
+    def resolve_secrets_logs_count(root, info, app_id):
+        if not user_can_access_app(info.context.user.userId, app_id):
+            raise GraphQLError("You don't have access to this app")
+
+        app = App.objects.get(id=app_id)
+
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=app.organisation, deleted_at=None)
+
+        env_keys = EnvironmentKey.objects.filter(
+            environment__app=app, user=org_member, deleted_at=None
+        ).select_related('environment')
+
+        envs = [env_key.environment for env_key in env_keys]
+
+        return SecretEvent.objects.filter(environment__in=envs).count()
 
     def resolve_app_activity_chart(root, info, app_id, period=TimeRange.DAY):
         """
@@ -355,6 +408,7 @@ class Mutation(graphene.ObjectType):
     create_secret = CreateSecretMutation.Field()
     edit_secret = EditSecretMutation.Field()
     delete_secret = DeleteSecretMutation.Field()
+    read_secret = ReadSecretMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

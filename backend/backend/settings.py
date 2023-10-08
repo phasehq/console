@@ -267,4 +267,3 @@ try:
     APP_HOST = os.getenv('APP_HOST')
 except:
     APP_HOST = 'self'
-    
