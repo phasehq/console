@@ -1,3 +1,4 @@
+from api.emails import send_inite_email
 from backend.graphene.utils.permissions import user_is_admin, user_is_org_member
 import graphene
 from graphql import GraphQLError
@@ -88,6 +89,8 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
                 organisation_id=org_id, invited_by=invited_by, role=role.lower(), invitee_email=email, expires_at=expiry)
 
             invite.apps.set(app_scope)
+
+            send_inite_email(invite)
 
             return InviteOrganisationMemberMutation(invite=invite)
         else:
