@@ -53,7 +53,12 @@ def send_inite_email(invite):
 
     invited_by_social_acc = invite.invited_by.user.socialaccount_set.first()
 
-    invited_by_name = invited_by_social_acc.extra_data.get('name')
+    name = invited_by_social_acc.extra_data.get('name')
+
+    if name is not None:
+        invited_by_name = name
+    else:
+        invited_by_name = invite.invited_by.user.email
 
     invite_code = encode_string_to_base64(str(invite.id))
 
