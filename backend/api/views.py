@@ -96,7 +96,7 @@ class CustomGoogleOAuth2Adapter(GoogleOAuth2Adapter):
                 print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email)
+            send_login_email(request, email, 'Google')
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -137,7 +137,7 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
                 print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email)
+            send_login_email(request, email, 'GitHub')
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -158,7 +158,6 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
         provider_base_url, provider_api_version)
 
     def complete_login(self, request, app, token, response):
-        print('logging in')
         response = requests.get(self.profile_url, params={
                                 "access_token": token.token})
         data = _check_errors(response)
@@ -175,7 +174,7 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
                     print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email)
+            send_login_email(request, email, 'GitLab')
         except Exception as e:
             print(f"Error sending email: {e}")
 
