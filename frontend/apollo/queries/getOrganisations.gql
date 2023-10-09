@@ -1,9 +1,0 @@
-query GetOrganisations {
-  organisations {
-    id
-    name
-    identityKey
-    createdAt
-    plan
-  }
-}

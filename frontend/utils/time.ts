@@ -31,3 +31,39 @@ export const relativeTimeFromDates = (relative: Date | null, pivot: Date = new D
   const elapsed = relative.getTime() - pivot.getTime()
   return relativeTimeFromElapsed(elapsed)
 }
+
+/**
+ * Get a Unix timestamp for a future time, specified in days, hours, and minutes.
+ *
+ * @param {number} [days=0] - The number of days in the future.
+ * @param {number} [hours=0] - The number of hours in the future.
+ * @param {number} [minutes=0] - The number of minutes in the future.
+ * @returns {number} The Unix timestamp for the future time.
+ */
+export const getUnixTimeStampinFuture = (
+  days: number = 0,
+  hours: number = 0,
+  minutes: number = 0
+): number => {
+  const millisecondsInADay = 86400000
+  const millisecondsInAnHour = 3600000
+  const millisecondsInAMinute = 60000
+
+  return (
+    Date.now() +
+    days * millisecondsInADay +
+    hours * millisecondsInAnHour +
+    minutes * millisecondsInAMinute
+  )
+}
+
+/**
+ * Converts a datetime string from python to a unix timestamp
+ *
+ * @param {string} datetime string
+ * @returns {number}
+ */
+export const dateToUnixTimestamp = (dateString: string): number => {
+  const dateObj = new Date(dateString)
+  return Math.floor(dateObj.getTime())
+}

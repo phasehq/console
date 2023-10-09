@@ -1,16 +1,14 @@
 'use client'
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { useQuery, useLazyQuery } from '@apollo/client'
+import { useLazyQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { GetOrganisations } from '@/apollo/queries/getOrganisations.gql'
-import { GetAppDetail } from '@/apollo/queries/getAppDetail.gql'
+import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
-import { Button } from '@/components/common/Button'
-import { FaCopy } from 'react-icons/fa'
+import { organisationContext } from '@/contexts/organisationContext'
 
 export default function AppLayout({
   params,
@@ -19,56 +17,63 @@ export default function AppLayout({
   params: { team: string; app: string }
   children: React.ReactNode
 }) {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
   const path = usePathname()
   const [tabIndex, setTabIndex] = useState(0)
-  const { data: orgsData } = useQuery(GetOrganisations)
   const [getApp, { data, loading }] = useLazyQuery(GetAppDetail)
   const app = data?.apps[0] as AppType
 
-  useEffect(() => {
-    if (orgsData) {
-      const organisationId = orgsData.organisations[0].id
-      getApp({
-        variables: {
-          organisationId,
-          appId: params.app,
-        },
-      })
-    }
-  }, [getApp, orgsData, params.app])
-
-  useEffect(() => {
-    const activeTabIndex = () => {
-      if (app) {
-        const currentUrl = path?.split('/')[4]
-        if (currentUrl === '') return 0
-        if (currentUrl === 'logs') return 1
-        if (currentUrl === 'keys') return 2
-        if (currentUrl === 'settings') return 3
-      }
-      return 0
-    }
-    setTabIndex(activeTabIndex())
-  }, [app, path])
-
-  const tabs = [
+  const [tabs, setTabs] = useState([
     {
-      name: 'Home',
+      name: 'Secrets',
       link: '',
+    },
+    {
+      name: 'Service tokens',
+      link: 'tokens',
     },
     {
       name: 'Logs',
       link: 'logs',
     },
     {
-      name: 'Keys',
-      link: 'keys',
+      name: 'Members',
+      link: 'members',
     },
-    {
-      name: 'Settings',
-      link: 'settings',
-    },
-  ]
+  ])
+
+  useEffect(() => {
+    if (organisation) {
+      getApp({
+        variables: {
+          organisationId: organisation.id,
+          appId: params.app,
+        },
+      })
+
+      if (organisation.role!.toLowerCase() !== 'dev') {
+        setTabs((prevTabs) =>
+          prevTabs.some((tab) => tab.name === 'Settings')
+            ? prevTabs
+            : [...prevTabs, { name: 'Settings', link: 'settings' }]
+        )
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisation, params.app])
+
+  useEffect(() => {
+    const activeTabIndex = () => {
+      if (app) {
+        const currentUrl = path?.split('/')[4] || ''
+        const index = tabs.findIndex((tab) => tab.link === currentUrl)
+        return index >= 0 ? index : 0
+      }
+      return 0
+    }
+
+    setTabIndex(activeTabIndex())
+  }, [app, path, tabs])
 
   return (
     <div

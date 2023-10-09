@@ -1,0 +1,8 @@
+mutation UpdateMemberRole($memberId: ID!, $role: String!) {
+  updateOrganisationMemberRole(memberId: $memberId, role: $role) {
+    orgMember {
+      id
+      role
+    }
+  }
+}

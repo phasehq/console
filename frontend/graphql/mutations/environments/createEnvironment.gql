@@ -1,0 +1,11 @@
+
+mutation CreateEnv($input: EnvironmentInput!) {
+  createEnvironment(environmentData: $input) {
+    environment {
+      id
+      name
+      createdAt
+      identityKey
+    }
+  }
+}

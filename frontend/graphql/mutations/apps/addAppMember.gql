@@ -1,0 +1,7 @@
+mutation AddMemberToApp($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {
+  addAppMember(memberId: $memberId, appId: $appId, envKeys: $envKeys) {
+    app {
+      id
+    }
+  }
+}

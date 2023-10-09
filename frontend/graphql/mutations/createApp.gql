@@ -1,0 +1,27 @@
+mutation CreateApplication(
+  $id: ID!
+  $organisationId: ID!
+  $name: String!
+  $identityKey: String!
+  $appToken: String!
+  $appSeed: String!
+  $wrappedKeyShare: String!
+  $appVersion: Int!
+) {
+  createApp(
+    id: $id
+    organisationId: $organisationId
+    name: $name
+    identityKey: $identityKey
+    appToken: $appToken
+    appSeed: $appSeed
+    wrappedKeyShare: $wrappedKeyShare
+    appVersion: $appVersion
+  ) {
+    app {
+      id
+      name
+      identityKey
+    }
+  }
+}

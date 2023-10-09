@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { AnimatedLogo } from '../common/AnimatedLogo'
 import { ModeToggle } from '../common/ModeToggle'
 import UserMenu from '../UserMenu'
+import { FaSun, FaMoon } from 'react-icons/fa'
 
 const OnboardingNavbar = () => {
   return (
@@ -17,7 +18,11 @@ const OnboardingNavbar = () => {
           phase.dev
         </Link>
         <div className="flex gap-4 items-center">
-          <ModeToggle />
+          <div className="flex gap-2 items-center">
+            <FaSun className="text-neutral-500" />
+            <ModeToggle />
+            <FaMoon className="text-neutral-500" />
+          </div>
           <UserMenu />
         </div>
       </nav>

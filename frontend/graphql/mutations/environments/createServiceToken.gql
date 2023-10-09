@@ -1,0 +1,9 @@
+mutation CreateNewServiceToken($appId: ID!, $environmentKeys: [EnvironmentKeyInput], $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $name: String!, $expiry: BigInt) {
+  createServiceToken(appId: $appId, environmentKeys: $environmentKeys, identityKey: $identityKey, token: $token, wrappedKeyShare: $wrappedKeyShare, name: $name, expiry: $expiry) {
+    serviceToken {
+      id
+      createdAt
+      expiresAt
+    }
+  }
+}
