@@ -261,7 +261,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
     if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted'
   }
 
-  const secretHistory = secret.history!.filter(
+  const secretHistory = secret.history?.filter(
     (event: Maybe<SecretEventType>) => event?.eventType! !== ApiSecretEventEventTypeChoices.R
   )
 
