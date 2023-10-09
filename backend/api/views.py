@@ -322,6 +322,9 @@ class SecretsView(APIView):
                 print('EX:', ex)
                 return HttpResponse(status=404)
 
+        else:
+            org_member = None
+
         if not env.id:
             return HttpResponse(status=404)
 
