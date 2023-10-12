@@ -1,0 +1,11 @@
+query GetAppMembers($appId: ID!) {
+  appUsers(appId: $appId) {
+    id
+    identityKey
+    email
+    fullName
+    avatarUrl
+    createdAt
+    role
+  }
+}

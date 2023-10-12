@@ -1,5 +1,5 @@
 import { AppType, ChartDataPointType, TimeRange } from '@/apollo/graphql'
-import { GetAppActivityChart } from '@/apollo/queries/getAppActivityChart.gql'
+import { GetAppActivityChart } from '@/graphql/queries/getAppActivityChart.gql'
 import { humanReadableNumber } from '@/utils/dataUnits'
 import { useLazyQuery } from '@apollo/client'
 import { useEffect, useState } from 'react'

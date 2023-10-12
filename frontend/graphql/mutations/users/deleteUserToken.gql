@@ -1,0 +1,5 @@
+mutation RevokeUserToken($tokenId: ID!) {
+  deleteUserToken(tokenId: $tokenId) {
+    ok
+  }
+}

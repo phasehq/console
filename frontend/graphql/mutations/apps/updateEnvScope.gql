@@ -1,0 +1,7 @@
+mutation UpdateEnvScope($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {
+  updateMemberEnvironmentScope(memberId: $memberId, appId: $appId, envKeys: $envKeys) {
+    app {
+      id
+    }
+  }
+}

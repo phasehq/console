@@ -1,9 +1,9 @@
 # Phase Console - Backend
 
-Python Django REST api + Postgres
+Django + Graphene + DRF
 
 ### Generate graphql schema for frontend
 
 ```bash
-./manage.py graphql_schema --schema backend.schema.schema --out ../dashboard/apollo/schema.graphql
+./manage.py graphql_schema --schema backend.schema.schema --out ../frontend/apollo/schema.graphql
 ```

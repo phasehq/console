@@ -6,6 +6,7 @@ def custom_exception_handler(exc, context):
     # Call REST framework's default exception handler first,
     # to get the standard error response.
     response = exception_handler(exc, context)
+    print("EXCEPTION", exc)
 
     # set 404 as default response code
     status_code = 404

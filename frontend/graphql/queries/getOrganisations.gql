@@ -1,0 +1,13 @@
+query GetOrganisations {
+  organisations {
+    id
+    name
+    identityKey
+    createdAt
+    plan
+    role
+    memberId
+    keyring
+    recovery
+  }
+}

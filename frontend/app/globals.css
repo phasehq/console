@@ -39,6 +39,8 @@
   --callout-border-rgb: 172, 175, 176;
   --card-rgb: 180, 185, 188;
   --card-border-rgb: 131, 134, 135;
+
+  --toastify-color-success: rgb(16 185 129)!important;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -71,6 +73,8 @@
     --callout-border-rgb: 108, 108, 108;
     --card-rgb: 100, 100, 100;
     --card-border-rgb: 200, 200, 200;
+
+    --toastify-color-success: rgb(16 185 129)!important;
   }
 }
 
@@ -109,14 +113,18 @@ a {
 
 @layer components {
   input {
-    @apply bg-white dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-black dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500;
+    @apply p-2 focus:outline-none
+  }
+
+  input:not(.custom) {
+    @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-zinc-800 dark:text-white ring-1 ring-inset ring-neutral-500/40 focus:ring-1 focus:ring-emerald-500 group-focus-within:invalid:ring-red-500 focus:ring-inset;
   }
 
   textarea {
-    @apply bg-white dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-black dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500;
+    @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-zinc-800 dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500;
   }
 
   select {
-    @apply bg-white dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-black dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500;
+    @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-zinc-800 dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500;
   }
 }

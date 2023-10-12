@@ -46,7 +46,6 @@
   "devDependencies": {
     "@graphql-codegen/cli": "3.2.2",
     "@graphql-codegen/client-preset": "2.1.1",
-    "@graphql-codegen/typescript": "^3.0.2",
     "@graphql-codegen/typescript-react-apollo": "^3.3.7",
     "@types/country-flag-icons": "^1.2.0",
     "@types/jsonwebtoken": "^9.0.1",

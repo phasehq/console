@@ -1,0 +1,13 @@
+query GetInvites($orgId: ID!) {
+  organisationInvites(orgId: $orgId) {
+    id
+    createdAt
+    expiresAt
+    invitedBy {
+      email
+      fullName
+      self
+    }
+    inviteeEmail
+  }
+}

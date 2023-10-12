@@ -1,0 +1,7 @@
+mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {
+  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {
+    app {
+      id
+    }
+  }
+}
