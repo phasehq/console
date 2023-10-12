@@ -26,14 +26,14 @@ def send_email(subject, recipient_list, template_name, context):
     )
 
 
-def send_login_email(request, email):
+def send_login_email(request, email, provider):
     user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
     ip_address = get_client_ip(request)
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # Creating context dictionary
     context = {
-        'auth': 'GitHub',
+        'auth': provider,
         'email': email,
         'ip': ip_address,
         'user_agent': user_agent,
