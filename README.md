@@ -16,20 +16,25 @@
   
 <br>
 
-[Phase Console](https://phase.dev) is an open source, end-to-end encrypted key management solution for developers to seamlessly encrypt production data in their apps.
 
 ## Console
 
-<img src="img/console-home.png" width="100%" alt="Phase Console" />
+<img src="img/environment-secrets.png" width="100%" alt="Phase Console" />
+
+<div width="100%">
+  <img src="img/secrets-overview.png" alt="Phase Console" width="45%">
+  &nbsp; &nbsp; &nbsp; &nbsp;
+  <img src="img/members.png" alt="Phase Console" width="45%"/>
+</div>
 
 - **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables
 
 - **[Hold your keys](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your root keys via 24 word mnemonic phrase
 - **Secret management**: Diffs, version control and Point-in-time Recovery
-- Fine grained Role-based and cryptographic access control, per application, per environment.
-- **Service Tokens**:
-- **Secret referencing**: Inheritance
-- **[Audit Logs]()**
+- **RBAC**: Fine-grained, role-based and cryptographic access control, per application, per environment.
+- **Service Tokens**: Authenticate CI runners, build tools and production environment with granualar-scope
+- **Secret referencing**: Inherit secrets to create sophisticated configurations
+- **[Audit Logs]()**: Compelte visibility into every change and access event 
 - **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure
 - **[Phase KMS](https://phase.dev)**: A zero knowledge key management service
 - **[SDKs](https://docs.phase.dev/sdks)**: Encrypt / decrypt data with a few lines of code.
@@ -40,7 +45,7 @@ And much more.
 
 ## CLI
 
-```fish
+```bash
 # Your existing secrets
 > cat .env
 AWS_ACCESS_KEY_ID="AKIA2OGYBAH63UA3VNFG"
