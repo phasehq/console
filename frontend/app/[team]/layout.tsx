@@ -53,7 +53,7 @@ export default function RootLayout({
       <HeroPattern />
       {showNav && <NavBar team={params.team} />}
       {showNav && <Sidebar />}
-      <div className={clsx(showNav && 'pt-16')}>{children}</div>
+      <div className={clsx('min-h-screen overflow-auto', showNav && 'pt-16')}>{children}</div>
     </div>
   )
 }
