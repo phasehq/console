@@ -128,9 +128,11 @@ export default function NewAppDialog(props: {
   ) {
     const { data: appEnvsData } = await getAppEnvs({ variables: { appId } })
 
+    const keyring = await validateKeyring(pw)
+
     const userKxKeys = {
-      publicKey: await getUserKxPublicKey(keyring!.publicKey),
-      privateKey: await getUserKxPrivateKey(keyring!.privateKey),
+      publicKey: await getUserKxPublicKey(keyring.publicKey),
+      privateKey: await getUserKxPrivateKey(keyring.privateKey),
     }
 
     const env = appEnvsData.appEnvironments.find((env: EnvironmentType) => env.envType === envType)
