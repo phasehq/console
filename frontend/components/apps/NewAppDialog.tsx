@@ -206,6 +206,11 @@ export default function NewAppDialog(props: {
         comment: 'This is an example secret.',
       },
       {
+        key: 'DB_USER',
+        value: 'postgres',
+        comment: 'This is an example secret.',
+      },
+      {
         key: 'DB_HOST',
         value: 'mc-laren-prod-db.c9ufzjtplsaq.us-west-1.rds.amazonaws.com',
         comment: 'This is an example secret.',
