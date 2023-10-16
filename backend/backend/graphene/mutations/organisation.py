@@ -22,9 +22,6 @@ class CreateOrganisationMutation(graphene.Mutation):
     def mutate(cls, root, info, id, name, identity_key, wrapped_keyring, wrapped_recovery):
         if Organisation.objects.filter(name__iexact=name).exists():
             raise GraphQLError('This organisation name is not available.')
-        if OrganisationMember.objects.filter(user_id=info.context.user.userId, role=OrganisationMember.OWNER).exists():
-            raise GraphQLError(
-                'Your current plan only supports one organisation.')
 
         owner = CustomUser.objects.get(userId=info.context.user.userId)
         org = Organisation.objects.create(
