@@ -34,7 +34,7 @@ import {
   getUserKxPublicKey,
 } from '@/utils/crypto'
 
-const FREE_APP_LIMIT = 5
+const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
 
 export default function NewAppDialog(props: {
