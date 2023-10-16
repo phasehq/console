@@ -1,4 +1,4 @@
-from api.emails import send_inite_email
+from api.emails import send_inite_email, send_user_joined_email
 from backend.graphene.utils.permissions import user_is_admin, user_is_org_member
 import graphene
 from graphql import GraphQLError
@@ -151,6 +151,11 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
 
             invite.valid = False
             invite.save()
+
+            try:
+                send_user_joined_email(invite, org_member)
+            except Exception as e:
+                print(f"Error sending new user joined email: {e}")
 
             return CreateOrganisationMemberMutation(org_member=org_member)
         else:
