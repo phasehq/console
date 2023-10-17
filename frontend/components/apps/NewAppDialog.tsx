@@ -121,19 +121,22 @@ export default function NewAppDialog(props: {
     })
   }
 
-  async function processSecrets(
-    appId: string,
-    envType: ApiEnvironmentEnvTypeChoices,
-    secrets: Array<Partial<SecretType>>
-  ) {
-    const { data: appEnvsData } = await getAppEnvs({ variables: { appId } })
+  /**
+   * Encrypts a set of secrets for the given env and creates them server-side
+   *
+   * @param {EnvironmentType} env - The environment in which the secrets will be created.
+   * @param {Array<Partial<SecretType>>} secrets - An array of secrets to be processed.
+   * @returns {Promise<void>} A Promise that resolves when the all secrets are encrypted and stored on the server.
+   *
+   * @throws {Error} If the specified environment is invalid or if an error occurs during processing.
+   */
+  async function processSecrets(env: EnvironmentType, secrets: Array<Partial<SecretType>>) {
+    const keyring = await validateKeyring(pw)
 
     const userKxKeys = {
-      publicKey: await getUserKxPublicKey(keyring!.publicKey),
-      privateKey: await getUserKxPrivateKey(keyring!.privateKey),
+      publicKey: await getUserKxPublicKey(keyring.publicKey),
+      privateKey: await getUserKxPrivateKey(keyring.privateKey),
     }
-
-    const env = appEnvsData.appEnvironments.find((env: EnvironmentType) => env.envType === envType)
 
     const envSalt = await decryptAsymmetric(
       env.wrappedSalt,
@@ -167,6 +170,12 @@ export default function NewAppDialog(props: {
     return Promise.all(promises)
   }
 
+  /**
+   * Handles the creation of example secrets for a given app. Defines the set of example secrets, fetches all envs for this app and handles creation of each set of secrets with the respective envs
+   *
+   * @param {string} appId
+   * @returns {Promise<void>}
+   */
   const createExampleSecrets = async (appId: string) => {
     const DEV_SECRETS = [
       {
@@ -253,47 +262,72 @@ export default function NewAppDialog(props: {
       },
     ]
 
-    await processSecrets(appId, ApiEnvironmentEnvTypeChoices.Dev, DEV_SECRETS)
-    await processSecrets(appId, ApiEnvironmentEnvTypeChoices.Staging, STAG_SECRETS)
-    await processSecrets(appId, ApiEnvironmentEnvTypeChoices.Prod, PROD_SECRETS)
+    const { data: appEnvsData } = await getAppEnvs({ variables: { appId } })
+
+    await processSecrets(
+      appEnvsData.appEnvironments.find(
+        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Dev
+      ),
+      DEV_SECRETS
+    )
+    await processSecrets(
+      appEnvsData.appEnvironments.find(
+        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Staging
+      ),
+      STAG_SECRETS
+    )
+    await processSecrets(
+      appEnvsData.appEnvironments.find(
+        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Prod
+      ),
+      PROD_SECRETS
+    )
   }
 
+  /**
+   * Initialize application environments for a given application ID.
+   *
+   * @param {string} appId - The ID of the application for which environments will be initialized.
+   * @returns {Promise<boolean>} A Promise that resolves to `true` when initialization is complete.
+   *
+   * @throws {Error} If there are any errors during the environment initialization process.
+   */
   const initAppEnvs = async (appId: string) => {
-    const mutationPayload = {
-      devEnv: await createNewEnv(
-        appId,
-        'Development',
-        ApiEnvironmentEnvTypeChoices.Dev,
-        orgAdminsData.organisationAdminsAndSelf
-      ),
-      stagingEnv: await createNewEnv(
-        appId,
-        'Staging',
-        ApiEnvironmentEnvTypeChoices.Staging,
-        orgAdminsData.organisationAdminsAndSelf
-      ),
-      prodEnv: await createNewEnv(
-        appId,
-        'Production',
-        ApiEnvironmentEnvTypeChoices.Prod,
-        orgAdminsData.organisationAdminsAndSelf
-      ),
-    }
+    return new Promise<boolean>(async (resolve, reject) => {
+      const mutationPayload = {
+        devEnv: await createNewEnv(
+          appId,
+          'Development',
+          ApiEnvironmentEnvTypeChoices.Dev,
+          orgAdminsData.organisationAdminsAndSelf
+        ),
+        stagingEnv: await createNewEnv(
+          appId,
+          'Staging',
+          ApiEnvironmentEnvTypeChoices.Staging,
+          orgAdminsData.organisationAdminsAndSelf
+        ),
+        prodEnv: await createNewEnv(
+          appId,
+          'Production',
+          ApiEnvironmentEnvTypeChoices.Prod,
+          orgAdminsData.organisationAdminsAndSelf
+        ),
+      }
 
-    await initAppEnvironments({
-      variables: {
-        devEnv: mutationPayload.devEnv.createEnvPayload,
-        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
-        prodEnv: mutationPayload.prodEnv.createEnvPayload,
-        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
-        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
-        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
-      },
+      await initAppEnvironments({
+        variables: {
+          devEnv: mutationPayload.devEnv.createEnvPayload,
+          stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
+          prodEnv: mutationPayload.prodEnv.createEnvPayload,
+          devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
+          stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
+          prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
+        },
+      })
+
+      resolve(true)
     })
-
-    if (createStarters) {
-      await createExampleSecrets(appId)
-    }
   }
 
   const handleCreateApp = async () => {
@@ -336,7 +370,13 @@ export default function NewAppDialog(props: {
             ],
           })
 
-          await initAppEnvs(data.createApp.app.id)
+          const newAppId = data.createApp.app.id
+
+          await initAppEnvs(newAppId)
+
+          if (createStarters) {
+            await createExampleSecrets(newAppId)
+          }
 
           setAppSecret(`pss:v${APP_VERSION}:${appToken}:${appKeyShares[0]}:${wrapKey}`)
           setAppId(`phApp:v${APP_VERSION}:${appKeys.publicKey}`)
