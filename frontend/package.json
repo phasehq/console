@@ -48,6 +48,7 @@
     "@graphql-codegen/client-preset": "2.1.1",
     "@graphql-codegen/typescript-react-apollo": "^3.3.7",
     "@types/country-flag-icons": "^1.2.0",
+    "@types/jest": "^29.5.6",
     "@types/jsonwebtoken": "^9.0.1",
     "@types/libsodium-wrappers-sumo": "^0.7.5",
     "@types/react-icons": "^3.0.0",
@@ -60,8 +61,11 @@
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-react": "^7.32.2",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "jest": "^29.7.0",
+    "jest-module-name-mapper": "^0.1.5",
     "postcss": "^8.4.21",
     "prettier": "^2.8.4",
-    "tailwindcss": "^3.2.7"
+    "tailwindcss": "^3.2.7",
+    "ts-jest": "^29.1.1"
   }
 }
