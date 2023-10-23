@@ -268,7 +268,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="Update comment">
+        <Button variant="outline" onClick={openModal} title="View secret history">
           <FaHistory /> History
         </Button>
       </div>
