@@ -4,7 +4,7 @@ import '@/app/globals.css'
 import Providers from './providers'
 import { Inter } from '@next/font/google'
 import { ToastContainer } from 'react-toastify'
-import 'react-toastify/scss/main.scss'
+import 'react-toastify/dist/ReactToastify.min.css'
 import '@/utils/logoAnimation.css'
 
 const inter = Inter({
