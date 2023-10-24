@@ -14,6 +14,10 @@ COPY --chown=app:app package.json yarn.lock ./
 
 # ---- Dependencies ----
 FROM base AS dependencies
+
+# install system dependencies
+RUN apk add curl
+
 # install node packages
 RUN yarn install --frozen-lockfile --no-cache && yarn cache clean
 # copy production node_modules aside (this is a neat trick to get only production modules)
