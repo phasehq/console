@@ -3,6 +3,9 @@ FROM node:alpine AS base
 # set working directory
 WORKDIR /app
 
+# install system dependencies
+RUN apk add curl
+
 # Add a new user "app" and change ownership of the /app directory
 RUN addgroup app && adduser -S -G app app && chown -R app:app /app
 
@@ -15,12 +18,9 @@ COPY --chown=app:app package.json yarn.lock ./
 # ---- Dependencies ----
 FROM base AS dependencies
 
-# install system dependencies
-RUN apk add curl
-
 # install node packages
 RUN yarn install --frozen-lockfile --no-cache && yarn cache clean
-# copy production node_modules aside (this is a neat trick to get only production modules)
+# copy production node_modules aside
 RUN cp -R node_modules /tmp/node_modules
 # install ALL node_modules, including 'devDependencies'
 RUN yarn install --frozen-lockfile
