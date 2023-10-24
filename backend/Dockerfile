@@ -3,7 +3,7 @@ FROM python:3.11.4-alpine3.18
 ADD requirements.txt /app/requirements.txt
 
 RUN set -ex \
-    && apk add --no-cache --virtual .build-deps curl postgresql-dev build-base gcc musl-dev jpeg-dev zlib-dev libffi-dev cairo-dev pango-dev gdk-pixbuf-dev mariadb-dev python3-dev  \
+    && apk add --no-cache --virtual .build-deps postgresql-dev build-base gcc musl-dev jpeg-dev zlib-dev libffi-dev cairo-dev pango-dev gdk-pixbuf-dev mariadb-dev python3-dev  \
     && python -m venv /env \
     && /env/bin/pip install --upgrade pip \
     && /env/bin/pip install --no-cache-dir -r /app/requirements.txt \
@@ -15,6 +15,7 @@ RUN set -ex \
     && apk add --virtual rundeps $runDeps \
     && apk del .build-deps
 
+RUN apk add --no-cache curl
 RUN addgroup -S app && adduser -S app -G app
 ADD . /app
 WORKDIR /app
