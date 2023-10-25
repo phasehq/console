@@ -4,6 +4,7 @@ import { OrganisationType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { Logo } from '@/components/common/Logo'
+import Spinner from '@/components/common/Spinner'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -19,8 +20,16 @@ import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
-import { FaEyeSlash, FaEye, FaChevronRight } from 'react-icons/fa'
+import {
+  FaEyeSlash,
+  FaEye,
+  FaChevronRight,
+  FaTerminal,
+  FaExclamationTriangle,
+  FaCheckCircle,
+} from 'react-icons/fa'
 import { MdContentCopy } from 'react-icons/md'
+import { SiGithub, SiGnometerminal, SiSlack } from 'react-icons/si'
 import { toast } from 'react-toastify'
 
 interface WebAuthRequestParams {
@@ -50,7 +59,9 @@ const getWebAuthRequestParams = (hash: string): WebAuthRequestParams => {
 export default function WebAuth() {
   const pathname = usePathname()
   const { organisations } = useContext(organisationContext)
-  const [status, setStatus] = useState<'in progress' | 'success' | 'error'>('in progress')
+  const [status, setStatus] = useState<
+    'validating' | 'in progress' | 'success' | 'error' | 'invalid'
+  >('validating')
   const [userToken, setUserToken] = useState<string>('')
 
   const [createUserToken] = useMutation(CreateNewUserToken)
@@ -93,7 +104,7 @@ export default function WebAuth() {
         organisation!.id,
         password
       )
-      //setKeyring(decryptedKeyring)
+
       resolve(decryptedKeyring)
     })
   }
@@ -139,11 +150,17 @@ export default function WebAuth() {
     const validateWebAuthRequest = async () => {
       if (pathname) {
         const hash = window.location.hash.replace('#', '')
+        if (hash.length === 0) setStatus('invalid')
 
         const decodedWebAuthReq = await cryptoUtils.decodeb64string(hash)
         const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
 
-        setRequestParams(authRequestParams)
+        if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName)
+          setStatus('invalid')
+        else {
+          setStatus('in progress')
+          setRequestParams(authRequestParams)
+        }
       }
     }
 
@@ -168,7 +185,7 @@ export default function WebAuth() {
       <Disclosure
         as="div"
         defaultOpen={defaultOpen}
-        className="ring-1 ring-inset ring-neutral-500/40 rounded-md p-px flex flex-col w-full"
+        className="ring-1 ring-inset ring-neutral-500/40 rounded-md p-px flex flex-col divide-y divide-neutral-500/30 w-full"
       >
         {({ open }) => (
           <>
@@ -256,13 +273,21 @@ export default function WebAuth() {
       <HeroPattern />
       <OnboardingNavbar />
 
+      {status == 'validating' && (
+        <div className="mx-auto my-auto">
+          <Spinner size="lg" />
+        </div>
+      )}
+
       {status == 'in progress' && (
         <div className="mx-auto my-auto space-y-8">
           <div className="text-center">
-            <div className="mx-auto flex justify-center">
-              <Logo boxSize={80} />
+            <div className="mx-auto flex justify-center py-2">
+              <SiGnometerminal className="text-black/80 dark:text-white/80" size="40" />
             </div>
-            <h1 className="text-black dark:text-white text-4xl font-bold">CLI Auth</h1>
+            <h1 className="text-black dark:text-white text-4xl font-semibold">
+              CLI Authentication
+            </h1>
             <p className="text-neutral-500 text-lg">
               Choose an account below to authenticate with the Phase CLI
             </p>
@@ -280,15 +305,17 @@ export default function WebAuth() {
       )}
 
       {status === 'success' && (
-        <div className="mx-auto my-auto text-center">
+        <div className="mx-auto my-auto text-center space-y-2">
           <div className="mx-auto flex justify-center">
-            <Logo boxSize={80} />
+            <FaCheckCircle className="text-emerald-500" size="40" />
           </div>
           <h1 className="text-black dark:text-white text-4xl font-bold">
             CLI Authentication complete
           </h1>
           <p className="text-neutral-500 text-lg">
-            You can head back to your terminal and close this screen now
+            You have logged into the Phase CLI as{' '}
+            <code className="text-emerald-500">{session?.user?.email}</code>. <br /> You can head
+            back to your terminal and close this screen now
           </p>
         </div>
       )}
@@ -297,27 +324,30 @@ export default function WebAuth() {
         <div className="mx-auto my-auto w-full max-w-3xl flex flex-col gap-6">
           <div className="w-full max-w-md text-center mx-auto">
             <div className="mx-auto flex justify-center">
-              <Logo boxSize={80} />
+              <FaExclamationTriangle className="text-amber-500" size="40" />
             </div>
-            <h1 className="text-black dark:text-white text-4xl font-bold">
+            <h1 className="text-black dark:text-white text-4xl font-semibold">
               CLI Authentication error
             </h1>
-            <p className="text-neutral-500 text-lg">
+            <p className="text-neutral-500 text-base">
               Something went wrong authenticating with the CLI. Please try the following steps:
             </p>
           </div>
 
-          <ul className="text-left list-disc list-inside text-black dark:text-white">
+          <ol className="text-left list-decimal list-inside text-black dark:text-white space-y-2">
             <li>
-              If you are self-hosting Phase, please verify the url of your Phase Console instance
+              Retry authentication with{' '}
+              <code
+                className="text-emerald-500 cursor-pointer"
+                onClick={() => handleCopy('phase auth --mode token')}
+              >
+                phase auth --mode token
+              </code>
+              .
             </li>
-            <li>
-              Try authenticating with{' '}
-              <code className="text-emerald-500">phase auth --mode token</code> and paste the
-              following token into your terminal when prompted:
-            </li>
-          </ul>
-          <div className="py-4">
+            <li>Paste the following token into your terminal when prompted:</li>
+          </ol>
+          <div className="py-0">
             <div className="bg-blue-200 dark:bg-blue-400/10 shadow-inner p-3 rounded-lg">
               <div className="w-full flex items-center justify-between pb-4">
                 <span className="uppercase text-xs tracking-widest text-gray-500">user token</span>
@@ -330,6 +360,54 @@ export default function WebAuth() {
                 </div>
               </div>
               <code className="text-xs break-all text-blue-500">{userToken}</code>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-20 text-center">
+            <div className="text-neutral-500 text-sm">Still having issues? Get in touch.</div>
+            <div className="flex items-center gap-2 justify-center">
+              <a href="https://slack.phase.dev" target="_blank" rel="noreferrer">
+                <Button variant="secondary">
+                  <SiSlack /> Slack
+                </Button>
+              </a>
+              <a href="https://github.com/phasehq" target="_blank" rel="noreferrer">
+                <Button variant="secondary">
+                  <SiGithub /> GitHub
+                </Button>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {status === 'invalid' && (
+        <div className="mx-auto my-auto w-full max-w-3xl flex flex-col gap-6">
+          <div className="w-full max-w-md text-center mx-auto">
+            <div className="mx-auto flex justify-center py-2">
+              <FaExclamationTriangle className="text-amber-500" size="40" />
+            </div>
+            <h1 className="text-black dark:text-white text-4xl font-semibold">
+              CLI Authentication error
+            </h1>
+            <p className="text-neutral-500 text-base">
+              This authentication link is invalid. Please try again.
+            </p>
+          </div>
+
+          <div className="space-y-2 pt-20 text-center">
+            <div className="text-neutral-500 text-sm">Still having issues? Get in touch.</div>
+            <div className="flex items-center gap-2 justify-center">
+              <a href="https://slack.phase.dev" target="_blank" rel="noreferrer">
+                <Button variant="secondary">
+                  <SiSlack /> Slack
+                </Button>
+              </a>
+              <a href="https://github.com/phasehq" target="_blank" rel="noreferrer">
+                <Button variant="secondary">
+                  <SiGithub /> GitHub
+                </Button>
+              </a>
             </div>
           </div>
         </div>
