@@ -6,7 +6,6 @@ import { HeroPattern } from '@/components/common/HeroPattern'
 import { Logo } from '@/components/common/Logo'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { RoleLabel } from '@/components/users/RoleLabel'
-import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
@@ -20,13 +19,7 @@ import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
-import {
-  FaEyeSlash,
-  FaEye,
-  FaChevronDown,
-  FaChevronRight,
-  FaExclamationTriangle,
-} from 'react-icons/fa'
+import { FaEyeSlash, FaEye, FaChevronRight } from 'react-icons/fa'
 import { MdContentCopy } from 'react-icons/md'
 import { toast } from 'react-toastify'
 
