@@ -309,7 +309,7 @@ export default function WebAuth() {
           <div className="mx-auto flex justify-center">
             <FaCheckCircle className="text-emerald-500" size="40" />
           </div>
-          <h1 className="text-black dark:text-white text-4xl font-bold">
+          <h1 className="text-black dark:text-white text-4xl font-semibold">
             CLI Authentication complete
           </h1>
           <p className="text-neutral-500 text-lg">
