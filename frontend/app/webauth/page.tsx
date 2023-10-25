@@ -1,18 +1,23 @@
 'use client'
 
 import { OrganisationType } from '@/apollo/graphql'
-import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import { Button } from '@/components/common/Button'
+import { HeroPattern } from '@/components/common/HeroPattern'
+import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
+import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { getUserKxPublicKey, getUserKxPrivateKey, encryptAsymmetric } from '@/utils/crypto'
 import { generateUserToken } from '@/utils/environments'
 import { useMutation } from '@apollo/client'
+import { Disclosure, Transition } from '@headlessui/react'
 import axios from 'axios'
 import { useSession } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
-import { useRouter } from 'next/router'
 import { useContext, useEffect, useState } from 'react'
+import { FaEyeSlash, FaEye } from 'react-icons/fa'
+import { toast } from 'react-toastify'
 
 interface WebAuthRequestParams {
   port: number
@@ -35,7 +40,7 @@ export default function WebAuth() {
   const pathname = usePathname()
   const { organisations, activeOrganisation, setActiveOrganisation, loading } =
     useContext(organisationContext)
-  const { keyring } = useContext(KeyringContext)
+  const { keyring, setKeyring } = useContext(KeyringContext)
 
   const [createUserToken] = useMutation(CreateNewUserToken)
 
@@ -70,15 +75,36 @@ export default function WebAuth() {
     })
   }
 
-  const authenticate = async (params: WebAuthRequestParams, organisation: OrganisationType) => {
-    const pssUser = await handleCreatePat(params.requestedTokenName, organisation.id)
+  const validateKeyring = async (password: string, organisation: OrganisationType) => {
+    return new Promise<OrganisationKeyring>(async (resolve) => {
+      if (keyring) resolve(keyring)
+      else {
+        const decryptedKeyring = await cryptoUtils.getKeyring(
+          session?.user?.email!,
+          organisation!.id,
+          password
+        )
+        setKeyring(decryptedKeyring)
+        resolve(decryptedKeyring)
+      }
+    })
+  }
 
-    const encryptedUserToken = await encryptAsymmetric(pssUser, params.publicKey)
+  const authenticate = async (organisation: OrganisationType, password: string) => {
+    if (!requestParams) {
+      toast.error('Invalid webauth request')
+      return false
+    }
+    await validateKeyring(password, organisation)
+    const pssUser = await handleCreatePat(requestParams.requestedTokenName, organisation.id)
 
-    console.log('POST to', `http://localhost:${params.port}`)
+    const encryptedUserToken = await encryptAsymmetric(pssUser, requestParams.publicKey)
+    const encryptedEmail = await encryptAsymmetric(session?.user?.email!, requestParams.publicKey)
 
-    const cliResponse = await axios.post(`http://localhost:${params.port}`, {
-      email: session?.user?.email,
+    console.log('POST to', `http://127.0.0.1:${requestParams.port}`)
+
+    const cliResponse = await axios.post(`http://127.0.0.1:${requestParams.port}`, {
+      email: encryptedEmail,
       pss: encryptedUserToken,
     })
 
@@ -86,26 +112,104 @@ export default function WebAuth() {
   }
 
   useEffect(() => {
-    if (pathname) {
-      const hash = window.location.hash.replace('#', '')
-      console.log('path n hash', pathname, hash)
-      const authRequestParams = getWebAuthRequestParams(hash)
-      console.log('request params', authRequestParams)
+    const validateWebAuthRequest = async () => {
+      if (pathname) {
+        const hash = window.location.hash.replace('#', '')
+        console.log('path n hash', pathname, hash)
+        const decodedWebAuthReq = await cryptoUtils.decodeb64string(hash)
+        const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
+        console.log('request params', authRequestParams)
 
-      setRequestParams(authRequestParams)
+        setRequestParams(authRequestParams)
+      }
     }
+
+    validateWebAuthRequest()
   }, [pathname])
 
-  useEffect(() => {
-    if (requestParams && keyring && organisations?.length === 1) {
-      authenticate(requestParams, activeOrganisation!)
+  // useEffect(() => {
+  //   if (requestParams && keyring && organisations?.length === 1) {
+  //     authenticate(activeOrganisation!)
+  //   }
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [activeOrganisation, keyring, organisations?.length, requestParams])
+
+  const OrganisationSelectPanel = (props: { organisation: OrganisationType }) => {
+    const { organisation } = props
+
+    const [password, setPassword] = useState<string>('')
+    const [showPw, setShowPw] = useState<boolean>(false)
+
+    const handleSubmit = async () => {
+      console.log('keyring', keyring)
+
+      await authenticate(organisation, password)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeOrganisation, keyring, organisations?.length, requestParams])
+
+    return (
+      <Disclosure>
+        <Disclosure.Button>
+          <div className="p-8 bg-zinc-100 dark:bg-zinc-800 flex flex-col gap-2 text-center">
+            <h2 className="text-3xl font-bold text-black dark:text-white">{organisation.name}</h2>
+            <div className="text-neutral-500">
+              You are {organisation.role!.toLowerCase() === 'dev' ? 'a' : 'an'}{' '}
+              <RoleLabel role={organisation.role!} /> in this organisation
+            </div>
+          </div>
+        </Disclosure.Button>
+
+        <Transition
+          enter="transition duration-100 ease-out"
+          enterFrom="transform scale-95 opacity-0"
+          enterTo="transform scale-100 opacity-100"
+          leave="transition duration-75 ease-out"
+          leaveFrom="transform scale-100 opacity-100"
+          leaveTo="transform scale-95 opacity-0"
+        >
+          <Disclosure.Panel>
+            <div className="space-y-4 w-full p-4 bg-zinc-100 dark:bg-zinc-800">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                Sudo password
+              </label>
+              <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
+                <input
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type={showPw ? 'text' : 'password'}
+                  minLength={16}
+                  required
+                  autoFocus
+                  className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
+                />
+                <button
+                  className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
+                  type="button"
+                  onClick={() => setShowPw(!showPw)}
+                  tabIndex={-1}
+                >
+                  {showPw ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
+              <Button variant="primary" onClick={handleSubmit}>
+                Submit
+              </Button>
+            </div>
+          </Disclosure.Panel>
+        </Transition>
+      </Disclosure>
+    )
+  }
 
   return (
-    <div className="h-screen w-full">
-      {activeOrganisation && <UnlockKeyringDialog organisationId={activeOrganisation.id} />}
+    <div className="flex h-screen w-full">
+      {/* {activeOrganisation && <UnlockKeyringDialog organisationId={activeOrganisation.id} />} */}
+      <HeroPattern />
+      <div className="mx-auto my-auto flex flex-col divide-y divide-neutral-500/40">
+        {organisations?.map((organisation) => (
+          <OrganisationSelectPanel key={organisation.id} organisation={organisation} />
+        ))}
+      </div>
     </div>
   )
 }

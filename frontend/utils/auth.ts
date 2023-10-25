@@ -413,7 +413,7 @@ export namespace cryptoUtils {
     return `${hostname}/invite/${encodedInvite}`
   }
 
-  export const decodeInvite = async (hash: string) => {
+  export const decodeb64string = async (hash: string) => {
     await _sodium.ready
     const sodium = _sodium
 

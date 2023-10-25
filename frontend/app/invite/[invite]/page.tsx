@@ -59,7 +59,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
 
   useEffect(() => {
     const handleVerifyInvite = async () => {
-      const inviteId = await cryptoUtils.decodeInvite(params.invite)
+      const inviteId = await cryptoUtils.decodeb64string(params.invite)
 
       await verifyInvite({
         variables: { inviteId },
