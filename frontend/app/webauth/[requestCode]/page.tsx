@@ -148,7 +148,9 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
   useEffect(() => {
     const validateWebAuthRequest = async () => {
-      const decodedWebAuthReq = await cryptoUtils.decodeb64string(params.requestCode)
+      const decodedWebAuthReq = await cryptoUtils.decodeb64string(
+        decodeURIComponent(params.requestCode)
+      )
       const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
 
       if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName)
