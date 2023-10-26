@@ -56,7 +56,7 @@ const getWebAuthRequestParams = (hash: string): WebAuthRequestParams => {
   }
 }
 
-export default function WebAuth() {
+export default function WebAuth({ params }: { params: { requestCode: string } }) {
   const pathname = usePathname()
   const { organisations } = useContext(organisationContext)
   const [status, setStatus] = useState<
@@ -148,24 +148,19 @@ export default function WebAuth() {
 
   useEffect(() => {
     const validateWebAuthRequest = async () => {
-      if (pathname) {
-        const hash = window.location.hash.replace('#', '')
-        if (hash.length === 0) setStatus('invalid')
+      const decodedWebAuthReq = await cryptoUtils.decodeb64string(params.requestCode)
+      const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
 
-        const decodedWebAuthReq = await cryptoUtils.decodeb64string(hash)
-        const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
-
-        if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName)
-          setStatus('invalid')
-        else {
-          setStatus('in progress')
-          setRequestParams(authRequestParams)
-        }
+      if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName)
+        setStatus('invalid')
+      else {
+        setStatus('in progress')
+        setRequestParams(authRequestParams)
       }
     }
 
     validateWebAuthRequest()
-  }, [pathname])
+  }, [params.requestCode])
 
   const OrganisationSelectPanel = (props: {
     organisation: OrganisationType
@@ -275,7 +270,7 @@ export default function WebAuth() {
 
       {status == 'validating' && (
         <div className="mx-auto my-auto">
-          <Spinner size="lg" />
+          <Spinner size="xl" />
         </div>
       )}
 
