@@ -18,7 +18,7 @@ import { Disclosure, Transition } from '@headlessui/react'
 import axios from 'axios'
 import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
 import {
   FaEyeSlash,
@@ -57,7 +57,7 @@ const getWebAuthRequestParams = (hash: string): WebAuthRequestParams => {
 }
 
 export default function WebAuth({ params }: { params: { requestCode: string } }) {
-  const pathname = usePathname()
+  const router = useRouter()
   const { organisations } = useContext(organisationContext)
   const [status, setStatus] = useState<
     'validating' | 'in progress' | 'success' | 'error' | 'invalid'
@@ -163,6 +163,10 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
     validateWebAuthRequest()
   }, [params.requestCode])
+
+  useEffect(() => {
+    if (organisations?.length === 0) router.push('/signup')
+  }, [organisations, router])
 
   const OrganisationSelectPanel = (props: {
     organisation: OrganisationType
