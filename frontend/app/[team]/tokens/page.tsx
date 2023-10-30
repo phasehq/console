@@ -2,49 +2,30 @@
 
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { RevokeUserToken } from '@/graphql/mutations/users/deleteUserToken.gql'
-import { RevokeServiceToken } from '@/graphql/mutations/environments/deleteServiceToken.gql'
-import { CreateNewServiceToken } from '@/graphql/mutations/environments/createServiceToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
-import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
-import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import {
-  generateUserToken,
-  newEnvToken,
-  newEnvWrapKey,
-  newServiceTokenKeys,
-  unwrapEnvSecretsForUser,
-  wrapEnvSecretsForServiceToken,
-} from '@/utils/environments'
-import { EnvironmentType, ServiceTokenType, UserTokenType } from '@/apollo/graphql'
-import { cryptoUtils } from '@/utils/auth'
+import { generateUserToken } from '@/utils/environments'
+import { ServiceTokenType, UserTokenType } from '@/apollo/graphql'
 import { getUserKxPublicKey, getUserKxPrivateKey } from '@/utils/crypto'
-import { splitSecret } from '@/utils/keyshares'
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
+import { useLazyQuery, useMutation } from '@apollo/client'
 import { useState, useEffect, useContext, Fragment } from 'react'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { Button } from '@/components/common/Button'
 import {
-  FaCheckSquare,
-  FaChevronDown,
   FaCircle,
   FaDotCircle,
   FaExclamationTriangle,
   FaKey,
   FaPlus,
-  FaSquare,
   FaTimes,
   FaTrashAlt,
-  FaUserLock,
 } from 'react-icons/fa'
 import { getUnixTimeStampinFuture, relativeTimeFromDates } from '@/utils/time'
-import { Dialog, Listbox, RadioGroup, Transition } from '@headlessui/react'
+import { Dialog, RadioGroup, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { MdContentCopy } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userIsAdmin } from '@/utils/permissions'
-import { Avatar } from '@/components/common/Avatar'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
 interface ExpiryOptionT {
