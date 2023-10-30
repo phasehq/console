@@ -3,7 +3,6 @@
 import { OrganisationType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { HeroPattern } from '@/components/common/HeroPattern'
-import { Logo } from '@/components/common/Logo'
 import Spinner from '@/components/common/Spinner'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { RoleLabel } from '@/components/users/RoleLabel'
@@ -18,13 +17,12 @@ import { Disclosure, Transition } from '@headlessui/react'
 import axios from 'axios'
 import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
-import { usePathname, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
 import {
   FaEyeSlash,
   FaEye,
   FaChevronRight,
-  FaTerminal,
   FaExclamationTriangle,
   FaCheckCircle,
 } from 'react-icons/fa'
