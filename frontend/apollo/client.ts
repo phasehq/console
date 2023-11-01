@@ -5,8 +5,10 @@ import { signOut, SignOutParams } from 'next-auth/react'
 import { UrlUtils } from '@/utils/auth'
 import axios from 'axios'
 import { toast } from 'react-toastify'
+import posthog from 'posthog-js'
 
 export const handleSignout = async (options?: SignOutParams<true> | undefined) => {
+  posthog.reset()
   const response = await axios.post(
     UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
     {},
