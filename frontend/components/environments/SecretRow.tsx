@@ -184,7 +184,7 @@ const TagsDialog = (props: {
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       Update{' '}
-                      <span className="text-zinc-700 dark:text-zinc-200 font-mono">
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-mask">
                         {secretName}
                       </span>{' '}
                       tags
@@ -301,7 +301,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      <span className="text-zinc-700 dark:text-zinc-200 font-mono">
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-mask">
                         {secret.key}
                       </span>{' '}
                       history
@@ -428,7 +428,7 @@ const CommentDialog = (props: {
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       Update{' '}
-                      <span className="text-zinc-700 dark:text-zinc-200 font-mono">
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-mask">
                         {secretName}
                       </span>{' '}
                       comment
@@ -519,7 +519,7 @@ const DeleteConfirmDialog = (props: {
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       Delete{' '}
-                      <span className="text-zinc-700 dark:text-zinc-200 font-mono">
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-mask">
                         {secretName}
                       </span>
                     </h3>
