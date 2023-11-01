@@ -31,7 +31,7 @@ export const SecretPropertyDiffs = (props: {
         <div className="pl-3 font-mono">
           <span className="text-neutral-500 mr-2">KEY:</span>
           <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-mask">{previousItem.key}</s>
-          <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+          <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-mask">
             {historyItem!.key}
           </span>
         </div>
@@ -41,7 +41,7 @@ export const SecretPropertyDiffs = (props: {
         <div className="pl-3 font-mono">
           <span className="text-neutral-500 mr-2">VALUE:</span>
           <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-mask">{previousItem.value}</s>
-          <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+          <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-mask">
             {historyItem!.value}
           </span>
         </div>
@@ -51,7 +51,7 @@ export const SecretPropertyDiffs = (props: {
         <div className="pl-3 font-mono">
           <span className="text-neutral-500 mr-2">COMMENT:</span>
           <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-mask">{previousItem.comment}</s>
-          <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
+          <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-mask">
             {historyItem!.comment}
           </span>
         </div>
