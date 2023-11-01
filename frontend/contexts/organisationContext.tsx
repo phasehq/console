@@ -39,7 +39,6 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
   const { organisations } = orgsData ?? { organisations: null }
 
   useEffect(() => {
-    posthog.reset()
     if (session && organisation) {
       if (session.user?.email)
         posthog.identify(organisation.memberId!, {
