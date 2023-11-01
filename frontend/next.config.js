@@ -1,14 +1,14 @@
 /** @type {import('next').NextConfig} */
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval';
+  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://app.posthog.com;
   style-src 'self' 'unsafe-inline';
   object-src 'none';
   base-uri 'self';
-  connect-src 'self' data: http://127.0.0.1:* https://*.phase.dev https://phase.statuspage.io/api/v2/status.json;
+  connect-src 'self' data: http://127.0.0.1:* https://*.phase.dev https://phase.statuspage.io/api/v2/status.json https://app.posthog.com; 
   font-src 'self';
   frame-src 'self';
-  img-src 'self' https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://secure.gravatar.com https://gitlab.com;
+  img-src 'self' https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://secure.gravatar.com https://gitlab.com; 
   manifest-src 'self';
   media-src 'self';
   worker-src 'none';
