@@ -439,7 +439,7 @@ const CommentDialog = (props: {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="space-y-6 p-4">
+                  <div className="space-y-6 p-4 ph-mask">
                     <textarea
                       rows={5}
                       value={commentValue}
@@ -576,7 +576,7 @@ export default function SecretRow(props: {
   }
 
   const INPUT_BASE_STYLE =
-    'w-full text-zinc-800 font-mono custom bg-zinc-100 dark:bg-zinc-800 dark:text-white transition ease'
+    'w-full text-zinc-800 font-mono custom bg-zinc-100 dark:bg-zinc-800 dark:text-white transition ease ph-mask'
 
   const keyIsBlank = secret.key.length === 0
 
