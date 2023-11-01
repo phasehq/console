@@ -358,7 +358,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   )}
                 </div>
               </div>
-              <code className="text-xs break-all text-blue-500">{userToken}</code>
+              <code className="text-xs break-all text-blue-500 ph-mask">{userToken}</code>
             </div>
           </div>
 
