@@ -510,7 +510,7 @@ export default function NewAppDialog(props: {
                                 type={showPw ? 'text' : 'password'}
                                 minLength={16}
                                 required
-                                className="w-full "
+                                className="w-full ph-mask"
                               />
                               <button
                                 className="absolute inset-y-0 right-4"

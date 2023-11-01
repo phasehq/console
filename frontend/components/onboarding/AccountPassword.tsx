@@ -98,7 +98,7 @@ export const AccountPassword = (props: AccountPasswordProps) => {
             type={showPw2 ? 'text' : 'password'}
             minLength={16}
             required
-            className="w-full"
+            className="w-full ph-mask"
           />
           <button
             className="absolute inset-y-0 right-4 text-neutral-500"

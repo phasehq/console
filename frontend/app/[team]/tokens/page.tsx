@@ -206,7 +206,7 @@ const CreateUserTokenDialog = (props: { organisationId: string }) => {
                             )}
                           </div>
                         </div>
-                        <code className="text-xs break-all text-blue-500">{userToken}</code>
+                        <code className="text-xs break-all text-blue-500 ph-mask">{userToken}</code>
                       </div>
                     </div>
                   ) : (

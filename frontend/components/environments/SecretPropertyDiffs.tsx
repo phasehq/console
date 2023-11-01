@@ -30,7 +30,7 @@ export const SecretPropertyDiffs = (props: {
       {historyItem!.key !== previousItem.key && (
         <div className="pl-3 font-mono">
           <span className="text-neutral-500 mr-2">KEY:</span>
-          <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.key}</s>
+          <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-mask">{previousItem.key}</s>
           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
             {historyItem!.key}
           </span>
@@ -40,7 +40,7 @@ export const SecretPropertyDiffs = (props: {
       {historyItem!.value !== previousItem.value && (
         <div className="pl-3 font-mono">
           <span className="text-neutral-500 mr-2">VALUE:</span>
-          <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.value}</s>
+          <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-mask">{previousItem.value}</s>
           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
             {historyItem!.value}
           </span>
@@ -50,7 +50,7 @@ export const SecretPropertyDiffs = (props: {
       {historyItem!.comment !== previousItem.comment && (
         <div className="pl-3 font-mono">
           <span className="text-neutral-500 mr-2">COMMENT:</span>
-          <s className="bg-red-200 dark:bg-red-950 text-red-500">{previousItem.comment}</s>
+          <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-mask">{previousItem.comment}</s>
           <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500">
             {historyItem!.comment}
           </span>

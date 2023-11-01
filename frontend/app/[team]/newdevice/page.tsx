@@ -241,7 +241,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
                       minLength={16}
                       required
                       autoFocus
-                      className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
+                      className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-mask"
                     />
                     <button
                       className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"

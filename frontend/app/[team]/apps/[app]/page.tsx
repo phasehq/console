@@ -234,7 +234,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           <div className="flex justify-between items-center w-full">
             <code
               className={clsx(
-                'break-all whitespace-break-spaces max-w-full',
+                'break-all whitespace-break-spaces max-w-full ph-mask',
                 sameAsProd ? 'text-amber-500' : 'text-emerald-500'
               )}
             >
@@ -299,7 +299,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             >
               <td
                 className={clsx(
-                  'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2',
+                  'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 ph-no-capture',
                   open ? 'font-bold' : 'font-medium'
                 )}
               >
