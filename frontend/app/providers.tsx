@@ -14,7 +14,6 @@ if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://app.posthog.com',
     capture_pageview: true,
     session_recording: {
-      maskTextSelector: '.ph-mask', // Masks all text elements with the ph-mask class
       maskInputOptions: {
         password: true, //mask password inputs
       },

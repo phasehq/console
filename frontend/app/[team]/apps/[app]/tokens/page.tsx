@@ -231,7 +231,9 @@ export default function Tokens({ params }: { params: { team: string; app: string
             </div>
             {!appSecret && <RotateAppDialog />}
           </div>
-          <code className="text-xs text-red-500 ph-mask">{appSecret || appSecretPlaceholder}</code>
+          <code className="text-xs text-red-500 ph-no-capture">
+            {appSecret || appSecretPlaceholder}
+          </code>
         </div>
       </div>
     )

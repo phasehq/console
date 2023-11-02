@@ -243,7 +243,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                         minLength={16}
                         required
                         autoFocus
-                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-mask"
+                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
                       />
                       <button
                         className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
@@ -358,7 +358,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   )}
                 </div>
               </div>
-              <code className="text-xs break-all text-blue-500 ph-mask">{userToken}</code>
+              <code className="text-xs break-all text-blue-500 ph-no-capture">{userToken}</code>
             </div>
           </div>
 

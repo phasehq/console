@@ -234,7 +234,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           <div className="flex justify-between items-center w-full">
             <code
               className={clsx(
-                'break-all whitespace-break-spaces max-w-full ph-mask',
+                'break-all whitespace-break-spaces max-w-full ph-no-capture',
                 sameAsProd ? 'text-amber-500' : 'text-emerald-500'
               )}
             >

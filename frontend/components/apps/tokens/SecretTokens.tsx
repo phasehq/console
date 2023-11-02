@@ -280,7 +280,7 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                             )}
                           </div>
                         </div>
-                        <code className="text-xs break-all text-teal-500 ph-mask">
+                        <code className="text-xs break-all text-teal-500 ph-no-capture">
                           {serviceToken}
                         </code>
                       </div>

@@ -28,7 +28,7 @@ export const AccountSeedGen = (props: { mnemonic: string }) => {
           key={word + index}
         >
           <span className="text-zinc-400 dark:text-zinc-700">{index + 1}</span>
-          <span className="hidden group-hover:block ph-mask">{word}</span>
+          <span className="hidden group-hover:block ph-no-capture">{word}</span>
           <span className="group-hover:hidden">*****</span>
         </div>
       ))}

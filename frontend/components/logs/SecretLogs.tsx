@@ -313,7 +313,9 @@ export default function SecretLogs(props: { app: string }) {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 w-full gap-4 text-sm">
                     <LogField label="Key">
-                      <div className="flex items-center gap-2 ph-mask">{decryptedEvent?.key}</div>
+                      <div className="flex items-center gap-2 ph-no-capture">
+                        {decryptedEvent?.key}
+                      </div>
                     </LogField>
 
                     <LogField label="IP address"> {log.ipAddress}</LogField>
