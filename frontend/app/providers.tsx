@@ -8,18 +8,11 @@ import { KeyringProvider } from '@/contexts/keyringContext'
 import { OrganisationProvider } from '@/contexts/organisationContext'
 import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
+import { initializePostHog } from '@/utils/posthog'
 
-if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
-  posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
-    api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://app.posthog.com',
-    capture_pageview: true,
-    session_recording: {
-      maskInputOptions: {
-        password: true, //mask password inputs
-      },
-    },
-  })
-}
+const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
+
+if (IS_CLOUD_HOSTED) initializePostHog()
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
