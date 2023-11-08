@@ -12,7 +12,7 @@ import {
   MdOutlinePassword,
 } from 'react-icons/md'
 import { TeamName } from '@/components/onboarding/TeamName'
-import { AccountSeedGen } from '@/components/onboarding/AccountSeedGen'
+import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { AccountSeedChecker } from '@/components/onboarding/AccountSeedChecker'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { cryptoUtils } from '@/utils/auth'
@@ -23,12 +23,13 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import { setLocalKeyring } from '@/utils/localStorage'
+import { generateRecoveryPdf } from '@/utils/recovery'
 
 const bip39 = require('bip39')
 
 const Onboard = () => {
   const { data: session } = useSession()
-  const [name, setName] = useState<string>('')
+  const [teamName, setTeamName] = useState<string>('')
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
   const [mnemonic, setMnemonic] = useState('')
@@ -38,7 +39,7 @@ const Onboard = () => {
   const [showWelcome, setShowWelcome] = useState<boolean>(true)
   const [createOrganisation, { data, loading, error }] = useMutation(CreateOrg)
   const [isloading, setIsLoading] = useState<boolean>(false)
-  const [seedDownloaded, setSeedDownloaded] = useState<boolean>(false)
+  const [recoveryDownloaded, setRecoveryDownloaded] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
   const router = useRouter()
 
@@ -55,50 +56,43 @@ const Onboard = () => {
   const steps: Step[] = [
     {
       index: 0,
-      name: 'Team name',
+      name: 'Team Name',
       icon: <MdGroups />,
       title: 'Choose a name for your team',
       description: 'Your team name must be alphanumeric.',
     },
     {
       index: 1,
-      name: 'Set up recovery phrase',
-      icon: <MdKey />,
-      title: 'Recovery',
-      description:
-        "This is your 24 word recovery phrase. You can use it log in to your Phase account if you forget the sudo password. It's used to derive your encryption keys. Only you have access to it. Please write it down or store it somewhere safe like a password manager.",
-    },
-    {
-      index: 2,
-      name: 'Verify recovery phrase',
-      icon: <MdOutlineVerifiedUser />,
-      title: 'Verify recovery phrase',
-      description: 'Please enter the your recovery phrase in the correct order below.',
-    },
-    {
-      index: 3,
-      name: 'Sudo password',
+      name: 'Sudo Password',
       icon: <MdOutlinePassword />,
       title: 'Set a sudo password',
       description:
-        'Please set up a strong sudo password to continue. This will be used to to perform administrative tasks and to encrypt keys locally on this device.',
+        'Please set up a strong sudo password. This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks that require access to your account keys.',
+    },
+    {
+      index: 2,
+      name: 'Account recovery',
+      icon: <MdKey />,
+      title: 'Account Recovery',
+      description:
+        'Only you have access to your account keys. If you forget your sudo password, you will need to enter a recovery phrase to retrieve your keys and regain access to your account.',
     },
   ]
 
   const validateCurrentStep = () => {
     if (step === 0) {
-      if (!name) {
+      if (!teamName) {
         errorToast('Please enter a team name')
         //return false
       }
-    } else if (step === 2) {
-      if (inputs.join(' ') !== mnemonic && !seedDownloaded) {
-        errorToast('Incorrect account recovery key!')
-        return false // TODO: UNCOMMENT THIS!!
-      }
-    } else if (step === 3) {
+    } else if (step === 1) {
       if (pw !== pw2) {
         errorToast("Passwords don't match")
+        return false
+      }
+    } else if (step === 2) {
+      if (!recoveryDownloaded) {
+        errorToast('Please download the your account recovery kit!')
         return false
       }
     }
@@ -132,6 +126,23 @@ const Onboard = () => {
     )
   }
 
+  const handleDownloadRecoveryKit = async () => {
+    toast
+      .promise(
+        generateRecoveryPdf(
+          mnemonic,
+          session?.user?.email!,
+          teamName,
+          session?.user?.name || undefined
+        ),
+        {
+          pending: 'Generating recovery kit',
+          success: 'Downloaded recovery kit',
+        }
+      )
+      .then(() => setRecoveryDownloaded(true))
+  }
+
   const handleAccountInit = async () => {
     return new Promise<boolean>(async (resolve, reject) => {
       setIsLoading(true)
@@ -141,7 +152,7 @@ const Onboard = () => {
         const result = await createOrganisation({
           variables: {
             id: orgId,
-            name,
+            name: teamName,
             identityKey: publicKey,
             wrappedKeyring: encryptedKeyring,
             wrappedRecovery: encryptedMnemonic,
@@ -180,10 +191,6 @@ const Onboard = () => {
 
   const decrementStep = () => {
     if (step !== 0) setStep(step - 1)
-  }
-
-  const skipSeedCheckerStep = () => {
-    if (seedDownloaded) setStep(3)
   }
 
   useEffect(() => {
@@ -229,7 +236,7 @@ const Onboard = () => {
           <Button
             variant="primary"
             arrow="right"
-            onClick={() => (window.location.href = `/${name}`)}
+            onClick={() => (window.location.href = `/${teamName}`)}
           >
             Go to Console
           </Button>
@@ -253,17 +260,11 @@ const Onboard = () => {
               <Stepper steps={steps} activeStep={step} />
             </div>
 
-            {step === 0 && <TeamName name={name} setName={setName} />}
-            {step === 1 && <AccountSeedGen mnemonic={mnemonic} />}
+            {step === 0 && <TeamName name={teamName} setName={setTeamName} />}
+            {step === 1 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
             {step === 2 && (
-              <AccountSeedChecker
-                mnemonic={mnemonic}
-                inputs={inputs}
-                updateInputs={handleInputUpdate}
-                required={!seedDownloaded}
-              />
+              <AccountRecovery mnemonic={mnemonic} onDownload={handleDownloadRecoveryKit} />
             )}
-            {step === 3 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
 
             <div className="flex justify-between w-full">
               <div>
@@ -274,13 +275,8 @@ const Onboard = () => {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {seedDownloaded && step === 2 && (
-                  <Button variant="secondary" type="button" onClick={skipSeedCheckerStep}>
-                    Skip
-                  </Button>
-                )}
                 <Button variant="primary" type="submit" isLoading={isloading || loading}>
-                  Next
+                  {step === steps.length - 1 ? 'Finish' : 'Next'}
                 </Button>
               </div>
             </div>

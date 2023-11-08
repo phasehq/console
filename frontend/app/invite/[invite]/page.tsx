@@ -3,7 +3,7 @@
 import { cryptoUtils } from '@/utils/auth'
 import VerifyInvite from '@/graphql/queries/organisation/validateOrganisationInvite.gql'
 import AcceptOrganisationInvite from '@/graphql/mutations/organisation/acceptInvite.gql'
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
+import { useLazyQuery, useMutation } from '@apollo/client'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
@@ -11,14 +11,14 @@ import Loading from '@/app/loading'
 import { useEffect, useState } from 'react'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
-import { AccountSeedChecker } from '@/components/onboarding/AccountSeedChecker'
-import { AccountSeedGen } from '@/components/onboarding/AccountSeedGen'
-import { MdKey, MdOutlineVerifiedUser, MdOutlinePassword } from 'react-icons/md'
+import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
+import { MdKey, MdOutlinePassword } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import { OrganisationMemberInviteType } from '@/apollo/graphql'
 import { useSession } from 'next-auth/react'
 import { setLocalKeyring } from '@/utils/localStorage'
 import { Logo } from '@/components/common/Logo'
+import { generateRecoveryPdf } from '@/utils/recovery'
 
 const bip39 = require('bip39')
 
@@ -50,8 +50,8 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const [showWelcome, setShowWelcome] = useState<boolean>(true)
   const [step, setStep] = useState<number>(0)
   const [recoverySkipped, setRecoverySkipped] = useState<boolean>(false)
+  const [recoveryDownloaded, setRecoveryDownloaded] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
-  const [inputs, setInputs] = useState<Array<string>>([])
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
   const [mnemonic, setMnemonic] = useState('')
@@ -73,26 +73,19 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const steps: Step[] = [
     {
       index: 0,
-      name: 'Set up recovery phrase',
-      icon: <MdKey />,
-      title: 'Recovery',
-      description:
-        "This is your 24 word recovery phrase. You can use it log in to your Phase account if you forget the sudo password. It's used to derive your encryption keys. Only you have access to it. Please write it down or store it somewhere safe like a password manager.",
-    },
-    {
-      index: 1,
-      name: 'Verify recovery phrase',
-      icon: <MdOutlineVerifiedUser />,
-      title: 'Verify recovery phrase',
-      description: 'Please enter the your recovery phrase in the correct order below.',
-    },
-    {
-      index: 2,
-      name: 'Sudo password',
+      name: 'Sudo Password',
       icon: <MdOutlinePassword />,
       title: 'Set a sudo password',
       description:
-        'Please set up a strong sudo password to continue. This will be used to to perform administrative tasks and to secure your account keys.',
+        'Please set up a strong sudo password. This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks that require access to your account keys.',
+    },
+    {
+      index: 1,
+      name: 'Account recovery',
+      icon: <MdKey />,
+      title: 'Account Recovery',
+      description:
+        'Only you have access to your account keys. If you forget your sudo password, you will need to enter a recovery phrase to retrieve your keys and regain access to your account.',
     },
   ]
 
@@ -160,23 +153,15 @@ export default function Invite({ params }: { params: { invite: string } }) {
     })
   }
 
-  const handleInputUpdate = (newValue: string, index: number) => {
-    if (newValue.split(' ').length === 24) {
-      setInputs(newValue.split(' '))
-    } else setInputs(inputs.map((input: string, i: number) => (index === i ? newValue : input)))
-  }
-
   const validateCurrentStep = () => {
-    if (step === 1 && !recoverySkipped) {
-      if (inputs.join(' ') !== mnemonic && !recoverySkipped) {
-        errorToast('Incorrect account recovery key!')
-        return false
-      }
-    } else if (step === 2) {
+    if (step === 0) {
       if (pw !== pw2) {
         errorToast("Passwords don't match")
         return false
       }
+    } else if (step === 1 && !recoveryDownloaded) {
+      errorToast('Please download the your account recovery kit!')
+      return false
     }
     return true
   }
@@ -198,19 +183,10 @@ export default function Invite({ params }: { params: { invite: string } }) {
     if (step !== 0) setStep(step - 1)
   }
 
-  const skipRecoverySteps = () => {
-    setRecoverySkipped(true)
-    setStep(2)
-  }
-
   useEffect(() => {
     setMnemonic(bip39.generateMnemonic(256))
     const id = crypto.randomUUID()
   }, [])
-
-  useEffect(() => {
-    setInputs([...Array(mnemonic.split(' ').length)].map(() => ''))
-  }, [mnemonic])
 
   const WelcomePane = () => (
     <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
@@ -258,6 +234,23 @@ export default function Invite({ params }: { params: { invite: string } }) {
     )
   }
 
+  const handleDownloadRecoveryKit = async () => {
+    toast
+      .promise(
+        generateRecoveryPdf(
+          mnemonic,
+          session?.user?.email!,
+          invite.organisation.name,
+          session?.user?.name || undefined
+        ),
+        {
+          pending: 'Generating recovery kit',
+          success: 'Downloaded recovery kit',
+        }
+      )
+      .then(() => setRecoveryDownloaded(true))
+  }
+
   return (
     <>
       <div>
@@ -280,16 +273,11 @@ export default function Invite({ params }: { params: { invite: string } }) {
                   <Stepper steps={steps} activeStep={step} />
                 </div>
 
-                {step === 0 && <AccountSeedGen mnemonic={mnemonic} />}
+                {step === 0 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
+
                 {step === 1 && (
-                  <AccountSeedChecker
-                    mnemonic={mnemonic}
-                    inputs={inputs}
-                    updateInputs={handleInputUpdate}
-                    required={!recoverySkipped}
-                  />
+                  <AccountRecovery mnemonic={mnemonic} onDownload={handleDownloadRecoveryKit} />
                 )}
-                {step === 2 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
 
                 <div className="flex justify-between w-full">
                   <div>
@@ -300,11 +288,6 @@ export default function Invite({ params }: { params: { invite: string } }) {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {step !== 2 && (
-                      <Button variant="secondary" type="button" onClick={skipRecoverySteps}>
-                        Skip
-                      </Button>
-                    )}
                     <Button variant="primary" type="submit" isLoading={isloading}>
                       Next
                     </Button>

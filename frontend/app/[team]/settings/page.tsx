@@ -4,14 +4,16 @@ import { Alert } from '@/components/common/Alert'
 import { Avatar } from '@/components/common/Avatar'
 import { Button } from '@/components/common/Button'
 import { ModeToggle } from '@/components/common/ModeToggle'
-import { AccountSeedGen } from '@/components/onboarding/AccountSeedGen'
+import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { cryptoUtils } from '@/utils/auth'
+import { generateRecoveryPdf } from '@/utils/recovery'
 import { Dialog, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
 import { Fragment, useContext, useState } from 'react'
 import { FaEye, FaEyeSlash, FaMoon, FaSun, FaTimes } from 'react-icons/fa'
+import { toast } from 'react-toastify'
 
 const ViewRecoveryDialog = () => {
   const { activeOrganisation } = useContext(organisationContext)
@@ -49,22 +51,37 @@ const ViewRecoveryDialog = () => {
     setIsOpen(true)
   }
 
+  const handleDownloadRecoveryKit = async () => {
+    toast.promise(
+      generateRecoveryPdf(
+        recovery,
+        session?.user?.email!,
+        activeOrganisation!.name,
+        session?.user?.name || undefined
+      ),
+      {
+        pending: 'Generating recovery kit',
+        success: 'Downloaded recovery kit',
+      }
+    )
+  }
+
   return (
     <>
       <div className="flex flex-col gap-4">
         <Alert variant="info" icon={true}>
           <div className="flex flex-col gap-2">
-            <p>Your recovery phrase is encrypted.</p>
+            <p>Your account keys are encrypted.</p>
 
             <p>
-              Backup your account recovery phrase in a safe place if you haven&apos;t already. If
-              you forget your sudo password, it is the only way to restore your accout keys.
+              Store your account recovery kit in a safe place if you haven&apos;t already. If you
+              forget your sudo password, it is the only way to restore your accout keys.
             </p>
           </div>
         </Alert>
         <div>
           <Button variant="primary" onClick={openModal} title="View recovery">
-            <FaEye /> View recovery
+            <FaEye /> View recovery info
           </Button>
         </div>
       </div>
@@ -106,7 +123,9 @@ const ViewRecoveryDialog = () => {
                   </Dialog.Title>
 
                   <div className="py-4">
-                    {recovery && <AccountSeedGen mnemonic={recovery} />}
+                    {recovery && (
+                      <AccountRecovery mnemonic={recovery} onDownload={handleDownloadRecoveryKit} />
+                    )}
 
                     {!recovery && (
                       <form onSubmit={handleDecryptRecovery}>
@@ -195,7 +214,7 @@ export default function Settings({ params }: { params: { team: string } }) {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="text-lg font-medium">Recovery phrase</div>
+            <div className="text-lg font-medium">Recovery</div>
             <ViewRecoveryDialog />
           </div>
 
