@@ -18,7 +18,7 @@ import { OrganisationMemberInviteType } from '@/apollo/graphql'
 import { useSession } from 'next-auth/react'
 import { setLocalKeyring } from '@/utils/localStorage'
 import { Logo } from '@/components/common/Logo'
-import { generateRecoveryPdf } from '@/utils/recovery'
+import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 
 const bip39 = require('bip39')
 
@@ -251,6 +251,15 @@ export default function Invite({ params }: { params: { invite: string } }) {
       .then(() => setRecoveryDownloaded(true))
   }
 
+  const handleCopyRecoveryKit = () => {
+    copyRecoveryKit(
+      mnemonic,
+      session?.user?.email!,
+      invite.organisation.name,
+      session?.user?.name || undefined
+    )
+  }
+
   return (
     <>
       <div>
@@ -276,7 +285,11 @@ export default function Invite({ params }: { params: { invite: string } }) {
                 {step === 0 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
 
                 {step === 1 && (
-                  <AccountRecovery mnemonic={mnemonic} onDownload={handleDownloadRecoveryKit} />
+                  <AccountRecovery
+                    mnemonic={mnemonic}
+                    onDownload={handleDownloadRecoveryKit}
+                    onCopy={handleCopyRecoveryKit}
+                  />
                 )}
 
                 <div className="flex justify-between w-full">

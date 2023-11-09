@@ -4,26 +4,18 @@ import { Button } from '@/components/common/Button'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { useEffect, useState } from 'react'
-import {
-  MdOutlineVerifiedUser,
-  MdGroups,
-  MdOutlineKey,
-  MdKey,
-  MdOutlinePassword,
-} from 'react-icons/md'
+import { MdGroups, MdKey, MdOutlinePassword } from 'react-icons/md'
 import { TeamName } from '@/components/onboarding/TeamName'
 import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
-import { AccountSeedChecker } from '@/components/onboarding/AccountSeedChecker'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
-import { gql, useMutation } from '@apollo/client'
+import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import { setLocalKeyring } from '@/utils/localStorage'
-import { generateRecoveryPdf } from '@/utils/recovery'
+import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 
 const bip39 = require('bip39')
 
@@ -36,7 +28,7 @@ const Onboard = () => {
   const [orgId, setOrgId] = useState('')
   const [inputs, setInputs] = useState<Array<string>>([])
   const [step, setStep] = useState<number>(0)
-  const [showWelcome, setShowWelcome] = useState<boolean>(true)
+
   const [createOrganisation, { data, loading, error }] = useMutation(CreateOrg)
   const [isloading, setIsLoading] = useState<boolean>(false)
   const [recoveryDownloaded, setRecoveryDownloaded] = useState<boolean>(false)
@@ -45,12 +37,6 @@ const Onboard = () => {
 
   const errorToast = (message: string) => {
     toast.error(message)
-  }
-
-  const handleInputUpdate = (newValue: string, index: number) => {
-    if (newValue.split(' ').length === 24) {
-      setInputs(newValue.split(' '))
-    } else setInputs(inputs.map((input: string, i: number) => (index === i ? newValue : input)))
   }
 
   const steps: Step[] = [
@@ -143,6 +129,10 @@ const Onboard = () => {
       .then(() => setRecoveryDownloaded(true))
   }
 
+  const handleCopyRecoveryKit = () => {
+    copyRecoveryKit(mnemonic, session?.user?.email!, teamName, session?.user?.name || undefined)
+  }
+
   const handleAccountInit = async () => {
     return new Promise<boolean>(async (resolve, reject) => {
       setIsLoading(true)
@@ -209,24 +199,6 @@ const Onboard = () => {
     setInputs([...Array(mnemonic.split(' ').length)].map(() => ''))
   }, [mnemonic])
 
-  const WelcomePane = () => {
-    return (
-      <div className="flex flex-col gap-y-2 items-center">
-        <h1 className="text-4xl text-black dark:text-white text-center font-bold">
-          Welcome to Phase
-        </h1>
-        <p className="text-black/30 dark:text-white/40 text-center">
-          Setting up your account will take just a few minutes
-        </p>
-        <div className="mx-auto pt-8">
-          <Button variant="primary" onClick={() => setShowWelcome(false)}>
-            Get started
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   const SuccessPane = () => {
     return (
       <div className="flex flex-col gap-y-2 items-center">
@@ -250,8 +222,7 @@ const Onboard = () => {
       <HeroPattern />
 
       <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-40">
-        {showWelcome && <WelcomePane />}
-        {!showWelcome && !success && (
+        {!success && (
           <form
             onSubmit={incrementStep}
             className="space-y-16 p-8 border border-violet-200/10 rounded-lg dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
@@ -263,7 +234,11 @@ const Onboard = () => {
             {step === 0 && <TeamName name={teamName} setName={setTeamName} />}
             {step === 1 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
             {step === 2 && (
-              <AccountRecovery mnemonic={mnemonic} onDownload={handleDownloadRecoveryKit} />
+              <AccountRecovery
+                mnemonic={mnemonic}
+                onDownload={handleDownloadRecoveryKit}
+                onCopy={handleCopyRecoveryKit}
+              />
             )}
 
             <div className="flex justify-between w-full">

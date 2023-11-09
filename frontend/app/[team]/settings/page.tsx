@@ -8,7 +8,7 @@ import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { cryptoUtils } from '@/utils/auth'
-import { generateRecoveryPdf } from '@/utils/recovery'
+import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { Dialog, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
 import { Fragment, useContext, useState } from 'react'
@@ -63,6 +63,15 @@ const ViewRecoveryDialog = () => {
         pending: 'Generating recovery kit',
         success: 'Downloaded recovery kit',
       }
+    )
+  }
+
+  const handleCopyRecoveryKit = () => {
+    copyRecoveryKit(
+      recovery,
+      session?.user?.email!,
+      activeOrganisation!.name,
+      session?.user?.name || undefined
     )
   }
 
@@ -124,7 +133,11 @@ const ViewRecoveryDialog = () => {
 
                   <div className="py-4">
                     {recovery && (
-                      <AccountRecovery mnemonic={recovery} onDownload={handleDownloadRecoveryKit} />
+                      <AccountRecovery
+                        mnemonic={recovery}
+                        onDownload={handleDownloadRecoveryKit}
+                        onCopy={handleCopyRecoveryKit}
+                      />
                     )}
 
                     {!recovery && (
