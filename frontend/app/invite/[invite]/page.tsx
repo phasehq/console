@@ -77,7 +77,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
       icon: <MdOutlinePassword />,
       title: 'Set a sudo password',
       description:
-        'Please set up a strong sudo password. This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks that require access to your account keys.',
+        'This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks.',
     },
     {
       index: 1,
@@ -85,7 +85,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
       icon: <MdKey />,
       title: 'Account Recovery',
       description:
-        'Only you have access to your account keys. If you forget your sudo password, you will need to enter a recovery phrase to retrieve your keys and regain access to your account.',
+        'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
     },
   ]
 
