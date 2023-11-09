@@ -45,7 +45,14 @@ const Onboard = () => {
       name: 'Team Name',
       icon: <MdGroups />,
       title: 'Choose a name for your team',
-      description: 'Your team name must be alphanumeric.',
+      description: (
+        <div className="space-y-1">
+          Your team name can be alphanumeric.
+          <code>
+            <pre>[a-zA-Z0-9]</pre>
+          </code>
+        </div>
+      ),
     },
     {
       index: 1,
@@ -53,7 +60,7 @@ const Onboard = () => {
       icon: <MdOutlinePassword />,
       title: 'Set a sudo password',
       description:
-        'Please set up a strong sudo password. This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks that require access to your account keys.',
+        'This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks.',
     },
     {
       index: 2,
@@ -61,7 +68,7 @@ const Onboard = () => {
       icon: <MdKey />,
       title: 'Account Recovery',
       description:
-        'Only you have access to your account keys. If you forget your sudo password, you will need to enter a recovery phrase to retrieve your keys and regain access to your account.',
+        'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
     },
   ]
 
@@ -131,6 +138,7 @@ const Onboard = () => {
 
   const handleCopyRecoveryKit = () => {
     copyRecoveryKit(mnemonic, session?.user?.email!, teamName, session?.user?.name || undefined)
+    setRecoveryDownloaded(true)
   }
 
   const handleAccountInit = async () => {
@@ -225,9 +233,14 @@ const Onboard = () => {
         {!success && (
           <form
             onSubmit={incrementStep}
-            className="space-y-16 p-8 border border-violet-200/10 rounded-lg dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
+            className="space-y-8 p-8 border border-violet-200/10 rounded-lg bg-zinc-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
           >
             <div className="flex flex-col w-full">
+              {step >= 0 && (
+                <div className="text-black dark:text-white font-semibold text-2xl text-center">
+                  Welcome to Phase
+                </div>
+              )}
               <Stepper steps={steps} activeStep={step} />
             </div>
 
@@ -250,7 +263,12 @@ const Onboard = () => {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="primary" type="submit" isLoading={isloading || loading}>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  isLoading={isloading || loading}
+                  disabled={step === steps.length - 1 && !recoveryDownloaded}
+                >
                   {step === steps.length - 1 ? 'Finish' : 'Next'}
                 </Button>
               </div>
