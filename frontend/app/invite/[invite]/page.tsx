@@ -49,7 +49,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
 
   const [showWelcome, setShowWelcome] = useState<boolean>(true)
   const [step, setStep] = useState<number>(0)
-  const [recoverySkipped, setRecoverySkipped] = useState<boolean>(false)
+
   const [recoveryDownloaded, setRecoveryDownloaded] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
   const [pw, setPw] = useState<string>('')
@@ -258,6 +258,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
       invite.organisation.name,
       session?.user?.name || undefined
     )
+    setRecoveryDownloaded(true)
   }
 
   return (
@@ -301,8 +302,13 @@ export default function Invite({ params }: { params: { invite: string } }) {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="primary" type="submit" isLoading={isloading}>
-                      Next
+                    <Button
+                      variant="primary"
+                      type="submit"
+                      isLoading={isloading || loading}
+                      disabled={step === steps.length - 1 && !recoveryDownloaded}
+                    >
+                      {step === steps.length - 1 ? 'Finish' : 'Next'}
                     </Button>
                   </div>
                 </div>
