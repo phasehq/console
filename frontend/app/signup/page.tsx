@@ -210,8 +210,8 @@ const Onboard = () => {
   const SuccessPane = () => {
     return (
       <div className="flex flex-col gap-y-2 items-center">
-        <h1 className="text-4xl text-black dark:text-white text-center font-bold">Success!</h1>
-        <p className="text-black/30 dark:text-white/40 text-center">Your account is setup!</p>
+        <h1 className="text-4xl text-black dark:text-white text-center font-bold">You're All Set</h1>
+        <p className="text-black/30 dark:text-white/40 text-center">Your account is ready to go!</p>
         <div className="mx-auto pt-8">
           <Button
             variant="primary"
