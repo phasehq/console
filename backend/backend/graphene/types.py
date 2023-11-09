@@ -38,7 +38,7 @@ class OrganisationType(DjangoObjectType):
             user=info.context.user, organisation=self, deleted_at=None)
         return org_member.wrapped_recovery
 
-    def resolve_idenity_key(self, info):
+    def resolve_identity_key(self, info):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self, deleted_at=None)
         return org_member.identity_key
