@@ -1,3 +1,0 @@
-query GetAppLogCount($appId: ID!, $thisMonth: Boolean) {
-  logsCount(appId: $appId, thisMonth: $thisMonth)
-}

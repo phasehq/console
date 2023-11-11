@@ -49,7 +49,7 @@ services:
 
   postgres:
     container_name: phase-postgres
-    image: postgres
+    image: postgres:15.4-alpine3.17
     restart: always
     env_file:
       - .env.dev

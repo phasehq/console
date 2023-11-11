@@ -1,5 +1,17 @@
 import jwt from 'jsonwebtoken'
 import _sodium from 'libsodium-wrappers-sumo'
+import { getLocalKeyring } from './localStorage'
+
+export type OrganisationKeyring = {
+  symmetricKey: string
+  publicKey: string
+  privateKey: string
+}
+
+type AppKeyring = {
+  publicKey: string
+  privateKey: string
+}
 
 export namespace JwtUtils {
   export const isJwtExpired = (token: string) => {
@@ -43,23 +55,6 @@ export namespace UrlUtils {
 }
 
 export namespace cryptoUtils {
-  type OrganisationKeyring = {
-    symmetricKey: string
-    publicKey: string
-    privateKey: string
-  }
-
-  type AppKeyring = {
-    publicKey: string
-    privateKey: string
-  }
-
-  type ShamirShare = {
-    bits: number
-    id: number
-    data: string
-  }
-
   /**
    * Returns 16 bytes from an input string that can be used as a salt for Argon2
    *
@@ -82,7 +77,7 @@ export namespace cryptoUtils {
    * @param {Uint8Array} key
    * @returns {Promise<Uint8Array>} - Ciphertext with appended nonce
    */
-  const encryptRaw = async (plaintext: string, key: Uint8Array): Promise<Uint8Array> => {
+  export const encryptRaw = async (plaintext: string, key: Uint8Array): Promise<Uint8Array> => {
     await _sodium.ready
     const sodium = _sodium
 
@@ -124,6 +119,36 @@ export namespace cryptoUtils {
     )
 
     return plaintext
+  }
+
+  /**
+   * Encrypts a single string with the given key. Returns the ciphertext as a base64 string
+   *
+   * @param {string} plaintext - Plaintext string to encrypt
+   * @param {Uint8Array} key - Symmetric encryption key
+   * @returns {string}
+   */
+  export const encryptString = async (plaintext: string, key: Uint8Array) => {
+    await _sodium.ready
+    const sodium = _sodium
+
+    return sodium.to_base64(await encryptRaw(plaintext, key), sodium.base64_variants.ORIGINAL)
+  }
+
+  /**
+   * Decrypts a single base64 ciphertext string with the given key. Returns the plaintext as a string
+   *
+   * @param cipherText - base64 string ciphertext with appended nonce
+   * @param key - Symmetric encryption key
+   * @returns {string}
+   */
+  export const decryptString = async (cipherText: string, key: Uint8Array) => {
+    await _sodium.ready
+    const sodium = _sodium
+
+    return sodium.to_string(
+      await decryptRaw(sodium.from_base64(cipherText, sodium.base64_variants.ORIGINAL), key)
+    )
   }
 
   /**
@@ -263,6 +288,25 @@ export namespace cryptoUtils {
   }
 
   /**
+   * Decrypts an Account recovery phrase
+   *
+   * @param encryptedRecovery - Hex encoded encrypted recovery phrase
+   * @param key - Hex encoded decryption key
+   * @returns {string}
+   */
+  export const decryptAccountRecovery = async (encryptedRecovery: string, key: string) => {
+    await _sodium.ready
+    const sodium = _sodium
+
+    const ciphertextBytes = sodium.from_hex(encryptedRecovery)
+    const keyBytes = sodium.from_hex(key)
+
+    const plaintextBytes = await decryptRaw(ciphertextBytes, keyBytes)
+    const plaintext = sodium.to_string(plaintextBytes)
+    return plaintext
+  }
+
+  /**
    * Create a random seed for a new app
    *
    * @returns {Promise<string>} - hex encoded app seed
@@ -359,5 +403,35 @@ export namespace cryptoUtils {
     const keyBytes = sodium.from_hex(wrapKey)
     const wrappedKey = await encryptRaw(keyShare, keyBytes)
     return sodium.to_hex(wrappedKey)
+  }
+
+  export const getInviteLink = (inviteId: string) => {
+    const sodium = _sodium
+
+    const hostname = `${window.location.protocol}//${window.location.host}`
+    const encodedInvite = sodium.to_base64(inviteId, sodium.base64_variants.ORIGINAL)
+    return `${hostname}/invite/${encodedInvite}`
+  }
+
+  export const decodeb64string = async (b64string: string) => {
+    await _sodium.ready
+    const sodium = _sodium
+
+    return sodium.to_string(sodium.from_base64(b64string, sodium.base64_variants.ORIGINAL))
+  }
+
+  export const getKeyring = async (email: string, organisationId: string, password: string) => {
+    return new Promise<OrganisationKeyring>(async (resolve, reject) => {
+      const encryptedKeyring = getLocalKeyring(email, organisationId)!.keyring
+      if (!encryptedKeyring) reject('Error fetching local encrypted keys from browser')
+
+      try {
+        const deviceKey = await deviceVaultKey(password, email)
+        const decryptedKeyring = await decryptAccountKeyring(encryptedKeyring!, deviceKey)
+        resolve(decryptedKeyring)
+      } catch (e) {
+        reject(`Error unlocking user keyring: ${e}`)
+      }
+    })
   }
 }

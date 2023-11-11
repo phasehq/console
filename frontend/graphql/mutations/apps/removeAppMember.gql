@@ -1,0 +1,7 @@
+mutation RemoveMemberFromApp($memberId: ID!, $appId: ID!) {
+  removeAppMember(memberId: $memberId, appId: $appId) {
+    app {
+      id
+    }
+  }
+}

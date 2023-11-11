@@ -1,0 +1,18 @@
+query VerifyInvite($inviteId: ID!) {
+  validateInvite(inviteId: $inviteId) {
+    id
+    organisation {
+      id
+      name
+    }
+    inviteeEmail
+    invitedBy {
+      email
+    }
+    apps {
+      id
+      name
+    }
+    
+  }
+}

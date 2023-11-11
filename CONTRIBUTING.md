@@ -35,12 +35,22 @@ Most of Phase's code is under the MIT license, though some paid feature restrict
 Any third party components incorporated into our code are licensed under the original license provided by the applicable component owner.
 
 ## Setup local development environment
-
 ### Dev server with hot reload
-
-1. Create a `.env.dev` file with `cp .env.dev.example .env.dev` and add atleast one OAuth provider.
-2. `docker-compose -f dev-docker-compose.yml up`.
-3. The Console is now running at `https://localhost` with HMR.
+1. Create a **.env.dev** file using
+    ```
+    cp .env.dev.example .env.dev
+    ```
+2. Add atleast one OAuth provider in your **.env.dev**. Follow the [docs](https://docs.phase.dev/self-hosting/configuration/envars)
+3. Verify that **dev-docker-compose.yml** file is populated with the correct environment variables by running
+    ```
+    docker compose -f dev-docker-compose.yml --env-file .env.dev config
+    ```
+4. Start the containers using 
+    ```
+    docker-compose -f dev-docker-compose.yml --env-file .env.dev up
+    ```
+5. The Console is now running at <https://localhost> with [HMR(Hot Module Replacement)](https://webpack.js.org/concepts/hot-module-replacement) and a self-signed certificate.
+   >**Note : Your browser might warn you about the self-signed certificate. You can safely accept the certificate and proceed. 
 
 ### Staging env to test production builds
 

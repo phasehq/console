@@ -31,8 +31,9 @@ services:
       NEXTAUTH_URL: "${HTTP_PROTOCOL}${HOST}"
       OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
       BACKEND_API_BASE: "http://backend:8000"
-      NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOCOL}${HOST}/ph-backend"
+      NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOCOL}${HOST}/service"
       NEXT_PUBLIC_NEXTAUTH_PROVIDERS: "${SSO_PROVIDERS}"
+      NEXT_PUBLIC_POSTHOG_KEY: "${NEXT_PUBLIC_POSTHOG_KEY}"
     networks:
       - phase-net-dev
 
@@ -54,7 +55,7 @@ services:
 
   postgres:
     container_name: phase-postgres
-    image: postgres
+    image: postgres:15.4-alpine3.17
     restart: always
     env_file:
       - .env

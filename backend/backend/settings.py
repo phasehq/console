@@ -121,6 +121,17 @@ SOCIALACCOUNT_QUERY_EMAIL = True
 
 OAUTH_REDIRECT_URI = os.getenv('OAUTH_REDIRECT_URI')
 
+
+# Email configurations
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('SMTP_SERVER')
+EMAIL_PORT = int(os.getenv('SMTP_PORT', 587))
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('SMTP_USERNAME')
+EMAIL_HOST_PASSWORD = os.getenv('SMTP_PASSWORD')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
+
+
 SITE_ID = 1
 
 MIDDLEWARE = [
@@ -256,4 +267,3 @@ try:
     APP_HOST = os.getenv('APP_HOST')
 except:
     APP_HOST = 'self'
-    

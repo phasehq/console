@@ -2,7 +2,7 @@
 
 import clsx from 'clsx'
 import { signIn, useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ReactNode, useEffect, useState } from 'react'
 import { FaGithub, FaGitlab, FaGoogle } from 'react-icons/fa'
 import { AnimatedLogo } from '../common/AnimatedLogo'
@@ -44,6 +44,10 @@ export default function SignInButtons() {
   const { status } = useSession()
   const router = useRouter()
 
+  const searchParams = useSearchParams()
+
+  const callbackUrl = searchParams.get('callbackUrl')
+
   const titleText = () => (loading ? 'Logging you in' : 'Phase Console')
 
   useEffect(() => {
@@ -57,7 +61,10 @@ export default function SignInButtons() {
 
   const handleProviderButtonClick = (providerId: string) => {
     setLoading(true)
-    signIn(providerId)
+    signIn(providerId, {
+      redirect: callbackUrl ? true : false,
+      callbackUrl: callbackUrl || '',
+    })
   }
 
   return (

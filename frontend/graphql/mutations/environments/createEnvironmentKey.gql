@@ -1,0 +1,8 @@
+mutation CreateEnvKey($envId: ID!, $userId: ID,$wrappedSeed: String!, $wrappedSalt: String!, $identityKey: String!) {
+  createEnvironmentKey(envId: $envId, userId: $userId, wrappedSeed: $wrappedSeed, wrappedSalt: $wrappedSalt, identityKey: $identityKey) {
+    environmentKey {
+      id
+      createdAt
+    }
+  }
+}
