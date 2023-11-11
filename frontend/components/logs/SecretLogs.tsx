@@ -194,12 +194,6 @@ export default function SecretLogs(props: { app: string }) {
         // Decrypt event fields
         decryptedEvent!.key = await decryptAsymmetric(event!.key, privateKey, publicKey)
 
-        // decryptedEvent!.value = await decryptAsymmetric(event!.value, privateKey, publicKey)
-
-        // if (decryptedEvent!.comment !== '') {
-        //   decryptedEvent!.comment = await decryptAsymmetric(event!.comment, privateKey, publicKey)
-        // }
-
         setDecryptedEvent(decryptedEvent)
       }
 
@@ -290,7 +284,9 @@ export default function SecretLogs(props: { app: string }) {
                 </div>
               </td>
               <td className="whitespace-nowrap px-6 py-4 font-mono">{log.environment.envType}</td>
-              <td className="whitespace-nowrap px-6 py-4 font-mono">{decryptedEvent?.key}</td>
+              <td className="whitespace-nowrap px-6 py-4 font-mono ph-no-capture">
+                {decryptedEvent?.key}
+              </td>
               <td className="whitespace-nowrap px-6 py-4 font-medium capitalize">
                 {relativeTimeStamp()}
               </td>
@@ -319,7 +315,9 @@ export default function SecretLogs(props: { app: string }) {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 w-full gap-4 text-sm">
                     <LogField label="Key">
-                      <div className="flex items-center gap-2">{decryptedEvent?.key}</div>
+                      <div className="flex items-center gap-2 ph-no-capture">
+                        {decryptedEvent?.key}
+                      </div>
                     </LogField>
 
                     <LogField label="IP address"> {log.ipAddress}</LogField>

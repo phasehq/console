@@ -4,6 +4,18 @@ from django.template.loader import render_to_string
 from datetime import datetime
 import os
 from api.utils import encode_string_to_base64, get_client_ip
+from api.models import OrganisationMember
+
+
+def get_org_member_name(org_member):
+    social_acc = org_member.user.socialaccount_set.first()
+
+    member_name = social_acc.extra_data.get('name')
+
+    if member_name is None:
+        member_name = org_member.email
+
+    return member_name
 
 
 def send_email(subject, recipient_list, template_name, context):
@@ -26,14 +38,14 @@ def send_email(subject, recipient_list, template_name, context):
     )
 
 
-def send_login_email(request, email):
+def send_login_email(request, email, provider):
     user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
     ip_address = get_client_ip(request)
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # Creating context dictionary
     context = {
-        'auth': 'GitHub',
+        'auth': provider,
         'email': email,
         'ip': ip_address,
         'user_agent': user_agent,
@@ -51,14 +63,7 @@ def send_login_email(request, email):
 def send_inite_email(invite):
     organisation = invite.organisation.name
 
-    invited_by_social_acc = invite.invited_by.user.socialaccount_set.first()
-
-    name = invited_by_social_acc.extra_data.get('name')
-
-    if name is not None:
-        invited_by_name = name
-    else:
-        invited_by_name = invite.invited_by.user.email
+    invited_by_name = get_org_member_name(invite.invited_by)
 
     invite_code = encode_string_to_base64(str(invite.id))
 
@@ -74,5 +79,37 @@ def send_inite_email(invite):
         f"Invite - {organisation} on Phase",
         [invite.invitee_email],
         'backend/api/email_templates/invite.html',
+        context
+    )
+
+
+def send_user_joined_email(invite, new_member):
+    organisation = invite.organisation.name
+
+    owner = OrganisationMember.objects.get(
+        organisation=invite.organisation, role=OrganisationMember.OWNER, deleted_at=None)
+
+    owner_name = get_org_member_name(owner)
+
+    invited_by_name = get_org_member_name(invite.invited_by)
+
+    if owner_name == invited_by_name:
+        invited_by_name = 'you'
+
+    new_user_name = get_org_member_name(new_member)
+
+    if invited_by_name is None:
+        invited_by_name = invite.invited_by.user.email
+
+    context = {
+        'organisation': organisation,
+        'invited_by': invited_by_name,
+        'new_user': new_user_name
+    }
+
+    send_email(
+        f"A new user has joined {organisation} on Phase",
+        [owner.user.email],
+        'backend/api/email_templates/user_joined_org.html',
         context
     )

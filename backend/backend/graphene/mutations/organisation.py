@@ -1,4 +1,4 @@
-from api.emails import send_inite_email
+from api.emails import send_inite_email, send_user_joined_email
 from backend.graphene.utils.permissions import user_is_admin, user_is_org_member
 import graphene
 from graphql import GraphQLError
@@ -22,9 +22,6 @@ class CreateOrganisationMutation(graphene.Mutation):
     def mutate(cls, root, info, id, name, identity_key, wrapped_keyring, wrapped_recovery):
         if Organisation.objects.filter(name__iexact=name).exists():
             raise GraphQLError('This organisation name is not available.')
-        if OrganisationMember.objects.filter(user_id=info.context.user.userId, role=OrganisationMember.OWNER).exists():
-            raise GraphQLError(
-                'Your current plan only supports one organisation.')
 
         owner = CustomUser.objects.get(userId=info.context.user.userId)
         org = Organisation.objects.create(
@@ -151,6 +148,11 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
 
             invite.valid = False
             invite.save()
+
+            try:
+                send_user_joined_email(invite, org_member)
+            except Exception as e:
+                print(f"Error sending new user joined email: {e}")
 
             return CreateOrganisationMemberMutation(org_member=org_member)
         else:

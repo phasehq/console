@@ -413,11 +413,11 @@ export namespace cryptoUtils {
     return `${hostname}/invite/${encodedInvite}`
   }
 
-  export const decodeInvite = async (hash: string) => {
+  export const decodeb64string = async (b64string: string) => {
     await _sodium.ready
     const sodium = _sodium
 
-    return sodium.to_string(sodium.from_base64(hash, sodium.base64_variants.ORIGINAL))
+    return sodium.to_string(sodium.from_base64(b64string, sodium.base64_variants.ORIGINAL))
   }
 
   export const getKeyring = async (email: string, organisationId: string, password: string) => {
