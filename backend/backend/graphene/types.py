@@ -38,7 +38,7 @@ class OrganisationType(DjangoObjectType):
             user=info.context.user, organisation=self, deleted_at=None)
         return org_member.wrapped_recovery
 
-    def resolve_idenity_key(self, info):
+    def resolve_identity_key(self, info):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self, deleted_at=None)
         return org_member.identity_key
@@ -99,6 +99,22 @@ class EnvironmentType(DjangoObjectType):
         model = Environment
         fields = ('id', 'name', 'env_type', 'identity_key',
                   'wrapped_seed', 'wrapped_salt', 'created_at', 'updated_at')
+
+    def resolve_wrapped_seed(self, info):
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=self.app.organisation, deleted_at=None)
+        user_env_key = EnvironmentKey.objects.get(
+            environment=self, user=org_member, deleted_at=None)
+
+        return user_env_key.wrapped_seed
+
+    def resolve_wrapped_salt(self, info):
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=self.app.organisation, deleted_at=None)
+        user_env_key = EnvironmentKey.objects.get(
+            environment=self, user=org_member, deleted_at=None)
+
+        return user_env_key.wrapped_salt
 
 
 class EnvironmentKeyType(DjangoObjectType):

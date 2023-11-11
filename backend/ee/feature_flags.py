@@ -11,7 +11,7 @@ def allow_new_app(organisation):
     Returns:
         bool: Whether or not to allow creating an app for the given org
     """
-    FREE_APP_LIMIT = 5
+    FREE_APP_LIMIT = 3
     PRO_APP_LIMIT = 10
 
     current_app_count = App.objects.filter(

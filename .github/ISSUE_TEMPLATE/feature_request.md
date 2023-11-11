@@ -1,34 +1,21 @@
 ---
-name: Bug report
-about: Create a report to help us improve
-title: ""
-labels: bug
-assignees: ""
+name: Feature request
+about: Suggest a feature for Phase
+labels: enhancement, feature
+
 ---
 
-### Describe the bug
+## Is your feature request related to a problem?
 
-A clear and concise description of what the bug is.
+*Please describe.*
 
-### To Reproduce
+## Describe the solution you'd like
 
-Steps to reproduce the behavior:
 
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
 
-### Expected behavior
+## Describe alternatives you've considered
 
-A clear and concise description of what you expected to happen.
 
-### Screenshots
 
-If applicable, add screenshots to help explain your problem.
+## Additional context
 
-### Platform you are having the issue on:
-
-### Additional context
-
-Add any other context about the problem here.
