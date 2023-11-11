@@ -1,0 +1,33 @@
+mutation InitAppEnvironments(
+  $devEnv: EnvironmentInput!
+  $stagingEnv: EnvironmentInput!
+  $prodEnv: EnvironmentInput!
+  $devAdminKeys: [EnvironmentKeyInput],
+  $stagAdminKeys: [EnvironmentKeyInput]
+  $prodAdminKeys: [EnvironmentKeyInput]
+) {
+  devEnvironment: createEnvironment(environmentData: $devEnv, adminKeys: $devAdminKeys) {
+    environment {
+      id
+      name
+      createdAt
+      identityKey
+    }
+  }
+  stagingEnvironment: createEnvironment(environmentData: $stagingEnv, adminKeys: $stagAdminKeys) {
+    environment {
+      id
+      name
+      createdAt
+      identityKey
+    }
+  }
+  prodEnvironment: createEnvironment(environmentData: $prodEnv, adminKeys: $prodAdminKeys) {
+    environment {
+      id
+      name
+      createdAt
+      identityKey
+    }
+  }
+}

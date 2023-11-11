@@ -6,10 +6,11 @@ import { Fragment, useState } from 'react'
 import { FaTrash, FaTimes, FaExclamationTriangle } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
-import { DeleteApp } from '@/apollo/mutations/deleteApp.gql'
-import { GetApps } from '@/apollo/queries/getApps.gql'
+import { DeleteApplication } from '@/graphql/mutations/deleteApp.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
 import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
+import { Alert } from '../common/Alert'
 
 export default function DeleteAppDialog(props: {
   organisationId: string
@@ -20,7 +21,7 @@ export default function DeleteAppDialog(props: {
   const { organisationId, appId, appName, teamName } = props
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [typedName, setTypedName] = useState<string>('')
-  const [deleteApp, { loading }] = useMutation(DeleteApp)
+  const [deleteApp, { loading }] = useMutation(DeleteApplication)
   const router = useRouter()
 
   const reset = () => {
@@ -126,14 +127,21 @@ export default function DeleteAppDialog(props: {
                     <div className="mt-2 space-y-6">
                       <p className="text-sm text-gray-500">Permanently delete this App</p>
 
-                      <div className=" rounded-lg bg-orange-800/30 text-orange-500 p-4 w-full flex items-center gap-4">
-                        <FaExclamationTriangle />
-                        <div>
-                          <span className="font-bold">Warning: This is permanent!</span> <br />
-                          Once you delete this App, you will not be able to decrypt any data that
-                          was encrypted with these keys.
+                      <Alert variant="danger" icon={true}>
+                        <div className="space-y-1">
+                          <p className="font-bold">Warning: This is permanent!</p>
+
+                          <p>
+                            Deleting this App will permanently delete all environments and secrets
+                            associated with it.
+                          </p>
+
+                          <p>
+                            Once you delete this App, you will not be able to decrypt any data that
+                            was encrypted with this App&apos;s KMS keys.
+                          </p>
                         </div>
-                      </div>
+                      </Alert>
 
                       <div className="flex flex-col justify-center max-w-md mx-auto">
                         <label
@@ -149,7 +157,7 @@ export default function DeleteAppDialog(props: {
                           maxLength={64}
                           value={typedName}
                           placeholder="MyApp"
-                          onChange={(e) => setTypedName(e.target.value.replace(/[^a-z0-9]/gi, ''))}
+                          onChange={(e) => setTypedName(e.target.value)}
                         />
                       </div>
                     </div>

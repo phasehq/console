@@ -1,0 +1,8 @@
+mutation CreateEnvToken($envId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {
+  createEnvironmentToken(envId: $envId, name: $name, identityKey: $identityKey, token: $token, wrappedKeyShare: $wrappedKeyShare) {
+    environmentToken {
+      id
+      createdAt
+    }
+  }
+}

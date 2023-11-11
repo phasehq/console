@@ -15,6 +15,7 @@ RUN set -ex \
     && apk add --virtual rundeps $runDeps \
     && apk del .build-deps
 
+RUN apk add --no-cache curl
 RUN addgroup -S app && adduser -S app -G app
 ADD . /app
 WORKDIR /app

@@ -11,11 +11,12 @@ def allow_new_app(organisation):
     Returns:
         bool: Whether or not to allow creating an app for the given org
     """
-    FREE_APP_LIMIT = 1
+    FREE_APP_LIMIT = 3
     PRO_APP_LIMIT = 10
 
-    current_app_count = App.objects.filter(organisation=organisation, is_deleted=False).count()
-    
+    current_app_count = App.objects.filter(
+        organisation=organisation, is_deleted=False).count()
+
     if organisation.plan == Organisation.FREE_PLAN and current_app_count >= FREE_APP_LIMIT:
         return False
     elif organisation.plan == Organisation.PRO_PLAN and current_app_count >= PRO_APP_LIMIT:
