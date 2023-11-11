@@ -29,7 +29,7 @@ export const AccountSeedChecker = (props: AccountSeedCheckProps) => {
             readOnly={isCorrect(index) ? true : false}
             //maxLength={25}
             className={clsx(
-              'font-mono w-full',
+              'font-mono w-full ph-no-capture',
               isCorrect(index) && '!bg-emerald-400/20 !text-emerald-500'
             )}
           />
