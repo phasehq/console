@@ -34,7 +34,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
       icon: <MdOutlineKey />,
       title: 'Sudo password',
       description:
-        "Please set up a strong 'sudo' password to continue. This will be used to to perform administrative tasks and to encrypt keys locally on this device.",
+        "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
     },
   ])
 
@@ -74,7 +74,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
           icon: <MdOutlineKey />,
           title: 'Sudo password',
           description:
-            "Please set up a strong 'sudo' password to continue. This will be used to to perform administrative tasks and to encrypt keys locally on this device.",
+            "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
         },
       ])
 
