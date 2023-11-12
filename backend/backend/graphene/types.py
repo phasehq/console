@@ -176,7 +176,7 @@ class SecretType(DjangoObjectType):
         # interfaces = (relay.Node, )
 
     def resolve_history(self, info):
-        return SecretEvent.objects.filter(secret_id=self.id).order_by('timestamp')
+        return SecretEvent.objects.filter(secret_id=self.id, event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE]).order_by('timestamp')
 
 
 class KMSLogType(ObjectType):
