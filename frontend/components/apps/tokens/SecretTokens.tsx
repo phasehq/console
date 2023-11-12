@@ -598,14 +598,21 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                 )}
               </div>
 
+              <div className="flex items-center gap-2">
+                {tokenEnvironments.map(({ envType }: { envType: string }) => (
+                  <div
+                    key={envType}
+                    className="rounded-full py-1 px-3 text-zinc-700 ring-1 ring-inset ring-zinc-900/1 dark:text-zinc-400 dark:ring-white/10"
+                  >
+                    {envType}
+                  </div>
+                ))}
+              </div>
+
               <div className={clsx(isExpired && 'text-red-500')}>
                 {isExpired ? 'Expired' : 'Expires'}{' '}
                 {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
               </div>
-
-              {tokenEnvironments.map(({ envType }: { envType: string }) => (
-                <div key={envType}>{envType}</div>
-              ))}
             </div>
           </div>
         </div>
