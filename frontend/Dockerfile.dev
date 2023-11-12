@@ -6,12 +6,12 @@ WORKDIR /app
 
 # Copy over package files 
 COPY package.json ./
-COPY package-lock.json ./
+COPY yarn.lock ./
 
 # Install dependencies
-RUN npm install
+RUN yarn install --frozen-lockfile --no-cache && yarn cache clean
 
 # Copy all files 
 COPY . .
 
-CMD ["npm", "run", "dev"]
+CMD ["yarn", "dev"]
