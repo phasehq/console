@@ -566,6 +566,18 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
 
     const allowDelete = activeUserIsAdmin || token.createdBy!.self
 
+    const identityKeys = token.keys.map((key) => key.identityKey)
+
+    const { data } = useQuery(GetAppEnvironments, {
+      variables: {
+        appId,
+      },
+    })
+
+    const tokenEnvironments = data.appEnvironments.filter((env: EnvironmentType) =>
+      identityKeys.includes(env.identityKey)
+    )
+
     return (
       <div className="flex items-center w-full justify-between p-2 group">
         <div className="flex items-center gap-4">
@@ -590,6 +602,10 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                 {isExpired ? 'Expired' : 'Expires'}{' '}
                 {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
               </div>
+
+              {tokenEnvironments.map(({ idx, name }: { idx: number; name: string }) => (
+                <div key={idx}>{name}</div>
+              ))}
             </div>
           </div>
         </div>
