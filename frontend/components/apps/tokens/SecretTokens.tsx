@@ -603,8 +603,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                 {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
               </div>
 
-              {tokenEnvironments.map(({ idx, name }: { idx: number; name: string }) => (
-                <div key={idx}>{name}</div>
+              {tokenEnvironments.map(({ envType }: { envType: string }) => (
+                <div key={envType}>{envType}</div>
               ))}
             </div>
           </div>
