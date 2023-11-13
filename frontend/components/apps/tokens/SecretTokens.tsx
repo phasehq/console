@@ -602,7 +602,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                 {tokenEnvironments.map(({ envType }: { envType: string }) => (
                   <div
                     key={envType}
-                    className="rounded-full py-1 px-3 text-zinc-700 ring-1 ring-inset ring-zinc-900/1 dark:text-zinc-400 dark:ring-white/10"
+                    className="rounded-full py-1 px-3 text-zinc-700 ring-1 ring-inset ring-zinc-900/10 dark:text-zinc-400 dark:ring-white/10"
                   >
                     {envType}
                   </div>
