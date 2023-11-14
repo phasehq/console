@@ -486,7 +486,7 @@ const OverrideDialog = (props: {
   const { secretId, secretName, environment, override } = props
 
   const [createOverride] = useMutation(CreateNewPersonalSecret)
-  const [removeOverride] = useMutation(DeletePersonalSecret)
+  const [removeOverride] = useMutation(RemovePersonalSecret)
 
   const [value, setValue] = useState<string>(override?.value || '')
 
