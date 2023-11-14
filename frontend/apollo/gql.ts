@@ -31,7 +31,7 @@ const documents = {
     "mutation UpdateSecret($id: ID!, $secretData: SecretInput!) {\n  editSecret(id: $id, secretData: $secretData) {\n    secret {\n      id\n      updatedAt\n    }\n  }\n}": types.UpdateSecretDocument,
     "mutation InitAppEnvironments($devEnv: EnvironmentInput!, $stagingEnv: EnvironmentInput!, $prodEnv: EnvironmentInput!, $devAdminKeys: [EnvironmentKeyInput], $stagAdminKeys: [EnvironmentKeyInput], $prodAdminKeys: [EnvironmentKeyInput]) {\n  devEnvironment: createEnvironment(\n    environmentData: $devEnv\n    adminKeys: $devAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  stagingEnvironment: createEnvironment(\n    environmentData: $stagingEnv\n    adminKeys: $stagAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  prodEnvironment: createEnvironment(\n    environmentData: $prodEnv\n    adminKeys: $prodAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.InitAppEnvironmentsDocument,
     "mutation LogSecretRead($id: ID!) {\n  readSecret(id: $id) {\n    ok\n  }\n}": types.LogSecretReadDocument,
-    "mutation DeletePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}": types.DeletePersonalSecretDocument,
+    "mutation RemovePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}": types.RemovePersonalSecretDocument,
     "mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {\n  createOrganisationMember(\n    orgId: $orgId\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n    inviteId: $inviteId\n  ) {\n    orgMember {\n      id\n      email\n      createdAt\n      role\n    }\n  }\n}": types.AcceptOrganisationInviteDocument,
     "mutation DeleteOrgInvite($inviteId: ID!) {\n  deleteInvitation(inviteId: $inviteId) {\n    ok\n  }\n}": types.DeleteOrgInviteDocument,
     "mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}": types.RemoveMemberDocument,
@@ -151,7 +151,7 @@ export function graphql(source: "mutation LogSecretRead($id: ID!) {\n  readSecre
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation DeletePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}"): (typeof documents)["mutation DeletePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}"];
+export function graphql(source: "mutation RemovePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}"): (typeof documents)["mutation RemovePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
