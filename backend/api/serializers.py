@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import CustomUser, Environment, EnvironmentKey, Organisation, Secret, ServiceToken, UserToken
+from .models import CustomUser, Environment, EnvironmentKey, Organisation, Secret, ServiceToken, UserToken, PersonalSecret
 
 
 def find_index_by_id(dictionaries, target_id):
@@ -38,10 +38,31 @@ class OrganisationSerializer(serializers.ModelSerializer):
             return Organisation(**validated_data)
 
 
+class PersonalSecretSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonalSecret
+        fields = '__all__'
+
+
 class SecretSerializer(serializers.ModelSerializer):
+    override = serializers.SerializerMethodField()
+
     class Meta:
         model = Secret
         fields = '__all__'
+
+    def get_override(self, obj):
+        # Assuming 'request' is passed to the context of the serializer.
+        org_member = self.context.get('org_member')
+        if org_member:
+
+            try:
+                personal_secret = PersonalSecret.objects.get(
+                    secret=obj, user=org_member)
+                return PersonalSecretSerializer(personal_secret).data
+            except PersonalSecret.DoesNotExist:
+                return None
+        return None
 
 
 class EnvironmentSerializer(serializers.ModelSerializer):
