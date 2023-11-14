@@ -500,6 +500,16 @@ const OverrideDialog = (props: {
     setIsOpen(true)
   }
 
+  const handleDeleteOverride = async () => {
+    await removeOverride({
+      variables: {
+        secretId,
+      },
+    })
+    setValue('')
+    toast.success('Removed personal secret')
+  }
+
   const handleUpdateOverride = async () => {
     if (value.length > 0) {
       const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
@@ -513,18 +523,10 @@ const OverrideDialog = (props: {
         },
       })
       toast.success('Saved personal secret')
-    } else if (override?.value !== undefined && value === '') {
-      await removeOverride({
-        variables: {
-          secretId,
-        },
-      })
-      toast.success('Removed personal secret')
     }
   }
 
   const handleClose = () => {
-    handleUpdateOverride()
     closeModal()
   }
 
@@ -533,7 +535,7 @@ const OverrideDialog = (props: {
       <div className="flex items-center justify-center">
         <Button variant="outline" onClick={openModal} title="Override this value">
           <FaUserEdit
-            className={clsx(override?.value && override.value.length > 0 && 'text-emerald-500')}
+            className={clsx(override?.value && override.value.length > 0 && 'text-amber-500')}
           />{' '}
           <span className="hidden 2xl:block text-xs">Override</span>
         </Button>
@@ -594,8 +596,13 @@ const OverrideDialog = (props: {
                     ></textarea>
                   </div>
 
-                  <div className="flex justify-end">
-                    <Button variant="primary" onClick={handleClose}>
+                  <div className="flex justify-end gap-2 items-center">
+                    {override && (
+                      <Button variant="danger" onClick={handleDeleteOverride}>
+                        Delete
+                      </Button>
+                    )}
+                    <Button variant="primary" onClick={handleUpdateOverride}>
                       Save
                     </Button>
                   </div>
