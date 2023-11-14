@@ -1,7 +1,8 @@
 import {
   ApiSecretEventEventTypeChoices,
+  EnvironmentType,
   Maybe,
-  SecretEventType,
+  PersonalSecretType,
   SecretTagType,
   SecretType,
 } from '@/apollo/graphql'
@@ -14,24 +15,27 @@ import {
   FaTrashAlt,
   FaHistory,
   FaPlus,
-  FaUser,
   FaTags,
   FaCheckSquare,
   FaSquare,
   FaKey,
-  FaInfo,
+  FaUserEdit,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { Dialog, Popover, Transition } from '@headlessui/react'
+import { Dialog, Transition } from '@headlessui/react'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
 import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
+import { CreateNewPersonalSecret } from '@/graphql/mutations/environments/createPersonalSecret.gql'
+import { DeletePersonalSecret } from '@/graphql/mutations/environments/removePersonalSecret.gql'
 import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
 import { Avatar } from '../common/Avatar'
 import { SecretPropertyDiffs } from './SecretPropertyDiffs'
+import { encryptAsymmetric } from '@/utils/crypto'
+import { toast } from 'react-toastify'
 
 export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
@@ -267,7 +271,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
     <>
       <div className="flex items-center justify-center">
         <Button variant="outline" onClick={openModal} title="View secret history">
-          <FaHistory /> History
+          <FaHistory /> <span className="hidden 2xl:block text-xs">History</span>
         </Button>
       </div>
 
@@ -297,13 +301,18 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                 leaveTo="opacity-0 scale-95"
               >
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture">
-                        {secret.key}
-                      </span>{' '}
-                      history
-                    </h3>
+                  <Dialog.Title as="div" className="flex w-full justify-between items-start">
+                    <div>
+                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                        <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture">
+                          {secret.key}
+                        </span>{' '}
+                        history
+                      </h3>
+                      <div className="text-neutral-500 text-sm">
+                        View the chronological history of changes made to this secret.
+                      </div>
+                    </div>
 
                     <Button variant="text" onClick={closeModal}>
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
@@ -393,7 +402,8 @@ const CommentDialog = (props: {
     <>
       <div className="flex items-center justify-center">
         <Button variant="outline" onClick={openModal} title="Update comment">
-          <FaRegCommentDots className={clsx(comment && 'text-emerald-500')} /> Comment
+          <FaRegCommentDots className={clsx(comment && 'text-emerald-500')} />{' '}
+          <span className="hidden 2xl:block text-xs">Comment</span>
         </Button>
       </div>
 
@@ -423,14 +433,20 @@ const CommentDialog = (props: {
                 leaveTo="opacity-0 scale-95"
               >
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Update{' '}
-                      <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture">
-                        {secretName}
-                      </span>{' '}
-                      comment
-                    </h3>
+                  <Dialog.Title as="div" className="flex w-full justify-between items-start">
+                    <div>
+                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                        Update{' '}
+                        <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture">
+                          {secretName}
+                        </span>{' '}
+                        comment
+                      </h3>
+                      <div className="text-neutral-500 text-sm">
+                        Add a comment to this secret to provide additional information, context or
+                        instructions.
+                      </div>
+                    </div>
 
                     <Button variant="text" onClick={handleClose}>
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
@@ -449,6 +465,138 @@ const CommentDialog = (props: {
                   <div className="flex justify-end">
                     <Button variant="secondary" onClick={handleClose}>
                       Done
+                    </Button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+    </>
+  )
+}
+
+const OverrideDialog = (props: {
+  secretId: string
+  secretName: string
+  environment: EnvironmentType
+  override: Maybe<PersonalSecretType>
+}) => {
+  const { secretId, secretName, environment, override } = props
+
+  const [createOverride] = useMutation(CreateNewPersonalSecret)
+  const [removeOverride] = useMutation(DeletePersonalSecret)
+
+  const [value, setValue] = useState<string>(override?.value || '')
+
+  const [isOpen, setIsOpen] = useState<boolean>(false)
+
+  const closeModal = () => {
+    setIsOpen(false)
+  }
+
+  const openModal = () => {
+    setIsOpen(true)
+  }
+
+  const handleUpdateOverride = async () => {
+    if (value.length > 0) {
+      const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
+
+      await createOverride({
+        variables: {
+          newPersonalSecret: {
+            secretId,
+            value: encryptedValue,
+          },
+        },
+      })
+      toast.success('Saved personal secret')
+    } else if (override?.value !== undefined && value === '') {
+      await removeOverride({
+        variables: {
+          secretId,
+        },
+      })
+      toast.success('Removed personal secret')
+    }
+  }
+
+  const handleClose = () => {
+    handleUpdateOverride()
+    closeModal()
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-center">
+        <Button variant="outline" onClick={openModal} title="Override this value">
+          <FaUserEdit
+            className={clsx(override?.value && override.value.length > 0 && 'text-emerald-500')}
+          />{' '}
+          <span className="hidden 2xl:block text-xs">Override</span>
+        </Button>
+      </div>
+
+      <Transition appear show={isOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={handleClose}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Title as="div" className="flex w-full justify-between items-start">
+                    <div>
+                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                        Override{' '}
+                        <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture">
+                          {secretName}
+                        </span>{' '}
+                      </h3>
+                      <div className="text-neutral-500 text-sm">
+                        Override this value with a Personal Secret. This value will only be visible
+                        to you, and will not affect the value of this secret in the environment or
+                        other users.
+                      </div>
+                    </div>
+
+                    <Button variant="text" onClick={handleClose}>
+                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
+                    </Button>
+                  </Dialog.Title>
+
+                  <div className="space-y-6 p-4 ph-no-capture">
+                    <textarea
+                      rows={5}
+                      value={value}
+                      className="w-full"
+                      onChange={(e) => setValue(e.target.value)}
+                    ></textarea>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button variant="primary" onClick={handleClose}>
+                      Save
                     </Button>
                   </div>
                 </Dialog.Panel>
@@ -551,6 +699,7 @@ const DeleteConfirmDialog = (props: {
 export default function SecretRow(props: {
   orgId: string
   secret: SecretType
+  environment: EnvironmentType
   cannonicalSecret: SecretType | undefined
   secretNames: Array<Partial<SecretType>>
   handlePropertyChange: Function
@@ -640,8 +789,8 @@ export default function SecretRow(props: {
               onClick={toggleReveal}
               title={isRevealed ? 'Mask value' : 'Reveal value'}
             >
-              <span className="py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
-              {isRevealed ? 'Mask' : 'Reveal'}
+              <span className="2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+              <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
             </Button>
           </div>
 
@@ -660,6 +809,19 @@ export default function SecretRow(props: {
               secretId={secret.id}
               comment={secret.comment}
               handlePropertyChange={handlePropertyChange}
+            />
+          </div>
+          <div
+            className={clsx(
+              (!secret.override || secret.override.value.length === 0) &&
+                'opacity-0 group-hover:opacity-100 transition-opacity ease'
+            )}
+          >
+            <OverrideDialog
+              secretName={secret.key}
+              secretId={secret.id}
+              environment={props.environment}
+              override={secret.override!}
             />
           </div>
         </div>
