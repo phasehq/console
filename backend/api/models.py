@@ -341,3 +341,14 @@ class SecretEvent(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
+
+
+class PersonalSecret(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
+    user = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE)
+    value = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
