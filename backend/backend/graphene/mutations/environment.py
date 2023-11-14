@@ -3,8 +3,8 @@ from api.utils import get_resolver_request_meta
 from backend.graphene.utils.permissions import member_can_access_org, user_can_access_app, user_can_access_environment, user_is_org_member
 import graphene
 from graphql import GraphQLError
-from api.models import App, Environment, EnvironmentKey, EnvironmentToken, Organisation, OrganisationMember, Secret, SecretEvent, SecretFolder, SecretTag, UserToken, ServiceToken
-from backend.graphene.types import AppType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, SecretFolderType, SecretTagType, SecretType, ServiceTokenType, UserTokenType
+from api.models import App, Environment, EnvironmentKey, EnvironmentToken, Organisation, OrganisationMember, PersonalSecret, Secret, SecretEvent, SecretFolder, SecretTag, UserToken, ServiceToken
+from backend.graphene.types import AppType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, PersonalSecretType, SecretFolderType, SecretTagType, SecretType, ServiceTokenType, UserTokenType
 from datetime import datetime
 
 
@@ -33,6 +33,11 @@ class SecretInput(graphene.InputObjectType):
     value = graphene.String(required=True)
     tags = graphene.List(graphene.String)
     comment = graphene.String()
+
+
+class PersonalSecretInput(graphene.InputObjectType):
+    secret_id = graphene.ID()
+    value = graphene.String()
 
 
 class CreateEnvironmentMutation(graphene.Mutation):
@@ -488,3 +493,58 @@ class ReadSecretMutation(graphene.Mutation):
                                                     value=secret.value, comment=secret.comment, event_type=SecretEvent.READ, ip_address=ip_address, user_agent=user_agent)
             read_event.tags.set(secret.tags.all())
             return ReadSecretMutation(ok=True)
+
+
+class CreatePersonalSecretMutation(graphene.Mutation):
+
+    class Arguments:
+        override_data = PersonalSecretInput(PersonalSecretInput)
+
+    override = graphene.Field(PersonalSecretType)
+
+    @classmethod
+    def mutate(cls, root, info, override_data):
+        secret = Secret.objects.get(id=override_data.secret_id)
+        org = secret.environment.app.organisation
+        org_member = OrganisationMember.objects.get(
+            organisation=org, user=info.context.user)
+
+        if not user_can_access_environment(info.context.user, secret.environment.id):
+            raise GraphQLError(
+                "You don't have access to this secret")
+
+        if PersonalSecret.objects.filter(secret_id=override_data.secret_id, user=org_member).exists():
+            override = PersonalSecret.objects.get(
+                secret_id=override_data.secret_id, user=org_member)
+            override.value = override_data.value
+            override.save()
+
+        else:
+            override = PersonalSecret.objects.create(
+                secret_id=override_data.secret_id, user=org_member, value=override_data.value)
+
+        return CreatePersonalSecretMutation(override=override)
+
+
+class DeletePersonalSecretMutation(graphene.Mutation):
+
+    class Arguments:
+        secret_id = graphene.ID()
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, secret_id):
+        secret = Secret.objects.get(id=secret_id)
+        org = secret.environment.app.organisation
+        org_member = OrganisationMember.objects.get(
+            organisation=org, user=info.context.user)
+
+        if not user_can_access_environment(info.context.user, secret.environment.id):
+            raise GraphQLError(
+                "You don't have access to this secret")
+
+        PersonalSecret.objects.filter(
+            secret_id=secret_id, user=org_member).delete()
+
+        return DeletePersonalSecretMutation(ok=True)
