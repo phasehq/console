@@ -47,19 +47,8 @@ export default function AppsHome({ params }: { params: { team: string } }) {
           </Link>
         ))}
         {organisation && apps && (
-          <div className="bg-white/50 dark:bg-neutral-800 opacity-40 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl p-8 flex flex-col gap-y-20">
-            <div className="mx-auto my-auto">
-              <NewAppDialog
-                buttonLabel={
-                  <div className="w-full flex mx-auto my-auto items-center">
-                    <FaPlus size="32" className="text-neutral-800 dark:text-neutral-300" />
-                  </div>
-                }
-                buttonVariant="text"
-                organisation={organisation}
-                appCount={apps.length}
-              />
-            </div>
+          <div className="bg-zinc-100 dark:bg-neutral-800 opacity-80 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl flex flex-col gap-y-20 min-h-[252px]">
+            <NewAppDialog organisation={organisation} appCount={apps.length} />
           </div>
         )}
       </div>
