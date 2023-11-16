@@ -22,7 +22,7 @@ import {
   FaUserEdit,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { Dialog, Transition } from '@headlessui/react'
+import { Dialog, Switch, Transition } from '@headlessui/react'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
 import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
@@ -485,12 +485,20 @@ const OverrideDialog = (props: {
 }) => {
   const { secretId, secretName, environment, override } = props
 
-  const [createOverride] = useMutation(CreateNewPersonalSecret)
-  const [removeOverride] = useMutation(RemovePersonalSecret)
+  const [createOverride, { loading: createLoading }] = useMutation(CreateNewPersonalSecret)
+  const [removeOverride, { loading: removeLoading }] = useMutation(RemovePersonalSecret)
 
   const [value, setValue] = useState<string>(override?.value || '')
+  const [isActive, setIsActive] = useState<boolean>(override ? override.isActive : true)
 
+  const [saved, setSaved] = useState<boolean>(true)
   const [isOpen, setIsOpen] = useState<boolean>(false)
+
+  const reset = () => {
+    console.log('reset')
+    setValue(override?.value || '')
+    setIsActive(override?.isActive || true)
+  }
 
   const closeModal = () => {
     setIsOpen(false)
@@ -500,14 +508,37 @@ const OverrideDialog = (props: {
     setIsOpen(true)
   }
 
+  const valueUpdated = () => {
+    if (override === null && value === '') return false
+    else {
+      return override?.value !== value
+    }
+  }
+
+  const isActiveUpdated = () => {
+    if (override === null && value === '') return false
+    else {
+      return isActive !== override?.isActive
+    }
+  }
+
+  const saveRequired = valueUpdated() || isActiveUpdated()
+
+  useEffect(() => {
+    if (saveRequired) setSaved(false)
+  }, [saveRequired])
+
+  const toggleIsActive = () => setIsActive(!isActive)
+
   const handleDeleteOverride = async () => {
     await removeOverride({
       variables: {
         secretId,
       },
     })
-    setValue('')
+    reset()
     toast.success('Removed personal secret')
+    closeModal()
   }
 
   const handleUpdateOverride = async () => {
@@ -519,25 +550,37 @@ const OverrideDialog = (props: {
           newPersonalSecret: {
             secretId,
             value: encryptedValue,
+            isActive,
           },
         },
       })
       toast.success('Saved personal secret')
+      setSaved(true)
+      closeModal()
     }
   }
 
   const handleClose = () => {
+    if (saveRequired && !saved) reset()
     closeModal()
   }
+
+  const activeOverride = override?.value?.length && override?.isActive
 
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="Override this value">
-          <FaUserEdit
-            className={clsx(override?.value && override.value.length > 0 && 'text-amber-500')}
-          />{' '}
-          <span className="hidden 2xl:block text-xs">Override</span>
+        <Button
+          variant="outline"
+          onClick={openModal}
+          title={
+            activeOverride ? 'A Personal Secret is overriding this value' : 'Override this value'
+          }
+        >
+          <FaUserEdit className={clsx(activeOverride && 'text-amber-500')} />{' '}
+          <span className={clsx('hidden 2xl:block text-xs', activeOverride && 'text-amber-500')}>
+            Override
+          </span>
         </Button>
       </div>
 
@@ -587,7 +630,7 @@ const OverrideDialog = (props: {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="space-y-6 p-4 ph-no-capture">
+                  <div className="space-y-6 py-4 ph-no-capture">
                     <textarea
                       rows={5}
                       value={value}
@@ -596,15 +639,45 @@ const OverrideDialog = (props: {
                     ></textarea>
                   </div>
 
-                  <div className="flex justify-end gap-2 items-center">
-                    {override && (
-                      <Button variant="danger" onClick={handleDeleteOverride}>
-                        Delete
+                  <div className="flex justify-between gap-2 items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm">Activate override</div>
+                      <Switch
+                        checked={isActive}
+                        onChange={toggleIsActive}
+                        className={`${
+                          isActive
+                            ? 'bg-emerald-400/10 ring-emerald-400/20'
+                            : 'bg-neutral-500/40 ring-neutral-500/30'
+                        } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+                      >
+                        <span className="sr-only">Set as active</span>
+                        <span
+                          className={`${
+                            isActive ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-black'
+                          } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+                        ></span>
+                      </Switch>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {override && (
+                        <Button
+                          variant="danger"
+                          onClick={handleDeleteOverride}
+                          isLoading={removeLoading}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                      <Button
+                        variant="primary"
+                        onClick={handleUpdateOverride}
+                        isLoading={createLoading}
+                        disabled={!saveRequired}
+                      >
+                        Save
                       </Button>
-                    )}
-                    <Button variant="primary" onClick={handleUpdateOverride}>
-                      Save
-                    </Button>
+                    </div>
                   </div>
                 </Dialog.Panel>
               </Transition.Child>
@@ -820,7 +893,7 @@ export default function SecretRow(props: {
           </div>
           <div
             className={clsx(
-              (!secret.override || secret.override.value.length === 0) &&
+              (!secret.override || secret.override.value?.length === 0) &&
                 'opacity-0 group-hover:opacity-100 transition-opacity ease'
             )}
           >
