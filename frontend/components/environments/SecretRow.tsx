@@ -634,7 +634,7 @@ const OverrideDialog = (props: {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="space-y-6 py-4">
+                  <div className="space-y-4 py-8">
                     <div className="space-y-2">
                       <div className="text-sm font-medium text-black dark:text-white">
                         Override Value
