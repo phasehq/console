@@ -1,10 +1,4 @@
-import {
-  ApiSecretEventEventTypeChoices,
-  Maybe,
-  SecretEventType,
-  SecretTagType,
-  SecretType,
-} from '@/apollo/graphql'
+import { ApiSecretEventEventTypeChoices, SecretTagType, SecretType } from '@/apollo/graphql'
 import { Fragment, useEffect, useState } from 'react'
 import {
   FaEyeSlash,
@@ -14,15 +8,13 @@ import {
   FaTrashAlt,
   FaHistory,
   FaPlus,
-  FaUser,
   FaTags,
   FaCheckSquare,
   FaSquare,
   FaKey,
-  FaInfo,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { Dialog, Popover, Transition } from '@headlessui/react'
+import { Dialog, Transition } from '@headlessui/react'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
 import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
@@ -234,8 +226,8 @@ const TagsDialog = (props: {
   )
 }
 
-const HistoryDialog = (props: { secret: SecretType }) => {
-  const { secret } = props
+const HistoryDialog = (props: { secret: SecretType; handlePropertyChange: Function }) => {
+  const { secret, handlePropertyChange } = props
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
@@ -347,6 +339,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                                 secret={secret}
                                 historyItem={historyItem!}
                                 index={index}
+                                handlePropertyChange={handlePropertyChange}
                               />
                             )}
                           </div>
@@ -646,7 +639,7 @@ export default function SecretRow(props: {
           </div>
 
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-            <HistoryDialog secret={secret} />
+            <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
           </div>
 
           <div

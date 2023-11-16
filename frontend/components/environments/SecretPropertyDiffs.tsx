@@ -1,13 +1,16 @@
 import { SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
 import { areTagsAreSame } from '@/utils/tags'
 import { Tag } from './SecretRow'
+import { FaUndoAlt } from 'react-icons/fa'
+import { Button } from '../common/Button'
 
 export const SecretPropertyDiffs = (props: {
   secret: SecretType
   historyItem: SecretEventType
   index: number
+  handlePropertyChange: Function
 }) => {
-  const { secret, historyItem, index } = props
+  const { secret, historyItem, index, handlePropertyChange } = props
 
   const previousItem = secret.history![index - 1]!
 
@@ -25,6 +28,11 @@ export const SecretPropertyDiffs = (props: {
     return removedTags
   }
 
+  const handleRestoreValue = (value: string) => {
+    console.log('restore', value)
+    handlePropertyChange(secret.id, 'value', value)
+  }
+
   return (
     <>
       {historyItem!.key !== previousItem.key && (
@@ -40,14 +48,25 @@ export const SecretPropertyDiffs = (props: {
       )}
 
       {historyItem!.value !== previousItem.value && (
-        <div className="pl-3 font-mono">
-          <span className="text-neutral-500 mr-2">VALUE:</span>
-          <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture">
-            {previousItem.value}
-          </s>
-          <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture">
-            {historyItem!.value}
-          </span>
+        <div className="pl-3 font-mono space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-neutral-500 mr-2">VALUE:</span>
+          </div>
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between bg-red-200 dark:bg-red-950">
+              <s className=" text-red-500 ph-no-capture">{previousItem.value}</s>
+              <Button
+                variant="secondary"
+                onClick={() => handleRestoreValue(previousItem.value)}
+                title="Restore this value"
+              >
+                <FaUndoAlt />
+              </Button>
+            </div>
+            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture">
+              {historyItem!.value}
+            </span>
+          </div>
         </div>
       )}
 
