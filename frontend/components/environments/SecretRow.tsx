@@ -495,7 +495,6 @@ const OverrideDialog = (props: {
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const reset = () => {
-    console.log('reset')
     setValue(override?.value || '')
     setIsActive(override?.isActive || true)
   }
