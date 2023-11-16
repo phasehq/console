@@ -168,7 +168,8 @@ class SecretEventType(DjangoObjectType):
 class PersonalSecretType(DjangoObjectType):
     class Meta:
         model = PersonalSecret
-        fields = ('id', 'secret', 'user', 'value', 'created_at', 'updated_at')
+        fields = ('id', 'secret', 'user', 'value',
+                  'is_active', 'created_at', 'updated_at')
 
 
 class SecretType(DjangoObjectType):

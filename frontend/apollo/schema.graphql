@@ -195,7 +195,8 @@ type PersonalSecretType {
   id: String!
   secret: SecretType!
   user: OrganisationMemberType!
-  value: String!
+  value: String
+  isActive: Boolean!
   createdAt: DateTime
   updatedAt: DateTime!
 }
@@ -468,6 +469,7 @@ type CreatePersonalSecretMutation {
 input PersonalSecretInput {
   secretId: ID
   value: String
+  isActive: Boolean
 }
 
 type DeletePersonalSecretMutation {

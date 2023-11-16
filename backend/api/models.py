@@ -348,7 +348,8 @@ class PersonalSecret(models.Model):
     secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.CASCADE)
-    value = models.TextField()
+    value = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)

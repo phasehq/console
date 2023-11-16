@@ -38,6 +38,7 @@ class SecretInput(graphene.InputObjectType):
 class PersonalSecretInput(graphene.InputObjectType):
     secret_id = graphene.ID()
     value = graphene.String()
+    is_active = graphene.Boolean()
 
 
 class CreateEnvironmentMutation(graphene.Mutation):
@@ -513,15 +514,11 @@ class CreatePersonalSecretMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have access to this secret")
 
-        if PersonalSecret.objects.filter(secret_id=override_data.secret_id, user=org_member).exists():
-            override = PersonalSecret.objects.get(
-                secret_id=override_data.secret_id, user=org_member)
-            override.value = override_data.value
-            override.save()
-
-        else:
-            override = PersonalSecret.objects.create(
-                secret_id=override_data.secret_id, user=org_member, value=override_data.value)
+        override, created = PersonalSecret.objects.get_or_create(
+            secret_id=override_data.secret_id, user=org_member)
+        override.value = override_data.value
+        override.is_active = override_data.is_active
+        override.save()
 
         return CreatePersonalSecretMutation(override=override)
 
