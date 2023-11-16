@@ -20,6 +20,8 @@ import {
   FaSquare,
   FaKey,
   FaUserEdit,
+  FaTrash,
+  FaCheck,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Dialog, Switch, Transition } from '@headlessui/react'
@@ -499,6 +501,11 @@ const OverrideDialog = (props: {
     setIsActive(override?.isActive || true)
   }
 
+  const clear = () => {
+    setValue('')
+    setIsActive(true)
+  }
+
   const closeModal = () => {
     setIsOpen(false)
   }
@@ -535,28 +542,26 @@ const OverrideDialog = (props: {
         secretId,
       },
     })
-    reset()
+    clear()
     toast.success('Removed personal secret')
     closeModal()
   }
 
   const handleUpdateOverride = async () => {
-    if (value.length > 0) {
-      const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
+    const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
 
-      await createOverride({
-        variables: {
-          newPersonalSecret: {
-            secretId,
-            value: encryptedValue,
-            isActive,
-          },
+    await createOverride({
+      variables: {
+        newPersonalSecret: {
+          secretId,
+          value: encryptedValue,
+          isActive,
         },
-      })
-      toast.success('Saved personal secret')
-      setSaved(true)
-      closeModal()
-    }
+      },
+    })
+    toast.success('Saved personal secret')
+    setSaved(true)
+    closeModal()
   }
 
   const handleClose = () => {
@@ -564,7 +569,7 @@ const OverrideDialog = (props: {
     closeModal()
   }
 
-  const activeOverride = override?.value?.length && override?.isActive
+  const activeOverride = override && override?.isActive
 
   return (
     <>
@@ -619,8 +624,8 @@ const OverrideDialog = (props: {
                       </h3>
                       <div className="text-neutral-500 text-sm">
                         Override this value with a Personal Secret. This value will only be visible
-                        to you, and will not affect the value of this secret in the environment or
-                        other users.
+                        to you, and will not alter the value of this secret for other users or 3rd
+                        party services.
                       </div>
                     </div>
 
@@ -629,18 +634,22 @@ const OverrideDialog = (props: {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="space-y-6 py-4 ph-no-capture">
-                    <textarea
-                      rows={5}
-                      value={value}
-                      className="w-full"
-                      onChange={(e) => setValue(e.target.value)}
-                    ></textarea>
-                  </div>
-
-                  <div className="flex justify-between gap-2 items-center">
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm">Activate override</div>
+                  <div className="space-y-6 py-4">
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-black dark:text-white">
+                        Override Value
+                      </div>
+                      <textarea
+                        rows={5}
+                        value={value}
+                        className="w-full ph-no-capture font-mono"
+                        onChange={(e) => setValue(e.target.value)}
+                      ></textarea>
+                    </div>
+                    <div className="flex items-center justify-start gap-2">
+                      <div className="text-sm text-black dark:text-white font-medium">
+                        Activate Secret Override
+                      </div>
                       <Switch
                         checked={isActive}
                         onChange={toggleIsActive}
@@ -658,25 +667,29 @@ const OverrideDialog = (props: {
                         ></span>
                       </Switch>
                     </div>
-                    <div className="flex items-center gap-4">
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
                       {override && (
                         <Button
                           variant="danger"
                           onClick={handleDeleteOverride}
                           isLoading={removeLoading}
                         >
+                          <FaTrash />
                           Remove
                         </Button>
                       )}
-                      <Button
-                        variant="primary"
-                        onClick={handleUpdateOverride}
-                        isLoading={createLoading}
-                        disabled={!saveRequired}
-                      >
-                        Save
-                      </Button>
                     </div>
+                    <Button
+                      variant="primary"
+                      onClick={handleUpdateOverride}
+                      isLoading={createLoading}
+                      disabled={!saveRequired}
+                    >
+                      Save
+                    </Button>
                   </div>
                 </Dialog.Panel>
               </Transition.Child>
@@ -892,7 +905,7 @@ export default function SecretRow(props: {
           </div>
           <div
             className={clsx(
-              (!secret.override || secret.override.value?.length === 0) &&
+              (!secret.override || !secret.override.isActive) &&
                 'opacity-0 group-hover:opacity-100 transition-opacity ease'
             )}
           >
