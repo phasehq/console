@@ -240,8 +240,8 @@ const TagsDialog = (props: {
   )
 }
 
-const HistoryDialog = (props: { secret: SecretType }) => {
-  const { secret } = props
+const HistoryDialog = (props: { secret: SecretType; handlePropertyChange: Function }) => {
+  const { secret, handlePropertyChange } = props
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
@@ -358,6 +358,7 @@ const HistoryDialog = (props: { secret: SecretType }) => {
                                 secret={secret}
                                 historyItem={historyItem!}
                                 index={index}
+                                handlePropertyChange={handlePropertyChange}
                               />
                             )}
                           </div>
@@ -887,7 +888,7 @@ export default function SecretRow(props: {
           </div>
 
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-            <HistoryDialog secret={secret} />
+            <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
           </div>
 
           <div
