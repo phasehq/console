@@ -61,6 +61,7 @@ export const SecretPropertyDiffs = (props: {
                 title="Restore this value"
               >
                 <FaUndoAlt />
+                Restore
               </Button>
             </div>
             <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture">
