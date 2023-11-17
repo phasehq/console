@@ -175,6 +175,7 @@ type SecretType {
   createdAt: DateTime
   updatedAt: DateTime!
   history: [SecretEventType]
+  override: PersonalSecretType
 }
 
 type SecretFolderType {
@@ -188,6 +189,16 @@ type SecretTagType {
   id: String!
   name: String!
   color: String!
+}
+
+type PersonalSecretType {
+  id: String!
+  secret: SecretType!
+  user: OrganisationMemberType!
+  value: String
+  isActive: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime!
 }
 
 type EnvironmentType {
@@ -315,6 +326,8 @@ type Mutation {
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
   deleteSecret(id: ID!): DeleteSecretMutation
   readSecret(id: ID!): ReadSecretMutation
+  createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
+  removeOverride(secretId: ID): DeletePersonalSecretMutation
 }
 
 type CreateOrganisationMutation {
@@ -446,5 +459,19 @@ type DeleteSecretMutation {
 }
 
 type ReadSecretMutation {
+  ok: Boolean
+}
+
+type CreatePersonalSecretMutation {
+  override: PersonalSecretType
+}
+
+input PersonalSecretInput {
+  secretId: ID
+  value: String
+  isActive: Boolean
+}
+
+type DeletePersonalSecretMutation {
   ok: Boolean
 }
