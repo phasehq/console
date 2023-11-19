@@ -67,6 +67,8 @@ export function Button(buttonProps: ButtonProps) {
     />
   )
 
+  const spinnerColor = variant === 'danger' ? 'red' : 'emerald'
+
   return (
     <button
       {...buttonProps}
@@ -74,7 +76,7 @@ export function Button(buttonProps: ButtonProps) {
       disabled={buttonProps.disabled || isLoading}
     >
       {!isLoading && arrow === 'left' && arrowIcon}
-      {isLoading && <Spinner size={'sm'} />}
+      {isLoading && <Spinner size={'sm'} color={spinnerColor} />}
       {children}
       {!isLoading && arrow === 'right' && arrowIcon}
     </button>
