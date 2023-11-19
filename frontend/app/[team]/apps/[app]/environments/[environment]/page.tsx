@@ -308,6 +308,14 @@ export default function Environment({
               decryptedSecret.history = decryptedHistory
             }
 
+            if (secret.override?.value) {
+              decryptedSecret.override!.value = await decryptAsymmetric(
+                secret.override?.value,
+                envKeys.privateKey,
+                envKeys.publicKey
+              )
+            }
+
             return decryptedSecret
           })
         )
@@ -595,6 +603,7 @@ export default function Environment({
                   <SecretRow
                     orgId={organisation.id}
                     secret={secret as SecretType}
+                    environment={environment}
                     cannonicalSecret={cannonicalSecret(secret.id)}
                     secretNames={secretNames}
                     handlePropertyChange={handleUpdateSecretProperty}
