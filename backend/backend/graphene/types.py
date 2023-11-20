@@ -2,7 +2,7 @@ import graphene
 from enum import Enum
 from graphene import ObjectType, relay
 from graphene_django import DjangoObjectType
-from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, OrganisationMemberInvite, Secret, SecretEvent, SecretFolder, SecretTag, ServiceToken, UserToken
+from api.models import CustomUser, Environment, EnvironmentKey, EnvironmentToken, Organisation, App, OrganisationMember, OrganisationMemberInvite, PersonalSecret, Secret, SecretEvent, SecretFolder, SecretTag, ServiceToken, UserToken
 from logs.dynamodb_models import KMSLog
 from allauth.socialaccount.models import SocialAccount
 
@@ -165,18 +165,41 @@ class SecretEventType(DjangoObjectType):
                   'version', 'tags', 'comment', 'event_type', 'timestamp', 'user', 'ip_address', 'user_agent', 'environment')
 
 
+class PersonalSecretType(DjangoObjectType):
+    class Meta:
+        model = PersonalSecret
+        fields = ('id', 'secret', 'user', 'value',
+                  'is_active', 'created_at', 'updated_at')
+
+
 class SecretType(DjangoObjectType):
 
     history = graphene.List(SecretEventType)
+    override = graphene.Field(PersonalSecretType)
 
     class Meta:
         model = Secret
         fields = ('id', 'key', 'value', 'folder', 'version', 'tags',
-                  'comment', 'created_at', 'updated_at', 'history')
+                  'comment', 'created_at', 'updated_at', 'history', 'override')
         # interfaces = (relay.Node, )
 
     def resolve_history(self, info):
         return SecretEvent.objects.filter(secret_id=self.id, event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE]).order_by('timestamp')
+
+    def resolve_override(self, info):
+        if info.context.user:
+            org = self.environment.app.organisation
+            org_member = OrganisationMember.objects.get(
+                organisation=org, user=info.context.user)
+
+            try:
+                override = PersonalSecret.objects.get(
+                    secret=self, user=org_member)
+
+                if override is not None:
+                    return override
+            except:
+                return None
 
 
 class KMSLogType(ObjectType):

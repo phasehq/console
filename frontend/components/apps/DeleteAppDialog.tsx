@@ -83,7 +83,7 @@ export default function DeleteAppDialog(props: {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal}>
+        <Button variant="danger" onClick={openModal}>
           <FaTrash /> Delete
         </Button>
       </div>
@@ -163,10 +163,15 @@ export default function DeleteAppDialog(props: {
                     </div>
 
                     <div className="mt-8 flex items-center w-full justify-between">
-                      <Button variant="secondary" type="button" onClick={closeModal}>
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        onClick={closeModal}
+                        disabled={loading}
+                      >
                         Cancel
                       </Button>
-                      <Button type="submit" variant="primary">
+                      <Button type="submit" variant="danger" isLoading={loading}>
                         Delete
                       </Button>
                     </div>
