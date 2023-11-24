@@ -6,6 +6,7 @@ from backend.api.kv import write
 import json
 from django.utils import timezone
 from django.conf import settings
+from backend.api.services import ServiceConfig
 
 CLOUD_HOSTED = settings.APP_HOST == 'cloud'
 
@@ -217,6 +218,37 @@ class EnvironmentKey(models.Model):
     identity_key = models.CharField(max_length=256)
     wrapped_seed = models.CharField(max_length=256)
     wrapped_salt = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+class ServerEnvironmentKey(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    identity_key = models.CharField(max_length=256)
+    wrapped_seed = models.CharField(max_length=256)
+    wrapped_salt = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+class EnvironmentSync(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    service = models.CharField(
+        max_length=50, choices=ServiceConfig.get_service_choices())
+    options = models.JSONField()
+    authentication = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)

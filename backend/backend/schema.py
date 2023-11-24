@@ -1,4 +1,6 @@
-from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreatePersonalSecretMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeletePersonalSecretMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation, ReadSecretMutation, UpdateMemberEnvScopeMutation
+
+from .graphene.queries.syncing import resolve_server_public_key, resolve_sync_enabled
+from .graphene.mutations.environment import CreateEnvironmentKeyMutation, CreateEnvironmentMutation, CreateEnvironmentTokenMutation, CreatePersonalSecretMutation, CreateSecretFolderMutation, CreateSecretMutation, CreateSecretTagMutation, CreateServiceTokenMutation, CreateUserTokenMutation, DeletePersonalSecretMutation, DeleteSecretMutation, DeleteServiceTokenMutation, DeleteUserTokenMutation, EditSecretMutation, InitEnvSync, ReadSecretMutation, UpdateMemberEnvScopeMutation
 from .graphene.utils.permissions import user_can_access_app, user_can_access_environment, user_is_admin, user_is_org_member
 from .graphene.mutations.app import AddAppMemberMutation, CreateAppMutation, DeleteAppMutation, RemoveAppMemberMutation, RotateAppKeysMutation
 from .graphene.mutations.organisation import CreateOrganisationMemberMutation, CreateOrganisationMutation, DeleteInviteMutation, DeleteOrganisationMemberMutation, InviteOrganisationMemberMutation, UpdateOrganisationMemberRole, UpdateUserWrappedSecretsMutation
@@ -53,7 +55,16 @@ class Query(graphene.ObjectType):
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
+    server_public_key = graphene.String()
+
+    sync_enabled = graphene.Boolean(app_id=graphene.ID())
+
+    resolve_server_public_key = resolve_server_public_key
+
+    resolve_sync_enabled = resolve_sync_enabled
+
     def resolve_organisations(root, info):
+
         memberships = OrganisationMember.objects.filter(
             user=info.context.user, deleted_at=None)
 
@@ -396,6 +407,8 @@ class Mutation(graphene.ObjectType):
     create_environment = CreateEnvironmentMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
+
+    init_env_sync = InitEnvSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

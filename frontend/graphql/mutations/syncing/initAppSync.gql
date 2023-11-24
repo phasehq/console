@@ -1,0 +1,7 @@
+mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {
+  initEnvSync(appId: $appId, envKeys: $envKeys) {
+    app {
+      id
+    }
+  }
+}
