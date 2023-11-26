@@ -27,17 +27,16 @@
   <img src="img/members.png" alt="Phase Console" width="45%"/>
 </div>
 
-- **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables
-
-- **[Hold your keys](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your root keys via 24 word mnemonic phrase
-- **Secret management**: Diffs, version control and Point-in-time Recovery
-- **RBAC**: Fine-grained, role-based and cryptographic access control, per application, per environment.
-- **Service Tokens**: Authenticate CI runners, build tools and production environment with granualar-scope
-- **Secret referencing**: Inherit secrets to create sophisticated configurations
-- **[Audit Logs]()**: Compelte visibility into every change and access event 
-- **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure
-- **[Phase KMS](https://phase.dev)**: A zero knowledge key management service
-- **[SDKs](https://docs.phase.dev/sdks)**: Encrypt / decrypt data with a few lines of code.
+|    | **Features**                                                                                                 |
+| -- | ------------------------------------------------------------------------------------------------------------ |
+| 📺 | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables) |
+| 🔐  | **[Hold your keys](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your root keys via 24 word mnemonic phrase                                                         |
+| 🤫  | **Secret management**: Diffs, version control and Point-in-time Recovery                                                       |
+| 🙋  | **RBAC**: Fine-grained, role-based and cryptographic access control, per application, per environment.          |
+| 🔑  | **Service Tokens**: Authenticate CI runners, build tools and production environment with granualar-scope                     |
+| ⛓️  | **Secret referencing & overrides**: Create personal secrets. Inherit values from other secrets            |
+| 🥡  | **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure                           |
+| 🔍  | **[Audit Logs]()**: Compelte visibility into every change and access event  
 
 And much more.
 
