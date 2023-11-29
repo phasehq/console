@@ -1,0 +1,20 @@
+query GetAppSyncStatus($appId: ID!) {
+  syncEnabled(appId: $appId)
+  appSyncs(appId: $appId) {
+    id
+    environment {
+      id
+      name
+      envType
+    }
+    serviceInfo {
+      id
+      name
+    }
+    options
+    isActive
+    lastSync
+    createdAt
+  }
+  serverPublicKey 
+}

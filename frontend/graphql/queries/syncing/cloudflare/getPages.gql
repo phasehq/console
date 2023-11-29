@@ -1,0 +1,7 @@
+query GetCfPages($accountId: String!, $accessToken: String!) {
+  cloudflarePagesProjects(accountId: $accountId, accessToken: $accessToken) {
+    name
+    deploymentId
+    environments
+  }
+}

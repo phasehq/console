@@ -20,6 +20,8 @@ type Query {
   serviceTokens(appId: ID): [ServiceTokenType]
   serverPublicKey: String
   syncEnabled(appId: ID): Boolean
+  appSyncs(appId: ID): [EnvironmentSyncType]
+  cloudflarePagesProjects(accountId: String, accessToken: String): [CloudFlarePagesType]
 }
 
 type OrganisationType {
@@ -311,6 +313,37 @@ type ServerEnvironmentKeyType {
   updatedAt: DateTime!
 }
 
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  options: JSONString!
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  serviceInfo: ServiceType
+}
+
+"""
+Allows use of a JSON String for input / output from the GraphQL schema.
+
+Use of this type is *not recommended* as you lose the benefits of having a defined, static
+schema (one of the key benefits of GraphQL).
+"""
+scalar JSONString
+
+type ServiceType {
+  id: String
+  name: String
+  resourceType: String
+  subresourceType: String
+}
+
+type CloudFlarePagesType {
+  name: String
+  deploymentId: String
+  environments: [String]
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
@@ -329,6 +362,7 @@ type Mutation {
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
+  createCloudflarePagesSync(accessToken: String, accountId: String, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -426,6 +460,10 @@ type CreateEnvironmentTokenMutation {
 
 type InitEnvSync {
   app: AppType
+}
+
+type CreateCloudflarePagesSync {
+  sync: EnvironmentSyncType
 }
 
 type CreateUserTokenMutation {

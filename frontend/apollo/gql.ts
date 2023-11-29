@@ -39,6 +39,8 @@ const documents = {
     "mutation UpdateMemberRole($memberId: ID!, $role: String!) {\n  updateOrganisationMemberRole(memberId: $memberId, role: $role) {\n    orgMember {\n      id\n      role\n    }\n  }\n}": types.UpdateMemberRoleDocument,
     "mutation UpdateWrappedSecrets($orgId: ID!, $wrappedKeyring: String!, $wrappedRecovery: String!) {\n  updateMemberWrappedSecrets(\n    orgId: $orgId\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n  ) {\n    orgMember {\n      id\n    }\n  }\n}": types.UpdateWrappedSecretsDocument,
     "mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}": types.RotateAppKeyDocument,
+    "mutation CreateNewCfPagesSync($envId: ID!, $projectName: String!, $deploymentId: ID!, $projectEnv: String!, $accessToken: String!, $accountId: String!) {\n  createCloudflarePagesSync(\n    envId: $envId\n    projectName: $projectName\n    deploymentId: $deploymentId\n    projectEnv: $projectEnv\n    accessToken: $accessToken\n    accountId: $accountId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}": types.CreateNewCfPagesSyncDocument,
+    "mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  initEnvSync(appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n    }\n  }\n}": types.InitAppSyncingDocument,
     "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}": types.CreateNewUserTokenDocument,
     "mutation RevokeUserToken($tokenId: ID!) {\n  deleteUserToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeUserTokenDocument,
     "query GetAppMembers($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role\n  }\n}": types.GetAppMembersDocument,
@@ -53,13 +55,15 @@ const documents = {
     "query VerifyInvite($inviteId: ID!) {\n  validateInvite(inviteId: $inviteId) {\n    id\n    organisation {\n      id\n      name\n    }\n    inviteeEmail\n    invitedBy {\n      email\n    }\n    apps {\n      id\n      name\n    }\n  }\n}": types.VerifyInviteDocument,
     "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n  }\n}": types.GetAppEnvironmentsDocument,
     "query GetAppSecretsLogs($appId: ID!, $start: BigInt, $end: BigInt) {\n  logs(appId: $appId, start: $start, end: $end) {\n    secrets {\n      id\n      key\n      value\n      tags {\n        id\n        name\n        color\n      }\n      version\n      comment\n      timestamp\n      ipAddress\n      userAgent\n      user {\n        email\n        username\n        fullName\n        avatarUrl\n      }\n      eventType\n      environment {\n        id\n        envType\n        name\n      }\n      secret {\n        id\n      }\n    }\n  }\n  secretsLogsCount(appId: $appId)\n  environmentKeys(appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    environment {\n      id\n    }\n  }\n}": types.GetAppSecretsLogsDocument,
-    "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  serverPublicKey\n}": types.GetAppSyncStatusDocument,
     "query GetEnvironmentKey($envId: ID!, $appId: ID!) {\n  environmentKeys(environmentId: $envId, appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvironmentKeyDocument,
     "query GetEnvironmentTokens($envId: ID!) {\n  environmentTokens(environmentId: $envId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n  }\n}": types.GetEnvironmentTokensDocument,
     "query GetEnvSecretsKV($envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n    value\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvSecretsKvDocument,
     "query GetSecretTags($orgId: ID!) {\n  secretTags(orgId: $orgId) {\n    id\n    name\n    color\n  }\n}": types.GetSecretTagsDocument,
     "query GetSecrets($appId: ID!, $envId: ID!) {\n  secrets(envId: $envId) {\n    id\n    key\n    value\n    tags {\n      id\n      name\n      color\n    }\n    comment\n    createdAt\n    history {\n      id\n      key\n      value\n      tags {\n        id\n        name\n        color\n      }\n      version\n      comment\n      timestamp\n      ipAddress\n      userAgent\n      user {\n        email\n        username\n        fullName\n        avatarUrl\n      }\n      eventType\n    }\n    override {\n      value\n      isActive\n    }\n  }\n  appEnvironments(appId: $appId, environmentId: $envId) {\n    id\n    name\n    envType\n    identityKey\n  }\n  environmentKeys(appId: $appId, environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetSecretsDocument,
     "query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    expiresAt\n    keys {\n      id\n      identityKey\n    }\n  }\n}": types.GetServiceTokensDocument,
+    "query GetCfPages($accountId: String!, $accessToken: String!) {\n  cloudflarePagesProjects(accountId: $accountId, accessToken: $accessToken) {\n    name\n    deploymentId\n    environments\n  }\n}": types.GetCfPagesDocument,
+    "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  appSyncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    createdAt\n  }\n  serverPublicKey\n}": types.GetAppSyncStatusDocument,
+    "query GetAppSyncs($appId: ID!) {\n  appSyncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    createdAt\n  }\n}": types.GetAppSyncsDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
 };
 
@@ -184,6 +188,14 @@ export function graphql(source: "mutation RotateAppKey($id: ID!, $appToken: Stri
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation CreateNewCfPagesSync($envId: ID!, $projectName: String!, $deploymentId: ID!, $projectEnv: String!, $accessToken: String!, $accountId: String!) {\n  createCloudflarePagesSync(\n    envId: $envId\n    projectName: $projectName\n    deploymentId: $deploymentId\n    projectEnv: $projectEnv\n    accessToken: $accessToken\n    accountId: $accountId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}"): (typeof documents)["mutation CreateNewCfPagesSync($envId: ID!, $projectName: String!, $deploymentId: ID!, $projectEnv: String!, $accessToken: String!, $accountId: String!) {\n  createCloudflarePagesSync(\n    envId: $envId\n    projectName: $projectName\n    deploymentId: $deploymentId\n    projectEnv: $projectEnv\n    accessToken: $accessToken\n    accountId: $accountId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  initEnvSync(appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  initEnvSync(appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}"): (typeof documents)["mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -240,10 +252,6 @@ export function graphql(source: "query GetAppSecretsLogs($appId: ID!, $start: Bi
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  serverPublicKey\n}"): (typeof documents)["query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  serverPublicKey\n}"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
 export function graphql(source: "query GetEnvironmentKey($envId: ID!, $appId: ID!) {\n  environmentKeys(environmentId: $envId, appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}"): (typeof documents)["query GetEnvironmentKey($envId: ID!, $appId: ID!) {\n  environmentKeys(environmentId: $envId, appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -265,6 +273,18 @@ export function graphql(source: "query GetSecrets($appId: ID!, $envId: ID!) {\n 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    expiresAt\n    keys {\n      id\n      identityKey\n    }\n  }\n}"): (typeof documents)["query GetServiceTokens($appId: ID!) {\n  serviceTokens(appId: $appId) {\n    id\n    name\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    expiresAt\n    keys {\n      id\n      identityKey\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetCfPages($accountId: String!, $accessToken: String!) {\n  cloudflarePagesProjects(accountId: $accountId, accessToken: $accessToken) {\n    name\n    deploymentId\n    environments\n  }\n}"): (typeof documents)["query GetCfPages($accountId: String!, $accessToken: String!) {\n  cloudflarePagesProjects(accountId: $accountId, accessToken: $accessToken) {\n    name\n    deploymentId\n    environments\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  appSyncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    createdAt\n  }\n  serverPublicKey\n}"): (typeof documents)["query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  appSyncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    createdAt\n  }\n  serverPublicKey\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetAppSyncs($appId: ID!) {\n  appSyncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    createdAt\n  }\n}"): (typeof documents)["query GetAppSyncs($appId: ID!) {\n  appSyncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    createdAt\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
