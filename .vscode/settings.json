@@ -23,7 +23,7 @@
   },
   "prettier.ignorePath": ".gitignore",
   "[python]": {
-    "editor.defaultFormatter": "ms-python.autopep8",
+    "editor.defaultFormatter": "ms-python.black-formatter",
     "editor.formatOnSave": true
   } // Don't run prettier for files listed in .gitignore
 }
