@@ -142,30 +142,6 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
         return UpdateMemberEnvScopeMutation(app=app)
 
 
-class InitEnvSync(graphene.Mutation):
-    class Arguments:
-        app_id = graphene.ID()
-        env_keys = graphene.List(EnvironmentKeyInput)
-
-    app = graphene.Field(AppType)
-
-    @classmethod
-    def mutate(cls, root, info, app_id, env_keys):
-        user = info.context.user
-        app = App.objects.get(id=app_id)
-
-        if not user_can_access_app(user.userId, app.id):
-            raise GraphQLError("You don't have access to this app")
-
-        else:
-            # set new server env keys
-            for key in env_keys:
-                ServerEnvironmentKey.objects.create(
-                    environment_id=key.env_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt, identity_key=key.identity_key)
-
-        return InitEnvSync(app=app)
-
-
 class CreateEnvironmentTokenMutation(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID(required=True)
