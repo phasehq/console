@@ -1,25 +1,27 @@
 'use client'
 
-import GetAppSyncStatus from '@/graphql/queries/secrets/getAppSyncStatus.gql'
+import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import InitAppSyncing from '@/graphql/mutations/syncing/initAppSync.gql'
 import GetEnvironmentKey from '@/graphql/queries/secrets/getEnvironmentKey.gql'
+import GetCfPages from '@/graphql/queries/syncing/cloudflare/getPages.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/environments'
-import { EnvironmentType } from '@/apollo/graphql'
+import { EnvironmentSyncType, EnvironmentType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
-import { userIsAdmin } from '@/utils/permissions'
 import { Dialog, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { useState, Fragment, useContext } from 'react'
-import { FaUserCog, FaTimes, FaEyeSlash, FaEye, FaSync } from 'react-icons/fa'
+import { FaTimes, FaEyeSlash, FaEye, FaSync, FaAngleDoubleRight } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useSession } from 'next-auth/react'
 import { Alert } from '@/components/common/Alert'
 import { SiAmazonaws, SiCloudflare, SiGooglecloud, SiVault } from 'react-icons/si'
+import { CloudflareSyncDialog } from '@/components/syncing/CloudflareSyncDialog'
+import { relativeTimeFromDates } from '@/utils/time'
 
 const syncServices = [
   {
@@ -45,6 +47,8 @@ export default function Syncing({ params }: { params: { team: string; app: strin
   const { keyring, setKeyring } = useContext(KeyringContext)
 
   const { data } = useQuery(GetAppSyncStatus, { variables: { appId: params.app } })
+
+  const [getCloudflarePages] = useLazyQuery(GetCfPages)
 
   const { data: session } = useSession()
 
@@ -259,17 +263,72 @@ export default function Syncing({ params }: { params: { team: string; app: strin
         </div>
       )}
       {data?.syncEnabled === true && (
-        <div className="grid grid-cols-4 gap-8">
-          {syncServices.map((service) => (
-            <div
-              key={service.name}
-              className="flex flex-col justify-center items-center gap-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg cursor-pointer hover:bg-emerald-200 dark:hover:bg-emerald-900 transition ease"
-            >
-              <div className="text-5xl">{service.icon}</div>
-              <div className="text-black dark:text-white text-xl font-semibold">{service.name}</div>
+        <>
+          {data.appSyncs && data.appSyncs.length > 0 && (
+            <div className="flex flex-col gap-2 border-b border-neutral-500/40 pb-10">
+              <div className="text-2xl font-semibold pb-4">Active Syncs</div>
+              {data.appSyncs.map((sync: EnvironmentSyncType) => (
+                <div
+                  key={sync.id}
+                  className="flex justify-between items-center p-2 rounded-lg border border-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 text-sm font-medium"
+                >
+                  <div className="flex gap-4 items-center">
+                    <div className="tracking-wider text-sm">{sync.environment.envType}</div>
+                    <FaAngleDoubleRight className="text-neutral-500 shrink-0" />
+                    <div>{sync.serviceInfo?.name}</div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    {JSON.parse(sync.options)['project_name']}
+                    <span className="text-neutral-500 font-normal">
+                      ({JSON.parse(sync.options)['environment']})
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div>Created {relativeTimeFromDates(new Date(sync.createdAt))}</div>
+                    <div>Last synced {sync.lastSync || 'never'}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={clsx(
+                        'h-2 w-2 rounded-full animate-pulse',
+                        sync.isActive ? 'bg-emerald-500' : 'bg-red-500'
+                      )}
+                    ></div>
+                    {sync.isActive ? 'Active' : 'Paused'}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+
+          <div className="grid grid-cols-4 gap-8">
+            {syncServices.map((service) => (
+              <div
+                key={service.name}
+                className="flex flex-col justify-center items-center gap-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg cursor-pointer hover:bg-emerald-200 dark:hover:bg-emerald-900 transition ease"
+              >
+                <div className="text-5xl">{service.icon}</div>
+                <div className="text-black dark:text-white text-xl font-semibold">
+                  {service.name}
+                </div>
+              </div>
+            ))}
+
+            <CloudflareSyncDialog
+              appId={params.app}
+              button={
+                <div className="flex flex-col justify-center items-center gap-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg cursor-pointer hover:bg-emerald-200 dark:hover:bg-emerald-900 transition ease">
+                  <div className="text-5xl">
+                    <SiCloudflare />
+                  </div>
+                  <div className="text-black dark:text-white text-xl font-semibold">Cloudflare</div>
+                </div>
+              }
+            />
+          </div>
+        </>
       )}
     </div>
   )
