@@ -2,7 +2,6 @@ import GetCfPages from '@/graphql/queries/syncing/cloudflare/getPages.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import CreateNewCfPagesSync from '@/graphql/mutations/syncing/cloudflare/CreateCfPagesSync.gql'
-import GetAppSyncs from '@/graphql/queries/syncing/getAppSyncs.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { encryptAsymmetric } from '@/utils/crypto'
 import { Fragment, useEffect, useState } from 'react'
@@ -64,7 +63,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; onComplete: Fu
           accessToken: encryptedAccessToken,
           accountId: encryptedAccountId,
         },
-        refetchQueries: [{ query: GetAppSyncs, variables: { appId } }],
+        refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
       })
 
       toast.success('Created new Sync!')

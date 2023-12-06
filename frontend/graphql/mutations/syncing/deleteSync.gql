@@ -1,0 +1,5 @@
+mutation DeleteSync($syncId: ID!) {
+  deleteEnvSync(syncId: $syncId) {
+    ok
+  }
+}

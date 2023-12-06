@@ -13,7 +13,7 @@ import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { Dialog, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { useState, Fragment, useContext } from 'react'
-import { FaTimes, FaEyeSlash, FaEye, FaSync, FaAngleDoubleRight } from 'react-icons/fa'
+import { FaTimes, FaEyeSlash, FaEye, FaSync } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -21,7 +21,8 @@ import { useSession } from 'next-auth/react'
 import { Alert } from '@/components/common/Alert'
 import { SiAmazonaws, SiCloudflare, SiGooglecloud, SiVault } from 'react-icons/si'
 import { CloudflareSyncDialog } from '@/components/syncing/CloudflareSyncDialog'
-import { relativeTimeFromDates } from '@/utils/time'
+import { SyncCard } from '@/components/syncing/SyncCard'
+import { ManageSyncDialog } from '@/components/syncing/ManageSyncDialog'
 
 const syncServices = [
   {
@@ -46,7 +47,10 @@ export default function Syncing({ params }: { params: { team: string; app: strin
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring, setKeyring } = useContext(KeyringContext)
 
-  const { data } = useQuery(GetAppSyncStatus, { variables: { appId: params.app } })
+  const { data } = useQuery(GetAppSyncStatus, {
+    variables: { appId: params.app },
+    pollInterval: 10000,
+  })
 
   const [getCloudflarePages] = useLazyQuery(GetCfPages)
 
@@ -268,37 +272,12 @@ export default function Syncing({ params }: { params: { team: string; app: strin
             <div className="flex flex-col gap-2 border-b border-neutral-500/40 pb-10">
               <div className="text-2xl font-semibold pb-4">Active Syncs</div>
               {data.appSyncs.map((sync: EnvironmentSyncType) => (
-                <div
+                <ManageSyncDialog
                   key={sync.id}
-                  className="flex justify-between items-center p-2 rounded-lg border border-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 text-sm font-medium"
-                >
-                  <div className="flex gap-4 items-center">
-                    <div className="tracking-wider text-sm">{sync.environment.envType}</div>
-                    <FaAngleDoubleRight className="text-neutral-500 shrink-0" />
-                    <div>{sync.serviceInfo?.name}</div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    {JSON.parse(sync.options)['project_name']}
-                    <span className="text-neutral-500 font-normal">
-                      ({JSON.parse(sync.options)['environment']})
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div>Created {relativeTimeFromDates(new Date(sync.createdAt))}</div>
-                    <div>Last synced {sync.lastSync || 'never'}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={clsx(
-                        'h-2 w-2 rounded-full animate-pulse',
-                        sync.isActive ? 'bg-emerald-500' : 'bg-red-500'
-                      )}
-                    ></div>
-                    {sync.isActive ? 'Active' : 'Paused'}
-                  </div>
-                </div>
+                  sync={sync}
+                  appId={params.app}
+                  button={<SyncCard sync={sync} />}
+                />
               ))}
             </div>
           )}

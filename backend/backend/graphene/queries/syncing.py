@@ -1,7 +1,13 @@
-from api.crypto import decrypt_asymmetric, encrypt_asymmetric, get_server_keypair
+from api.utils.crypto import (
+    decrypt_asymmetric,
+    encrypt_asymmetric,
+    get_server_keypair,
+)
 from api.models import Environment, EnvironmentSync, ServerEnvironmentKey
-from backend.graphene.utils.syncing.cloudflare.pages import list_cloudflare_pages
-from backend.graphene.utils.permissions import user_can_access_app
+from backend.api.notifier import notify_slack
+from api.utils.syncing.cloudflare.pages import list_cloudflare_pages
+from api.utils.permissions import user_can_access_app, user_can_access_environment
+from api.services import ServiceConfig
 from graphql import GraphQLError
 
 
@@ -36,6 +42,11 @@ def resolve_app_syncs(root, info, app_id):
     if not user_can_access_app(info.context.user.userId, app_id):
         raise GraphQLError("You don't have access to this app")
 
-    # EnvironmentSync.objects.all().delete()
+    return EnvironmentSync.objects.filter(environment__app__id=app_id, deleted_at=None)
 
-    return EnvironmentSync.objects.filter(environment__app__id=app_id)
+
+def resolve_env_syncs(root, info, env_id):
+    if not user_can_access_environment(info.context.user.userId, env_id):
+        raise GraphQLError("You don't have access to this environment")
+
+    return EnvironmentSync.objects.filter(environment_id=env_id, deleted_at=None)

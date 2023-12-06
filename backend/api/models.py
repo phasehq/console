@@ -11,6 +11,8 @@ import json
 from django.utils import timezone
 from django.conf import settings
 from api.services import ServiceConfig
+from api.tasks import trigger_sync_tasks
+
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -200,6 +202,16 @@ class Environment(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
 
+    def save(self, *args, **kwargs):
+        # Call the "real" save() method to save the Secret
+        super().save(*args, **kwargs)
+
+        # Trigger all sync jobs associated with this environment
+        [
+            trigger_sync_tasks(env_sync)
+            for env_sync in EnvironmentSync.objects.filter(environment=self)
+        ]
+
 
 class EnvironmentKey(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
@@ -235,6 +247,17 @@ class ServerEnvironmentKey(models.Model):
 
 
 class EnvironmentSync(models.Model):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    TIMED_OUT = "timed_out"
+    FAILED = "failed"
+
+    STATUS_OPTIONS = [
+        (IN_PROGRESS, "In progress"),
+        (COMPLETED, "Completed"),
+        (TIMED_OUT, "Timed out"),
+        (FAILED, "Failed"),
+    ]
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     service = models.CharField(
@@ -247,10 +270,28 @@ class EnvironmentSync(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     last_sync = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_OPTIONS,
+        default=IN_PROGRESS,
+    )
 
     def delete(self, *args, **kwargs):
         self.deleted_at = timezone.now()
         self.save()
+
+
+class EnvironmentSyncEvent(models.Model):
+    meta = models.JSONField(null=True)
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    env_sync = models.ForeignKey(EnvironmentSync, on_delete=models.CASCADE)
+    status = models.CharField(
+        max_length=16,
+        choices=EnvironmentSync.STATUS_OPTIONS,
+        default=EnvironmentSync.IN_PROGRESS,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
 
 
 class EnvironmentToken(models.Model):
@@ -333,6 +374,15 @@ class Secret(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        # Call the "real" save() method to save the Secret
+        super().save(*args, **kwargs)
+
+        # Update the 'updated_at' timestamp of the associated Environment
+        if self.environment:
+            self.environment.updated_at = timezone.now()
+            self.environment.save()
 
 
 class SecretEvent(models.Model):

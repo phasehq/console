@@ -1,13 +1,15 @@
 from api.services import ServiceConfig
+from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 import graphene
 from enum import Enum
-from graphene import ObjectType, relay
+from graphene import ObjectType, relay, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
     CustomUser,
     Environment,
     EnvironmentKey,
     EnvironmentSync,
+    EnvironmentSyncEvent,
     EnvironmentToken,
     Organisation,
     App,
@@ -238,8 +240,16 @@ class ServiceType(ObjectType):
     subresource_type = graphene.String()
 
 
+class EnvironmentSyncEventType(DjangoObjectType):
+    class Meta:
+        model = EnvironmentSyncEvent
+        fields = ("id", "env_sync", "status", "created_at", "completed_at", "meta")
+
+
 class EnvironmentSyncType(DjangoObjectType):
     service_info = graphene.Field(ServiceType)
+    credentials = graphene.JSONString()
+    history = graphene.List(NonNull(EnvironmentSyncEventType), required=True)
 
     class Meta:
         model = EnvironmentSync
@@ -251,11 +261,34 @@ class EnvironmentSyncType(DjangoObjectType):
             "is_active",
             "created_at",
             "last_sync",
+            "status",
+            "credentials",
+            "history",
         )
 
     def resolve_service_info(self, info):
         service_config = ServiceConfig.get_service_config(self.service.lower())
         return service_config
+
+    def resolve_credentials(self, info):
+        service_config = ServiceConfig.get_service_config(self.service)
+
+        pk, sk = get_server_keypair()
+
+        authentication_credentials = {}
+        for credential_key in service_config.get("expected_credentials", []):
+            credential_value = decrypt_asymmetric(
+                self.authentication.get(credential_key), sk.hex(), pk.hex()
+            )
+            if credential_value is not None:
+                authentication_credentials[credential_key] = credential_value
+
+        return authentication_credentials
+
+    def resolve_history(self, info):
+        return EnvironmentSyncEvent.objects.filter(env_sync=self).order_by(
+            "-created_at"
+        )
 
 
 class UserTokenType(DjangoObjectType):

@@ -1,12 +1,17 @@
-from api.crypto import get_server_keypair
-from backend.graphene.utils.syncing.cloudflare.pages import CloudFlarePagesType
+from api.utils.crypto import get_server_keypair
+from api.tasks import sync_cloudflare_pages, trigger_sync_tasks
+from api.utils.syncing.cloudflare.pages import (
+    CloudFlarePagesType,
+    get_authentication_credentials,
+)
 import graphene
 from graphql import GraphQLError
-from backend.graphene.utils.permissions import user_can_access_app
+from api.utils.permissions import user_can_access_app, user_can_access_environment
 from backend.graphene.types import AppType, EnvironmentSyncType
 from .environment import EnvironmentKeyInput
 from api.models import App, Environment, EnvironmentSync, ServerEnvironmentKey
 from api.services import ServiceConfig
+from django.utils import timezone
 
 
 class InitEnvSync(graphene.Mutation):
@@ -78,7 +83,7 @@ class CreateCloudflarePagesSync(graphene.Mutation):
         }
 
         existing_syncs = EnvironmentSync.objects.filter(
-            environment=env, service=service_id
+            environment=env, service=service_id, deleted_at=None
         )
 
         for es in existing_syncs:
@@ -99,4 +104,95 @@ class CreateCloudflarePagesSync(graphene.Mutation):
             authentication=authentication_credentials,
         )
 
+        trigger_sync_tasks(sync)
+
         return CreateCloudflarePagesSync(sync=sync)
+
+
+class UpdateCloudflarePagesSyncCredentials(graphene.Mutation):
+    class Arguments:
+        sync_id = graphene.ID()
+        access_token = graphene.String()
+        account_id = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(cls, root, info, sync_id, access_token, account_id):
+        sync = EnvironmentSync.objects.get(id=sync_id)
+
+        if not user_can_access_environment(
+            info.context.user.userId, sync.environment.id
+        ):
+            raise GraphQLError("You don't have access to this environment")
+
+        authentication_credentials = {
+            "access_token": access_token,
+            "account_id": account_id,
+        }
+
+        sync.authentication = authentication_credentials
+        sync.updated_at = timezone.now()
+        sync.save()
+
+        return UpdateCloudflarePagesSyncCredentials(sync=sync)
+
+
+class DeleteSync(graphene.Mutation):
+    class Arguments:
+        sync_id = graphene.ID()
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, sync_id):
+        env_sync = EnvironmentSync.objects.get(id=sync_id)
+
+        if not user_can_access_environment(
+            info.context.user.userId, env_sync.environment.id
+        ):
+            raise GraphQLError("You don't have access to this environment")
+
+        env_sync.delete()
+
+        return DeleteSync(ok=True)
+
+
+class ToggleSyncActive(graphene.Mutation):
+    class Arguments:
+        sync_id = graphene.ID()
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, sync_id):
+        env_sync = EnvironmentSync.objects.get(id=sync_id)
+
+        if not user_can_access_environment(
+            info.context.user.userId, env_sync.environment.id
+        ):
+            raise GraphQLError("You don't have access to this environment")
+
+        env_sync.delete()
+
+        return ToggleSyncActive(ok=True)
+
+
+class TriggerSync(graphene.Mutation):
+    class Arguments:
+        sync_id = graphene.ID()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(cls, root, info, sync_id):
+        env_sync = EnvironmentSync.objects.get(id=sync_id)
+
+        if not user_can_access_environment(
+            info.context.user.userId, env_sync.environment.id
+        ):
+            raise GraphQLError("You don't have access to this environment")
+
+        trigger_sync_tasks(env_sync)
+
+        return TriggerSync(sync=env_sync)

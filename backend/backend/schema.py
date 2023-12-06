@@ -1,9 +1,10 @@
-from .graphene.utils.syncing.cloudflare.pages import CloudFlarePagesType
+from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from .graphene.queries.syncing import (
     resolve_server_public_key,
     resolve_sync_enabled,
     resolve_cloudflare_pages_projects,
     resolve_app_syncs,
+    resolve_env_syncs,
 )
 from .graphene.mutations.environment import (
     CreateEnvironmentKeyMutation,
@@ -23,8 +24,15 @@ from .graphene.mutations.environment import (
     ReadSecretMutation,
     UpdateMemberEnvScopeMutation,
 )
-from .graphene.mutations.syncing import CreateCloudflarePagesSync, InitEnvSync
-from .graphene.utils.permissions import (
+from .graphene.mutations.syncing import (
+    CreateCloudflarePagesSync,
+    DeleteSync,
+    InitEnvSync,
+    ToggleSyncActive,
+    TriggerSync,
+    UpdateCloudflarePagesSyncCredentials,
+)
+from api.utils.permissions import (
     user_can_access_app,
     user_can_access_environment,
     user_is_admin,
@@ -155,19 +163,23 @@ class Query(graphene.ObjectType):
 
     app_syncs = graphene.List(EnvironmentSyncType, app_id=graphene.ID())
 
+    env_syncs = graphene.List(EnvironmentSyncType, env_id=graphene.ID())
+
     cloudflare_pages_projects = graphene.List(
         CloudFlarePagesType,
         account_id=graphene.String(),
         access_token=graphene.String(),
     )
 
-    # --------------------------------------------------------------------#
+    # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
 
     resolve_sync_enabled = resolve_sync_enabled
 
     resolve_app_syncs = resolve_app_syncs
+
+    resolve_env_syncs = resolve_env_syncs
 
     resolve_cloudflare_pages_projects = resolve_cloudflare_pages_projects
 
@@ -550,7 +562,11 @@ class Mutation(graphene.ObjectType):
     create_environment_token = CreateEnvironmentTokenMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
+    delete_env_sync = DeleteSync.Field()
+    trigger_sync = TriggerSync.Field()
+    toggle_sync_active = ToggleSyncActive.Field()
     create_cloudflare_pages_sync = CreateCloudflarePagesSync.Field()
+    update_cloudflare_sync_credentials = UpdateCloudflarePagesSyncCredentials.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

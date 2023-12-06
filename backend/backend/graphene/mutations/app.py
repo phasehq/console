@@ -1,6 +1,6 @@
 from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import EnvironmentKeyInput
-from backend.graphene.utils.permissions import user_can_access_app, user_is_admin, user_is_org_member
+from api.utils.permissions import user_can_access_app, user_is_admin, user_is_org_member
 from ee.feature_flags import allow_new_app
 import graphene
 from django.utils import timezone
@@ -9,7 +9,7 @@ from api.models import App, EnvironmentKey, Organisation, OrganisationMember
 from backend.graphene.types import AppType
 from django.conf import settings
 
-CLOUD_HOSTED = settings.APP_HOST == 'cloud'
+CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 class CreateAppMutation(graphene.Mutation):
@@ -26,7 +26,19 @@ class CreateAppMutation(graphene.Mutation):
     app = graphene.Field(AppType)
 
     @classmethod
-    def mutate(cls, root, info, id, organisation_id, name, identity_key, app_token, app_seed, wrapped_key_share, app_version):
+    def mutate(
+        cls,
+        root,
+        info,
+        id,
+        organisation_id,
+        name,
+        identity_key,
+        app_token,
+        app_seed,
+        wrapped_key_share,
+        app_version,
+    ):
         user = info.context.user
         org = Organisation.objects.get(id=organisation_id)
         if not user_is_org_member(user.userId, organisation_id):
@@ -34,16 +46,26 @@ class CreateAppMutation(graphene.Mutation):
 
         if allow_new_app(org) == False:
             raise GraphQLError(
-                'You have reached the App limit for your current plan. Please upgrade your account to add more.')
+                "You have reached the App limit for your current plan. Please upgrade your account to add more."
+            )
 
         if App.objects.filter(identity_key=identity_key).exists():
             raise GraphQLError("This app already exists")
 
-        app = App.objects.create(id=id, organisation=org, name=name, identity_key=identity_key,
-                                 app_token=app_token, app_seed=app_seed, wrapped_key_share=wrapped_key_share, app_version=app_version)
+        app = App.objects.create(
+            id=id,
+            organisation=org,
+            name=name,
+            identity_key=identity_key,
+            app_token=app_token,
+            app_seed=app_seed,
+            wrapped_key_share=wrapped_key_share,
+            app_version=app_version,
+        )
 
         org_member = OrganisationMember.objects.get(
-            organisation=org, user=info.context.user, deleted_at=None)
+            organisation=org, user=info.context.user, deleted_at=None
+        )
         org_member.apps.add(app)
 
         admin_roles = [OrganisationMember.ADMIN, OrganisationMember.OWNER]
@@ -77,11 +99,11 @@ class RotateAppKeysMutation(graphene.Mutation):
 
             # purge keys from cloudflare cache
             purged = purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}")
+                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}"
+            )
 
             if not deleted or not purged:
-                raise GraphQLError(
-                    "Failed to delete app keys. Please try again.")
+                raise GraphQLError("Failed to delete app keys. Please try again.")
 
         app.app_token = app_token
         app.wrapped_key_share = wrapped_key_share
@@ -104,8 +126,7 @@ class DeleteAppMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
         if not user_is_admin(user.userId, app.organisation.id):
-            raise GraphQLError(
-                "You don't have permission to perform that action.")
+            raise GraphQLError("You don't have permission to perform that action.")
 
         if CLOUD_HOSTED:
             # delete current keys from cloudflare KV
@@ -113,11 +134,11 @@ class DeleteAppMutation(graphene.Mutation):
 
             # purge keys from cloudflare cache
             purged = purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}")
+                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}"
+            )
 
             if not deleted or not purged:
-                raise GraphQLError(
-                    "Failed to delete app keys. Please try again.")
+                raise GraphQLError("Failed to delete app keys. Please try again.")
 
         app.wrapped_key_share = ""
         app.is_deleted = True
@@ -143,13 +164,17 @@ class AddAppMemberMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        org_member = OrganisationMember.objects.get(
-            id=member_id, deleted_at=None)
+        org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
 
         app.members.add(org_member)
         for key in env_keys:
             EnvironmentKey.objects.create(
-                environment_id=key.env_id, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt, identity_key=key.identity_key)
+                environment_id=key.env_id,
+                user_id=key.user_id,
+                wrapped_seed=key.wrapped_seed,
+                wrapped_salt=key.wrapped_salt,
+                identity_key=key.identity_key,
+            )
 
         return AddAppMemberMutation(app=app)
 
@@ -169,13 +194,13 @@ class RemoveAppMemberMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        org_member = OrganisationMember.objects.get(
-            id=member_id, deleted_at=None)
+        org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
         if org_member not in app.members.all():
             raise GraphQLError("This user is not a member of this app")
         else:
             app.members.remove(org_member)
             EnvironmentKey.objects.filter(
-                environment__app=app, user_id=member_id).delete()
+                environment__app=app, user_id=member_id
+            ).delete()
 
         return RemoveAppMemberMutation(app=app)

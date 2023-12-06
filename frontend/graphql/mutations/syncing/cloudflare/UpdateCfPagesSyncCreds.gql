@@ -1,0 +1,7 @@
+mutation UpdateCfPagesSyncCreds($syncId: ID!, $accessToken: String!, $accountId: String!) {
+  updateCloudflareSyncCredentials(syncId: $syncId, accessToken: $accessToken, accountId: $accountId) {
+    sync {
+      id
+    }
+  }
+}

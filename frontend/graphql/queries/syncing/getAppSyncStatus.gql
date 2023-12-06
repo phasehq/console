@@ -14,7 +14,16 @@ query GetAppSyncStatus($appId: ID!) {
     options
     isActive
     lastSync
+    status
+    credentials
     createdAt
+    history {
+      id
+      status
+      createdAt
+      completedAt
+      meta
+    }
   }
   serverPublicKey 
 }

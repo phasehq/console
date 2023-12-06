@@ -1,10 +1,42 @@
 from django.utils import timezone
-from api.utils import get_resolver_request_meta
-from backend.graphene.utils.permissions import member_can_access_org, user_can_access_app, user_can_access_environment, user_is_org_member
+from api.utils.rest import get_resolver_request_meta
+from api.utils.permissions import (
+    member_can_access_org,
+    user_can_access_app,
+    user_can_access_environment,
+    user_is_org_member,
+)
 import graphene
 from graphql import GraphQLError
-from api.models import App, Environment, EnvironmentKey, EnvironmentToken, Organisation, OrganisationMember, PersonalSecret, Secret, SecretEvent, SecretFolder, SecretTag, ServerEnvironmentKey, UserToken, ServiceToken
-from backend.graphene.types import AppType, EnvironmentKeyType, EnvironmentTokenType, EnvironmentType, PersonalSecretType, SecretFolderType, SecretTagType, SecretType, ServiceTokenType, UserTokenType
+from api.models import (
+    App,
+    Environment,
+    EnvironmentKey,
+    EnvironmentSync,
+    EnvironmentToken,
+    Organisation,
+    OrganisationMember,
+    PersonalSecret,
+    Secret,
+    SecretEvent,
+    SecretFolder,
+    SecretTag,
+    ServerEnvironmentKey,
+    UserToken,
+    ServiceToken,
+)
+from backend.graphene.types import (
+    AppType,
+    EnvironmentKeyType,
+    EnvironmentTokenType,
+    EnvironmentType,
+    PersonalSecretType,
+    SecretFolderType,
+    SecretTagType,
+    SecretType,
+    ServiceTokenType,
+    UserTokenType,
+)
 from datetime import datetime
 
 
@@ -57,17 +89,36 @@ class CreateEnvironmentMutation(graphene.Mutation):
 
         app = App.objects.get(id=environment_data.app_id)
 
-        environment = Environment.objects.create(app=app, name=environment_data.name, env_type=environment_data.env_type,
-                                                 identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
+        environment = Environment.objects.create(
+            app=app,
+            name=environment_data.name,
+            env_type=environment_data.env_type,
+            identity_key=environment_data.identity_key,
+            wrapped_seed=environment_data.wrapped_seed,
+            wrapped_salt=environment_data.wrapped_salt,
+        )
 
         org_owner = OrganisationMember.objects.get(
-            organisation=environment.app.organisation, role=OrganisationMember.OWNER, deleted_at=None)
+            organisation=environment.app.organisation,
+            role=OrganisationMember.OWNER,
+            deleted_at=None,
+        )
 
-        EnvironmentKey.objects.create(environment=environment, user=org_owner,
-                                      identity_key=environment_data.identity_key, wrapped_seed=environment_data.wrapped_seed, wrapped_salt=environment_data.wrapped_salt)
+        EnvironmentKey.objects.create(
+            environment=environment,
+            user=org_owner,
+            identity_key=environment_data.identity_key,
+            wrapped_seed=environment_data.wrapped_seed,
+            wrapped_salt=environment_data.wrapped_salt,
+        )
         for key in admin_keys:
             EnvironmentKey.objects.create(
-                environment=environment, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt, identity_key=key.identity_key)
+                environment=environment,
+                user_id=key.user_id,
+                wrapped_seed=key.wrapped_seed,
+                wrapped_salt=key.wrapped_salt,
+                identity_key=key.identity_key,
+            )
 
         return CreateEnvironmentMutation(environment=environment)
 
@@ -84,8 +135,16 @@ class CreateEnvironmentKeyMutation(graphene.Mutation):
     environment_key = graphene.Field(EnvironmentKeyType)
 
     @classmethod
-    def mutate(cls, root, info, env_id,  identity_key, wrapped_seed, wrapped_salt, user_id=None,):
-
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        identity_key,
+        wrapped_seed,
+        wrapped_salt,
+        user_id=None,
+    ):
         env = Environment.objects.get(id=env_id)
 
         # check that the user attempting the mutation has access
@@ -93,18 +152,26 @@ class CreateEnvironmentKeyMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         # check that the user for whom we are adding a key has access
-        if not user_id is not None and member_can_access_org(user_id, env.app.organisation.id):
+        if not user_id is not None and member_can_access_org(
+            user_id, env.app.organisation.id
+        ):
             raise GraphQLError("This user doesn't have access to this app")
 
         if user_id is not None:
             org_member = OrganisationMember.objects.get(id=user_id)
 
-            if EnvironmentKey.objects.filter(environment=env, user_id=org_member).exists():
-                raise GraphQLError(
-                    "This user already has access to this environment")
+            if EnvironmentKey.objects.filter(
+                environment=env, user_id=org_member
+            ).exists():
+                raise GraphQLError("This user already has access to this environment")
 
         environment_key = EnvironmentKey.objects.create(
-            environment=env, user_id=user_id, identity_key=identity_key, wrapped_seed=wrapped_seed, wrapped_salt=wrapped_salt)
+            environment=env,
+            user_id=user_id,
+            identity_key=identity_key,
+            wrapped_seed=wrapped_seed,
+            wrapped_salt=wrapped_salt,
+        )
 
         return CreateEnvironmentKeyMutation(environment_key=environment_key)
 
@@ -125,19 +192,24 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        org_member = OrganisationMember.objects.get(
-            id=member_id, deleted_at=None)
+        org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
         if org_member not in app.members.all():
             raise GraphQLError("This user does not have access to this app")
         else:
             # delete all existing keys
             EnvironmentKey.objects.filter(
-                environment__app=app, user_id=member_id).delete()
+                environment__app=app, user_id=member_id
+            ).delete()
 
             # set new keys
             for key in env_keys:
                 EnvironmentKey.objects.create(
-                    environment_id=key.env_id, user_id=key.user_id, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt, identity_key=key.identity_key)
+                    environment_id=key.env_id,
+                    user_id=key.user_id,
+                    wrapped_seed=key.wrapped_seed,
+                    wrapped_salt=key.wrapped_salt,
+                    identity_key=key.identity_key,
+                )
 
         return UpdateMemberEnvScopeMutation(app=app)
 
@@ -156,13 +228,19 @@ class CreateEnvironmentTokenMutation(graphene.Mutation):
     def mutate(cls, root, info, env_id, name, identity_key, token, wrapped_key_share):
         user = info.context.user
         if user_can_access_environment(user.userId, env_id):
-
             env = Environment.objects.get(id=env_id)
             org_member = OrganisationMember.objects.get(
-                organisation=env.app.organisation, user_id=user.userId, deleted_at=None)
+                organisation=env.app.organisation, user_id=user.userId, deleted_at=None
+            )
 
             environment_token = EnvironmentToken.objects.create(
-                environment_id=env_id, user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share)
+                environment_id=env_id,
+                user=org_member,
+                name=name,
+                identity_key=identity_key,
+                token=token,
+                wrapped_key_share=wrapped_key_share,
+            )
 
             return CreateEnvironmentTokenMutation(environment_token=environment_token)
 
@@ -180,12 +258,14 @@ class CreateUserTokenMutation(graphene.Mutation):
     user_token = graphene.Field(UserTokenType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, name, identity_key, token, wrapped_key_share, expiry):
+    def mutate(
+        cls, root, info, org_id, name, identity_key, token, wrapped_key_share, expiry
+    ):
         user = info.context.user
         if user_is_org_member(user.userId, org_id):
-
             org_member = OrganisationMember.objects.get(
-                organisation_id=org_id, user_id=user.userId, deleted_at=None)
+                organisation_id=org_id, user_id=user.userId, deleted_at=None
+            )
 
             if expiry is not None:
                 expires_at = datetime.fromtimestamp(expiry / 1000)
@@ -193,13 +273,18 @@ class CreateUserTokenMutation(graphene.Mutation):
                 expires_at = None
 
             user_token = UserToken.objects.create(
-                user=org_member, name=name, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share, expires_at=expires_at)
+                user=org_member,
+                name=name,
+                identity_key=identity_key,
+                token=token,
+                wrapped_key_share=wrapped_key_share,
+                expires_at=expires_at,
+            )
 
             return CreateUserTokenMutation(user_token=user_token, ok=True)
 
         else:
-            raise GraphQLError(
-                "You don't have permission to perform this action")
+            raise GraphQLError("You don't have permission to perform this action")
 
 
 class DeleteUserTokenMutation(graphene.Mutation):
@@ -220,8 +305,7 @@ class DeleteUserTokenMutation(graphene.Mutation):
 
             return DeleteUserTokenMutation(ok=True)
         else:
-            raise GraphQLError(
-                "You don't have permission to perform this action")
+            raise GraphQLError("You don't have permission to perform this action")
 
 
 class CreateServiceTokenMutation(graphene.Mutation):
@@ -237,17 +321,39 @@ class CreateServiceTokenMutation(graphene.Mutation):
     service_token = graphene.Field(ServiceTokenType)
 
     @classmethod
-    def mutate(cls, root, info, app_id, environment_keys, identity_key, token, wrapped_key_share, name, expiry):
+    def mutate(
+        cls,
+        root,
+        info,
+        app_id,
+        environment_keys,
+        identity_key,
+        token,
+        wrapped_key_share,
+        name,
+        expiry,
+    ):
         user = info.context.user
         app = App.objects.get(id=app_id)
 
         if user_is_org_member(user.userId, app.organisation.id):
-
             org_member = OrganisationMember.objects.get(
-                organisation_id=app.organisation.id, user_id=user.userId, deleted_at=None)
+                organisation_id=app.organisation.id,
+                user_id=user.userId,
+                deleted_at=None,
+            )
 
-            env_keys = EnvironmentKey.objects.bulk_create([EnvironmentKey(
-                environment_id=key.env_id, identity_key=key.identity_key, wrapped_seed=key.wrapped_seed, wrapped_salt=key.wrapped_salt) for key in environment_keys])
+            env_keys = EnvironmentKey.objects.bulk_create(
+                [
+                    EnvironmentKey(
+                        environment_id=key.env_id,
+                        identity_key=key.identity_key,
+                        wrapped_seed=key.wrapped_seed,
+                        wrapped_salt=key.wrapped_salt,
+                    )
+                    for key in environment_keys
+                ]
+            )
 
             if expiry is not None:
                 expires_at = datetime.fromtimestamp(expiry / 1000)
@@ -255,7 +361,14 @@ class CreateServiceTokenMutation(graphene.Mutation):
                 expires_at = None
 
             service_token = ServiceToken.objects.create(
-                app=app, identity_key=identity_key, token=token, wrapped_key_share=wrapped_key_share, name=name, created_by=org_member, expires_at=expires_at)
+                app=app,
+                identity_key=identity_key,
+                token=token,
+                wrapped_key_share=wrapped_key_share,
+                name=name,
+                created_by=org_member,
+                expires_at=expires_at,
+            )
 
             service_token.keys.set(env_keys)
 
@@ -280,8 +393,7 @@ class DeleteServiceTokenMutation(graphene.Mutation):
 
             return DeleteServiceTokenMutation(ok=True)
         else:
-            raise GraphQLError(
-                "You don't have permission to perform this action")
+            raise GraphQLError("You don't have permission to perform this action")
 
 
 class CreateSecretFolderMutation(graphene.Mutation):
@@ -298,7 +410,8 @@ class CreateSecretFolderMutation(graphene.Mutation):
         user = info.context.user
         if user_can_access_environment(user.id, env_id):
             folder = SecretFolder.objects.create(
-                id=id, environment_id=env_id, parent_id=parent_folder_id, name=name)
+                id=id, environment_id=env_id, parent_id=parent_folder_id, name=name
+            )
 
             return CreateSecretFolderMutation(folder=folder)
 
@@ -313,18 +426,15 @@ class CreateSecretTagMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, org_id, name, color):
-
         if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError(
-                "You don't have permission to perform this action")
+            raise GraphQLError("You don't have permission to perform this action")
 
         org = Organisation.objects.get(id=org_id)
 
         if SecretTag.objects.filter(organisation=org, name=name).exists():
-            raise GraphQLError('This tag already exists!')
+            raise GraphQLError("This tag already exists!")
 
-        tag = SecretTag.objects.create(
-            organisation=org, name=name, color=color)
+        tag = SecretTag.objects.create(organisation=org, name=name, color=color)
 
         return CreateSecretTagMutation(tag=tag)
 
@@ -340,20 +450,18 @@ class CreateSecretMutation(graphene.Mutation):
         env = Environment.objects.get(id=secret_data.env_id)
         org = env.app.organisation
         if not user_is_org_member(info.context.user.userId, org.id):
-            raise GraphQLError(
-                "You don't have permission to perform this action")
+            raise GraphQLError("You don't have permission to perform this action")
 
-        tags = SecretTag.objects.filter(
-            id__in=secret_data.tags)
+        tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
         secret_obj_data = {
-            'environment_id': env.id,
-            'folder_id': secret_data.folder_id,
-            'key': secret_data.key,
-            'key_digest': secret_data.key_digest,
-            'value': secret_data.value,
-            'version': 1,
-            'comment': secret_data.comment
+            "environment_id": env.id,
+            "folder_id": secret_data.folder_id,
+            "key": secret_data.key,
+            "key_digest": secret_data.key_digest,
+            "value": secret_data.value,
+            "version": 1,
+            "comment": secret_data.comment,
         }
 
         secret = Secret.objects.create(**secret_obj_data)
@@ -362,16 +470,21 @@ class CreateSecretMutation(graphene.Mutation):
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org, deleted_at=None)
+            user=info.context.user, organisation=org, deleted_at=None
+        )
 
         event = SecretEvent.objects.create(
-            **{**secret_obj_data, **{
-                'user': org_member,
-                'secret': secret,
-                'event_type': SecretEvent.CREATE,
-                'ip_address': ip_address,
-                'user_agent': user_agent
-            }})
+            **{
+                **secret_obj_data,
+                **{
+                    "user": org_member,
+                    "secret": secret,
+                    "event_type": SecretEvent.CREATE,
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
+                },
+            }
+        )
         event.tags.set(tags)
 
         return CreateSecretMutation(secret=secret)
@@ -390,19 +503,17 @@ class EditSecretMutation(graphene.Mutation):
         env = secret.environment
         org = env.app.organisation
         if not user_is_org_member(info.context.user.userId, org.id):
-            raise GraphQLError(
-                "You don't have permission to perform this action")
+            raise GraphQLError("You don't have permission to perform this action")
 
-        tags = SecretTag.objects.filter(
-            id__in=secret_data.tags)
+        tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
         secret_obj_data = {
-            'folder_id': secret_data.folder_id,
-            'key': secret_data.key,
-            'key_digest': secret_data.key_digest,
-            'value': secret_data.value,
-            'version': secret.version + 1,
-            'comment': secret_data.comment
+            "folder_id": secret_data.folder_id,
+            "key": secret_data.key,
+            "key_digest": secret_data.key_digest,
+            "value": secret_data.value,
+            "version": secret.version + 1,
+            "comment": secret_data.comment,
         }
 
         for key, value in secret_obj_data.items():
@@ -415,17 +526,22 @@ class EditSecretMutation(graphene.Mutation):
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org, deleted_at=None)
+            user=info.context.user, organisation=org, deleted_at=None
+        )
 
         event = SecretEvent.objects.create(
-            **{**secret_obj_data, **{
-                'user': org_member,
-                'environment': env,
-                'secret': secret,
-                'event_type': SecretEvent.UPDATE,
-                'ip_address': ip_address,
-                'user_agent': user_agent
-            }})
+            **{
+                **secret_obj_data,
+                **{
+                    "user": org_member,
+                    "environment": env,
+                    "secret": secret,
+                    "event_type": SecretEvent.UPDATE,
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
+                },
+            }
+        )
         event.tags.set(tags)
 
         return EditSecretMutation(secret=secret)
@@ -444,8 +560,7 @@ class DeleteSecretMutation(graphene.Mutation):
         org = env.app.organisation
 
         if not user_is_org_member(info.context.user.userId, org.id):
-            raise GraphQLError(
-                "You don't have permission to perform this action")
+            raise GraphQLError("You don't have permission to perform this action")
 
         secret.updated_at = timezone.now()
         secret.deleted_at = timezone.now()
@@ -454,10 +569,12 @@ class DeleteSecretMutation(graphene.Mutation):
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org, deleted_at=None)
+            user=info.context.user, organisation=org, deleted_at=None
+        )
 
-        most_recent_event_copy = SecretEvent.objects.filter(
-            secret=secret).order_by('version').last()
+        most_recent_event_copy = (
+            SecretEvent.objects.filter(secret=secret).order_by("version").last()
+        )
 
         # setting the pk to None and then saving it creates a copy of the instance with updated fields
         most_recent_event_copy.id = None
@@ -482,22 +599,31 @@ class ReadSecretMutation(graphene.Mutation):
         env = secret.environment
         org = env.app.organisation
         if not user_is_org_member(info.context.user.userId, org.id):
-            raise GraphQLError(
-                "You don't have permission to perform this action")
+            raise GraphQLError("You don't have permission to perform this action")
         else:
             ip_address, user_agent = get_resolver_request_meta(info.context)
 
             org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=org, deleted_at=None)
+                user=info.context.user, organisation=org, deleted_at=None
+            )
 
-            read_event = SecretEvent.objects.create(secret=secret, environment=secret.environment, user=org_member, key=secret.key, key_digest=secret.key_digest,
-                                                    value=secret.value, comment=secret.comment, event_type=SecretEvent.READ, ip_address=ip_address, user_agent=user_agent)
+            read_event = SecretEvent.objects.create(
+                secret=secret,
+                environment=secret.environment,
+                user=org_member,
+                key=secret.key,
+                key_digest=secret.key_digest,
+                value=secret.value,
+                comment=secret.comment,
+                event_type=SecretEvent.READ,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             read_event.tags.set(secret.tags.all())
             return ReadSecretMutation(ok=True)
 
 
 class CreatePersonalSecretMutation(graphene.Mutation):
-
     class Arguments:
         override_data = PersonalSecretInput(PersonalSecretInput)
 
@@ -508,14 +634,15 @@ class CreatePersonalSecretMutation(graphene.Mutation):
         secret = Secret.objects.get(id=override_data.secret_id)
         org = secret.environment.app.organisation
         org_member = OrganisationMember.objects.get(
-            organisation=org, user=info.context.user)
+            organisation=org, user=info.context.user
+        )
 
         if not user_can_access_environment(info.context.user, secret.environment.id):
-            raise GraphQLError(
-                "You don't have access to this secret")
+            raise GraphQLError("You don't have access to this secret")
 
         override, created = PersonalSecret.objects.get_or_create(
-            secret_id=override_data.secret_id, user=org_member)
+            secret_id=override_data.secret_id, user=org_member
+        )
         override.value = override_data.value
         override.is_active = override_data.is_active
         override.save()
@@ -524,7 +651,6 @@ class CreatePersonalSecretMutation(graphene.Mutation):
 
 
 class DeletePersonalSecretMutation(graphene.Mutation):
-
     class Arguments:
         secret_id = graphene.ID()
 
@@ -535,13 +661,12 @@ class DeletePersonalSecretMutation(graphene.Mutation):
         secret = Secret.objects.get(id=secret_id)
         org = secret.environment.app.organisation
         org_member = OrganisationMember.objects.get(
-            organisation=org, user=info.context.user)
+            organisation=org, user=info.context.user
+        )
 
         if not user_can_access_environment(info.context.user, secret.environment.id):
-            raise GraphQLError(
-                "You don't have access to this secret")
+            raise GraphQLError("You don't have access to this secret")
 
-        PersonalSecret.objects.filter(
-            secret_id=secret_id, user=org_member).delete()
+        PersonalSecret.objects.filter(secret_id=secret_id, user=org_member).delete()
 
         return DeletePersonalSecretMutation(ok=True)

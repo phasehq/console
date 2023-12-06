@@ -4,7 +4,7 @@ class ServiceConfig:
         "name": "Cloudflare Pages",
         "api_url": "https://api.cloudflare.com/client/v4",
         "auth_scheme": "token",
-        "expected_credentials": ["CLOUDFLARE_ACCESS_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        "expected_credentials": ["access_token", "account_id"],
         "resource_type": "project",
         "subresource_options": ["production", "preview"],
     }
@@ -14,7 +14,7 @@ class ServiceConfig:
         "name": "Cloudflare Secrets",
         "api_url": "https://api.cloudflare.com/client/v4",
         "auth_scheme": "token",
-        "expected_credentials": ["CLOUDFLARE_ACCESS_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        "expected_credentials": ["access_token", "account_id"],
         "resource_type": "project",
         "subresource_options": ["production", "preview"],
     }
@@ -24,7 +24,7 @@ class ServiceConfig:
         "name": "Cloudflare Workers",
         "api_url": "https://api.cloudflare.com/client/v4",
         "auth_scheme": "token",
-        "expected_credentials": ["CLOUDFLARE_ACCESS_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        "expected_credentials": ["access_token", "account_id"],
         "resource_type": "project",
         "subresource_options": ["production", "preview"],
     }

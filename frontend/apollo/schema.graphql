@@ -21,6 +21,7 @@ type Query {
   serverPublicKey: String
   syncEnabled(appId: ID): Boolean
   appSyncs(appId: ID): [EnvironmentSyncType]
+  envSyncs(envId: ID): [EnvironmentSyncType]
   cloudflarePagesProjects(accountId: String, accessToken: String): [CloudFlarePagesType]
 }
 
@@ -320,7 +321,10 @@ type EnvironmentSyncType {
   isActive: Boolean!
   createdAt: DateTime
   lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
   serviceInfo: ServiceType
+  credentials: JSONString
+  history: [EnvironmentSyncEventType!]!
 }
 
 """
@@ -331,11 +335,50 @@ schema (one of the key benefits of GraphQL).
 """
 scalar JSONString
 
+"""An enumeration."""
+enum ApiEnvironmentSyncStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
+}
+
 type ServiceType {
   id: String
   name: String
   resourceType: String
   subresourceType: String
+}
+
+type EnvironmentSyncEventType {
+  meta: JSONString
+  id: String!
+  envSync: EnvironmentSyncType!
+  status: ApiEnvironmentSyncEventStatusChoices!
+  createdAt: DateTime
+  completedAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiEnvironmentSyncEventStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
 }
 
 type CloudFlarePagesType {
@@ -362,7 +405,11 @@ type Mutation {
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
+  deleteEnvSync(syncId: ID): DeleteSync
+  triggerSync(syncId: ID): TriggerSync
+  toggleSyncActive(syncId: ID): ToggleSyncActive
   createCloudflarePagesSync(accessToken: String, accountId: String, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
+  updateCloudflareSyncCredentials(accessToken: String, accountId: String, syncId: ID): UpdateCloudflarePagesSyncCredentials
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -462,7 +509,23 @@ type InitEnvSync {
   app: AppType
 }
 
+type DeleteSync {
+  ok: Boolean
+}
+
+type TriggerSync {
+  sync: EnvironmentSyncType
+}
+
+type ToggleSyncActive {
+  ok: Boolean
+}
+
 type CreateCloudflarePagesSync {
+  sync: EnvironmentSyncType
+}
+
+type UpdateCloudflarePagesSyncCredentials {
   sync: EnvironmentSyncType
 }
 

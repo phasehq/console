@@ -1,4 +1,3 @@
-
 from nacl.hash import blake2b
 from nacl.utils import random
 from base64 import b64encode, b64decode
@@ -10,7 +9,8 @@ from nacl.bindings import (
     crypto_aead_xchacha20poly1305_ietf_decrypt,
     crypto_kx_client_session_keys,
     crypto_kx_server_session_keys,
-    crypto_secretbox_NONCEBYTES)
+    crypto_secretbox_NONCEBYTES,
+)
 from nacl.encoding import RawEncoder
 from typing import Tuple
 from typing import List
@@ -84,8 +84,7 @@ def decrypt_asymmetric(ciphertext_string, private_key_hex, public_key_hex):
         (public_key, private_key), bytes.fromhex(ciphertext_segments[2])
     )
 
-    plaintext = decrypt_string(
-        ciphertext_segments[3], session_keys[0])
+    plaintext = decrypt_string(ciphertext_segments[3], session_keys[0])
 
     return plaintext
 
@@ -179,8 +178,8 @@ def env_keypair(env_seed: str):
     public_key_hex = public_key.hex()
     private_key_hex = private_key.hex()
 
-    # Return the keys in a dictionary
-    return {"publicKey": public_key_hex, "privateKey": private_key_hex}
+    # Return the keys in a tuple
+    return public_key_hex, private_key_hex
 
 
 def blake2b_digest(input_str: str, salt: str) -> str:
