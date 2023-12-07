@@ -406,8 +406,7 @@ class SecretType(DjangoObjectType):
         if info.context.user:
             org = self.environment.app.organisation
             org_member = OrganisationMember.objects.get(
-                organisation=org, user=info.context.user
-            )
+                organisation=org, user=info.context.user, deleted_at=None)
 
             try:
                 override = PersonalSecret.objects.get(secret=self, user=org_member)
