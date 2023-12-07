@@ -28,8 +28,6 @@ def sync_cloudflare_pages(environment_sync):
 
         sync_event = EnvironmentSyncEvent.objects.create(env_sync=environment_sync)
 
-        time.sleep(15)
-
         kv_pairs = get_environment_secrets(environment_sync)
 
         account_id, access_token = get_authentication_credentials(environment_sync)
