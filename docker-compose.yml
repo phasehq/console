@@ -76,6 +76,7 @@ services:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_HOST_AUTH_METHOD: "trust"
+
     volumes:
       - phase-postgres-data:/var/lib/postgresql/data
     networks:
@@ -86,7 +87,7 @@ services:
     image: redis:alpine
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:${REDIS_PORT}"
     networks:
       - phase-net
 

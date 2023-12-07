@@ -272,8 +272,10 @@ except:
 
 RQ_QUEUES = {
     "default": {
-        "HOST": "redis",
-        "PORT": 6379,
+        "HOST": os.getenv("REDIS_HOST"),
+        "PORT": os.getenv("REDIS_PORT"),
+        "PASSWORD": os.getenv("REDIS_PASSWORD"),
         "DB": 0,
+        "CONNECTION_KWARGS": {"ssl": True},
     }
 }
