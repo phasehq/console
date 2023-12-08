@@ -275,7 +275,8 @@ RQ_QUEUES = {
         "HOST": os.getenv("REDIS_HOST"),
         "PORT": os.getenv("REDIS_PORT"),
         "PASSWORD": os.getenv("REDIS_PASSWORD"),
+        "SSL": os.getenv("REDIS_SSL", "False"),
         "DB": 0,
-        "CONNECTION_KWARGS": {"ssl": True},
+        #"CONNECTION_KWARGS": {"ssl": True},
     }
 }
