@@ -10,12 +10,14 @@ import {
   FaExchangeAlt,
   FaHome,
   FaKey,
+  FaPlus,
   FaUsersCog,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Fragment, useContext } from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
+import { Button } from '../common/Button'
 
 export type SidebarLinkT = {
   name: string
@@ -158,17 +160,22 @@ const Sidebar = () => {
               active={link.active}
             />
           ))}
+          <Link href="/signup">
+            <Button variant="primary">
+              <div className="flex items-center gap-2">
+                <FaPlus /> Create New Organisation
+              </div>
+            </Button>
+          </Link>
         </div>
         <div className="p-4">
-          {
-            <SidebarLink
-              key={links[4].name}
-              name={links[4].name}
-              href={links[4].href}
-              icon={links[4].icon}
-              active={links[4].active}
-            />
-          }
+          <SidebarLink
+            key={links[4].name}
+            name={links[4].name}
+            href={links[4].href}
+            icon={links[4].icon}
+            active={links[4].active}
+          />
         </div>
       </nav>
     </div>
