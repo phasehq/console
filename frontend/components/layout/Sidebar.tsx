@@ -50,7 +50,7 @@ const Sidebar = () => {
   const { organisations, activeOrganisation, setActiveOrganisation } =
     useContext(organisationContext)
 
-  const showOrgsMenu = organisations === null ? false : organisations.length > 1
+  const showOrgsMenu = organisations === null ? false : organisations?.length > 1
 
   const OrgsMenu = () => {
     const router = useRouter()
