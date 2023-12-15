@@ -50,7 +50,7 @@ const Sidebar = () => {
   const { organisations, activeOrganisation, setActiveOrganisation } =
     useContext(organisationContext)
 
-  const showOrgsMenu = organisations === null ? false : organisations?.length > 1
+  const showOrgsMenu = organisations === null ? false : organisations.length > 1
 
   const OrgsMenu = () => {
     const router = useRouter()
@@ -80,24 +80,33 @@ const Sidebar = () => {
               leaveTo="transform opacity-0 scale-95"
             >
               <Menu.Items className="absolute z-10 -right-2 top-12 mt-2 w-56 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                <div className="px-1 py-1">
-                  {organisations?.map((org: OrganisationType) => (
-                    <Menu.Item key={org.id}>
-                      {({ active }) => (
-                        <button
-                          onClick={() => switchOrg(org)}
-                          className={`${
-                            active
-                              ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
-                              : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
-                          } group flex w-full gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium`}
-                        >
-                          {org.name}
-                          <FaExchangeAlt />
-                        </button>
-                      )}
-                    </Menu.Item>
-                  ))}
+                {showOrgsMenu ? (
+                  <div className="px-1 py-1">
+                    {organisations?.map((org: OrganisationType) => (
+                      <Menu.Item key={org.id}>
+                        {({ active }) => (
+                          <button
+                            onClick={() => switchOrg(org)}
+                            className={`${
+                              active
+                                ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
+                                : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
+                            } group flex w-full gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium`}
+                          >
+                            {org.name}
+                            <FaExchangeAlt />
+                          </button>
+                        )}
+                      </Menu.Item>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="py-3 px-1 flex justify-center">
+                  <Link href="/signup">
+                    <Button variant="secondary">
+                      <FaPlus /> Create New Organisation
+                    </Button>
+                  </Link>
                 </div>
               </Menu.Items>
             </Transition>
@@ -144,13 +153,8 @@ const Sidebar = () => {
     <div className="h-screen flex flex-col pt-[64px]">
       <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
         <div className="gap-4 p-4 grid grid-cols-1">
-          {showOrgsMenu ? (
-            <OrgsMenu />
-          ) : (
-            <div className="p-2 text-neutral-500 font-semibold uppercase tracking-wider">
-              {activeOrganisation?.name}
-            </div>
-          )}
+          <OrgsMenu />
+
           {links.slice(0, 4).map((link) => (
             <SidebarLink
               key={link.name}
@@ -160,13 +164,6 @@ const Sidebar = () => {
               active={link.active}
             />
           ))}
-          <Link href="/signup">
-            <Button variant="primary">
-              <div className="flex items-center gap-2">
-                <FaPlus /> Create New Organisation
-              </div>
-            </Button>
-          </Link>
         </div>
         <div className="p-4">
           <SidebarLink
