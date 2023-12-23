@@ -1,10 +1,24 @@
 import { Dialog, Transition } from '@headlessui/react'
-import { useState, Fragment, ReactNode } from 'react'
+import { useState, Fragment, ReactNode, ReactElement } from 'react'
 import { FaTimes } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { CreateCloudflarePagesSync } from './CreateCloudflarePagesSync'
+import { CreateCloudflarePagesSync } from './Cloudflare/CreateCloudflarePagesSync'
+import React from 'react'
 
-export const CloudflareSyncDialog = (props: { appId: string; button: ReactNode }) => {
+type SyncPanelContentProps = {
+  children: ReactElement
+  closeModal: Function
+}
+
+const SyncPanelContent: React.FC<SyncPanelContentProps> = ({ children, closeModal }) => {
+  return React.cloneElement(children, { closeModal })
+}
+
+export const CreateSyncDialog = (props: {
+  appId: string
+  button: ReactElement
+  children: ReactElement
+}) => {
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const closeModal = () => {
@@ -43,9 +57,9 @@ export const CloudflareSyncDialog = (props: { appId: string; button: ReactNode }
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-screen-md transform overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-screen-md transform rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg leading-6 text-neutral-500">Sync with Cloudflare</h3>
+                    <h3 className="text-lg leading-6 text-neutral-500">Create a Sync</h3>
 
                     <Button variant="text" onClick={closeModal}>
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
@@ -53,7 +67,8 @@ export const CloudflareSyncDialog = (props: { appId: string; button: ReactNode }
                   </Dialog.Title>
 
                   <div className="py-4">
-                    <CreateCloudflarePagesSync appId={props.appId} onComplete={closeModal} />
+                    {/* <CreateCloudflarePagesSync appId={props.appId} onComplete={closeModal} /> */}
+                    <SyncPanelContent closeModal={closeModal}>{props.children}</SyncPanelContent>
                   </div>
                 </Dialog.Panel>
               </Transition.Child>

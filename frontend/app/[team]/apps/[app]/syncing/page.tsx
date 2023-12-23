@@ -19,29 +19,9 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useSession } from 'next-auth/react'
 import { Alert } from '@/components/common/Alert'
-import { SiAmazonaws, SiCloudflare, SiGooglecloud, SiVault } from 'react-icons/si'
-import { CloudflareSyncDialog } from '@/components/syncing/CloudflareSyncDialog'
 import { SyncCard } from '@/components/syncing/SyncCard'
 import { ManageSyncDialog } from '@/components/syncing/ManageSyncDialog'
-
-const syncServices = [
-  {
-    name: 'Cloudflare',
-    icon: <SiCloudflare />,
-  },
-  {
-    name: 'AWS Secret manager',
-    icon: <SiAmazonaws />,
-  },
-  {
-    name: 'GCP Secret manager',
-    icon: <SiGooglecloud />,
-  },
-  {
-    name: 'Hashicorp Vault',
-    icon: <SiVault />,
-  },
-]
+import { SyncOptions } from '@/components/syncing/SyncOptions'
 
 export default function Syncing({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -254,12 +234,12 @@ export default function Syncing({ params }: { params: { team: string; app: strin
   }
 
   return (
-    <div className="w-full space-y-10 pt-8 text-black dark:text-white">
+    <div className="w-full space-y-8 pt-8 text-black dark:text-white">
       {data?.syncEnabled === false && (
         <div className="flex flex-col gap-4 h-96 items-center justify-center">
-          <div className="space-y-0 text-center">
-            <div className="text-black dark:text-white text-2xl font-semibold">Enable syncing</div>
-            <div className="text-neutral-500">
+          <div className="space-y-1 text-center">
+            <div className="text-black dark:text-white text-3xl font-semibold">Enable syncing</div>
+            <div className="text-neutral-500 text-lg">
               Syncing is not yet enabled for this app. Click the button below to enable syncing.
             </div>
           </div>
@@ -268,10 +248,10 @@ export default function Syncing({ params }: { params: { team: string; app: strin
       )}
       {data?.syncEnabled === true && (
         <>
-          {data.appSyncs && data.appSyncs.length > 0 && (
-            <div className="flex flex-col gap-2 border-b border-neutral-500/40 pb-10">
+          {data.syncs && data.syncs.length > 0 && (
+            <div className="flex flex-col gap-2 border-b border-neutral-500/40 pb-8">
               <div className="text-2xl font-semibold pb-4">Active Syncs</div>
-              {data.appSyncs.map((sync: EnvironmentSyncType) => (
+              {data.syncs.map((sync: EnvironmentSyncType) => (
                 <ManageSyncDialog
                   key={sync.id}
                   sync={sync}
@@ -282,31 +262,7 @@ export default function Syncing({ params }: { params: { team: string; app: strin
             </div>
           )}
 
-          <div className="grid grid-cols-4 gap-8">
-            {syncServices.map((service) => (
-              <div
-                key={service.name}
-                className="flex flex-col justify-center items-center gap-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg cursor-pointer hover:bg-emerald-200 dark:hover:bg-emerald-900 transition ease"
-              >
-                <div className="text-5xl">{service.icon}</div>
-                <div className="text-black dark:text-white text-xl font-semibold">
-                  {service.name}
-                </div>
-              </div>
-            ))}
-
-            <CloudflareSyncDialog
-              appId={params.app}
-              button={
-                <div className="flex flex-col justify-center items-center gap-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg cursor-pointer hover:bg-emerald-200 dark:hover:bg-emerald-900 transition ease">
-                  <div className="text-5xl">
-                    <SiCloudflare />
-                  </div>
-                  <div className="text-black dark:text-white text-xl font-semibold">Cloudflare</div>
-                </div>
-              }
-            />
-          </div>
+          <SyncOptions appId={params.app} defaultOpen={data.syncs && data.syncs.length === 0} />
         </>
       )}
     </div>

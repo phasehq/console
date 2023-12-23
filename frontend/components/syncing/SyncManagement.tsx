@@ -1,26 +1,40 @@
-import { ApiEnvironmentSyncStatusChoices, EnvironmentSyncType } from '@/apollo/graphql'
+import {
+  ApiEnvironmentSyncStatusChoices,
+  EnvironmentSyncType,
+  ProviderCredentialsType,
+} from '@/apollo/graphql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import TriggerEnvSync from '@/graphql/mutations/syncing/triggerSync.gql'
+import UpdateSyncAuth from '@/graphql/mutations/syncing/updateSyncAuthentication.gql'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useMutation } from '@apollo/client'
 import clsx from 'clsx'
 import { FaAngleDoubleRight, FaSync } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { UpdateCloudflareCredentials } from './Cloudflare/UpdateCloudflareCredentials'
+//import { UpdateCloudflareCredentials } from './Cloudflare/UpdateProviderCredentials'
 import { DeleteSyncDialog } from './DeleteSyncDialog'
 import { SyncStatusIndicator } from './SyncStatusIndicator'
+import { useContext, useState } from 'react'
+import { ProviderCredentialPicker } from './ProviderCredentialPicker'
+import { organisationContext } from '@/contexts/organisationContext'
+import { toast } from 'react-toastify'
 
 export const SyncManagement = (props: { sync: EnvironmentSyncType; appId: string }) => {
   const { sync, appId } = props
 
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
   const [triggerSync] = useMutation(TriggerEnvSync)
+  const [updateAuth] = useMutation(UpdateSyncAuth)
 
-  const credentialsDialog = () => {
-    const serviceName = sync.serviceInfo?.name
+  const [credential, setCredential] = useState<ProviderCredentialsType | null>(sync.authentication!)
 
-    if (serviceName?.toLowerCase().includes('cloudflare'))
-      return <UpdateCloudflareCredentials sync={sync} />
-  }
+  // const credentialsDialog = () => {
+  //   const serviceName = sync.serviceInfo?.name
+
+  //   if (serviceName?.toLowerCase().includes('cloudflare'))
+  //     return <UpdateCloudflareCredentials sync={sync} />
+  // }
 
   const handleSync = async () => {
     await triggerSync({
@@ -32,6 +46,26 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; appId: string
         },
       ],
     })
+  }
+
+  const handleUpdateAuth = async (cred: ProviderCredentialsType) => {
+    setCredential(cred)
+
+    if (cred !== null) {
+      await updateAuth({
+        variables: {
+          syncId: sync.id,
+          credentialId: cred.id,
+        },
+        refetchQueries: [
+          {
+            query: GetAppSyncStatus,
+            variables: { appId },
+          },
+        ],
+      })
+      toast.success('Updated sync authentication')
+    }
   }
 
   const isSyncing = sync.status === ApiEnvironmentSyncStatusChoices.InProgress
@@ -71,7 +105,15 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; appId: string
             relativeTimeFromDates(new Date(sync.lastSync))}
         </div>
 
-        <div className="col-span-2">{credentialsDialog()}</div>
+        {/* <div className="col-span-2">{credentialsDialog()}</div> */}
+
+        <div className="col-span-2">
+          <ProviderCredentialPicker
+            credential={credential}
+            setCredential={(cred) => handleUpdateAuth(cred)}
+            orgId={organisation!.id}
+          />
+        </div>
 
         <div className="col-span-2 flex items-center gap-4 justify-end pt-4 border-t border-neutral-500/40">
           <Button variant="primary" onClick={handleSync} disabled={isSyncing}>

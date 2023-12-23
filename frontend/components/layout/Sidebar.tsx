@@ -11,6 +11,7 @@ import {
   FaHome,
   FaKey,
   FaUsersCog,
+  FaProjectDiagram,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Fragment, useContext } from 'react'
@@ -125,6 +126,12 @@ const Sidebar = () => {
       active: usePathname() === `/${team}/members`,
     },
     {
+      name: 'Integrations',
+      href: `/${team}/integrations`,
+      icon: <FaProjectDiagram size="20" />,
+      active: usePathname() === `/${team}/members`,
+    },
+    {
       name: 'Personal access tokens',
       href: `/${team}/tokens`,
       icon: <FaKey size="20" />,
@@ -149,7 +156,7 @@ const Sidebar = () => {
               {activeOrganisation?.name}
             </div>
           )}
-          {links.slice(0, 4).map((link) => (
+          {links.slice(0, 5).map((link) => (
             <SidebarLink
               key={link.name}
               name={link.name}
@@ -162,11 +169,11 @@ const Sidebar = () => {
         <div className="p-4">
           {
             <SidebarLink
-              key={links[4].name}
-              name={links[4].name}
-              href={links[4].href}
-              icon={links[4].icon}
-              active={links[4].active}
+              key={links[5].name}
+              name={links[5].name}
+              href={links[5].href}
+              icon={links[5].icon}
+              active={links[5].active}
             />
           }
         </div>
