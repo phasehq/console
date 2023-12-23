@@ -39,19 +39,21 @@ def list_cloudflare_pages(ACCOUNT_ID, ACCESS_TOKEN):
         raise Exception("Incorrect credentials")
 
     else:
-        print("Error in listing Cloudflare pages:", response.text)
+        raise Exception("Error in listing Cloudflare pages:", response.text)
 
 
 # TODO replace this with a generic util using the logic in the credential resolver for EnvironmentSyncType
-def get_authentication_credentials(environment_sync):
+def get_cf_pages_credentials(environment_sync):
     pk, sk = get_server_keypair()
 
     account_id = decrypt_asymmetric(
-        environment_sync.authentication["account_id"], sk.hex(), pk.hex()
+        environment_sync.authentication.credentials["account_id"], sk.hex(), pk.hex()
     )
     access_token = decrypt_asymmetric(
-        environment_sync.authentication["access_token"], sk.hex(), pk.hex()
+        environment_sync.authentication.credentials["access_token"], sk.hex(), pk.hex()
     )
+
+    print("GOT CREDENTIALS", account_id, access_token)
 
     return account_id, access_token
 
@@ -60,8 +62,6 @@ def get_authentication_credentials(environment_sync):
 # with the local secrets.json file. It demonstrates a common pattern of
 # fetching existing data, comparing it to the desired state, and making
 # the necessary changes to reach that state.
-
-
 def sync_cloudflare_secrets(
     secrets, ACCOUNT_ID, ACCESS_TOKEN, project_name, project_environment
 ):

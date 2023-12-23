@@ -1,9 +1,13 @@
 from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
+from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from .graphene.queries.syncing import (
+    resolve_aws_secret_manager_secrets,
     resolve_server_public_key,
+    resolve_providers,
     resolve_sync_enabled,
+    resolve_saved_credentials,
     resolve_cloudflare_pages_projects,
-    resolve_app_syncs,
+    resolve_syncs,
     resolve_env_syncs,
 )
 from .graphene.mutations.environment import (
@@ -25,12 +29,16 @@ from .graphene.mutations.environment import (
     UpdateMemberEnvScopeMutation,
 )
 from .graphene.mutations.syncing import (
+    CreateAWSSecretsManagerSync,
     CreateCloudflarePagesSync,
+    CreateProviderCredentials,
     DeleteSync,
     InitEnvSync,
     ToggleSyncActive,
     TriggerSync,
     UpdateCloudflarePagesSyncCredentials,
+    UpdateProviderCredentials,
+    UpdateSyncAuthentication,
 )
 from api.utils.permissions import (
     user_can_access_app,
@@ -66,6 +74,8 @@ from .graphene.types import (
     OrganisationMemberInviteType,
     OrganisationMemberType,
     OrganisationType,
+    ProviderCredentialsType,
+    ProviderType,
     SecretEventType,
     SecretTagType,
     SecretType,
@@ -78,6 +88,7 @@ from graphql import GraphQLError
 from api.models import (
     Environment,
     EnvironmentKey,
+    EnvironmentSync,
     EnvironmentToken,
     Organisation,
     App,
@@ -161,14 +172,29 @@ class Query(graphene.ObjectType):
 
     sync_enabled = graphene.Boolean(app_id=graphene.ID())
 
-    app_syncs = graphene.List(EnvironmentSyncType, app_id=graphene.ID())
+    providers = graphene.List(ProviderType)
+
+    saved_credentials = graphene.List(ProviderCredentialsType, org_id=graphene.ID())
+
+    syncs = graphene.List(
+        EnvironmentSyncType,
+        org_id=graphene.ID(required=False),
+        app_id=graphene.ID(required=False),
+        env_id=graphene.ID(required=False),
+    )
 
     env_syncs = graphene.List(EnvironmentSyncType, env_id=graphene.ID())
 
     cloudflare_pages_projects = graphene.List(
         CloudFlarePagesType,
-        account_id=graphene.String(),
-        access_token=graphene.String(),
+        credential_id=graphene.ID(),
+    )
+
+    aws_secrets = graphene.List(
+        AWSSecretType,
+        access_key_id=graphene.String(),
+        secret_access_key=graphene.String(),
+        region=graphene.String(),
     )
 
     # --------------------------------------------------------------------
@@ -177,11 +203,17 @@ class Query(graphene.ObjectType):
 
     resolve_sync_enabled = resolve_sync_enabled
 
-    resolve_app_syncs = resolve_app_syncs
+    resolve_providers = resolve_providers
+
+    resolve_saved_credentials = resolve_saved_credentials
+
+    resolve_syncs = resolve_syncs
 
     resolve_env_syncs = resolve_env_syncs
 
     resolve_cloudflare_pages_projects = resolve_cloudflare_pages_projects
+
+    resolve_aws_secrets = resolve_aws_secret_manager_secrets
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -565,8 +597,16 @@ class Mutation(graphene.ObjectType):
     delete_env_sync = DeleteSync.Field()
     trigger_sync = TriggerSync.Field()
     toggle_sync_active = ToggleSyncActive.Field()
+    update_sync_authentication = UpdateSyncAuthentication.Field()
+    create_provider_credentials = CreateProviderCredentials.Field()
+    update_provider_credentials = UpdateProviderCredentials.Field()
+
+    # Cloudflare
     create_cloudflare_pages_sync = CreateCloudflarePagesSync.Field()
     update_cloudflare_sync_credentials = UpdateCloudflarePagesSyncCredentials.Field()
+
+    # AWS
+    create_aws_secret_sync = CreateAWSSecretsManagerSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
