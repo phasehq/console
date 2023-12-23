@@ -1,14 +1,18 @@
 import { ProviderCredentialsType } from '@/apollo/graphql'
 import { FaCog, FaCube, FaTimes } from 'react-icons/fa'
 import { SiCloudflare } from 'react-icons/si'
-import { UpdateProviderCredentials } from './Cloudflare/UpdateProviderCredentials'
+import { UpdateProviderCredentials } from './UpdateProviderCredentials'
 import { Dialog, Transition } from '@headlessui/react'
-import { useState, Fragment } from 'react'
+import { useState, Fragment, useContext } from 'react'
 import { Button } from '../common/Button'
 import { relativeTimeFromDates } from '@/utils/time'
+import { organisationContext } from '@/contexts/organisationContext'
+import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
 
 export const ProviderCredentialCard = (props: { credential: ProviderCredentialsType }) => {
   const { credential } = props
+
+  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
@@ -80,7 +84,7 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Manage integration credentials
+                      Manage authentication credentials
                     </h3>
 
                     <Button variant="text" onClick={closeModal}>
@@ -89,6 +93,13 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
                   </Dialog.Title>
 
                   <UpdateProviderCredentials credential={credential} />
+
+                  <div className="flex justify-end">
+                    <DeleteProviderCredentialDialog
+                      credential={credential}
+                      orgId={organisation!.id}
+                    />
+                  </div>
                 </Dialog.Panel>
               </Transition.Child>
             </div>

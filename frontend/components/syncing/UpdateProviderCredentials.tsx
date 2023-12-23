@@ -1,12 +1,11 @@
-import { EnvironmentSyncType, ProviderCredentialsType } from '@/apollo/graphql'
+import { ProviderCredentialsType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { useState } from 'react'
 import { FaCheck, FaEdit, FaTimes } from 'react-icons/fa'
 import GetServerKey from '@/graphql/queries/syncing/getServerKey.gql'
-//import UpdateCfPagesSyncCreds from '@/graphql/mutations/syncing/cloudflare/UpdateCfPagesSyncCreds.gql'
+
 import UpdateProviderCreds from '@/graphql/mutations/syncing/updateProviderCreds.gql'
 import { useMutation, useQuery } from '@apollo/client'
-import { encryptAsymmetric } from '@/utils/crypto'
 import { toast } from 'react-toastify'
 import { Input } from '@/components/common/Input'
 import { encryptProviderCredentials } from '@/utils/syncing/general'
@@ -18,8 +17,6 @@ interface CredentialState {
 export const UpdateProviderCredentials = (props: { credential: ProviderCredentialsType }) => {
   const { credential } = props
 
-  //const credentials = JSON.parse(credential.credentials)
-
   const { data } = useQuery(GetServerKey)
   const [updateCredentials] = useMutation(UpdateProviderCreds)
   const [name, setName] = useState<string>(credential.name)
@@ -29,7 +26,6 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
   const [allowEdit, setAllowEdit] = useState(false)
 
   const credentialsUpdated = true
-  //accountId !== credentials.account_id || accessToken !== credentials.access_token
 
   const handleCredentialChange = (key: string, value: string) => {
     setCredentials({ ...credentials, [key]: value })
@@ -53,7 +49,7 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
   }
 
   return (
-    <div className="space-y-4 w-full py-4 border-y border-neutral-500/40">
+    <div className="space-y-4 w-full py-4">
       <div className="text-black dark:text-white font-semibold text-xl flex justify-between">
         Credentials
         {allowEdit ? (
