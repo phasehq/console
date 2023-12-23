@@ -258,6 +258,10 @@ class ProviderCredentials(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.save()
+
 
 class EnvironmentSync(models.Model):
     IN_PROGRESS = "in_progress"
