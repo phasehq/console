@@ -1,4 +1,4 @@
-from api.services import ServiceConfig
+from api.services import Providers, ServiceConfig
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 import graphene
 from enum import Enum
@@ -16,6 +16,7 @@ from api.models import (
     OrganisationMember,
     OrganisationMemberInvite,
     PersonalSecret,
+    ProviderCredentials,
     Secret,
     SecretEvent,
     SecretFolder,
@@ -162,6 +163,7 @@ class EnvironmentType(DjangoObjectType):
         fields = (
             "id",
             "name",
+            "app",
             "env_type",
             "identity_key",
             "wrapped_seed",
@@ -233,11 +235,60 @@ class EnvironmentTokenType(DjangoObjectType):
         )
 
 
+class ProviderType(graphene.ObjectType):
+    id = graphene.String(required=True)
+    name = graphene.String(required=True)
+    expected_credentials = graphene.List(
+        graphene.NonNull(graphene.String), required=True
+    )
+    auth_scheme = graphene.String()
+
+
 class ServiceType(ObjectType):
     id = graphene.String()
     name = graphene.String()
     resource_type = graphene.String()
     subresource_type = graphene.String()
+
+
+class ProviderCredentialsType(DjangoObjectType):
+    sync_count = graphene.Int()
+    provider = graphene.Field(ProviderType)
+
+    class Meta:
+        model = ProviderCredentials
+        fields = (
+            "id",
+            "name",
+            "provider",
+            "credentials",
+            "created_at",
+            "updated_at",
+            "sync_count",
+        )
+
+    def resolve_sync_count(self, info):
+        return EnvironmentSync.objects.filter(
+            authentication_id=self.id, deleted_at=None
+        ).count()
+
+    def resolve_provider(self, info):
+        return Providers.get_provider_config(self.provider)
+
+    def resolve_credentials(self, info):
+        provider = Providers.get_provider_config(self.provider)
+
+        pk, sk = get_server_keypair()
+
+        authentication_credentials = {}
+        for credential_key in provider["expected_credentials"]:
+            credential_value = decrypt_asymmetric(
+                self.credentials.get(credential_key), sk.hex(), pk.hex()
+            )
+            if credential_value is not None:
+                authentication_credentials[credential_key] = credential_value
+
+        return authentication_credentials
 
 
 class EnvironmentSyncEventType(DjangoObjectType):
@@ -248,7 +299,6 @@ class EnvironmentSyncEventType(DjangoObjectType):
 
 class EnvironmentSyncType(DjangoObjectType):
     service_info = graphene.Field(ServiceType)
-    credentials = graphene.JSONString()
     history = graphene.List(NonNull(EnvironmentSyncEventType), required=True)
 
     class Meta:
@@ -262,28 +312,13 @@ class EnvironmentSyncType(DjangoObjectType):
             "created_at",
             "last_sync",
             "status",
-            "credentials",
+            "authentication",
             "history",
         )
 
     def resolve_service_info(self, info):
         service_config = ServiceConfig.get_service_config(self.service.lower())
         return service_config
-
-    def resolve_credentials(self, info):
-        service_config = ServiceConfig.get_service_config(self.service)
-
-        pk, sk = get_server_keypair()
-
-        authentication_credentials = {}
-        for credential_key in service_config.get("expected_credentials", []):
-            credential_value = decrypt_asymmetric(
-                self.authentication.get(credential_key), sk.hex(), pk.hex()
-            )
-            if credential_value is not None:
-                authentication_credentials[credential_key] = credential_value
-
-        return authentication_credentials
 
     def resolve_history(self, info):
         return EnvironmentSyncEvent.objects.filter(env_sync=self).order_by(
@@ -406,7 +441,8 @@ class SecretType(DjangoObjectType):
         if info.context.user:
             org = self.environment.app.organisation
             org_member = OrganisationMember.objects.get(
-                organisation=org, user=info.context.user, deleted_at=None)
+                organisation=org, user=info.context.user, deleted_at=None
+            )
 
             try:
                 override = PersonalSecret.objects.get(secret=self, user=org_member)

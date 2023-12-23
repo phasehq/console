@@ -10,7 +10,7 @@ from backend.api.kv import write
 import json
 from django.utils import timezone
 from django.conf import settings
-from api.services import ServiceConfig
+from api.services import Providers, ServiceConfig
 from api.tasks import trigger_sync_tasks
 
 
@@ -246,6 +246,19 @@ class ServerEnvironmentKey(models.Model):
         self.save()
 
 
+class ProviderCredentials(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, related_name="credentials", on_delete=models.CASCADE
+    )
+    name = models.CharField(max_length=64)
+    provider = models.CharField(max_length=50, choices=Providers.get_provider_choices())
+    credentials = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+
 class EnvironmentSync(models.Model):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -264,7 +277,9 @@ class EnvironmentSync(models.Model):
         max_length=50, choices=ServiceConfig.get_service_choices()
     )
     options = models.JSONField()
-    authentication = models.JSONField()
+    authentication = models.ForeignKey(
+        ProviderCredentials, on_delete=models.SET_NULL, null=True
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
