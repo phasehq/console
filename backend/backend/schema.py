@@ -32,11 +32,11 @@ from .graphene.mutations.syncing import (
     CreateAWSSecretsManagerSync,
     CreateCloudflarePagesSync,
     CreateProviderCredentials,
+    DeleteProviderCredentials,
     DeleteSync,
     InitEnvSync,
     ToggleSyncActive,
     TriggerSync,
-    UpdateCloudflarePagesSyncCredentials,
     UpdateProviderCredentials,
     UpdateSyncAuthentication,
 )
@@ -598,12 +598,13 @@ class Mutation(graphene.ObjectType):
     trigger_sync = TriggerSync.Field()
     toggle_sync_active = ToggleSyncActive.Field()
     update_sync_authentication = UpdateSyncAuthentication.Field()
+
     create_provider_credentials = CreateProviderCredentials.Field()
     update_provider_credentials = UpdateProviderCredentials.Field()
+    delete_provider_credentials = DeleteProviderCredentials.Field()
 
     # Cloudflare
     create_cloudflare_pages_sync = CreateCloudflarePagesSync.Field()
-    update_cloudflare_sync_credentials = UpdateCloudflarePagesSyncCredentials.Field()
 
     # AWS
     create_aws_secret_sync = CreateAWSSecretsManagerSync.Field()

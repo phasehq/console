@@ -98,6 +98,24 @@ class UpdateProviderCredentials(graphene.Mutation):
         return UpdateProviderCredentials(credential=credential)
 
 
+class DeleteProviderCredentials(graphene.Mutation):
+    class Arguments:
+        credential_id = graphene.ID()
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, credential_id):
+        credential = ProviderCredentials.objects.get(id=credential_id)
+
+        if not user_is_org_member(info.context.user.userId, credential.organisation.id):
+            raise GraphQLError("You don't have permission to perform this action")
+
+        credential.delete()
+
+        return DeleteProviderCredentials(ok=True)
+
+
 class CreateCloudflarePagesSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
@@ -156,35 +174,6 @@ class CreateCloudflarePagesSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateCloudflarePagesSync(sync=sync)
-
-
-class UpdateCloudflarePagesSyncCredentials(graphene.Mutation):
-    class Arguments:
-        sync_id = graphene.ID()
-        access_token = graphene.String()
-        account_id = graphene.String()
-
-    sync = graphene.Field(EnvironmentSyncType)
-
-    @classmethod
-    def mutate(cls, root, info, sync_id, access_token, account_id):
-        sync = EnvironmentSync.objects.get(id=sync_id)
-
-        if not user_can_access_environment(
-            info.context.user.userId, sync.environment.id
-        ):
-            raise GraphQLError("You don't have access to this environment")
-
-        authentication_credentials = {
-            "access_token": access_token,
-            "account_id": account_id,
-        }
-
-        sync.authentication = authentication_credentials
-        sync.updated_at = timezone.now()
-        sync.save()
-
-        return UpdateCloudflarePagesSyncCredentials(sync=sync)
 
 
 class CreateAWSSecretsManagerSync(graphene.Mutation):
