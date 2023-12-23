@@ -1,20 +1,39 @@
+class Providers:
+    CLOUDFLARE = {
+        "id": "cloudflare",
+        "name": "Cloudflare",
+        "expected_credentials": ["access_token", "account_id"],
+        "auth_scheme": "token",
+    }
+
+    AWS = {
+        "id": "aws",
+        "name": "AWS",
+        "expected_credentials": ["access_key_id", "secret_access_key"],
+        "auth_scheme": "token",
+    }
+
+    @classmethod
+    def get_provider_choices(cls):
+        return [
+            (provider["id"], provider["name"])
+            for provider in cls.__dict__.values()
+            if isinstance(provider, dict)
+        ]
+
+    def get_provider_config(provider_id):
+        for provider in Providers.__dict__.values():
+            if isinstance(provider, dict) and provider["id"] == provider_id:
+                return provider
+        raise ValueError("Provider not found")
+
+
 class ServiceConfig:
     CLOUDFLARE_PAGES = {
         "id": "cloudflare_pages",
         "name": "Cloudflare Pages",
+        "provider": Providers.CLOUDFLARE,
         "api_url": "https://api.cloudflare.com/client/v4",
-        "auth_scheme": "token",
-        "expected_credentials": ["access_token", "account_id"],
-        "resource_type": "project",
-        "subresource_options": ["production", "preview"],
-    }
-
-    CLOUDFLARE_SECRETS = {
-        "id": "cloudflare_secrets",
-        "name": "Cloudflare Secrets",
-        "api_url": "https://api.cloudflare.com/client/v4",
-        "auth_scheme": "token",
-        "expected_credentials": ["access_token", "account_id"],
         "resource_type": "project",
         "subresource_options": ["production", "preview"],
     }
@@ -22,14 +41,19 @@ class ServiceConfig:
     CLOUDFLARE_WORKERS = {
         "id": "cloudflare_workers",
         "name": "Cloudflare Workers",
+        "provider": Providers.CLOUDFLARE,
         "api_url": "https://api.cloudflare.com/client/v4",
-        "auth_scheme": "token",
-        "expected_credentials": ["access_token", "account_id"],
         "resource_type": "project",
         "subresource_options": ["production", "preview"],
     }
 
-    # Define other services in the same way...
+    AWS_SECRETS_MANAGER = {
+        "id": "aws_secrets_manager",
+        "name": "AWS Secrets Manager",
+        "provider": Providers.AWS,
+        "resource_type": "secret",
+        "subresource_options": [],
+    }
 
     @classmethod
     def get_service_choices(cls):
@@ -44,9 +68,3 @@ class ServiceConfig:
             if isinstance(service, dict) and service["id"] == service_id:
                 return service
         raise ValueError("Service not found")
-
-
-# # Example usage:
-# service_config = get_service_config('cloudflare')
-# api_url = service_config['api_url']
-# # ... use api_url ...
