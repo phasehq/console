@@ -1,5 +1,5 @@
-mutation CreateNewCfPagesSync($envId: ID!, $projectName: String!, $deploymentId: ID!, $projectEnv: String!, $accessToken: String!, $accountId: String!) {
-  createCloudflarePagesSync(envId: $envId, projectName: $projectName, deploymentId: $deploymentId, projectEnv: $projectEnv, accessToken: $accessToken, accountId: $accountId) {
+mutation CreateNewCfPagesSync($envId: ID!, $projectName: String!, $deploymentId: ID!, $projectEnv: String!, $credentialId: ID!) {
+  createCloudflarePagesSync(envId: $envId, projectName: $projectName, deploymentId: $deploymentId, projectEnv: $projectEnv, credentialId: $credentialId) {
     sync {
       id
       environment {

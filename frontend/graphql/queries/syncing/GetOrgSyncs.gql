@@ -1,11 +1,14 @@
-query GetAppSyncStatus($appId: ID!) {
-  syncEnabled(appId: $appId)
-  syncs(appId: $appId) {
+query GetOrganisationSyncs($orgId: ID!) {
+  syncs(orgId: $orgId) {
     id
     environment {
       id
       name
       envType
+      app {
+        id
+        name
+      }
     }
     serviceInfo {
       id
@@ -29,5 +32,4 @@ query GetAppSyncStatus($appId: ID!) {
       meta
     }
   }
-  serverPublicKey 
 }

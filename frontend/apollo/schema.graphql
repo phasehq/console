@@ -20,9 +20,12 @@ type Query {
   serviceTokens(appId: ID): [ServiceTokenType]
   serverPublicKey: String
   syncEnabled(appId: ID): Boolean
-  appSyncs(appId: ID): [EnvironmentSyncType]
+  providers: [ProviderType]
+  savedCredentials(orgId: ID): [ProviderCredentialsType]
+  syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
   envSyncs(envId: ID): [EnvironmentSyncType]
-  cloudflarePagesProjects(accountId: String, accessToken: String): [CloudFlarePagesType]
+  cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
+  awsSecrets(accessKeyId: String, secretAccessKey: String, region: String): [AWSSecretType]
 }
 
 type OrganisationType {
@@ -208,6 +211,7 @@ type PersonalSecretType {
 
 type EnvironmentType {
   id: String!
+  app: AppType!
   name: String!
   envType: ApiEnvironmentEnvTypeChoices!
   identityKey: String!
@@ -314,17 +318,21 @@ type ServerEnvironmentKeyType {
   updatedAt: DateTime!
 }
 
-type EnvironmentSyncType {
+type ProviderType {
   id: String!
-  environment: EnvironmentType!
-  options: JSONString!
-  isActive: Boolean!
+  name: String!
+  expectedCredentials: [String!]!
+  authScheme: String
+}
+
+type ProviderCredentialsType {
+  id: String!
+  name: String!
+  provider: ProviderType
+  credentials: JSONString!
   createdAt: DateTime
-  lastSync: DateTime
-  status: ApiEnvironmentSyncStatusChoices!
-  serviceInfo: ServiceType
-  credentials: JSONString
-  history: [EnvironmentSyncEventType!]!
+  updatedAt: DateTime!
+  syncCount: Int
 }
 
 """
@@ -334,6 +342,19 @@ Use of this type is *not recommended* as you lose the benefits of having a defin
 schema (one of the key benefits of GraphQL).
 """
 scalar JSONString
+
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  options: JSONString!
+  authentication: ProviderCredentialsType
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
+  serviceInfo: ServiceType
+  history: [EnvironmentSyncEventType!]!
+}
 
 """An enumeration."""
 enum ApiEnvironmentSyncStatusChoices {
@@ -387,6 +408,11 @@ type CloudFlarePagesType {
   environments: [String]
 }
 
+type AWSSecretType {
+  name: String
+  arn: String
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
@@ -408,8 +434,12 @@ type Mutation {
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
   toggleSyncActive(syncId: ID): ToggleSyncActive
-  createCloudflarePagesSync(accessToken: String, accountId: String, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
+  updateSyncAuthentication(credentialId: ID, syncId: ID): UpdateSyncAuthentication
+  createProviderCredentials(credentials: JSONString, name: String, orgId: ID, provider: String): CreateProviderCredentials
+  updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
+  createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
   updateCloudflareSyncCredentials(accessToken: String, accountId: String, syncId: ID): UpdateCloudflarePagesSyncCredentials
+  createAwsSecretSync(arn: String, credentialId: ID, envId: ID, region: String, secretName: String): CreateAWSSecretsManagerSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -521,11 +551,27 @@ type ToggleSyncActive {
   ok: Boolean
 }
 
+type UpdateSyncAuthentication {
+  sync: EnvironmentSyncType
+}
+
+type CreateProviderCredentials {
+  credential: ProviderCredentialsType
+}
+
+type UpdateProviderCredentials {
+  credential: ProviderCredentialsType
+}
+
 type CreateCloudflarePagesSync {
   sync: EnvironmentSyncType
 }
 
 type UpdateCloudflarePagesSyncCredentials {
+  sync: EnvironmentSyncType
+}
+
+type CreateAWSSecretsManagerSync {
   sync: EnvironmentSyncType
 }
 
