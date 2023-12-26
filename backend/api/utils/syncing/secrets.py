@@ -86,7 +86,7 @@ def get_environment_secrets(environment_sync):
                 )
             except ValueError as e:
                 print(
-                    f"The environment '{ref_env}' for key '{key}' either does not exist or you do not have access to it. Reference {ref_key} not found. Ignoring..."
+                    f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
                 )
                 value = value.replace(f"${{{ref_env}.{ref_key}}}", "")
 
@@ -98,7 +98,7 @@ def get_environment_secrets(environment_sync):
                 f"${{{ref_key}}}",
                 secrets_dict.get(
                     ref_key,
-                    f"Warning: Local reference {ref_key} not found for key {key}. Ignoring...",
+                    f"Warning: Local reference not found for key.",
                 ),
             )
 
