@@ -10,6 +10,7 @@ from nacl.bindings import (
     crypto_kx_client_session_keys,
     crypto_kx_server_session_keys,
     crypto_secretbox_NONCEBYTES,
+    crypto_generichash,
 )
 from nacl.encoding import RawEncoder
 from typing import Tuple
@@ -87,11 +88,6 @@ def decrypt_asymmetric(ciphertext_string, private_key_hex, public_key_hex):
     plaintext = decrypt_string(ciphertext_segments[3], session_keys[0])
 
     return plaintext
-
-
-def digest(input):
-    hash = blake2b(input.encode(), encoder=RawEncoder)
-    return b64encode(hash).decode()
 
 
 def encrypt_raw(plaintext, key):

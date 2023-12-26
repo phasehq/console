@@ -1,12 +1,20 @@
-from api.utils.crypto import decrypt_asymmetric, env_keypair, get_server_keypair
-
+from api.utils.crypto import (
+    blake2b_digest,
+    decrypt_asymmetric,
+    env_keypair,
+    get_server_keypair,
+)
+import re
 from django.apps import apps
 
-# from backend.api.models import Secret, ServerEnvironmentKey
+
+cross_env_pattern = re.compile(r"\$\{(.+?)\.(.+?)\}")
+local_ref_pattern = re.compile(r"\$\{(.+?)\}")
 
 
 def get_environment_secrets(environment_sync):
     Secret = apps.get_model("api", "Secret")
+    Environment = apps.get_model("api", "Environment")
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
 
     pk, sk = get_server_keypair()
@@ -14,6 +22,8 @@ def get_environment_secrets(environment_sync):
     server_env_key = ServerEnvironmentKey.objects.get(
         environment_id=environment_sync.environment.id
     )
+
+    app = server_env_key.environment.app
 
     env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
 
@@ -31,4 +41,69 @@ def get_environment_secrets(environment_sync):
 
         kv_pairs.append((key, value))
 
-    return kv_pairs
+    # Create a dictionary from the fetched secrets for easy look-up
+    secrets_dict = dict(kv_pairs)
+
+    # Iterate through the secrets and resolve references
+    for key, value in secrets_dict.items():
+        # Handle cross environment references
+        cross_env_matches = re.findall(cross_env_pattern, value)
+
+        for ref_env, ref_key in cross_env_matches:
+            try:
+                referenced_environment = Environment.objects.get(
+                    name__iexact=ref_env, app=app
+                )
+                referenced_environment_key = ServerEnvironmentKey.objects.get(
+                    environment_id=referenced_environment.id
+                )
+                seed = decrypt_asymmetric(
+                    referenced_environment_key.wrapped_seed, sk.hex(), pk.hex()
+                )
+                salt = decrypt_asymmetric(
+                    referenced_environment_key.wrapped_salt, sk.hex(), pk.hex()
+                )
+
+                key_digest = blake2b_digest(ref_key, salt)
+
+                referenced_env_pubkey, referenced_env_privkey = env_keypair(seed)
+
+                referenced_secret = Secret.objects.get(
+                    environment=referenced_environment,
+                    key_digest=key_digest,
+                    deleted_at=None,
+                )
+
+                referenced_secret_value = decrypt_asymmetric(
+                    referenced_secret.value,
+                    referenced_env_privkey,
+                    referenced_env_pubkey,
+                )
+
+                # ref_secret = phase.get(env_name=ref_env, keys=[ref_key], app_name=phase_app)[0]
+                value = value.replace(
+                    f"${{{ref_env}.{ref_key}}}", referenced_secret_value
+                )
+            except ValueError as e:
+                print(
+                    f"The environment '{ref_env}' for key '{key}' either does not exist or you do not have access to it. Reference {ref_key} not found. Ignoring..."
+                )
+                value = value.replace(f"${{{ref_env}.{ref_key}}}", "")
+
+        # Handle local references
+        local_ref_matches = re.findall(local_ref_pattern, value)
+
+        for ref_key in local_ref_matches:
+            value = value.replace(
+                f"${{{ref_key}}}",
+                secrets_dict.get(
+                    ref_key,
+                    f"Warning: Local reference {ref_key} not found for key {key}. Ignoring...",
+                ),
+            )
+
+        secrets_dict[key] = value
+
+    secrets_kv_pairs = list(secrets_dict.items())
+
+    return secrets_kv_pairs

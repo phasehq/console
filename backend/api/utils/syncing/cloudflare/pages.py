@@ -53,8 +53,6 @@ def get_cf_pages_credentials(environment_sync):
         environment_sync.authentication.credentials["access_token"], sk.hex(), pk.hex()
     )
 
-    print("GOT CREDENTIALS", account_id, access_token)
-
     return account_id, access_token
 
 

@@ -27,8 +27,6 @@ def resolve_server_public_key(root, info):
 
 
 def resolve_sync_enabled(root, info, app_id):
-    # ServerEnvironmentKey.objects.all().delete()
-
     if not user_can_access_app(info.context.user.userId, app_id):
         raise GraphQLError("You don't have access to this app")
 
@@ -47,8 +45,6 @@ def resolve_providers(self, info):
 def resolve_saved_credentials(root, info, org_id):
     if not user_is_org_member(info.context.user.userId, org_id):
         raise GraphQLError("You don't have permission to perform this acttion")
-
-    # ProviderCredentials.objects.all().delete()
 
     return ProviderCredentials.objects.filter(organisation_id=org_id, deleted_at=None)
 
