@@ -254,7 +254,7 @@ export default function Syncing({ params }: { params: { team: string; app: strin
       {data?.syncEnabled === true && (
         <>
           {data.syncs && data.syncs.length > 0 && (
-            <div className="flex flex-col gap-2 border-b border-neutral-500/40 pb-8">
+            <div className="flex flex-col gap-4 border-b border-neutral-500/40 pb-8">
               <div className="text-2xl font-semibold pb-4">Active Syncs</div>
               {data.syncs.map((sync: EnvironmentSyncType) => (
                 <SyncCard key={sync.id} sync={sync} showAppName={true} showManageButton={true} />
