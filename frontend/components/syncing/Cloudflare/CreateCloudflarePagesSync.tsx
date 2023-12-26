@@ -10,12 +10,19 @@ import { Button } from '../../common/Button'
 import { CloudFlarePagesType, EnvironmentType, ProviderCredentialsType } from '@/apollo/graphql'
 import { Listbox, RadioGroup } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaAngleDoubleDown, FaChevronDown, FaCircle, FaDotCircle, FaKey } from 'react-icons/fa'
+import {
+  FaAngleDoubleDown,
+  FaChevronDown,
+  FaCircle,
+  FaCog,
+  FaDotCircle,
+  FaKey,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { SiCloudflarepages } from 'react-icons/si'
 import { organisationContext } from '@/contexts/organisationContext'
-import { CreateProviderCredentialsDialog } from '../CreateProviderCredentialsDialog'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
+import Link from 'next/link'
 
 export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -107,21 +114,26 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
         <div className="text-neutral-500">Sync an environment with Cloudflare pages.</div>
       </div>
 
-      {/* {!credentialsValid && (
-        <div className="flex justify-end">
-          <CreateProviderCredentialsDialog />
-        </div>
-      )} */}
-
       <form onSubmit={handleSubmit}>
         {!credentialsValid && (
-          <>
-            <ProviderCredentialPicker
-              credential={credential}
-              setCredential={(cred) => setCredential(cred)}
-              orgId={organisation!.id}
-            />
-          </>
+          <div className="flex items-end gap-2 justify-between">
+            <div className="w-full">
+              <ProviderCredentialPicker
+                credential={credential}
+                setCredential={(cred) => setCredential(cred)}
+                orgId={organisation!.id}
+              />
+            </div>
+            <div className="shrink-0">
+              <Link href={`/${organisation!.name}/integrations`}>
+                <Button variant="secondary">
+                  <div className="py-2">
+                    <FaCog />
+                  </div>
+                </Button>
+              </Link>
+            </div>
+          </div>
         )}
 
         {credentialsValid && (

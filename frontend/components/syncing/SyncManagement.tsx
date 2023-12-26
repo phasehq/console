@@ -84,21 +84,21 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
     <div className="py-4 space-y-4">
       <div className="grid grid-cols-2 w-full gap-4">
         <div className="text-neutral-500 uppercase tracking-widest text-sm">App</div>
-        <div className="font-semibold">{sync.environment.app.name}</div>
+        <div className="font-semibold text-black dark:text-white">{sync.environment.app.name}</div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Environment</div>
-        <div className="font-semibold">{sync.environment.name}</div>
+        <div className="font-semibold text-black dark:text-white">{sync.environment.name}</div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Service</div>
-        <div className="font-semibold">{sync.serviceInfo?.name}</div>
+        <div className="font-semibold text-black dark:text-white">{sync.serviceInfo?.name}</div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Project</div>
-        <div className="font-semibold">
+        <div className="font-semibold text-black dark:text-white">
           {JSON.parse(sync.options)['project_name']}({JSON.parse(sync.options)['environment']})
         </div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Status</div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 text-black dark:text-white">
           <div
             className={clsx(
               'h-2 w-2 rounded-full',
@@ -127,10 +127,12 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
         </div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Created</div>
-        <div className="font-semibold">{relativeTimeFromDates(new Date(sync.createdAt))}</div>
+        <div className="font-semibold text-black dark:text-white">
+          {relativeTimeFromDates(new Date(sync.createdAt))}
+        </div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Last sync</div>
-        <div className="font-semibold flex items-center gap-2">
+        <div className="font-semibold flex items-center gap-2 text-black dark:text-white">
           <SyncStatusIndicator status={sync.status} showLabel />
           {sync.status !== ApiEnvironmentSyncStatusChoices.InProgress &&
             relativeTimeFromDates(new Date(sync.lastSync))}

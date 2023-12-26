@@ -73,9 +73,9 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
                   </Dialog.Title>
                   <div>
                     <div className="col-span-2 flex items-center justify-evenly text-3xl py-4 border-b border-neutral-500/40 font-extralight">
-                      <div>{sync.environment.name}</div>
+                      <div className="text-black dark:text-white">{sync.environment.name}</div>
                       <FaAngleDoubleRight className="text-neutral-500" />
-                      <div>
+                      <div className="text-black dark:text-white">
                         {JSON.parse(sync.options)['project_name']}(
                         <span className="text-neutral-500">
                           {JSON.parse(sync.options)['environment']})

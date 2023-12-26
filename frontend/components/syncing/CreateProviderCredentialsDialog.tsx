@@ -19,7 +19,9 @@ interface CredentialState {
   [key: string]: string
 }
 
-export const CreateProviderCredentialsDialog = () => {
+export const CreateProviderCredentialsDialog = (props: {
+  buttonVariant?: 'primary' | 'secondary'
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -69,26 +71,6 @@ export const CreateProviderCredentialsDialog = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providersData])
 
-  // const encryptCredentials = async () => {
-  //   if (provider?.expectedCredentials && providersData?.serverPublicKey) {
-  //     // Create a deep copy of credentials
-  //     const credentialsCopy = structuredClone(credentials)
-
-  //     // Create a list of promises for each credential encryption
-  //     const encryptionPromises = provider.expectedCredentials.map(async (credential) => {
-  //       credentialsCopy[credential] = await encryptAsymmetric(
-  //         credentials[credential],
-  //         providersData.serverPublicKey
-  //       )
-  //     })
-
-  //     // Wait for all promises to resolve
-  //     await Promise.all(encryptionPromises)
-
-  //     return credentialsCopy
-  //   }
-  // }
-
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
@@ -124,7 +106,12 @@ export const CreateProviderCredentialsDialog = () => {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button type="button" variant="primary" onClick={openModal} title="Store a new credential">
+        <Button
+          type="button"
+          variant={props.buttonVariant || 'primary'}
+          onClick={openModal}
+          title="Store a new credential"
+        >
           <FaPlus /> Add credentials
         </Button>
       </div>

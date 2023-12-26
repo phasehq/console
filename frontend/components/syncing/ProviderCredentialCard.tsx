@@ -31,11 +31,13 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
   }
 
   return (
-    <div className="flex flex-wrap gap-4 justify-between p-2 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium">
+    <div className="grid grid-cols-5 gap-4 justify-between p-2 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium">
       <div className="flex gap-2 items-center">
         {providerIcon(credential.provider!.name)}
         <div>{credential.provider!.name}</div>
       </div>
+
+      <div className="flex gap-2 items-center">{credential.name}</div>
 
       <div className="flex gap-2 items-center">
         Used with {credential.syncCount} sync{credential.syncCount !== 1 && 's'}
@@ -45,7 +47,7 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
         Created {relativeTimeFromDates(new Date(credential.createdAt))}
       </div>
 
-      <div className="flex items-center justify-center">
+      <div className="flex items-center justify-end">
         <Button type="button" variant="secondary" onClick={openModal} title="Manage credential">
           <FaCog /> Manage
         </Button>
