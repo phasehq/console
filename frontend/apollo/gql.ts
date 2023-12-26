@@ -45,6 +45,7 @@ const documents = {
     "mutation DeleteSync($syncId: ID!) {\n  deleteEnvSync(syncId: $syncId) {\n    ok\n  }\n}": types.DeleteSyncDocument,
     "mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  initEnvSync(appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n    }\n  }\n}": types.InitAppSyncingDocument,
     "mutation SaveNewProviderCreds($orgId: ID!, $provider: String!, $name: String!, $credentials: JSONString!) {\n  createProviderCredentials(\n    orgId: $orgId\n    provider: $provider\n    name: $name\n    credentials: $credentials\n  ) {\n    credential {\n      id\n    }\n  }\n}": types.SaveNewProviderCredsDocument,
+    "mutation ToggleSync($syncId: ID!) {\n  toggleSyncActive(syncId: $syncId) {\n    ok\n  }\n}": types.ToggleSyncDocument,
     "mutation TriggerEnvSync($syncId: ID!) {\n  triggerSync(syncId: $syncId) {\n    sync {\n      status\n    }\n  }\n}": types.TriggerEnvSyncDocument,
     "mutation UpdateProviderCreds($credentialId: ID!, $name: String!, $credentials: JSONString!) {\n  updateProviderCredentials(\n    credentialId: $credentialId\n    name: $name\n    credentials: $credentials\n  ) {\n    credential {\n      id\n    }\n  }\n}": types.UpdateProviderCredsDocument,
     "mutation UpdateSyncAuth($syncId: ID!, $credentialId: ID!) {\n  updateSyncAuthentication(syncId: $syncId, credentialId: $credentialId) {\n    sync {\n      id\n      status\n    }\n  }\n}": types.UpdateSyncAuthDocument,
@@ -54,7 +55,7 @@ const documents = {
     "query GetAppActivityChart($appId: ID!, $period: TimeRange) {\n  appActivityChart(appId: $appId, period: $period) {\n    index\n    date\n    data\n  }\n}": types.GetAppActivityChartDocument,
     "query GetAppDetail($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n    appToken\n    appSeed\n    appVersion\n  }\n}": types.GetAppDetailDocument,
     "query GetAppKmsLogs($appId: ID!, $start: BigInt, $end: BigInt) {\n  logs(appId: $appId, start: $start, end: $end) {\n    kms {\n      id\n      timestamp\n      phaseNode\n      eventType\n      ipAddress\n      country\n      city\n      phSize\n    }\n  }\n  kmsLogsCount(appId: $appId)\n}": types.GetAppKmsLogsDocument,
-    "query GetApps($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n  }\n}": types.GetAppsDocument,
+    "query GetApps($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n    syncEnabled\n  }\n}": types.GetAppsDocument,
     "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n    role\n    memberId\n    keyring\n    recovery\n  }\n}": types.GetOrganisationsDocument,
     "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n  }\n}": types.GetInvitesDocument,
     "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role\n    identityKey\n    self\n  }\n}": types.GetOrganisationAdminsAndSelfDocument,
@@ -71,7 +72,7 @@ const documents = {
     "query GetOrganisationSyncs($orgId: ID!) {\n  syncs(orgId: $orgId) {\n    id\n    environment {\n      id\n      name\n      envType\n      app {\n        id\n        name\n      }\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n}": types.GetOrganisationSyncsDocument,
     "query GetAwsSecrets($accessKeyId: String!, $secretAccessKey: String!, $region: String!) {\n  awsSecrets(\n    accessKeyId: $accessKeyId\n    secretAccessKey: $secretAccessKey\n    region: $region\n  ) {\n    name\n    arn\n  }\n}": types.GetAwsSecretsDocument,
     "query GetCfPages($credentialId: ID!) {\n  cloudflarePagesProjects(credentialId: $credentialId) {\n    name\n    deploymentId\n    environments\n  }\n}": types.GetCfPagesDocument,
-    "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  syncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n  serverPublicKey\n}": types.GetAppSyncStatusDocument,
+    "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  syncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n      app {\n        id\n        name\n      }\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n  serverPublicKey\n}": types.GetAppSyncStatusDocument,
     "query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n  }\n  serverPublicKey\n}": types.GetProviderListDocument,
     "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n    }\n    syncCount\n  }\n}": types.GetSavedCredentialsDocument,
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
@@ -223,6 +224,10 @@ export function graphql(source: "mutation SaveNewProviderCreds($orgId: ID!, $pro
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation ToggleSync($syncId: ID!) {\n  toggleSyncActive(syncId: $syncId) {\n    ok\n  }\n}"): (typeof documents)["mutation ToggleSync($syncId: ID!) {\n  toggleSyncActive(syncId: $syncId) {\n    ok\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation TriggerEnvSync($syncId: ID!) {\n  triggerSync(syncId: $syncId) {\n    sync {\n      status\n    }\n  }\n}"): (typeof documents)["mutation TriggerEnvSync($syncId: ID!) {\n  triggerSync(syncId: $syncId) {\n    sync {\n      status\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -259,7 +264,7 @@ export function graphql(source: "query GetAppKmsLogs($appId: ID!, $start: BigInt
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetApps($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n  }\n}"): (typeof documents)["query GetApps($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n  }\n}"];
+export function graphql(source: "query GetApps($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n    syncEnabled\n  }\n}"): (typeof documents)["query GetApps($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n    syncEnabled\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -327,7 +332,7 @@ export function graphql(source: "query GetCfPages($credentialId: ID!) {\n  cloud
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  syncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n  serverPublicKey\n}"): (typeof documents)["query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  syncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n  serverPublicKey\n}"];
+export function graphql(source: "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  syncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n      app {\n        id\n        name\n      }\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n  serverPublicKey\n}"): (typeof documents)["query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  syncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n      app {\n        id\n        name\n      }\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n  serverPublicKey\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

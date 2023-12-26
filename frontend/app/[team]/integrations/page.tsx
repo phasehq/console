@@ -1,20 +1,26 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useEffect } from 'react'
+import { Fragment, useContext, useEffect } from 'react'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
-import { useLazyQuery, useQuery } from '@apollo/client'
-import { EnvironmentSyncType, ProviderCredentialsType } from '@/apollo/graphql'
+import { useLazyQuery } from '@apollo/client'
+import { AppType, EnvironmentSyncType, ProviderCredentialsType } from '@/apollo/graphql'
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
 import { SyncCard } from '@/components/syncing/SyncCard'
-import { ManageSyncDialog } from '@/components/syncing/ManageSyncDialog'
 import { ProviderCredentialCard } from '@/components/syncing/ProviderCredentialCard'
-import { FaProjectDiagram } from 'react-icons/fa'
+import { GetApps } from '@/graphql/queries/getApps.gql'
+import { Button } from '@/components/common/Button'
+import { SyncOptions } from '@/components/syncing/SyncOptions'
+import { Menu, Transition } from '@headlessui/react'
+import { FaArrowRight, FaPlus } from 'react-icons/fa'
+import clsx from 'clsx'
+import Link from 'next/link'
 
 export default function Integrations({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const [getApps, { data: appsData }] = useLazyQuery(GetApps)
   const [getSavedCredentials, { data: credentialsData }] = useLazyQuery(GetSavedCredentials)
   const [getOrgSyncs, { data: syncsData }] = useLazyQuery(GetOrganisationSyncs)
 
@@ -22,8 +28,59 @@ export default function Integrations({ params }: { params: { team: string } }) {
     if (organisation) {
       getSavedCredentials({ variables: { orgId: organisation.id }, pollInterval: 10000 })
       getOrgSyncs({ variables: { orgId: organisation.id }, pollInterval: 10000 })
+      getApps({ variables: { organisationId: organisation.id, appId: '' } })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisation])
+
+  const syncableApps = appsData?.apps.filter((app: AppType) => app.syncEnabled) ?? []
+
+  const NewSyncMenu = () => {
+    return (
+      <Menu as="div" className="relative group">
+        {({ open }) => (
+          <>
+            <Menu.Button as={Fragment}>
+              <Button type="button" variant="primary" title="Create a new snc">
+                <FaPlus /> Create a sync
+              </Button>
+            </Menu.Button>
+            <Transition
+              enter="transition duration-100 ease-out"
+              enterFrom="transform scale-95 opacity-0"
+              enterTo="transform scale-100 opacity-100"
+              leave="transition duration-75 ease-out"
+              leaveFrom="transform scale-100 opacity-100"
+              leaveTo="transform scale-95 opacity-0"
+              as="div"
+              className="absolute z-10 right-0 origin-bottom-right mt-2"
+            >
+              <Menu.Items as={Fragment}>
+                <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                  {syncableApps.map((app: AppType) => (
+                    <Menu.Item key={app.id} as={Fragment}>
+                      {({ active }) => (
+                        <Link
+                          href={`/${params.team}/apps/${app.id}/syncing?newSync=true`}
+                          className={clsx(
+                            'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
+                            active && 'bg-zinc-200 dark:bg-zinc-700'
+                          )}
+                        >
+                          <div className="text-lg">{app.name}</div>
+                          <FaArrowRight className="text-neutral-500" />
+                        </Link>
+                      )}
+                    </Menu.Item>
+                  ))}
+                </div>
+              </Menu.Items>
+            </Transition>
+          </>
+        )}
+      </Menu>
+    )
+  }
 
   return (
     <div className="w-full space-y-8 p-8 text-black dark:text-white">
@@ -38,6 +95,12 @@ export default function Integrations({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage syncs</p>
         </div>
 
+        {syncsData?.syncs.length > 0 && (
+          <div className="flex justify-end">
+            <NewSyncMenu />
+          </div>
+        )}
+
         {syncsData?.syncs.length > 0 ? (
           syncsData?.syncs.map((sync: EnvironmentSyncType) => (
             <SyncCard key={sync.id} sync={sync} showAppName={true} showManageButton={true} />
@@ -47,6 +110,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
             <div className="font-semibold text-black dark:text-white text-xl">No syncs</div>
             <div className="text-neutral-500">
               Create a sync from the &quot;Syncing&quot; tab of an App
+            </div>
+            <div className="flex justify-center p-4">
+              <NewSyncMenu />
             </div>
           </div>
         )}

@@ -107,6 +107,7 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
+  syncEnabled: Boolean
 }
 
 """An enumeration."""

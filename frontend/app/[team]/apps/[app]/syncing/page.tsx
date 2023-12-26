@@ -22,10 +22,15 @@ import { Alert } from '@/components/common/Alert'
 import { SyncCard } from '@/components/syncing/SyncCard'
 import { ManageSyncDialog } from '@/components/syncing/ManageSyncDialog'
 import { SyncOptions } from '@/components/syncing/SyncOptions'
+import { useSearchParams } from 'next/navigation'
 
 export default function Syncing({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring, setKeyring } = useContext(KeyringContext)
+
+  const searchParams = useSearchParams()
+
+  const openCreateSyncPanel = searchParams.get('newSync')
 
   const { data } = useQuery(GetAppSyncStatus, {
     variables: { appId: params.app },
@@ -257,7 +262,10 @@ export default function Syncing({ params }: { params: { team: string; app: strin
             </div>
           )}
 
-          <SyncOptions appId={params.app} defaultOpen={data.syncs && data.syncs.length === 0} />
+          <SyncOptions
+            appId={params.app}
+            defaultOpen={openCreateSyncPanel || (data.syncs && data.syncs.length === 0)}
+          />
         </>
       )}
     </div>
