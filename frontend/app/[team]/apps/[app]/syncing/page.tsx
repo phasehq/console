@@ -252,12 +252,7 @@ export default function Syncing({ params }: { params: { team: string; app: strin
             <div className="flex flex-col gap-2 border-b border-neutral-500/40 pb-8">
               <div className="text-2xl font-semibold pb-4">Active Syncs</div>
               {data.syncs.map((sync: EnvironmentSyncType) => (
-                <ManageSyncDialog
-                  key={sync.id}
-                  sync={sync}
-                  appId={params.app}
-                  button={<SyncCard sync={sync} />}
-                />
+                <SyncCard key={sync.id} sync={sync} showAppName={true} showManageButton={true} />
               ))}
             </div>
           )}

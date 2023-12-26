@@ -7,19 +7,15 @@ import { SyncManagement } from './SyncManagement'
 import { SyncHistory } from './SyncHistory'
 import clsx from 'clsx'
 
-export const ManageSyncDialog = (props: {
-  sync: EnvironmentSyncType
-  appId: string
-  button: ReactNode
-}) => {
-  const { sync, appId, button } = props
+export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: ReactNode }) => {
+  const { sync, button } = props
 
   const [tabIndex, setTabIndex] = useState(0)
 
   const tabs = [
     {
       label: 'Manage',
-      component: <SyncManagement sync={sync} appId={appId} />,
+      component: <SyncManagement sync={sync} />,
     },
     {
       label: 'History',

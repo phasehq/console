@@ -5,7 +5,6 @@ import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.g
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
 import CreateNewCfPagesSync from '@/graphql/mutations/syncing/cloudflare/CreateCfPagesSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { encryptAsymmetric } from '@/utils/crypto'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
 import { CloudFlarePagesType, EnvironmentType, ProviderCredentialsType } from '@/apollo/graphql'
@@ -18,10 +17,10 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { CreateProviderCredentialsDialog } from '../CreateProviderCredentialsDialog'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 
-export const CreateCloudflarePagesSync = (props: { appId: string; onComplete?: Function }) => {
+export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const { appId } = props
+  const { appId, closeModal } = props
 
   const { data } = useQuery(GetAppSyncStatus, { variables: { appId } })
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
@@ -39,12 +38,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; onComplete?: F
     useMutation(CreateNewCfPagesSync)
 
   const [createNewCred] = useMutation(SaveNewProviderCreds)
-
-  const [accountId, setAccountId] = useState('')
-  const [showAccountId, setShowAccountId] = useState(false)
-
-  const [accessToken, setAccessToken] = useState('')
-  const [showAccessToken, setShowAccessToken] = useState(false)
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
@@ -74,9 +67,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; onComplete?: F
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
-    // const encryptedAccountId = await encryptAsymmetric(accountId, data.serverPublicKey)
-    // const encryptedAccessToken = await encryptAsymmetric(accessToken, data.serverPublicKey)
-
     if (credential === null) {
       toast.error('Please select credential to use for this sync')
       return false
@@ -99,7 +89,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; onComplete?: F
       })
 
       toast.success('Created new Sync!')
-      //props.onComplete()
+      closeModal()
     }
   }
 
@@ -131,47 +121,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; onComplete?: F
               setCredential={(cred) => setCredential(cred)}
               orgId={organisation!.id}
             />
-            {/* <Listbox value={credential} onChange={setCredential}>
-              {({ open }) => (
-                <>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">Credentials</label>
-                  <Listbox.Button as={Fragment} aria-required>
-                    <div className={clsx('p-2 flex items-center justify-between  rounded-md h-10')}>
-                      {credential?.name || 'Select credentials'}
-                      <FaChevronDown
-                        className={clsx(
-                          'transition-transform ease duration-300 text-neutral-500',
-                          open ? 'rotate-180' : 'rotate-0'
-                        )}
-                      />
-                    </div>
-                  </Listbox.Button>
-                  <Listbox.Options>
-                    <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
-                      {credentials.map((cred: ProviderCredentialsType) => (
-                        <Listbox.Option key={cred.id} value={cred} as={Fragment}>
-                          {({ active, selected }) => (
-                            <div
-                              className={clsx(
-                                'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                                active && 'bg-zinc-400 dark:bg-zinc-700'
-                              )}
-                            >
-                              <FaKey className="shrink-0" />
-                              <div className="flex flex-col gap-2">
-                                <span className="text-black dark:text-white font-semibold">
-                                  {cred.name}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </Listbox.Option>
-                      ))}
-                    </div>
-                  </Listbox.Options>
-                </>
-              )}
-            </Listbox> */}
           </>
         )}
 

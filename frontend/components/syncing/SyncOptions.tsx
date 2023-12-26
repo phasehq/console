@@ -14,12 +14,12 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
     {
       name: 'AWS Secret manager',
       icon: <SiAmazonaws className="text-[#232F3E]" />,
-      panel: <CreateAWSSecretsSync appId={appId} />,
+      id: 'aws_secrets',
     },
     {
       name: 'Cloudflare Pages',
       icon: <SiCloudflarepages className="text-[#F38020]" />,
-      panel: <CreateCloudflarePagesSync appId={appId} />,
+      id: 'cloudflare_pages',
     },
   ]
 
@@ -119,9 +119,10 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
                       <div key={service.name}>
                         <CreateSyncDialog
                           appId={appId}
+                          service={service.id}
                           button={
                             <Card>
-                              <div className="flex items-start gap-4">
+                              <div className="flex items-start gap-4 cursor-pointer">
                                 <div className="text-4xl">{service.icon}</div>
                                 <div className="flex flex-col justify-center items-center gap-2">
                                   <div className="text-black dark:text-white text-lg font-semibold">
@@ -134,9 +135,7 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
                               </div>
                             </Card>
                           }
-                        >
-                          {service.panel}
-                        </CreateSyncDialog>
+                        />
                       </div>
                     ))}
                   </div>

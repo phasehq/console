@@ -16,6 +16,9 @@ import time
 def trigger_sync_tasks(env_sync):
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
 
+    if not env_sync.is_active:
+        return
+
     if env_sync.service == ServiceConfig.CLOUDFLARE_PAGES["id"]:
         env_sync.status = EnvironmentSync.IN_PROGRESS
         env_sync.save()

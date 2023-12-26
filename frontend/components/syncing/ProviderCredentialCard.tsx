@@ -46,12 +46,7 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
       </div>
 
       <div className="flex items-center justify-center">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={openModal}
-          title="Store a new credential"
-        >
+        <Button type="button" variant="secondary" onClick={openModal} title="Manage credential">
           <FaCog /> Manage
         </Button>
       </div>

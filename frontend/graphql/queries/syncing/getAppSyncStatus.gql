@@ -6,6 +6,10 @@ query GetAppSyncStatus($appId: ID!) {
       id
       name
       envType
+      app {
+        id
+        name
+      }
     }
     serviceInfo {
       id

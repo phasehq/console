@@ -270,7 +270,8 @@ class ToggleSyncActive(graphene.Mutation):
         ):
             raise GraphQLError("You don't have access to this environment")
 
-        env_sync.delete()
+        env_sync.is_active = not env_sync.is_active
+        env_sync.save()
 
         return ToggleSyncActive(ok=True)
 

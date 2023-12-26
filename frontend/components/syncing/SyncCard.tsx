@@ -1,12 +1,18 @@
 import { ApiEnvironmentSyncStatusChoices, EnvironmentSyncType, ServiceType } from '@/apollo/graphql'
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
-import { FaAngleDoubleRight, FaCube } from 'react-icons/fa'
+import { FaAngleDoubleRight, FaCog, FaCube } from 'react-icons/fa'
 import { SiCloudflare, SiCloudflarepages } from 'react-icons/si'
 import { SyncStatusIndicator } from './SyncStatusIndicator'
+import { Button } from '../common/Button'
+import { ManageSyncDialog } from './ManageSyncDialog'
 
-export const SyncCard = (props: { sync: EnvironmentSyncType; showAppName?: boolean }) => {
-  const { sync, showAppName } = props
+export const SyncCard = (props: {
+  sync: EnvironmentSyncType
+  showAppName?: boolean
+  showManageButton?: boolean
+}) => {
+  const { sync, showAppName, showManageButton } = props
 
   const serviceIcon = (service: ServiceType) => {
     if (service.id!.toLowerCase() === 'cloudflare_pages')
@@ -54,6 +60,17 @@ export const SyncCard = (props: { sync: EnvironmentSyncType; showAppName?: boole
         ></div>
         {sync.isActive ? 'Active' : 'Paused'}
       </div>
+
+      {showManageButton && (
+        <ManageSyncDialog
+          sync={sync}
+          button={
+            <Button type="button" variant="secondary" title="Manage sync">
+              <FaCog /> Manage
+            </Button>
+          }
+        />
+      )}
     </div>
   )
 }

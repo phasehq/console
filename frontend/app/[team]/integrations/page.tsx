@@ -38,14 +38,18 @@ export default function Integrations({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage syncs</p>
         </div>
 
-        {syncsData?.syncs.map((sync: EnvironmentSyncType) => (
-          <ManageSyncDialog
-            key={sync.id}
-            sync={sync}
-            appId={sync.environment.app.id}
-            button={<SyncCard sync={sync} showAppName={true} />}
-          />
-        ))}
+        {syncsData?.syncs.length > 0 ? (
+          syncsData?.syncs.map((sync: EnvironmentSyncType) => (
+            <SyncCard key={sync.id} sync={sync} showAppName={true} showManageButton={true} />
+          ))
+        ) : (
+          <div className="flex flex-col items-center text-center p-16">
+            <div className="font-semibold text-black dark:text-white text-xl">No syncs</div>
+            <div className="text-neutral-500">
+              Create a sync from the &quot;Syncing&quot; tab of an App
+            </div>
+          </div>
+        )}
       </div>
 
       <hr className="border-neutral-500/40" />
@@ -55,13 +59,31 @@ export default function Integrations({ params }: { params: { team: string } }) {
           <h2 className="text-black dark:text-white text-xl font-medium"> Authentication</h2>
           <p className="text-neutral-500">Manage stored credentials for third party services</p>
         </div>
-        <div className="flex justify-end">
-          <CreateProviderCredentialsDialog />
-        </div>
 
-        {credentialsData?.savedCredentials.map((credential: ProviderCredentialsType) => (
-          <ProviderCredentialCard key={credential.id} credential={credential} />
-        ))}
+        {credentialsData?.savedCredentials.length === 0 && (
+          <div className="flex flex-col items-center text-center p-16">
+            <div className="font-semibold text-black dark:text-white text-xl">
+              No authentication credentials
+            </div>
+            <div className="text-neutral-500">
+              Set up a new authentication method to start syncing with third party services.
+            </div>
+            <div className="flex justify-center p-4">
+              <CreateProviderCredentialsDialog />
+            </div>
+          </div>
+        )}
+
+        {credentialsData?.savedCredentials.length > 0 && (
+          <div className="flex justify-end">
+            <CreateProviderCredentialsDialog />
+          </div>
+        )}
+
+        {credentialsData?.savedCredentials.length > 0 &&
+          credentialsData?.savedCredentials.map((credential: ProviderCredentialsType) => (
+            <ProviderCredentialCard key={credential.id} credential={credential} />
+          ))}
       </div>
     </div>
   )

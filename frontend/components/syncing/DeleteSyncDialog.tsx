@@ -7,8 +7,8 @@ import { FaTrashAlt, FaTimes } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { useMutation } from '@apollo/client'
 
-export const DeleteSyncDialog = (props: { sync: EnvironmentSyncType; appId: string }) => {
-  const { sync, appId } = props
+export const DeleteSyncDialog = (props: { sync: EnvironmentSyncType }) => {
+  const { sync } = props
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
@@ -28,7 +28,7 @@ export const DeleteSyncDialog = (props: { sync: EnvironmentSyncType; appId: stri
       refetchQueries: [
         {
           query: GetAppSyncStatus,
-          variables: { appId },
+          variables: { appId: sync.environment.app.id },
         },
       ],
     })

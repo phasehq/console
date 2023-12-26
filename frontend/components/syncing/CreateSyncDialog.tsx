@@ -4,20 +4,13 @@ import { FaTimes } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { CreateCloudflarePagesSync } from './Cloudflare/CreateCloudflarePagesSync'
 import React from 'react'
-
-type SyncPanelContentProps = {
-  children: ReactElement
-  closeModal: Function
-}
-
-const SyncPanelContent: React.FC<SyncPanelContentProps> = ({ children, closeModal }) => {
-  return React.cloneElement(children, { closeModal })
-}
+import { CreateAWSSecretsSync } from './AWS/CreateAWSSecretsSync'
 
 export const CreateSyncDialog = (props: {
   appId: string
   button: ReactElement
-  children: ReactElement
+
+  service: string
 }) => {
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
@@ -27,6 +20,17 @@ export const CreateSyncDialog = (props: {
 
   const openModal = () => {
     setIsOpen(true)
+  }
+
+  const renderSyncPanel = (service: string) => {
+    switch (service) {
+      case 'aws_secrets':
+        return <CreateAWSSecretsSync appId={props.appId} />
+      case 'cloudflare_pages':
+        return <CreateCloudflarePagesSync appId={props.appId} closeModal={closeModal} />
+      default:
+        return null
+    }
   }
 
   return (
@@ -66,10 +70,7 @@ export const CreateSyncDialog = (props: {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="py-4">
-                    {/* <CreateCloudflarePagesSync appId={props.appId} onComplete={closeModal} /> */}
-                    <SyncPanelContent closeModal={closeModal}>{props.children}</SyncPanelContent>
-                  </div>
+                  <div className="py-4">{isOpen && renderSyncPanel(props.service)}</div>
                 </Dialog.Panel>
               </Transition.Child>
             </div>
