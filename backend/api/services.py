@@ -2,7 +2,7 @@ class Providers:
     CLOUDFLARE = {
         "id": "cloudflare",
         "name": "Cloudflare",
-        "expected_credentials": ["access_token", "account_id"],
+        "expected_credentials": ["account_id", "access_token"],
         "auth_scheme": "token",
     }
 
