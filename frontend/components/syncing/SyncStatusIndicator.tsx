@@ -36,7 +36,7 @@ export const SyncStatusIndicator = (props: {
     return (
       <div className="flex items-center gap-2">
         <FaMinusCircle className="text-neutral-500 shrink-0" />
-        {showLabel && 'Cancelled'}
+        {showLabel && 'Skipped'}
       </div>
     )
   } else
