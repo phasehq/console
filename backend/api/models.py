@@ -209,7 +209,10 @@ class Environment(models.Model):
         # Trigger all sync jobs associated with this environment
         [
             trigger_sync_tasks(env_sync)
-            for env_sync in EnvironmentSync.objects.filter(environment=self)
+            for env_sync in EnvironmentSync.objects.filter(
+                environment=self, deleted_at=None
+            )
+            if env_sync.is_active
         ]
 
 
@@ -258,20 +261,22 @@ class ProviderCredentials(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
-    def delete(self, *args, **kwargs):
-        self.deleted_at = timezone.now()
-        self.save()
+    # def delete(self, *args, **kwargs):
+    #     self.deleted_at = timezone.now()
+    #     self.save()
 
 
 class EnvironmentSync(models.Model):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+    CANCELLED = "cancelled"
     TIMED_OUT = "timed_out"
     FAILED = "failed"
 
     STATUS_OPTIONS = [
         (IN_PROGRESS, "In progress"),
         (COMPLETED, "Completed"),
+        (CANCELLED, "cancelled"),
         (TIMED_OUT, "Timed out"),
         (FAILED, "Failed"),
     ]
