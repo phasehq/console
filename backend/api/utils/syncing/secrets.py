@@ -9,7 +9,7 @@ from django.apps import apps
 
 
 cross_env_pattern = re.compile(r"\$\{(.+?)\.(.+?)\}")
-local_ref_pattern = re.compile(r"\$\{(.+?)\}")
+local_ref_pattern = re.compile(r"\$\{([^.]+?)\}")
 
 
 def get_environment_secrets(environment_sync):
@@ -84,7 +84,7 @@ def get_environment_secrets(environment_sync):
                 value = value.replace(
                     f"${{{ref_env}.{ref_key}}}", referenced_secret_value
                 )
-            except ValueError as e:
+            except:
                 print(
                     f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
                 )
