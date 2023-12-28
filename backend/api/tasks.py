@@ -12,7 +12,6 @@ from django_rq import job
 from rq.timeouts import JobTimeoutException
 from rq.job import Job
 from django_rq import get_queue
-import time
 import django_rq
 from rq.exceptions import NoSuchJobError
 
@@ -60,7 +59,6 @@ def cancel_sync_tasks(env_sync):
 @job("default", timeout=3600)
 def sync_cloudflare_pages(environment_sync):
     try:
-        time.sleep(20)
         EnvironmentSync = apps.get_model("api", "EnvironmentSync")
         EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
