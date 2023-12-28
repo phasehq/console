@@ -68,13 +68,13 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
             </td>
 
             <td className="whitespace-nowrap px-6 py-4">
-              <div>Created {relativeTimeFromDates(new Date(event.createdAt))}</div>
+              <div>{relativeTimeFromDates(new Date(event.createdAt))}</div>
             </td>
 
-            <td className="whitespace-nowrap px-6 py-4 font-mono">
+            <td className="whitespace-nowrap px-6 py-4">
               {event.completedAt &&
                 event.status !== ApiEnvironmentSyncEventStatusChoices.InProgress && (
-                  <div>Completed {relativeTimeFromDates(new Date(event.completedAt))}</div>
+                  <div>{relativeTimeFromDates(new Date(event.completedAt))}</div>
                 )}
             </td>
           </Disclosure.Button>
