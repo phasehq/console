@@ -273,6 +273,9 @@ class ToggleSyncActive(graphene.Mutation):
         env_sync.is_active = not env_sync.is_active
         env_sync.save()
 
+        if env_sync.is_active:
+            trigger_sync_tasks(env_sync)
+
         return ToggleSyncActive(ok=True)
 
 
