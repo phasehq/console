@@ -10,7 +10,7 @@ import ToggleSync from '@/graphql/mutations/syncing/toggleSync.gql'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useMutation } from '@apollo/client'
 import clsx from 'clsx'
-import { FaAngleDoubleRight, FaSync } from 'react-icons/fa'
+import { FaAngleDoubleRight, FaExclamationTriangle, FaSync } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { DeleteSyncDialog } from './DeleteSyncDialog'
 import { SyncStatusIndicator } from './SyncStatusIndicator'
@@ -81,7 +81,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
   const isSyncing = sync.status === ApiEnvironmentSyncStatusChoices.InProgress
 
   return (
-    <div className="py-4 space-y-4">
+    <div className="space-y-4 py-4">
       <div className="grid grid-cols-2 w-full gap-4">
         <div className="text-neutral-500 uppercase tracking-widest text-sm">App</div>
         <div className="font-semibold text-black dark:text-white">{sync.environment.app.name}</div>
@@ -97,7 +97,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
           {JSON.parse(sync.options)['project_name']}({JSON.parse(sync.options)['environment']})
         </div>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Status</div>
+        <div className="text-neutral-500 uppercase tracking-widest text-sm">Automatic syncing</div>
         <div className="flex items-center gap-2 text-black dark:text-white">
           <div
             className={clsx(
@@ -140,12 +140,19 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
 
         <hr className="border-neutral-500/20 col-span-2" />
 
-        <div className="col-span-2">
-          <ProviderCredentialPicker
-            credential={credential}
-            setCredential={(cred) => handleUpdateAuth(cred)}
-            orgId={organisation!.id}
-          />
+        <div className="col-span-2 flex items-end gap-4 w-full">
+          <div className="w-full grow">
+            <ProviderCredentialPicker
+              credential={credential}
+              setCredential={(cred) => handleUpdateAuth(cred)}
+              orgId={organisation!.id}
+            />
+          </div>
+          {credential === null && (
+            <div className="py-3">
+              <FaExclamationTriangle className="text-amber-500" title="Action required" />
+            </div>
+          )}
         </div>
 
         <div className="col-span-2 flex items-center gap-4 justify-end pt-4 border-t border-neutral-500/40">
