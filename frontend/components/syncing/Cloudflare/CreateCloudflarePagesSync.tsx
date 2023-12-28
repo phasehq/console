@@ -2,7 +2,6 @@ import GetCfPages from '@/graphql/queries/syncing/cloudflare/getPages.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
-import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
 import CreateNewCfPagesSync from '@/graphql/mutations/syncing/cloudflare/CreateCfPagesSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
@@ -21,7 +20,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
 
   const { appId, closeModal } = props
 
-  const { data } = useQuery(GetAppSyncStatus, { variables: { appId } })
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
       appId,
@@ -35,8 +33,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
 
   const [createCfPagesSync, { data: syncData, loading: creating }] =
     useMutation(CreateNewCfPagesSync)
-
-  const [createNewCred] = useMutation(SaveNewProviderCreds)
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
