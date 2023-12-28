@@ -1,70 +1,21 @@
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaChevronRight, FaPlus } from 'react-icons/fa'
-import { SiAmazonaws, SiCloudflarepages } from 'react-icons/si'
-import { CreateCloudflarePagesSync } from './Cloudflare/CreateCloudflarePagesSync'
+import { FaArrowRight, FaChevronRight, FaPlus } from 'react-icons/fa'
+import { SiCloudflarepages } from 'react-icons/si'
 import { CreateSyncDialog } from './CreateSyncDialog'
-import { CreateAWSSecretsSync } from './AWS/CreateAWSSecretsSync'
 import { Card } from '../common/Card'
+import { Button } from '../common/Button'
 
 export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
   const { defaultOpen, appId } = props
 
   const syncOptions = [
     {
-      name: 'AWS Secret manager',
-      icon: <SiAmazonaws className="text-[#232F3E]" />,
-      id: 'aws_secrets',
-    },
-    {
       name: 'Cloudflare Pages',
       icon: <SiCloudflarepages className="text-[#F38020]" />,
       id: 'cloudflare_pages',
     },
   ]
-
-  // const syncsOptions = [
-  //   {
-  //     categoryName: 'AWS',
-  //     services: [
-  //       {
-  //         name: 'AWS Secret manager',
-  //         icon: <SiAmazonaws />,
-  //         button: (
-  //           <div className="flex flex-col justify-center items-center gap-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg cursor-pointer hover:bg-emerald-200 dark:hover:bg-emerald-900 transition ease">
-  //             <div className="text-5xl">
-  //               <SiAmazonaws />
-  //             </div>
-  //             <div className="text-black dark:text-white text-xl font-semibold">
-  //               AWS Secrets Manager
-  //             </div>
-  //           </div>
-  //         ),
-  //         panel: <CreateAWSSecretsSync appId={appId} />,
-  //       },
-  //     ],
-  //   },
-  //   {
-  //     categoryName: 'Cloudflare',
-  //     services: [
-  //       {
-  //         name: 'Cloudflare Pages',
-  //         icon: <SiCloudflarepages />,
-  //         button: (
-  //           <div className="flex flex-col justify-center items-center gap-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg cursor-pointer hover:bg-emerald-200 dark:hover:bg-emerald-900 transition ease">
-  //             <div className="text-5xl">
-  //               <SiCloudflarepages />
-  //             </div>
-  //             <div className="text-black dark:text-white text-xl font-semibold">
-  //               Cloudflare Pages
-  //             </div>
-  //           </div>
-  //         ),
-  //         panel: <CreateCloudflarePagesSync appId={appId} />,
-  //       },
-  //     ],
-  //   },
-  // ]
 
   return (
     <Disclosure
@@ -122,14 +73,19 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
                           service={service.id}
                           button={
                             <Card>
-                              <div className="flex items-start gap-4 cursor-pointer">
+                              <div className="flex flex-auto gap-4 cursor-pointer">
                                 <div className="text-4xl">{service.icon}</div>
-                                <div className="flex flex-col justify-center items-center gap-2">
+                                <div className="flex flex-col justify-center gap-2">
                                   <div className="text-black dark:text-white text-lg font-semibold">
                                     {service.name}
                                   </div>
                                   <div className="text-neutral-500 text-sm">
                                     Sync an environment with {service.name}
+                                  </div>
+                                  <div className="text-emerald-500">
+                                    <Button variant="link">
+                                      Sync <FaArrowRight />
+                                    </Button>
                                   </div>
                                 </div>
                               </div>
