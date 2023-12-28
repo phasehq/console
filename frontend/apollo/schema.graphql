@@ -365,6 +365,9 @@ enum ApiEnvironmentSyncStatusChoices {
   """Completed"""
   COMPLETED
 
+  """cancelled"""
+  CANCELLED
+
   """Timed out"""
   TIMED_OUT
 
@@ -395,6 +398,9 @@ enum ApiEnvironmentSyncEventStatusChoices {
 
   """Completed"""
   COMPLETED
+
+  """cancelled"""
+  CANCELLED
 
   """Timed out"""
   TIMED_OUT

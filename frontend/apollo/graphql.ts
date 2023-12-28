@@ -56,6 +56,8 @@ export enum ApiEnvironmentEnvTypeChoices {
 
 /** An enumeration. */
 export enum ApiEnvironmentSyncEventStatusChoices {
+  /** cancelled */
+  Cancelled = 'CANCELLED',
   /** Completed */
   Completed = 'COMPLETED',
   /** Failed */
@@ -68,6 +70,8 @@ export enum ApiEnvironmentSyncEventStatusChoices {
 
 /** An enumeration. */
 export enum ApiEnvironmentSyncStatusChoices {
+  /** cancelled */
+  Cancelled = 'CANCELLED',
   /** Completed */
   Completed = 'COMPLETED',
   /** Failed */

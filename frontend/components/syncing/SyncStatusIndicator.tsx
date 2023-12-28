@@ -2,7 +2,7 @@ import {
   ApiEnvironmentSyncEventStatusChoices,
   ApiEnvironmentSyncStatusChoices,
 } from '@/apollo/graphql'
-import { FaCheckCircle, FaHourglassEnd, FaTimesCircle } from 'react-icons/fa'
+import { FaCheckCircle, FaHourglassEnd, FaMinusCircle, FaTimesCircle } from 'react-icons/fa'
 import Spinner from '../common/Spinner'
 
 export const SyncStatusIndicator = (props: {
@@ -30,6 +30,13 @@ export const SyncStatusIndicator = (props: {
       <div className="flex items-center gap-2">
         <FaHourglassEnd className="text-amber-500 shrink-0" />
         {showLabel && 'Timed out'}
+      </div>
+    )
+  } else if (status === ApiEnvironmentSyncStatusChoices.Cancelled) {
+    return (
+      <div className="flex items-center gap-2">
+        <FaMinusCircle className="text-neutral-500 shrink-0" />
+        {showLabel && 'Cancelled'}
       </div>
     )
   } else
