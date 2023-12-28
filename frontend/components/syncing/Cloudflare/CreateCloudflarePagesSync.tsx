@@ -196,7 +196,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute">
+                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto">
                             {filteredProjects.map((project: CloudFlarePagesType) => (
                               <Combobox.Option key={project.deploymentId} value={project}>
                                 {({ active, selected }) => (
