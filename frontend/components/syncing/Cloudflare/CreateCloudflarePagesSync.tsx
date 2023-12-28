@@ -124,15 +124,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                 orgId={organisation!.id}
               />
             </div>
-            <div className="shrink-0">
-              <Link href={`/${organisation!.name}/integrations`}>
-                <Button variant="secondary">
-                  <div className="py-2">
-                    <FaCog />
-                  </div>
-                </Button>
-              </Link>
-            </div>
           </div>
         )}
 
