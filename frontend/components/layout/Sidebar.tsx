@@ -140,7 +140,7 @@ const Sidebar = () => {
       name: 'Integrations',
       href: `/${team}/integrations`,
       icon: <FaProjectDiagram size="20" />,
-      active: usePathname() === `/${team}/members`,
+      active: usePathname() === `/${team}/integrations`,
     },
     {
       name: 'Personal access tokens',
@@ -160,7 +160,6 @@ const Sidebar = () => {
     <div className="h-screen flex flex-col pt-[64px]">
       <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
         <div className="gap-4 p-4 grid grid-cols-1">
-
           <OrgsMenu />
 
           {links.slice(0, 5).map((link) => (
@@ -174,13 +173,13 @@ const Sidebar = () => {
           ))}
         </div>
         <div className="p-4">
-            <SidebarLink
-              key={links[5].name}
-              name={links[5].name}
-              href={links[5].href}
-              icon={links[5].icon}
-              active={links[5].active}
-            />
+          <SidebarLink
+            key={links[5].name}
+            name={links[5].name}
+            href={links[5].href}
+            icon={links[5].icon}
+            active={links[5].active}
+          />
         </div>
       </nav>
     </div>
