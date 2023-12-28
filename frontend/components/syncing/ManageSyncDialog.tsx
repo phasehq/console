@@ -1,11 +1,12 @@
-import { EnvironmentSyncType } from '@/apollo/graphql'
+import { EnvironmentSyncType, ServiceType } from '@/apollo/graphql'
 import { Dialog, Tab, Transition } from '@headlessui/react'
 import { useState, Fragment, ReactNode } from 'react'
-import { FaAngleDoubleRight, FaTimes } from 'react-icons/fa'
+import { FaAngleDoubleRight, FaCube, FaTimes } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { SyncManagement } from './SyncManagement'
 import { SyncHistory } from './SyncHistory'
 import clsx from 'clsx'
+import { SiCloudflare } from 'react-icons/si'
 
 export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: ReactNode }) => {
   const { sync, button } = props
@@ -31,6 +32,12 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
 
   const openModal = () => {
     setIsOpen(true)
+  }
+
+  const serviceIcon = (service: ServiceType) => {
+    if (service.id!.toLowerCase() === 'cloudflare_pages')
+      return <SiCloudflare className="shrink-0" />
+    else return <FaCube />
   }
 
   return (
@@ -71,15 +78,33 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                     </Button>
                   </Dialog.Title>
-                  <div>
-                    <div className="col-span-2 flex items-center justify-evenly text-3xl py-4 border-b border-neutral-500/40 font-extralight">
-                      <div className="text-black dark:text-white">{sync.environment.name}</div>
-                      <FaAngleDoubleRight className="text-neutral-500" />
-                      <div className="text-black dark:text-white">
-                        {JSON.parse(sync.options)['project_name']}(
-                        <span className="text-neutral-500">
-                          {JSON.parse(sync.options)['environment']})
+                  <div className="pt-4">
+                    <div className="flex col-span-2 gap-4 items-center justify-between p-4 border border-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md">
+                      <div className="flex flex-col text-xl">
+                        <span className="text-black dark:text-white font-semibold">
+                          {sync.environment.app.name}{' '}
                         </span>
+
+                        <span className="tracking-wider text-base text-neutral-500">
+                          {sync.environment.envType}
+                        </span>
+                      </div>
+
+                      <div>
+                        <FaAngleDoubleRight className="text-neutral-500 text-xl justify-self-end" />
+                      </div>
+
+                      <div className="text-xl">
+                        <div className="flex gap-2 items-center font-semibold">
+                          {serviceIcon(sync.serviceInfo!)}
+                          <div>{sync.serviceInfo?.name}</div>
+                        </div>
+                        <div className="flex gap-2 text-base">
+                          {JSON.parse(sync.options)['project_name']}
+                          <span className="text-neutral-500 font-normal">
+                            ({JSON.parse(sync.options)['environment']})
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
@@ -103,7 +128,9 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
                       </Tab.List>
                       <Tab.Panels>
                         {tabs.map((tab) => (
-                          <Tab.Panel key={tab.label}>{tab.component}</Tab.Panel>
+                          <div key={tab.label} className="max-h-[80vh] overflow-y-auto">
+                            <Tab.Panel>{tab.component}</Tab.Panel>
+                          </div>
                         ))}
                       </Tab.Panels>
                     </Tab.Group>
