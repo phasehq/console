@@ -8,21 +8,13 @@ import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
 import { CloudFlarePagesType, EnvironmentType, ProviderCredentialsType } from '@/apollo/graphql'
-import { Listbox, RadioGroup } from '@headlessui/react'
+import { Combobox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import {
-  FaAngleDoubleDown,
-  FaChevronDown,
-  FaCircle,
-  FaCog,
-  FaDotCircle,
-  FaKey,
-} from 'react-icons/fa'
+import { FaAngleDoubleDown, FaChevronDown, FaCircle, FaDotCircle } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { SiCloudflarepages } from 'react-icons/si'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
-import Link from 'next/link'
 
 export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -49,6 +41,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
   const [cfProject, setCfProject] = useState<CloudFlarePagesType | null>(null)
+  const [query, setQuery] = useState('')
   const [cfEnv, setCfEnv] = useState<'preview' | 'production'>('preview')
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
 
@@ -101,6 +94,11 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
   }
 
   const cfProjects: CloudFlarePagesType[] = pagesData?.cloudflarePagesProjects ?? []
+
+  const filteredProjects =
+    query === ''
+      ? cfProjects
+      : cfProjects.filter((project) => project.name?.toLowerCase().includes(query.toLowerCase()))
 
   const cfEnvOptions = ['preview', 'production']
 
@@ -164,38 +162,47 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
             </div>
 
             <div className="grid grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Cloudflare Project
-                </label>
-                <div className="relative">
-                  <Listbox value={cfProject} onChange={setCfProject}>
-                    {({ open }) => (
-                      <>
-                        <Listbox.Button as={Fragment} aria-required>
-                          <div
-                            className={clsx(
-                              'p-2 flex items-center justify-between cursor-pointer rounded-md h-10 gap-2'
-                            )}
-                          >
-                            {cfProject?.name || 'Select a project'}
-
-                            <FaChevronDown
-                              className={clsx(
-                                'transition-transform ease duration-300 text-neutral-500',
-                                open ? 'rotate-180' : 'rotate-0'
-                              )}
-                            />
+              <div className="relative">
+                <Combobox value={cfProject} onChange={setCfProject}>
+                  {({ open }) => (
+                    <>
+                      <div className="space-y-2">
+                        <Combobox.Label as={Fragment}>
+                          <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
+                            Cloudflare Project
+                          </label>
+                        </Combobox.Label>
+                        <div className="w-full relative flex items-center">
+                          <Combobox.Input
+                            className="w-full"
+                            onChange={(event) => setQuery(event.target.value)}
+                            required
+                            displayValue={(project: CloudFlarePagesType) => project?.name!}
+                          />
+                          <div className="absolute inset-y-0 right-2 flex items-center">
+                            <Combobox.Button>
+                              <FaChevronDown
+                                className={clsx(
+                                  'text-neutral-500 transform transition ease cursor-pointer',
+                                  open ? 'rotate-180' : 'rotate-0'
+                                )}
+                              />
+                            </Combobox.Button>
                           </div>
-                        </Listbox.Button>
-                        <Listbox.Options>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
-                            {cfProjects.map((project) => (
-                              <Listbox.Option
-                                key={project.deploymentId}
-                                value={project}
-                                as={Fragment}
-                              >
+                        </div>
+                      </div>
+                      <Transition
+                        enter="transition duration-100 ease-out"
+                        enterFrom="transform scale-95 opacity-0"
+                        enterTo="transform scale-100 opacity-100"
+                        leave="transition duration-75 ease-out"
+                        leaveFrom="transform scale-100 opacity-100"
+                        leaveTo="transform scale-95 opacity-0"
+                      >
+                        <Combobox.Options as={Fragment}>
+                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute">
+                            {filteredProjects.map((project: CloudFlarePagesType) => (
+                              <Combobox.Option key={project.deploymentId} value={project}>
                                 {({ active, selected }) => (
                                   <div
                                     className={clsx(
@@ -211,14 +218,14 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                                     </div>
                                   </div>
                                 )}
-                              </Listbox.Option>
+                              </Combobox.Option>
                             ))}
                           </div>
-                        </Listbox.Options>
-                      </>
-                    )}
-                  </Listbox>
-                </div>
+                        </Combobox.Options>
+                      </Transition>
+                    </>
+                  )}
+                </Combobox>
               </div>
 
               <div>
