@@ -257,7 +257,7 @@ export default function Syncing({ params }: { params: { team: string; app: strin
             <div className="flex flex-col gap-4 border-b border-neutral-500/40 pb-8">
               <div className="text-2xl font-semibold pb-4">Active Syncs</div>
               {data.syncs.map((sync: EnvironmentSyncType) => (
-                <SyncCard key={sync.id} sync={sync} showAppName={true} showManageButton={true} />
+                <SyncCard key={sync.id} sync={sync} showAppName={false} showManageButton={true} />
               ))}
             </div>
           )}
