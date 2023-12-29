@@ -120,9 +120,13 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
     elif org_id:
         if not user_is_org_member(info.context.user.userId, org_id):
             raise GraphQLError("You don't have access to this organisation")
-        return EnvironmentSync.objects.filter(
-            environment__app__organisation_id=org_id, deleted_at=None
-        )
+        return [
+            sync
+            for sync in EnvironmentSync.objects.filter(
+                environment__app__organisation_id=org_id, deleted_at=None
+            )
+            if user_can_access_app(info.context.user.userId, sync.environment.app.id)
+        ]
 
     # If neither app_id, env_id, nor org_id is provided
     else:
