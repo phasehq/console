@@ -36,10 +36,12 @@ def list_cloudflare_pages(ACCOUNT_ID, ACCESS_TOKEN):
         return cf_projects
 
     elif response.status_code == 401 or response.status_code == 403:
-        raise Exception("Incorrect credentials")
+        raise Exception("Error listing Cloudflare Pages: Incorrect credentials")
 
     else:
-        raise Exception("Error in listing Cloudflare pages:", response.text)
+        raise Exception(
+            "Error listing Cloudflare Pages. Please verify that your credentials are correct."
+        )
 
 
 # TODO replace this with a generic util using the logic in the credential resolver for EnvironmentSyncType
