@@ -17,9 +17,14 @@ import { FaArrowRight, FaPlus } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { userIsAdmin } from '@/utils/permissions'
+import { useSearchParams } from 'next/navigation'
 
 export default function Integrations({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const searchParams = useSearchParams()
+
+  const openCreateCredentialDialog = searchParams.get('newCredential')
 
   const [getApps, { data: appsData }] = useLazyQuery(GetApps)
   const [getSavedCredentials, { data: credentialsData }] = useLazyQuery(GetSavedCredentials)
@@ -141,7 +146,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
             </div>
             {activeUserIsAdmin && (
               <div className="flex justify-center p-4">
-                <CreateProviderCredentialsDialog />
+                <CreateProviderCredentialsDialog
+                  defaultOpen={openCreateCredentialDialog !== null}
+                />
               </div>
             )}
           </div>
@@ -149,7 +156,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
         {credentialsData?.savedCredentials.length > 0 && activeUserIsAdmin && (
           <div className="flex justify-end">
-            <CreateProviderCredentialsDialog />
+            <CreateProviderCredentialsDialog defaultOpen={openCreateCredentialDialog !== null} />
           </div>
         )}
 

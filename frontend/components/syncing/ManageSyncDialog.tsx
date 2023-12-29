@@ -13,17 +13,6 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
 
   const [tabIndex, setTabIndex] = useState(0)
 
-  const tabs = [
-    {
-      label: 'Manage',
-      component: <SyncManagement sync={sync} />,
-    },
-    {
-      label: 'History',
-      component: <SyncHistory history={sync.history} />,
-    },
-  ]
-
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const closeModal = () => {
@@ -33,6 +22,17 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
   const openModal = () => {
     setIsOpen(true)
   }
+
+  const tabs = [
+    {
+      label: 'Manage',
+      component: <SyncManagement sync={sync} closeModal={closeModal} />,
+    },
+    {
+      label: 'History',
+      component: <SyncHistory history={sync.history} />,
+    },
+  ]
 
   const serviceIcon = (service: ServiceType) => {
     if (service.id!.toLowerCase() === 'cloudflare_pages')

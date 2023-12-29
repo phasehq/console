@@ -20,9 +20,10 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
 import { Switch } from '@headlessui/react'
 import { userIsAdmin } from '@/utils/permissions'
+import { usePathname } from 'next/navigation'
 
-export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
-  const { sync } = props
+export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: () => void }) => {
+  const { sync, closeModal } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -32,6 +33,8 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(sync.authentication!)
   const [isActive, setIsActive] = useState<boolean>(sync.isActive)
+
+  const isOnIntegrationsPage = usePathname() === `/${organisation?.name}/integrations`
 
   const handleSync = async () => {
     await triggerSync({
@@ -152,6 +155,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
               setCredential={(cred) => handleUpdateAuth(cred)}
               orgId={organisation!.id}
               disabled={!activeUserIsAdmin}
+              newCredentialCallback={closeModal}
             />
           </div>
           {credential === null && (

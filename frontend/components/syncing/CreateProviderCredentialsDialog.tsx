@@ -21,10 +21,11 @@ interface CredentialState {
 
 export const CreateProviderCredentialsDialog = (props: {
   buttonVariant?: 'primary' | 'secondary'
+  defaultOpen?: boolean
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [isOpen, setIsOpen] = useState<boolean>(false)
+  const [isOpen, setIsOpen] = useState<boolean>(props.defaultOpen || false)
   const [provider, setProvider] = useState<ProviderType | null>(null)
   const [name, setName] = useState<string>('')
   const [credentials, setCredentials] = useState<CredentialState>({})
@@ -69,6 +70,10 @@ export const CreateProviderCredentialsDialog = (props: {
   const openModal = () => {
     setIsOpen(true)
   }
+
+  useEffect(() => {
+    if (props.defaultOpen) openModal()
+  }, [props.defaultOpen])
 
   useEffect(() => {
     if (providersData?.providers && providersData.providers.length > 0) {

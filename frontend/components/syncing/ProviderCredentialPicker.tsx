@@ -8,14 +8,16 @@ import Link from 'next/link'
 import { Fragment, useContext } from 'react'
 import { FaChevronDown, FaKey, FaPlus } from 'react-icons/fa'
 import { Button } from '../common/Button'
+import { usePathname } from 'next/navigation'
 
 export const ProviderCredentialPicker = (props: {
   credential: ProviderCredentialsType | null
   setCredential: (credential: ProviderCredentialsType) => void
   orgId: string
   disabled?: boolean
+  newCredentialCallback?: () => void
 }) => {
-  const { credential, setCredential, orgId, disabled } = props
+  const { credential, setCredential, orgId, disabled, newCredentialCallback } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -67,8 +69,8 @@ export const ProviderCredentialPicker = (props: {
                   )}
                 </Listbox.Option>
               ))}
-              <Link href={`/${organisation!.name}/integrations`}>
-                <Button variant="secondary">
+              <Link href={`/${organisation!.name}/integrations?newCredential=true`}>
+                <Button variant="secondary" onClick={newCredentialCallback}>
                   <div className="flex items-center gap-2">
                     <FaPlus /> Add authentication credentials
                   </div>
