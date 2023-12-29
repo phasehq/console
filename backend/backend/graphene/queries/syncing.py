@@ -66,8 +66,6 @@ def resolve_cloudflare_pages_projects(root, info, credential_id):
         credential.credentials["access_token"], sk.hex(), pk.hex()
     )
 
-    print(decrypted_account_id, decrypted_access_token)
-
     try:
         projects = list_cloudflare_pages(decrypted_account_id, decrypted_access_token)
         return projects
