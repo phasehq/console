@@ -19,6 +19,7 @@ import { ProviderCredentialPicker } from './ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
 import { Switch } from '@headlessui/react'
+import { userIsAdmin } from '@/utils/permissions'
 
 export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
   const { sync } = props
@@ -80,6 +81,8 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
 
   const isSyncing = sync.status === ApiEnvironmentSyncStatusChoices.InProgress
 
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+
   return (
     <div className="space-y-4 py-4">
       <div className="grid grid-cols-2 w-full gap-4">
@@ -107,23 +110,25 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
           ></div>
           {sync.isActive ? 'Active' : 'Paused'}
 
-          <Switch
-            id="toggle-sync"
-            checked={isActive}
-            onChange={handleToggleSyncActive}
-            className={`${
-              isActive
-                ? 'bg-emerald-400/10 ring-emerald-400/20'
-                : 'bg-neutral-500/40 ring-neutral-500/30'
-            } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
-          >
-            <span className="sr-only">Active</span>
-            <span
+          {activeUserIsAdmin && (
+            <Switch
+              id="toggle-sync"
+              checked={isActive}
+              onChange={handleToggleSyncActive}
               className={`${
-                isActive ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-black'
-              } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
-            ></span>
-          </Switch>
+                isActive
+                  ? 'bg-emerald-400/10 ring-emerald-400/20'
+                  : 'bg-neutral-500/40 ring-neutral-500/30'
+              } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+            >
+              <span className="sr-only">Active</span>
+              <span
+                className={`${
+                  isActive ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-black'
+                } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+              ></span>
+            </Switch>
+          )}
         </div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Created</div>
@@ -146,6 +151,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
               credential={credential}
               setCredential={(cred) => handleUpdateAuth(cred)}
               orgId={organisation!.id}
+              disabled={!activeUserIsAdmin}
             />
           </div>
           {credential === null && (
@@ -159,7 +165,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType }) => {
           <Button variant="primary" onClick={handleSync} disabled={isSyncing}>
             <FaSync className={isSyncing ? 'animate-spin' : ''} /> Sync now
           </Button>
-          <DeleteSyncDialog sync={sync} />
+          {activeUserIsAdmin && <DeleteSyncDialog sync={sync} />}
         </div>
       </div>
     </div>

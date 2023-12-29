@@ -1,6 +1,6 @@
 import { ProviderCredentialsType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { FaCheck, FaEdit, FaTimes } from 'react-icons/fa'
 import GetServerKey from '@/graphql/queries/syncing/getServerKey.gql'
 
@@ -9,6 +9,8 @@ import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { Input } from '@/components/common/Input'
 import { encryptProviderCredentials } from '@/utils/syncing/general'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userIsAdmin } from '@/utils/permissions'
 
 interface CredentialState {
   [key: string]: string
@@ -16,6 +18,8 @@ interface CredentialState {
 
 export const UpdateProviderCredentials = (props: { credential: ProviderCredentialsType }) => {
   const { credential } = props
+
+  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { data } = useQuery(GetServerKey)
   const [updateCredentials] = useMutation(UpdateProviderCreds)
@@ -48,30 +52,36 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
     toast.success('Saved credentials')
   }
 
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+
   return (
     <div className="space-y-4 w-full py-4">
       <div className="text-black dark:text-white font-semibold text-xl flex justify-between">
         Credentials
-        {allowEdit ? (
-          <div className="flex items-center gap-2">
-            <Button
-              disabled={!credentialsUpdated}
-              variant="primary"
-              onClick={handleUpdateCredentials}
-            >
-              <FaCheck /> Save
-            </Button>{' '}
-            <Button
-              variant={credentialsUpdated ? 'danger' : 'secondary'}
-              onClick={() => setAllowEdit(false)}
-            >
-              <FaTimes /> {credentialsUpdated ? 'Discard' : 'Cancel'}
-            </Button>
+        {activeUserIsAdmin && (
+          <div>
+            {allowEdit ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  disabled={!credentialsUpdated}
+                  variant="primary"
+                  onClick={handleUpdateCredentials}
+                >
+                  <FaCheck /> Save
+                </Button>{' '}
+                <Button
+                  variant={credentialsUpdated ? 'danger' : 'secondary'}
+                  onClick={() => setAllowEdit(false)}
+                >
+                  <FaTimes /> {credentialsUpdated ? 'Discard' : 'Cancel'}
+                </Button>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={() => setAllowEdit(true)}>
+                <FaEdit /> Edit
+              </Button>
+            )}
           </div>
-        ) : (
-          <Button variant="outline" onClick={() => setAllowEdit(true)}>
-            <FaEdit /> Edit
-          </Button>
         )}
       </div>
 

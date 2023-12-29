@@ -16,6 +16,7 @@ import { Menu, Transition } from '@headlessui/react'
 import { FaArrowRight, FaPlus } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
+import { userIsAdmin } from '@/utils/permissions'
 
 export default function Integrations({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -34,6 +35,8 @@ export default function Integrations({ params }: { params: { team: string } }) {
   }, [organisation])
 
   const syncableApps = appsData?.apps.filter((app: AppType) => app.syncEnabled) ?? []
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const NewSyncMenu = () => {
     return (
@@ -95,7 +98,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage syncs</p>
         </div>
 
-        {syncsData?.syncs.length > 0 && (
+        {syncsData?.syncs.length > 0 && activeUserIsAdmin && (
           <div className="flex justify-end">
             <NewSyncMenu />
           </div>
@@ -111,9 +114,11 @@ export default function Integrations({ params }: { params: { team: string } }) {
             <div className="text-neutral-500">
               Create a sync from the &quot;Syncing&quot; tab of an App
             </div>
-            <div className="flex justify-center p-4">
-              <NewSyncMenu />
-            </div>
+            {activeUserIsAdmin && (
+              <div className="flex justify-center p-4">
+                <NewSyncMenu />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -134,13 +139,15 @@ export default function Integrations({ params }: { params: { team: string } }) {
             <div className="text-neutral-500">
               Set up a new authentication method to start syncing with third party services.
             </div>
-            <div className="flex justify-center p-4">
-              <CreateProviderCredentialsDialog />
-            </div>
+            {activeUserIsAdmin && (
+              <div className="flex justify-center p-4">
+                <CreateProviderCredentialsDialog />
+              </div>
+            )}
           </div>
         )}
 
-        {credentialsData?.savedCredentials.length > 0 && (
+        {credentialsData?.savedCredentials.length > 0 && activeUserIsAdmin && (
           <div className="flex justify-end">
             <CreateProviderCredentialsDialog />
           </div>

@@ -23,6 +23,7 @@ import { SyncCard } from '@/components/syncing/SyncCard'
 import { ManageSyncDialog } from '@/components/syncing/ManageSyncDialog'
 import { SyncOptions } from '@/components/syncing/SyncOptions'
 import { useSearchParams } from 'next/navigation'
+import { userIsAdmin } from '@/utils/permissions'
 
 export default function Syncing({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -55,6 +56,8 @@ export default function Syncing({ params }: { params: { team: string; app: strin
       }
     })
   }
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const EnableSyncingDialog = () => {
     const [enableSyncing, { loading }] = useMutation(InitAppSyncing)
@@ -262,10 +265,12 @@ export default function Syncing({ params }: { params: { team: string; app: strin
             </div>
           )}
 
-          <SyncOptions
-            appId={params.app}
-            defaultOpen={openCreateSyncPanel || (data.syncs && data.syncs.length === 0)}
-          />
+          {activeUserIsAdmin && (
+            <SyncOptions
+              appId={params.app}
+              defaultOpen={openCreateSyncPanel || (data.syncs && data.syncs.length === 0)}
+            />
+          )}
         </>
       )}
     </div>

@@ -8,6 +8,7 @@ import { Button } from '../common/Button'
 import { relativeTimeFromDates } from '@/utils/time'
 import { organisationContext } from '@/contexts/organisationContext'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
+import { userIsAdmin } from '@/utils/permissions'
 
 export const ProviderCredentialCard = (props: { credential: ProviderCredentialsType }) => {
   const { credential } = props
@@ -29,6 +30,8 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
       return <SiCloudflare className="shrink-0" />
     else return <FaCube />
   }
+
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   return (
     <div className="grid grid-cols-5 gap-4 justify-between p-2 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium">
@@ -91,12 +94,14 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
 
                   <UpdateProviderCredentials credential={credential} />
 
-                  <div className="flex justify-end">
-                    <DeleteProviderCredentialDialog
-                      credential={credential}
-                      orgId={organisation!.id}
-                    />
-                  </div>
+                  {activeUserIsAdmin && (
+                    <div className="flex justify-end">
+                      <DeleteProviderCredentialDialog
+                        credential={credential}
+                        orgId={organisation!.id}
+                      />
+                    </div>
+                  )}
                 </Dialog.Panel>
               </Transition.Child>
             </div>

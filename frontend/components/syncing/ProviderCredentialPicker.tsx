@@ -13,8 +13,9 @@ export const ProviderCredentialPicker = (props: {
   credential: ProviderCredentialsType | null
   setCredential: (credential: ProviderCredentialsType) => void
   orgId: string
+  disabled?: boolean
 }) => {
-  const { credential, setCredential, orgId } = props
+  const { credential, setCredential, orgId, disabled } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -29,8 +30,13 @@ export const ProviderCredentialPicker = (props: {
       {({ open }) => (
         <>
           <label className="block text-gray-700 text-sm font-bold mb-2">Authentication</label>
-          <Listbox.Button as={Fragment} aria-required>
-            <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-zinc-800 dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500">
+          <Listbox.Button as={Fragment} aria-required aria-disabled={disabled}>
+            <div
+              className={clsx(
+                'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-zinc-800 dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500',
+                disabled && 'cursor-not-allowed opacity-60'
+              )}
+            >
               {credential?.name || 'Select credentials'}
               <FaChevronDown
                 className={clsx(
