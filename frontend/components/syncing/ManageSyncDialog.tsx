@@ -94,7 +94,7 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
                         <FaAngleDoubleRight className="text-neutral-500 text-xl justify-self-end" />
                       </div>
 
-                      <div className="text-xl">
+                      <div className="text-xl text-black dark:text-white">
                         <div className="flex gap-2 items-center font-semibold">
                           {serviceIcon(sync.serviceInfo!)}
                           <div>{sync.serviceInfo?.name}</div>

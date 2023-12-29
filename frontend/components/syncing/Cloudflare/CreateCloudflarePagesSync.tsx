@@ -101,7 +101,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
   return (
     <div className="p-4 space-y-6">
       <div>
-        <div className="text-2xl font-semibold flex items-center gap-1">
+        <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-1">
           <SiCloudflarepages />
           Cloudflare Pages
         </div>
