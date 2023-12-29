@@ -39,14 +39,6 @@ export const CreateProviderCredentialsDialog = (props: {
   const filteredProviders =
     query === '' ? providers : providers.filter((provider) => provider.name!.includes(query))
 
-  const closeModal = () => {
-    setIsOpen(false)
-  }
-
-  const openModal = () => {
-    setIsOpen(true)
-  }
-
   const handleProviderChange = (provider: ProviderType) => {
     if (provider) {
       setProvider(provider)
@@ -62,6 +54,20 @@ export const CreateProviderCredentialsDialog = (props: {
 
   const handleCredentialChange = (key: string, value: string) => {
     setCredentials({ ...credentials, [key]: value })
+  }
+
+  const reset = () => {
+    setName('')
+    handleProviderChange(providers[0])
+  }
+
+  const closeModal = () => {
+    reset()
+    setIsOpen(false)
+  }
+
+  const openModal = () => {
+    setIsOpen(true)
   }
 
   useEffect(() => {
