@@ -1,6 +1,5 @@
 import { ProviderCredentialsType } from '@/apollo/graphql'
-import { FaCog, FaCube, FaTimes } from 'react-icons/fa'
-import { SiCloudflare } from 'react-icons/si'
+import { FaCog, FaTimes } from 'react-icons/fa'
 import { UpdateProviderCredentials } from './UpdateProviderCredentials'
 import { Dialog, Transition } from '@headlessui/react'
 import { useState, Fragment, useContext } from 'react'
@@ -9,6 +8,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { organisationContext } from '@/contexts/organisationContext'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
 import { userIsAdmin } from '@/utils/permissions'
+import { ProviderIcon } from './ProviderIcon'
 
 export const ProviderCredentialCard = (props: { credential: ProviderCredentialsType }) => {
   const { credential } = props
@@ -25,18 +25,13 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
     setIsOpen(true)
   }
 
-  const providerIcon = (providerName: string) => {
-    if (providerName.toLowerCase().includes('cloudflare'))
-      return <SiCloudflare className="shrink-0" />
-    else return <FaCube />
-  }
-
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   return (
     <div className="grid grid-cols-5 gap-4 justify-between p-2 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium">
       <div className="flex gap-2 items-center">
-        {providerIcon(credential.provider!.name)}
+        <ProviderIcon providerId={credential.provider?.id!} />
+
         <div>{credential.provider!.name}</div>
       </div>
 
