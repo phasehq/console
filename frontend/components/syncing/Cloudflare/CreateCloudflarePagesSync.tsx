@@ -29,12 +29,14 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
     variables: { orgId: organisation!.id },
   })
 
-  const [getCloudflarePages, { data: pagesData, loading }] = useLazyQuery(GetCfPages)
+  const [getCloudflarePages, { loading }] = useLazyQuery(GetCfPages)
 
   const [createCfPagesSync, { data: syncData, loading: creating }] =
     useMutation(CreateNewCfPagesSync)
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
+
+  const [cfProjects, setCfProjects] = useState<CloudFlarePagesType[]>([])
 
   const [cfProject, setCfProject] = useState<CloudFlarePagesType | null>(null)
   const [query, setQuery] = useState('')
@@ -43,16 +45,11 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
 
   const [credentialsValid, setCredentialsValid] = useState(false)
 
-  useEffect(() => {
-    if (pagesData?.cloudflarePagesProjects) {
-      setCredentialsValid(true)
-    }
-  }, [pagesData])
-
-  const credentials: ProviderCredentialsType[] =
-    credentialsData?.savedCredentials.filter(
-      (credential: ProviderCredentialsType) => credential.provider!.id === 'cloudflare'
-    ) ?? []
+  // useEffect(() => {
+  //   if (pagesData?.cloudflarePagesProjects) {
+  //     setCredentialsValid(true)
+  //   }
+  // }, [pagesData])
 
   useEffect(() => {
     if (credentialsData && credentialsData.savedCredentials.length > 0) {
@@ -67,11 +64,15 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
       toast.error('Please select credential to use for this sync')
       return false
     } else if (!credentialsValid) {
-      await getCloudflarePages({
+      const { data: pagesData } = await getCloudflarePages({
         variables: {
           credentialId: credential.id,
         },
       })
+      if (pagesData?.cloudflarePagesProjects) {
+        setCfProjects(pagesData?.cloudflarePagesProjects)
+        setCredentialsValid(true)
+      }
     } else {
       await createCfPagesSync({
         variables: {
@@ -89,7 +90,11 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
     }
   }
 
-  const cfProjects: CloudFlarePagesType[] = pagesData?.cloudflarePagesProjects ?? []
+  const handleClearSelectedCredentials = () => {
+    setCredentialsValid(false)
+  }
+
+  //const cfProjects: CloudFlarePagesType[] = pagesData?.cloudflarePagesProjects ?? []
 
   const filteredProjects =
     query === ''
@@ -105,24 +110,32 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
           <SiCloudflarepages />
           Cloudflare Pages
         </div>
-        <div className="text-neutral-500">Sync an environment with Cloudflare pages.</div>
+        <div className="text-neutral-500 text-sm">Sync an environment with Cloudflare pages.</div>
       </div>
 
       <form onSubmit={handleSubmit}>
         {!credentialsValid && (
-          <div className="flex items-end gap-2 justify-between">
-            <div className="w-full">
-              <ProviderCredentialPicker
-                credential={credential}
-                setCredential={(cred) => setCredential(cred)}
-                orgId={organisation!.id}
-              />
+          <div className="space-y-4">
+            <div className="font-medium text-black dark:text-white">
+              Step 1: Choose authentication credentials
+            </div>
+            <div className="flex items-end gap-2 justify-between">
+              <div className="w-full">
+                <ProviderCredentialPicker
+                  credential={credential}
+                  setCredential={(cred) => setCredential(cred)}
+                  orgId={organisation!.id}
+                />
+              </div>
             </div>
           </div>
         )}
 
         {credentialsValid && (
           <div className="space-y-6">
+            <div className="font-medium text-black dark:text-white">
+              Step 2: Select source and destination for Secrets
+            </div>
             <div>
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
@@ -254,9 +267,16 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
             </div>
           </div>
         )}
-        <div className="flex items-center justify-end pt-8">
+        <div className="flex items-center justify-between pt-8">
+          <div>
+            {credentialsValid && (
+              <Button variant="secondary" onClick={() => setCredentialsValid(false)}>
+                Back
+              </Button>
+            )}
+          </div>
           <Button isLoading={loading || creating} variant="primary" type="submit">
-            Next
+            {credentialsValid ? 'Create' : 'Next'}
           </Button>
         </div>
       </form>
