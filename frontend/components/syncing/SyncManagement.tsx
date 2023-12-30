@@ -149,7 +149,14 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
         <hr className="border-neutral-500/20 col-span-2" />
 
         <div className="col-span-2 flex items-end gap-4 w-full">
-          <div className="w-full grow">
+          <div
+            className="w-full grow"
+            title={
+              activeUserIsAdmin
+                ? 'Update Sync authentication'
+                : "You don't have permission to update sync authentication"
+            }
+          >
             <ProviderCredentialPicker
               credential={credential}
               setCredential={(cred) => handleUpdateAuth(cred)}
