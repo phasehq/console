@@ -46,7 +46,17 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
       </div>
 
       <div className="flex items-center justify-end">
-        <Button type="button" variant="secondary" onClick={openModal} title="Manage credential">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={openModal}
+          title={
+            activeUserIsAdmin
+              ? 'Manage credential'
+              : "You don't have permission to manage credentials"
+          }
+          disabled={!activeUserIsAdmin}
+        >
           <FaCog /> Manage
         </Button>
       </div>
@@ -89,14 +99,12 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
 
                   <UpdateProviderCredentials credential={credential} />
 
-                  {activeUserIsAdmin && (
-                    <div className="flex justify-end">
-                      <DeleteProviderCredentialDialog
-                        credential={credential}
-                        orgId={organisation!.id}
-                      />
-                    </div>
-                  )}
+                  <div className="flex justify-end">
+                    <DeleteProviderCredentialDialog
+                      credential={credential}
+                      orgId={organisation!.id}
+                    />
+                  </div>
                 </Dialog.Panel>
               </Transition.Child>
             </div>
