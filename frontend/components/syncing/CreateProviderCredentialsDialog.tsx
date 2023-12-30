@@ -5,7 +5,7 @@ import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCre
 import { Dialog, Combobox, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { useState, Fragment, ChangeEvent, useEffect, useContext } from 'react'
-import { FaChevronDown, FaPlus, FaTimes } from 'react-icons/fa'
+import { FaArrowRight, FaChevronDown, FaPlus, FaTimes } from 'react-icons/fa'
 import { Avatar } from '../common/Avatar'
 import { Button } from '../common/Button'
 import { useMutation, useQuery } from '@apollo/client'
@@ -14,9 +14,38 @@ import { encryptAsymmetric } from '@/utils/crypto'
 import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
 import { encryptProviderCredentials } from '@/utils/syncing/general'
+import { Card } from '../common/Card'
+import { ProviderIcon } from './ProviderIcon'
 
 interface CredentialState {
   [key: string]: string
+}
+
+const ProviderCard = (props: { provider: ProviderType }) => {
+  const { provider } = props
+
+  return (
+    <Card>
+      <div className="flex flex-auto gap-4 cursor-pointer">
+        <div className="text-4xl">
+          <ProviderIcon providerId={provider.id} />
+        </div>
+        <div className="flex flex-col gap-6 text-left">
+          <div>
+            <div className="text-black dark:text-white text-lg font-semibold">{provider.name}</div>
+            <div className="text-neutral-500 text-sm">
+              Create authenticationc credentials to sync with {provider.name}.
+            </div>
+          </div>
+          <div className="text-emerald-500">
+            <Button variant="link">
+              Create <FaArrowRight />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
 }
 
 export const CreateProviderCredentialsDialog = (props: {
@@ -30,15 +59,10 @@ export const CreateProviderCredentialsDialog = (props: {
   const [name, setName] = useState<string>('')
   const [credentials, setCredentials] = useState<CredentialState>({})
 
-  const [query, setQuery] = useState('')
-
   const { data: providersData } = useQuery(GetProviderList)
   const [saveNewCreds] = useMutation(SaveNewProviderCreds)
 
   const providers: ProviderType[] = providersData?.providers ?? []
-
-  const filteredProviders =
-    query === '' ? providers : providers.filter((provider) => provider.name!.includes(query))
 
   const handleProviderChange = (provider: ProviderType) => {
     if (provider) {
@@ -58,8 +82,8 @@ export const CreateProviderCredentialsDialog = (props: {
   }
 
   const reset = () => {
+    setProvider(null)
     setName('')
-    handleProviderChange(providers[0])
   }
 
   const closeModal = () => {
@@ -74,13 +98,6 @@ export const CreateProviderCredentialsDialog = (props: {
   useEffect(() => {
     if (props.defaultOpen) openModal()
   }, [props.defaultOpen])
-
-  useEffect(() => {
-    if (providersData?.providers && providersData.providers.length > 0) {
-      handleProviderChange(providersData.providers[0])
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providersData])
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -152,7 +169,7 @@ export const CreateProviderCredentialsDialog = (props: {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-3xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       Create new integration credentials
@@ -168,69 +185,19 @@ export const CreateProviderCredentialsDialog = (props: {
                       Add a new set of credentials for third party integrations.
                     </p>
                     <form className="space-y-6 p-4" onSubmit={handleSubmit}>
-                      <Combobox value={provider} onChange={handleProviderChange}>
-                        {({ open }) => (
-                          <>
-                            <div className="space-y-1">
-                              <Combobox.Label as={Fragment}>
-                                <label
-                                  className="block text-gray-700 text-sm font-bold"
-                                  htmlFor="name"
-                                >
-                                  Provider
-                                </label>
-                              </Combobox.Label>
-                              <div className="w-full relative flex items-center">
-                                <Combobox.Input
-                                  className="w-full"
-                                  onChange={(event) => setQuery(event.target.value)}
-                                  required
-                                  displayValue={(provider: ProviderType) => provider?.name}
-                                />
-                                <div className="absolute inset-y-0 right-2 flex items-center">
-                                  <Combobox.Button>
-                                    <FaChevronDown
-                                      className={clsx(
-                                        'text-neutral-500 transform transition ease cursor-pointer',
-                                        open ? 'rotate-180' : 'rotate-0'
-                                      )}
-                                    />
-                                  </Combobox.Button>
-                                </div>
-                              </div>
-                            </div>
-                            <Transition
-                              enter="transition duration-100 ease-out"
-                              enterFrom="transform scale-95 opacity-0"
-                              enterTo="transform scale-100 opacity-100"
-                              leave="transition duration-75 ease-out"
-                              leaveFrom="transform scale-100 opacity-100"
-                              leaveTo="transform scale-95 opacity-0"
+                      {provider === null && (
+                        <div className="grid grid-cols-2 gap-4">
+                          {providers.map((provider) => (
+                            <button
+                              key={provider.id}
+                              type="button"
+                              onClick={() => setProvider(provider)}
                             >
-                              <Combobox.Options as={Fragment}>
-                                <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20">
-                                  {filteredProviders.map((provider) => (
-                                    <Combobox.Option key={provider.id} value={provider}>
-                                      {({ active, selected }) => (
-                                        <div
-                                          className={clsx(
-                                            'flex items-center gap-2 p-2 cursor-pointer',
-                                            active && 'font-semibold'
-                                          )}
-                                        >
-                                          <span className="text-black dark:text-white">
-                                            {provider.name}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </Combobox.Option>
-                                  ))}
-                                </div>
-                              </Combobox.Options>
-                            </Transition>
-                          </>
-                        )}
-                      </Combobox>
+                              <ProviderCard provider={provider} />
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       {provider?.expectedCredentials.map((credential) => (
                         <Input
@@ -243,18 +210,30 @@ export const CreateProviderCredentialsDialog = (props: {
                         />
                       ))}
 
-                      <Input
-                        required
-                        value={name}
-                        setValue={(value) => setName(value)}
-                        label="Name"
-                      />
+                      {provider && (
+                        <Input
+                          required
+                          value={name}
+                          setValue={(value) => setName(value)}
+                          label="Name"
+                        />
+                      )}
 
-                      <div className="flex justify-end">
-                        <Button variant="primary" type="submit">
-                          Save
-                        </Button>
-                      </div>
+                      {provider && (
+                        <div className="flex justify-between">
+                          <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={() => setProvider(null)}
+                          >
+                            Back
+                          </Button>
+
+                          <Button variant="primary" type="submit">
+                            Save
+                          </Button>
+                        </div>
+                      )}
                     </form>
                   </div>
                 </Dialog.Panel>
