@@ -1,18 +1,48 @@
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { FaArrowRight, FaChevronRight, FaPlus } from 'react-icons/fa'
-import { SiCloudflarepages } from 'react-icons/si'
+import { SiCloudflare } from 'react-icons/si'
 import { CreateSyncDialog } from './CreateSyncDialog'
 import { Card } from '../common/Card'
 import { Button } from '../common/Button'
+import { ReactNode } from 'react'
+
+interface Service {
+  id: string
+  name: string
+  icon: ReactNode
+}
+
+const ServiceCard = (props: { service: Service }) => {
+  const { service } = props
+
+  return (
+    <Card>
+      <div className="flex flex-auto gap-4 cursor-pointer">
+        <div className="text-4xl">{service.icon}</div>
+        <div className="flex flex-col justify-center gap-6">
+          <div>
+            <div className="text-black dark:text-white text-lg font-semibold">{service.name}</div>
+            <div className="text-neutral-500 text-sm">Sync an environment with {service.name}.</div>
+          </div>
+          <div className="text-emerald-500">
+            <Button variant="link">
+              Sync <FaArrowRight />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
 
 export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
   const { defaultOpen, appId } = props
 
-  const syncOptions = [
+  const syncOptions: Service[] = [
     {
       name: 'Cloudflare Pages',
-      icon: <SiCloudflarepages className="text-[#F38020]" />,
+      icon: <SiCloudflare className="text-[#F38020]" />,
       id: 'cloudflare_pages',
     },
   ]
@@ -71,26 +101,7 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
                         <CreateSyncDialog
                           appId={appId}
                           service={service.id}
-                          button={
-                            <Card>
-                              <div className="flex flex-auto gap-4 cursor-pointer">
-                                <div className="text-4xl">{service.icon}</div>
-                                <div className="flex flex-col justify-center gap-2">
-                                  <div className="text-black dark:text-white text-lg font-semibold">
-                                    {service.name}
-                                  </div>
-                                  <div className="text-neutral-500 text-sm">
-                                    Sync an environment with {service.name}
-                                  </div>
-                                  <div className="text-emerald-500">
-                                    <Button variant="link">
-                                      Sync <FaArrowRight />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            </Card>
-                          }
+                          button={<ServiceCard service={service} />}
                         />
                       </div>
                     ))}
