@@ -75,7 +75,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
                             active && 'bg-zinc-200 dark:bg-zinc-700'
                           )}
                         >
-                          <div className="text-lg">{app.name}</div>
+                          <div className="text-lg whitespace-nowrap">{app.name}</div>
                           <FaArrowRight className="text-neutral-500" />
                         </Link>
                       )}
