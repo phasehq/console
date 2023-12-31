@@ -32,8 +32,8 @@ export const SyncCard = (props: {
   return (
     <div
       className={clsx(
-        'grid gap-4 items-center justify-between py-2 px-4 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium',
-        showManageButton ? 'grid-cols-6' : 'grid-cols-4'
+        'grid grid-cols-1 sm:grid-cols-2 gap-4 items-center justify-between py-2 px-4 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium',
+        showManageButton ? 'xl:grid-cols-6' : 'xl:grid-cols-4'
       )}
     >
       <div className="flex items-center gap-2">
@@ -48,8 +48,8 @@ export const SyncCard = (props: {
 
       <div
         className={clsx(
-          'flex gap-4 items-center justify-evenly',
-          showManageButton ? 'col-span-3' : 'col-span-2'
+          'flex items-center  gap-4',
+          showManageButton ? 'col-span-3 sm:gap-16' : 'col-span-2 sm:gap-8'
         )}
       >
         <div className="flex flex-col">
@@ -87,21 +87,7 @@ export const SyncCard = (props: {
         </div>
       </div>
 
-      {/* <div className="flex items-center gap-2">
-        <FaKey />
-        {sync.authentication?.name}
-      </div> */}
-
       <div>
-        {/* <div className="flex items-center gap-2">
-          <div
-            className={clsx(
-              'h-2 w-2 rounded-full',
-              sync.isActive ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
-            )}
-          ></div>
-          {sync.isActive ? 'Active' : 'Paused'}
-        </div> */}
         <div className="flex items-center justify-center gap-2">
           <div>{sync.status && <SyncStatusIndicator status={sync.status} showLabel />}</div>
 
