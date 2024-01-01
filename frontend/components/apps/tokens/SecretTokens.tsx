@@ -280,7 +280,9 @@ const CreateServiceTokenDialog = (props: { organisationId: string; appId: string
                             )}
                           </div>
                         </div>
-                        <code className="text-xs break-all text-teal-500">{serviceToken}</code>
+                        <code className="text-xs break-all text-teal-500 ph-no-capture">
+                          {serviceToken}
+                        </code>
                       </div>
                     </div>
                   ) : (
@@ -564,6 +566,18 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
 
     const allowDelete = activeUserIsAdmin || token.createdBy!.self
 
+    const identityKeys = token.keys.map((key) => key.identityKey)
+
+    const { data } = useQuery(GetAppEnvironments, {
+      variables: {
+        appId,
+      },
+    })
+
+    const tokenEnvironments = data.appEnvironments.filter((env: EnvironmentType) =>
+      identityKeys.includes(env.identityKey)
+    )
+
     return (
       <div className="flex items-center w-full justify-between p-2 group">
         <div className="flex items-center gap-4">
@@ -582,6 +596,17 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                       : token.createdBy?.fullName || token.createdBy?.email}
                   </div>
                 )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {tokenEnvironments.map(({ envType }: { envType: string }) => (
+                  <div
+                    key={envType}
+                    className="rounded-full py-1 px-3 text-zinc-700 ring-1 ring-inset ring-zinc-900/10 dark:text-zinc-400 dark:ring-white/10"
+                  >
+                    {envType}
+                  </div>
+                ))}
               </div>
 
               <div className={clsx(isExpired && 'text-red-500')}>

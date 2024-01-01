@@ -34,7 +34,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
       icon: <MdOutlineKey />,
       title: 'Sudo password',
       description:
-        "Please set up a strong 'sudo' password to continue. This will be used to to perform administrative tasks and to encrypt keys locally on this device.",
+        "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
     },
   ])
 
@@ -74,7 +74,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
           icon: <MdOutlineKey />,
           title: 'Sudo password',
           description:
-            "Please set up a strong 'sudo' password to continue. This will be used to to perform administrative tasks and to encrypt keys locally on this device.",
+            "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
         },
       ])
 
@@ -241,7 +241,7 @@ export default function NewDevice({ params }: { params: { team: string } }) {
                       minLength={16}
                       required
                       autoFocus
-                      className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
+                      className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
                     />
                     <button
                       className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"

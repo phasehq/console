@@ -234,7 +234,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           <div className="flex justify-between items-center w-full">
             <code
               className={clsx(
-                'break-all whitespace-break-spaces max-w-full',
+                'break-all whitespace-break-spaces max-w-full ph-no-capture',
                 sameAsProd ? 'text-amber-500' : 'text-emerald-500'
               )}
             >
@@ -299,7 +299,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             >
               <td
                 className={clsx(
-                  'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2',
+                  'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 ph-no-capture',
                   open ? 'font-bold' : 'font-medium'
                 )}
               >
@@ -399,7 +399,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             </div>
 
             <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
-              <div className="relative flex items-center bg-white dark:bg-zinc-800 rounded-md px-2">
+              <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
                 <div className="">
                   <FaSearch className="text-neutral-500" />
                 </div>

@@ -346,7 +346,8 @@ class SecretsView(APIView):
                                                     value=secret.value, comment=secret.comment, event_type=SecretEvent.READ, ip_address=ip_address, user_agent=user_agent)
             read_event.tags.set(secret.tags.all())
 
-        serializer = SecretSerializer(secrets, many=True)
+        serializer = SecretSerializer(secrets, many=True, context={
+                                      'org_member': org_member})
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 

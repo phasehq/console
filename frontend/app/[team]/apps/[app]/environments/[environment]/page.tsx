@@ -308,6 +308,14 @@ export default function Environment({
               decryptedSecret.history = decryptedHistory
             }
 
+            if (secret.override?.value) {
+              decryptedSecret.override!.value = await decryptAsymmetric(
+                secret.override?.value,
+                envKeys.privateKey,
+                envKeys.publicKey
+              )
+            }
+
             return decryptedSecret
           })
         )
@@ -525,7 +533,7 @@ export default function Environment({
           </div>
 
           <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
-            <div className="relative flex items-center bg-white dark:bg-zinc-800 rounded-md px-2">
+            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
               <div className="">
                 <FaSearch className="text-neutral-500" />
               </div>
@@ -595,6 +603,7 @@ export default function Environment({
                   <SecretRow
                     orgId={organisation.id}
                     secret={secret as SecretType}
+                    environment={environment}
                     cannonicalSecret={cannonicalSecret(secret.id)}
                     secretNames={secretNames}
                     handlePropertyChange={handleUpdateSecretProperty}

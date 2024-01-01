@@ -3,7 +3,7 @@ import { copyToClipBoard } from '@/utils/clipboard'
 import { Dialog, Switch, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
 import { Fragment, ReactNode, useContext, useEffect, useState } from 'react'
-import { FaCopy, FaExclamationTriangle, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa'
+import { FaCopy, FaExclamationTriangle, FaEye, FaEyeSlash, FaPlus, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -37,12 +37,7 @@ import {
 const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
 
-export default function NewAppDialog(props: {
-  appCount: number
-  organisation: OrganisationType
-  buttonLabel?: ReactNode
-  buttonVariant?: string
-}) {
+export default function NewAppDialog(props: { appCount: number; organisation: OrganisationType }) {
   const { organisation, appCount } = props
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')
@@ -51,6 +46,8 @@ export default function NewAppDialog(props: {
   const [appId, setAppId] = useState<string>('')
   const [createStarters, setCreateStarters] = useState<boolean>(appCount === 0)
   const [appSecret, setAppSecret] = useState<string>('')
+  const [appCreating, setAppCreating] = useState<boolean>(false)
+
   const { data: session } = useSession()
 
   const [createApp] = useMutation(CreateApplication)
@@ -61,11 +58,6 @@ export default function NewAppDialog(props: {
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
   const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
-
-  const DEFAULT_BUTTON = {
-    label: 'Create an app',
-    variant: 'primary',
-  }
 
   const { keyring, setKeyring } = useContext(KeyringContext)
 
@@ -89,17 +81,14 @@ export default function NewAppDialog(props: {
   }
 
   const closeModal = () => {
-    reset()
-    setIsOpen(false)
+    if (!appCreating) {
+      reset()
+      setIsOpen(false)
+    }
   }
 
   const openModal = () => {
     setIsOpen(true)
-  }
-
-  const handleCopy = (val: string) => {
-    copyToClipBoard(val)
-    toast.info('Copied')
   }
 
   const validateKeyring = async (password: string) => {
@@ -332,6 +321,7 @@ export default function NewAppDialog(props: {
 
   const handleCreateApp = async () => {
     const APP_VERSION = 1
+    setAppCreating(true)
 
     return new Promise<boolean>(async (resolve, reject) => {
       setTimeout(async () => {
@@ -380,10 +370,11 @@ export default function NewAppDialog(props: {
 
           setAppSecret(`pss:v${APP_VERSION}:${appToken}:${appKeyShares[0]}:${wrapKey}`)
           setAppId(`phApp:v${APP_VERSION}:${appKeys.publicKey}`)
-
+          setAppCreating(false)
           resolve(true)
           closeModal()
         } catch (error) {
+          setAppCreating(false)
           reject(error)
         }
       }, 500)
@@ -392,10 +383,11 @@ export default function NewAppDialog(props: {
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
+
     toast.promise(handleCreateApp, {
       pending: 'Setting up your app',
       success: 'App created!',
-      error: 'Something went wrong! Please check your sudo password and try again.',
+      error: 'Something went wrong!',
     })
   }
 
@@ -424,14 +416,15 @@ export default function NewAppDialog(props: {
 
   return (
     <>
-      <div className="flex items-center justify-center">
-        <Button
-          variant={props.buttonVariant || DEFAULT_BUTTON.variant}
-          type="button"
-          onClick={openModal}
-        >
-          {props.buttonLabel || DEFAULT_BUTTON.label}
-        </Button>
+      <div
+        className="flex items-center justify-center cursor-pointer w-full h-full group"
+        role="button"
+        onClick={openModal}
+      >
+        <div className="flex items-center text-lg gap-1 rounded-full bg-zinc-900 py-1 px-3 text-white group-hover:bg-zinc-700 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-1 dark:ring-inset dark:ring-emerald-400/20 dark:group-hover:bg-emerald-400/10 dark:group-hover:text-emerald-300 dark:group-hover:ring-emerald-300">
+          <FaPlus />
+          Create an App
+        </div>
       </div>
 
       <Transition appear show={isOpen} as={Fragment}>
@@ -473,8 +466,8 @@ export default function NewAppDialog(props: {
                     <form onSubmit={handleSubmit}>
                       <div className="mt-2 space-y-6 group">
                         <p className="text-sm text-gray-500">
-                          Create a new app by entering an app name below. A new set of encryption
-                          keys will be created to secure your app.
+                          Create a new App by entering an App name below. Your App will be
+                          initialized with 3 new environments.
                         </p>
                         <div className="flex flex-col justify-center">
                           <label
@@ -510,7 +503,7 @@ export default function NewAppDialog(props: {
                                 type={showPw ? 'text' : 'password'}
                                 minLength={16}
                                 required
-                                className="w-full "
+                                className="w-full ph-no-capture"
                               />
                               <button
                                 className="absolute inset-y-0 right-4"
@@ -554,10 +547,15 @@ export default function NewAppDialog(props: {
                       </div>
 
                       <div className="mt-8 flex items-center w-full justify-between">
-                        <Button variant="secondary" type="button" onClick={closeModal}>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          onClick={closeModal}
+                          disabled={appCreating}
+                        >
                           Cancel
                         </Button>
-                        <Button type="submit" variant="primary">
+                        <Button type="submit" variant="primary" isLoading={appCreating}>
                           Create
                         </Button>
                       </div>
@@ -578,47 +576,6 @@ export default function NewAppDialog(props: {
                           to request an upgrade.
                         </div>
                       )}
-                    </div>
-                  )}
-                  {complete() && (
-                    <div className="w-full break-all space-y-8 mt-6">
-                      <div className="bg-neutral-200 dark:bg-neutral-800  shadow-inner p-3 rounded-lg">
-                        <div className="uppercase text-xs tracking-widest text-gray-500 w-full flex items-center justify-between pb-4">
-                          app name
-                        </div>
-                        <code className="text-xs text-black dark:text-white">{name}</code>
-                      </div>
-
-                      <div className="bg-emerald-200/60 dark:bg-emerald-400/10 shadow-inner p-3 rounded-lg">
-                        <div className="uppercase text-xs tracking-widest text-gray-500 w-full flex items-center justify-between pb-4">
-                          app id
-                          <Button variant="outline" onClick={() => handleCopy(appId)}>
-                            Copy <FaCopy />
-                          </Button>
-                        </div>
-                        <code className="text-xs text-emerald-500">{appId}</code>
-                      </div>
-
-                      <div className="bg-red-200 dark:bg-red-400/10 shadow-inner p-3 rounded-lg">
-                        <div className="w-full flex items-center justify-between pb-4">
-                          <span className="uppercase text-xs tracking-widest text-gray-500">
-                            app secret
-                          </span>
-                          <div className="flex gap-4">
-                            <div className="rounded-lg bg-orange-800/30 text-orange-500 p-2 flex items-center gap-4">
-                              <FaExclamationTriangle />
-                              <div className="text-2xs">
-                                {"Copy this value. You won't see it again!"}
-                              </div>
-                            </div>
-
-                            <Button variant="outline" onClick={() => handleCopy(appSecret)}>
-                              <FaCopy /> Copy
-                            </Button>
-                          </div>
-                        </div>
-                        <code className="text-xs text-red-500">{appSecret}</code>
-                      </div>
                     </div>
                   )}
                 </Dialog.Panel>
