@@ -61,7 +61,7 @@ export namespace cryptoUtils {
    * @param {string} input - The input string to hash
    * @returns {Promise<Uint8Array>} - 16 byte salt
    */
-  const saltFromString = async (input: string) => {
+  export const saltFromString = async (input: string) => {
     await _sodium.ready
     const sodium = _sodium
 
