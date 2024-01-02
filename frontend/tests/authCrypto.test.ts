@@ -1,3 +1,14 @@
+/**
+ * @jest-environment node
+ */
+
+/*
+  👆 
+  overrides: testEnvironment: 'jsdom' in jest.config.js
+  to fix: ReferenceError: TextDecoder is not defined
+  
+*/
+
 import {
   randomKeyPair,
   clientSessionKeys,
