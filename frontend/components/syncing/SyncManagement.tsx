@@ -167,7 +167,10 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           </div>
           {credential === null && (
             <div className="py-3">
-              <FaExclamationTriangle className="text-amber-500" title="Action required" />
+              <FaExclamationTriangle
+                className="text-amber-500"
+                title="No authentication credentials assigned to this sync"
+              />
             </div>
           )}
         </div>

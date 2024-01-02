@@ -27,6 +27,23 @@ export const ProviderCredentialPicker = (props: {
 
   const credentials: ProviderCredentialsType[] = credentialsData?.savedCredentials ?? []
 
+  const NewCredentialsLink = () => (
+    <Link href={`/${organisation!.name}/integrations?newCredential=true`}>
+      <Button variant="secondary" onClick={newCredentialCallback}>
+        <div className="flex items-center gap-2">
+          <FaPlus /> Add authentication credentials
+        </div>
+      </Button>
+    </Link>
+  )
+
+  if (credentials.length === 0)
+    return (
+      <div>
+        <NewCredentialsLink />
+      </div>
+    )
+
   return (
     <Listbox value={credential} onChange={setCredential}>
       {({ open }) => (
@@ -69,13 +86,7 @@ export const ProviderCredentialPicker = (props: {
               ))}
 
               <div className="pt-2 border-t border-neutral-500/40">
-                <Link href={`/${organisation!.name}/integrations?newCredential=true`}>
-                  <Button variant="secondary" onClick={newCredentialCallback}>
-                    <div className="flex items-center gap-2">
-                      <FaPlus /> Add authentication credentials
-                    </div>
-                  </Button>
-                </Link>
+                <NewCredentialsLink />
               </div>
             </div>
           </Listbox.Options>
