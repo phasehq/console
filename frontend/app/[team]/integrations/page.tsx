@@ -39,9 +39,11 @@ export default function Integrations({ params }: { params: { team: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisation])
 
-  const syncableApps = appsData?.apps.filter((app: AppType) => app.syncEnabled) ?? []
+  const apps = appsData?.apps ?? []
 
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+
+  const noCredentials = credentialsData?.savedCredentials.length === 0
 
   const NewSyncMenu = () => {
     return (
@@ -65,7 +67,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
             >
               <Menu.Items as={Fragment}>
                 <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                  {syncableApps.map((app: AppType) => (
+                  {apps.map((app: AppType) => (
                     <Menu.Item key={app.id} as={Fragment}>
                       {({ active }) => (
                         <Link
@@ -136,29 +138,33 @@ export default function Integrations({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage stored credentials for third party services</p>
         </div>
 
-        {credentialsData?.savedCredentials.length === 0 && (
-          <div className="flex flex-col items-center text-center p-16">
+        <div
+          className={clsx(
+            noCredentials ? 'flex flex-col items-center text-center p-16' : 'flex justify-end'
+          )}
+        >
+          {noCredentials && (
             <div className="font-semibold text-black dark:text-white text-xl">
               No authentication credentials
             </div>
+          )}
+          {noCredentials && (
             <div className="text-neutral-500">
               Set up a new authentication method to start syncing with third party services.
             </div>
-            {activeUserIsAdmin && (
-              <div className="flex justify-center p-4">
-                <CreateProviderCredentialsDialog
-                  defaultOpen={openCreateCredentialDialog !== null}
-                />
-              </div>
-            )}
-          </div>
-        )}
+          )}
+          {activeUserIsAdmin && (
+            <div className={clsx(noCredentials && 'flex justify-center p-4')}>
+              <CreateProviderCredentialsDialog defaultOpen={openCreateCredentialDialog !== null} />
+            </div>
+          )}
+        </div>
 
-        {credentialsData?.savedCredentials.length > 0 && activeUserIsAdmin && (
+        {/* {credentialsData?.savedCredentials.length > 0 && activeUserIsAdmin && (
           <div className="flex justify-end">
             <CreateProviderCredentialsDialog defaultOpen={openCreateCredentialDialog !== null} />
           </div>
-        )}
+        )} */}
 
         {credentialsData?.savedCredentials.length > 0 &&
           credentialsData?.savedCredentials.map((credential: ProviderCredentialsType) => (
