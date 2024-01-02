@@ -41,7 +41,7 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
           <Disclosure.Button
             as="tr"
             className={clsx(
-              'py-4 border-neutral-500/20 transition duration-300 ease-in-out cursor-pointer',
+              'py-4 border-neutral-500/20 transition duration-300 ease-in-out cursor-pointer text-black dark:text-white',
               open
                 ? 'bg-neutral-200 dark:bg-neutral-800 border-r'
                 : 'border-b hover:bg-neutral-200 dark:hover:bg-neutral-800'
@@ -90,7 +90,7 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
             <td colSpan={6}>
               <Disclosure.Panel
                 className={clsx(
-                  'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20',
+                  'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20 text-black dark:text-white',
                   open ? 'border-b border-l-2 border-l-emerald-500 border-r shadow-xl' : ''
                 )}
               >

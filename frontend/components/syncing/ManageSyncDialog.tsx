@@ -70,7 +70,7 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-screen-md transform rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-screen-md transform rounded-2xl bg-zinc-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg leading-6 text-neutral-500">Manage sync</h3>
 
@@ -114,7 +114,7 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
                             {({ selected }) => (
                               <div
                                 className={clsx(
-                                  'p-3 font-medium border-b focus:outline-none',
+                                  'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
                                   selected
                                     ? 'border-emerald-500 font-semibold'
                                     : ' border-transparent cursor-pointer'
