@@ -1,4 +1,4 @@
-import { newEnvSeed, newEnvSalt, newEnvToken, newEnvWrapKey, encryptedEnvSeed, decryptedAppSeed, envKeyring, newServiceTokenKeys, generateEnvironmentToken } from '../utils/environments';
+import { newEnvSeed, newEnvSalt, newEnvToken, newEnvWrapKey, encryptedEnvSeed, decryptedAppSeed, envKeyring, newServiceTokenKeys } from '@/utils/environments';
 
 describe('New Environment Key Generation Tests', () => {
   const expectedHexLength = 64;

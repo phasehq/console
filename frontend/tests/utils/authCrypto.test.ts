@@ -17,9 +17,9 @@ import {
   decryptAsymmetric,
   digest,
   VERSION,
-} from '../utils/crypto';
+} from '@/utils/crypto';
 
-import { cryptoUtils } from '../utils/auth';
+import { cryptoUtils } from '@/utils/auth';
 
 import _sodium from 'libsodium-wrappers-sumo';
 
