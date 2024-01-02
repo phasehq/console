@@ -1,0 +1,8 @@
+mutation UpdateSyncAuth($syncId: ID!, $credentialId: ID!) {
+  updateSyncAuthentication(syncId: $syncId, credentialId: $credentialId) {
+    sync {
+      id
+      status
+    }
+  }
+}

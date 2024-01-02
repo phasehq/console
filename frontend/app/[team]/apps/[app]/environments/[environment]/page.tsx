@@ -1,6 +1,12 @@
 'use client'
 
-import { EnvironmentType, SecretInput, SecretType } from '@/apollo/graphql'
+import {
+  ApiEnvironmentSyncStatusChoices,
+  EnvironmentSyncType,
+  EnvironmentType,
+  SecretInput,
+  SecretType,
+} from '@/apollo/graphql'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
@@ -20,11 +26,13 @@ import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import {
+  FaArrowRight,
   FaChevronDown,
   FaDownload,
   FaExchangeAlt,
   FaPlus,
   FaSearch,
+  FaSync,
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
@@ -32,10 +40,14 @@ import SecretRow from '@/components/environments/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Menu, Transition } from '@headlessui/react'
+import { Menu, Popover, Transition } from '@headlessui/react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Alert } from '@/components/common/Alert'
+import { SyncStatusIndicator } from '@/components/syncing/SyncStatusIndicator'
+import { SyncCard } from '@/components/syncing/SyncCard'
+import { StatusIndicator } from '@/components/common/StatusIndicator'
+import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 
 type EnvKeyring = {
   privateKey: string
@@ -465,6 +477,72 @@ export default function Environment({
   //   }
   // }, [unsavedChanges])
 
+  // const EnvSyncStatus = () => {
+  //   const syncStatus = () => {
+  //     if (
+  //       data.envSyncs.some(
+  //         (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.Failed
+  //       )
+  //     )
+  //       return ApiEnvironmentSyncStatusChoices.Failed
+  //     else if (
+  //       data.envSyncs.some(
+  //         (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.InProgress
+  //       )
+  //     )
+  //       return ApiEnvironmentSyncStatusChoices.InProgress
+  //     else return ApiEnvironmentSyncStatusChoices.Completed
+  //   }
+
+  //   if (data?.envSyncs.length > 0) {
+  //     return (
+  //       <Menu as="div" className="relative inline-block text-left">
+  //         {({ open }) => (
+  //           <>
+  //             <Menu.Button
+  //               as="div"
+  //               className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between"
+  //             >
+  //               <SyncStatusIndicator status={syncStatus()} />
+  //             </Menu.Button>
+  //             <Transition
+  //               as={Fragment}
+  //               enter="transition ease-out duration-100"
+  //               enterFrom="transform opacity-0 scale-95"
+  //               enterTo="transform opacity-100 scale-100"
+  //               leave="transition ease-in duration-75"
+  //               leaveFrom="transform opacity-100 scale-100"
+  //               leaveTo="transform opacity-0 scale-95"
+  //             >
+  //               <Menu.Items className="absolute z-20 -right-2 top-12 w-[512px] md:w-[768px] origin-top-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur-md shadow-2xl focus:outline-none">
+  //                 <div className="p-4">
+  //                   <div className="space-y-2">
+  //                     <div className="flex items-center justify-between">
+  //                       <div className="text-black dark:text-white font-medium text-lg flex items-center gap-2">
+  //                         <FaSync />
+  //                         Syncs
+  //                       </div>
+  //                       <Link href={`/${params.team}/apps/${params.app}/syncing`}>
+  //                         <Button variant="secondary">
+  //                           Explore
+  //                           <FaArrowRight />
+  //                         </Button>
+  //                       </Link>
+  //                     </div>
+  //                     {data.envSyncs.map((sync: EnvironmentSyncType) => (
+  //                       <SyncCard key={sync.id} sync={sync} />
+  //                     ))}
+  //                   </div>
+  //                 </div>
+  //               </Menu.Items>
+  //             </Transition>
+  //           </>
+  //         )}
+  //       </Menu>
+  //     )
+  //   } else return <></>
+  // }
+
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
@@ -553,11 +631,6 @@ export default function Environment({
               />
             </div>
             <div className="flex gap-2 items-center">
-              <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
-                <span className="px-2 py-1">
-                  <FaDownload className="text-lg" />
-                </span>
-              </Button>
               {unsavedChanges && (
                 <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
                   <span className="px-2 py-1">
@@ -565,6 +638,13 @@ export default function Environment({
                   </span>
                 </Button>
               )}
+
+              {data.envSyncs && (
+                <div>
+                  <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
+                </div>
+              )}
+
               <Button
                 variant={unsavedChanges ? 'warning' : 'primary'}
                 disabled={!unsavedChanges || savingAndFetching}
@@ -612,10 +692,15 @@ export default function Environment({
                 </div>
               ))}
 
-            <div className="col-span-2 flex mt-4">
+            <div className="col-span-2 flex mt-4 gap-4 items-center">
               <Button variant="primary" onClick={() => handleAddSecret(false)}>
                 <div className="flex items-center gap-2">
                   <FaPlus /> Create new secret
+                </div>
+              </Button>
+              <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
+                <div className="flex items-center gap-2">
+                  <FaDownload /> Export .env
                 </div>
               </Button>
             </div>

@@ -40,6 +40,10 @@ export default function AppLayout({
       name: 'Members',
       link: 'members',
     },
+    {
+      name: 'Syncing',
+      link: 'syncing',
+    },
   ])
 
   useEffect(() => {

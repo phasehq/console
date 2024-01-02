@@ -1,0 +1,8 @@
+query GetProviderList {
+  providers {
+    id
+    name
+    expectedCredentials
+  }
+  serverPublicKey
+}
