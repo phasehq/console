@@ -1,20 +1,11 @@
-import { ApiEnvironmentSyncStatusChoices, EnvironmentSyncType, ServiceType } from '@/apollo/graphql'
+import { ApiEnvironmentSyncStatusChoices, EnvironmentSyncType } from '@/apollo/graphql'
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
-import {
-  FaAngleDoubleRight,
-  FaCog,
-  FaCube,
-  FaExclamation,
-  FaExclamationTriangle,
-  FaKey,
-  FaSync,
-} from 'react-icons/fa'
-import { SiCloudflare, SiCloudflarepages } from 'react-icons/si'
+import { FaAngleDoubleRight, FaCog, FaExclamationTriangle } from 'react-icons/fa'
 import { SyncStatusIndicator } from './SyncStatusIndicator'
 import { Button } from '../common/Button'
 import { ManageSyncDialog } from './ManageSyncDialog'
-import { Tag } from '../environments/SecretRow'
+import { ProviderIcon } from './ProviderIcon'
 
 export const SyncCard = (props: {
   sync: EnvironmentSyncType
@@ -22,12 +13,6 @@ export const SyncCard = (props: {
   showManageButton?: boolean
 }) => {
   const { sync, showAppName, showManageButton } = props
-
-  const serviceIcon = (service: ServiceType) => {
-    if (service.id!.toLowerCase() === 'cloudflare_pages')
-      return <SiCloudflare className="shrink-0" />
-    else return <FaCube />
-  }
 
   return (
     <div
@@ -75,7 +60,8 @@ export const SyncCard = (props: {
 
         <div>
           <div className="flex gap-2 items-center">
-            {serviceIcon(sync.serviceInfo!)}
+            <ProviderIcon providerId={sync.serviceInfo?.id!} />
+
             <div>{sync.serviceInfo?.name}</div>
           </div>
           <div className="flex gap-2">
