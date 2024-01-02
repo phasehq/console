@@ -18,7 +18,7 @@ const documents = {
     "mutation UpdateEnvScope($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.UpdateEnvScopeDocument,
     "mutation CreateApplication($id: ID!, $organisationId: ID!, $name: String!, $identityKey: String!, $appToken: String!, $appSeed: String!, $wrappedKeyShare: String!, $appVersion: Int!) {\n  createApp(\n    id: $id\n    organisationId: $organisationId\n    name: $name\n    identityKey: $identityKey\n    appToken: $appToken\n    appSeed: $appSeed\n    wrappedKeyShare: $wrappedKeyShare\n    appVersion: $appVersion\n  ) {\n    app {\n      id\n      name\n      identityKey\n    }\n  }\n}": types.CreateApplicationDocument,
     "mutation CreateOrg($id: ID!, $name: String!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!) {\n  createOrganisation(\n    id: $id\n    name: $name\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n  ) {\n    organisation {\n      id\n      name\n      createdAt\n    }\n  }\n}": types.CreateOrgDocument,
-    "mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    app {\n      id\n    }\n  }\n}": types.DeleteApplicationDocument,
+    "mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    ok\n  }\n}": types.DeleteApplicationDocument,
     "mutation CreateEnv($input: EnvironmentInput!) {\n  createEnvironment(environmentData: $input) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.CreateEnvDocument,
     "mutation CreateEnvKey($envId: ID!, $userId: ID, $wrappedSeed: String!, $wrappedSalt: String!, $identityKey: String!) {\n  createEnvironmentKey(\n    envId: $envId\n    userId: $userId\n    wrappedSeed: $wrappedSeed\n    wrappedSalt: $wrappedSalt\n    identityKey: $identityKey\n  ) {\n    environmentKey {\n      id\n      createdAt\n    }\n  }\n}": types.CreateEnvKeyDocument,
     "mutation CreateEnvToken($envId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {\n  createEnvironmentToken(\n    envId: $envId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n  ) {\n    environmentToken {\n      id\n      createdAt\n    }\n  }\n}": types.CreateEnvTokenDocument,
@@ -116,7 +116,7 @@ export function graphql(source: "mutation CreateOrg($id: ID!, $name: String!, $i
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    app {\n      id\n    }\n  }\n}"];
+export function graphql(source: "mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    ok\n  }\n}"): (typeof documents)["mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

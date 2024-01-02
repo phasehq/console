@@ -296,10 +296,6 @@ class EnvironmentSync(models.Model):
         default=IN_PROGRESS,
     )
 
-    def delete(self, *args, **kwargs):
-        self.deleted_at = timezone.now()
-        self.save()
-
 
 class EnvironmentSyncEvent(models.Model):
     meta = models.JSONField(null=True)

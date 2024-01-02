@@ -116,7 +116,7 @@ class DeleteAppMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
 
-    app = graphene.Field(AppType)
+    ok = graphene.Boolean()
 
     @classmethod
     def mutate(cls, root, info, id):
@@ -141,11 +141,10 @@ class DeleteAppMutation(graphene.Mutation):
                 raise GraphQLError("Failed to delete app keys. Please try again.")
 
         app.wrapped_key_share = ""
-        app.is_deleted = True
-        app.deleted_at = timezone.now()
         app.save()
+        app.delete()
 
-        return DeleteAppMutation(app=app)
+        return DeleteAppMutation(ok=True)
 
 
 class AddAppMemberMutation(graphene.Mutation):

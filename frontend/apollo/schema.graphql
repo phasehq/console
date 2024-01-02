@@ -498,7 +498,7 @@ type RotateAppKeysMutation {
 }
 
 type DeleteAppMutation {
-  app: AppType
+  ok: Boolean
 }
 
 type AddAppMemberMutation {
