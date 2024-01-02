@@ -1,8 +1,9 @@
-from datetime import datetime
-
+import logging
 from django.db import DatabaseError
-
 from logs.dynamodb_models import KMSLog
+
+# Configure logging at the top of your module
+logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 25
 
@@ -23,7 +24,7 @@ def get_app_logs(app_id, start, end, limit):
     try:
         return [log.attribute_values for log in KMSLog.timestamp_index.query(app_id, KMSLog.timestamp.between(start, end), limit=limit, scan_index_forward=False)] 
     except Exception as e:
-        print(e)
+        logger.exception('Error fetching logs for app_id %s: %s', app_id, e)
         raise DatabaseError('Error fetching logs. Please try again later.')
 
 def get_app_log_count(app_id):
@@ -39,7 +40,7 @@ def get_app_log_count(app_id):
     try:
         return KMSLog.timestamp_index.count(app_id)
     except Exception as e:
-        print(e)
+        logger.exception('Error fetching log count for app_id %s: %s', app_id, e)
         raise DatabaseError('Error fetching logs. Please try again later.')
 
 def get_app_log_count_range(app_id, start, end):
@@ -55,5 +56,5 @@ def get_app_log_count_range(app_id, start, end):
     try:
         return KMSLog.timestamp_index.count(app_id, KMSLog.timestamp.between(start, end))
     except Exception as e:
-        print(e)
+        logger.exception('Error fetching log count range for app_id %s: %s', app_id, e)
         raise DatabaseError('Error fetching logs. Please try again later.')
