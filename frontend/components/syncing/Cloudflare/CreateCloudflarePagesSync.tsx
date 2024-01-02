@@ -45,12 +45,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
 
   const [credentialsValid, setCredentialsValid] = useState(false)
 
-  // useEffect(() => {
-  //   if (pagesData?.cloudflarePagesProjects) {
-  //     setCredentialsValid(true)
-  //   }
-  // }, [pagesData])
-
   useEffect(() => {
     if (credentialsData && credentialsData.savedCredentials.length > 0) {
       setCredential(credentialsData.savedCredentials[0])
@@ -89,12 +83,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
       closeModal()
     }
   }
-
-  const handleClearSelectedCredentials = () => {
-    setCredentialsValid(false)
-  }
-
-  //const cfProjects: CloudFlarePagesType[] = pagesData?.cloudflarePagesProjects ?? []
 
   const filteredProjects =
     query === ''
