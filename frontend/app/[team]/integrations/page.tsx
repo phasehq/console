@@ -18,6 +18,7 @@ import clsx from 'clsx'
 import Link from 'next/link'
 import { userIsAdmin } from '@/utils/permissions'
 import { useSearchParams } from 'next/navigation'
+import { FrameworkIntegrations } from '@/components/syncing/FrameworkIntegrations'
 
 export default function Integrations({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -93,7 +94,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
   }
 
   return (
-    <div className="w-full space-y-8 p-8 text-black dark:text-white">
+    <div className="w-full space-y-8 md:space-y-10 p-8 text-black dark:text-white">
       <div className="space-y-1">
         <h1 className="text-3xl font-semibold">{params.team} Integrations</h1>
         <p className="text-neutral-500">Manage integrations with third party services</p>
@@ -160,16 +161,21 @@ export default function Integrations({ params }: { params: { team: string } }) {
           )}
         </div>
 
-        {/* {credentialsData?.savedCredentials.length > 0 && activeUserIsAdmin && (
-          <div className="flex justify-end">
-            <CreateProviderCredentialsDialog defaultOpen={openCreateCredentialDialog !== null} />
-          </div>
-        )} */}
-
         {credentialsData?.savedCredentials.length > 0 &&
           credentialsData?.savedCredentials.map((credential: ProviderCredentialsType) => (
             <ProviderCredentialCard key={credential.id} credential={credential} />
           ))}
+      </div>
+
+      <hr className="border-neutral-500/40" />
+
+      <div className="space-y-4">
+        <div className="border-b border-neutral-500/20 pb-4">
+          <h2 className="text-black dark:text-white text-xl font-medium"> Frameworks</h2>
+          <p className="text-neutral-500">Integrate Phase with your application stack</p>
+        </div>
+
+        <FrameworkIntegrations />
       </div>
     </div>
   )
