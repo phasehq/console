@@ -1,6 +1,6 @@
 import _sodium from 'libsodium-wrappers-sumo'
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
-import { splitSecret } from './keyshares'
+import { splitSecret } from '@/utils/keyshares'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationMemberRoleChoices,
