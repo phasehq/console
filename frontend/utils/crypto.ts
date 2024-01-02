@@ -1,5 +1,5 @@
 import _sodium, { KeyPair } from 'libsodium-wrappers-sumo'
-import { cryptoUtils } from './auth'
+import { cryptoUtils } from '@/utils/auth'
 
 export const VERSION = 1
 
