@@ -88,8 +88,8 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
               >
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Manage authentication credentials
+                    <h3 className="text-lg font-medium leading-6 text-neutral-500">
+                      Manage service credentials
                     </h3>
 
                     <Button variant="text" onClick={closeModal}>

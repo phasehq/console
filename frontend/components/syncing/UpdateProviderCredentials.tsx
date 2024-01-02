@@ -11,6 +11,7 @@ import { Input } from '@/components/common/Input'
 import { encryptProviderCredentials } from '@/utils/syncing/general'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userIsAdmin } from '@/utils/permissions'
+import { ProviderIcon } from './ProviderIcon'
 
 interface CredentialState {
   [key: string]: string
@@ -57,7 +58,11 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
   return (
     <div className="space-y-4 w-full py-4">
       <div className="text-black dark:text-white font-semibold text-xl flex justify-between">
-        Credentials
+        <div className="flex items-center gap-2">
+          {' '}
+          <ProviderIcon providerId={credential.provider?.id!} /> {credential.provider?.name}{' '}
+          Credentials
+        </div>
         {activeUserIsAdmin && (
           <div>
             {allowEdit ? (

@@ -31,7 +31,7 @@ export const ProviderCredentialPicker = (props: {
     <Link href={`/${organisation!.name}/integrations?newCredential=true`}>
       <Button variant="secondary" onClick={newCredentialCallback}>
         <div className="flex items-center gap-2">
-          <FaPlus /> Add authentication credentials
+          <FaPlus /> Add service credentials
         </div>
       </Button>
     </Link>
@@ -48,7 +48,7 @@ export const ProviderCredentialPicker = (props: {
     <Listbox value={credential} onChange={setCredential}>
       {({ open }) => (
         <>
-          <label className="block text-gray-700 text-sm font-bold mb-2">Authentication</label>
+          <label className="block text-gray-700 text-sm font-bold mb-2">Service credentials</label>
           <Listbox.Button as={Fragment} aria-required aria-disabled={disabled}>
             <div
               className={clsx(
