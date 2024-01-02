@@ -3,12 +3,20 @@ import { FaArrowRight } from 'react-icons/fa'
 import {
   SiDjango,
   SiDotnet,
+  SiFastapi,
+  SiFlask,
+  SiGatsby,
   SiGo,
   SiLaravel,
+  SiNestjs,
   SiNextdotjs,
   SiNodedotjs,
+  SiNuxtdotjs,
   SiReact,
+  SiRemix,
   SiRubyonrails,
+  SiSvelte,
+  SiVuedotjs,
 } from 'react-icons/si'
 import { Card } from '../common/Card'
 
@@ -62,10 +70,58 @@ export const FrameworkIntegrations = () => {
       description: 'Inject secrets and environment variables to your Laravel app.',
       logo: <SiLaravel className="shrink-0 text-[#FF2D20]" />,
     },
+    {
+      href: '/integrations/frameworks/vue-js',
+      name: 'Vue',
+      description: 'Inject secrets and environment variables to your Vue app.',
+      logo: <SiVuedotjs className="shrink-0 text-[#4FC08D]" />,
+    },
+    {
+      href: '/integrations/frameworks/nuxt',
+      name: 'Nuxt',
+      description: 'Inject secrets and environment variables to your Nuxt app.',
+      logo: <SiNuxtdotjs className="shrink-0 text-[#00DC82]" />,
+    },
+    {
+      href: '/integrations/frameworks/nest-js',
+      name: 'NestJS',
+      description: 'Inject secrets and environment variables to your NestJS app.',
+      logo: <SiNestjs className="shrink-0 text-[#E0234E]" />,
+    },
+    {
+      href: '/integrations/frameworks/fast-api',
+      name: 'FastAPI',
+      description: 'Inject secrets and environment variables to your FastAPI app.',
+      logo: <SiFastapi className="shrink-0 text-[#009688]" />,
+    },
+    {
+      href: '/integrations/frameworks/flask',
+      name: 'Flask',
+      description: 'Inject secrets and environment variables to your Flask app.',
+      logo: <SiFlask className="shrink-0 text-black dark:text-white" />,
+    },
+    {
+      href: '/integrations/frameworks/svelte',
+      name: 'Svelte',
+      description: 'Inject secrets and environment variables to your Svelte app.',
+      logo: <SiSvelte className="shrink-0 text-[#FF3E00]" />,
+    },
+    {
+      href: '/integrations/frameworks/gatsby',
+      name: 'Gatsby',
+      description: 'Inject secrets and environment variables to your Gatsby app.',
+      logo: <SiGatsby className="shrink-0 text-[#663399]" />,
+    },
+    {
+      href: '/integrations/frameworks/remix',
+      name: 'Remix',
+      description: 'Inject secrets and environment variables to your Gatsby app.',
+      logo: <SiRemix className="shrink-0 text-black dark:text-white" />,
+    },
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
       {frameworks.map((framework) => (
         <Card key={framework.name}>
           <Link
