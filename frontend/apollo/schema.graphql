@@ -18,6 +18,14 @@ type Query {
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
+  serverPublicKey: String
+  syncEnabled(appId: ID): Boolean
+  providers: [ProviderType]
+  savedCredentials(orgId: ID): [ProviderCredentialsType]
+  syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
+  envSyncs(envId: ID): [EnvironmentSyncType]
+  cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
+  awsSecrets(accessKeyId: String, secretAccessKey: String, region: String): [AWSSecretType]
 }
 
 type OrganisationType {
@@ -99,6 +107,7 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
+  syncEnabled: Boolean
 }
 
 """An enumeration."""
@@ -203,6 +212,7 @@ type PersonalSecretType {
 
 type EnvironmentType {
   id: String!
+  app: AppType!
   name: String!
   envType: ApiEnvironmentEnvTypeChoices!
   identityKey: String!
@@ -288,7 +298,7 @@ type UserTokenType {
 
 type ServiceTokenType {
   id: String!
-  keys: [EnvironmentKeyType!]!
+  keys: [ServerEnvironmentKeyType!]!
   identityKey: String!
   token: String!
   wrappedKeyShare: String!
@@ -297,6 +307,117 @@ type ServiceTokenType {
   createdAt: DateTime
   updatedAt: DateTime!
   expiresAt: DateTime
+}
+
+type ServerEnvironmentKeyType {
+  id: String!
+  environment: EnvironmentType!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type ProviderType {
+  id: String!
+  name: String!
+  expectedCredentials: [String!]!
+  authScheme: String
+}
+
+type ProviderCredentialsType {
+  id: String!
+  name: String!
+  provider: ProviderType
+  credentials: JSONString!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  syncCount: Int
+}
+
+"""
+Allows use of a JSON String for input / output from the GraphQL schema.
+
+Use of this type is *not recommended* as you lose the benefits of having a defined, static
+schema (one of the key benefits of GraphQL).
+"""
+scalar JSONString
+
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  options: JSONString!
+  authentication: ProviderCredentialsType
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
+  serviceInfo: ServiceType
+  history: [EnvironmentSyncEventType!]!
+}
+
+"""An enumeration."""
+enum ApiEnvironmentSyncStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """cancelled"""
+  CANCELLED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
+}
+
+type ServiceType {
+  id: String
+  name: String
+  resourceType: String
+  subresourceType: String
+}
+
+type EnvironmentSyncEventType {
+  meta: JSONString
+  id: String!
+  envSync: EnvironmentSyncType!
+  status: ApiEnvironmentSyncEventStatusChoices!
+  createdAt: DateTime
+  completedAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiEnvironmentSyncEventStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """cancelled"""
+  CANCELLED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
+}
+
+type CloudFlarePagesType {
+  name: String
+  deploymentId: String
+  environments: [String]
+}
+
+type AWSSecretType {
+  name: String
+  arn: String
 }
 
 type Mutation {
@@ -316,6 +437,16 @@ type Mutation {
   createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
+  initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
+  deleteEnvSync(syncId: ID): DeleteSync
+  triggerSync(syncId: ID): TriggerSync
+  toggleSyncActive(syncId: ID): ToggleSyncActive
+  updateSyncAuthentication(credentialId: ID, syncId: ID): UpdateSyncAuthentication
+  createProviderCredentials(credentials: JSONString, name: String, orgId: ID, provider: String): CreateProviderCredentials
+  updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
+  deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
+  createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
+  createAwsSecretSync(arn: String, credentialId: ID, envId: ID, region: String, secretName: String): CreateAWSSecretsManagerSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -367,7 +498,7 @@ type RotateAppKeysMutation {
 }
 
 type DeleteAppMutation {
-  app: AppType
+  ok: Boolean
 }
 
 type AddAppMemberMutation {
@@ -409,6 +540,46 @@ type CreateEnvironmentKeyMutation {
 
 type CreateEnvironmentTokenMutation {
   environmentToken: EnvironmentTokenType
+}
+
+type InitEnvSync {
+  app: AppType
+}
+
+type DeleteSync {
+  ok: Boolean
+}
+
+type TriggerSync {
+  sync: EnvironmentSyncType
+}
+
+type ToggleSyncActive {
+  ok: Boolean
+}
+
+type UpdateSyncAuthentication {
+  sync: EnvironmentSyncType
+}
+
+type CreateProviderCredentials {
+  credential: ProviderCredentialsType
+}
+
+type UpdateProviderCredentials {
+  credential: ProviderCredentialsType
+}
+
+type DeleteProviderCredentials {
+  ok: Boolean
+}
+
+type CreateCloudflarePagesSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateAWSSecretsManagerSync {
+  sync: EnvironmentSyncType
 }
 
 type CreateUserTokenMutation {

@@ -806,7 +806,7 @@ export default function SecretRow(props: {
 
   const handleRevealSecret = async () => {
     setIsRevealed(true)
-    await readSecret({ variables: { id: secret.id } })
+    if (cannonicalSecret !== undefined) await readSecret({ variables: { id: secret.id } })
   }
 
   const handleHideSecret = () => setIsRevealed(false)

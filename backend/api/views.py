@@ -1,9 +1,13 @@
-
 from datetime import datetime
 import json
-from api.serializers import EnvironmentKeySerializer, SecretSerializer, ServiceTokenSerializer, UserTokenSerializer
+from api.serializers import (
+    EnvironmentKeySerializer,
+    SecretSerializer,
+    ServiceTokenSerializer,
+    UserTokenSerializer,
+)
 from api.emails import send_login_email
-from backend.graphene.utils.permissions import user_can_access_environment
+from api.utils.permissions import user_can_access_environment
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from graphene_django.views import GraphQLView
@@ -12,9 +16,26 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
-from api.utils import get_client_ip, get_env_from_service_token, get_org_member_from_user_token, get_resolver_request_meta, get_token_type, token_is_expired_or_deleted
+from api.utils.rest import (
+    get_client_ip,
+    get_env_from_service_token,
+    get_org_member_from_user_token,
+    get_resolver_request_meta,
+    get_token_type,
+    token_is_expired_or_deleted,
+)
 from logs.models import KMSDBLog
-from .models import App, Environment, EnvironmentKey, EnvironmentToken, Secret, SecretEvent, SecretTag, ServiceToken, UserToken
+from .models import (
+    App,
+    Environment,
+    EnvironmentKey,
+    EnvironmentToken,
+    Secret,
+    SecretEvent,
+    SecretTag,
+    ServiceToken,
+    UserToken,
+)
 import jwt
 import requests
 from django.contrib.auth import logout
@@ -33,7 +54,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 
 
-CLOUD_HOSTED = settings.APP_HOST == 'cloud'
+CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 # for custom gitlab adapter class
 
@@ -47,8 +68,7 @@ def _check_errors(response):
     try:
         data = response.json()
     except ValueError:  # JSONDecodeError on py3
-        raise OAuth2Error(
-            "Invalid JSON from GitLab API: %r" % (response.text))
+        raise OAuth2Error("Invalid JSON from GitLab API: %r" % (response.text))
 
     if response.status_code >= 400 or "error" in data:
         # For errors, we expect the following format:
@@ -96,7 +116,7 @@ class CustomGoogleOAuth2Adapter(GoogleOAuth2Adapter):
                 print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email, 'Google')
+            send_login_email(request, email, "Google")
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -137,7 +157,7 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
                 print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email, 'GitHub')
+            send_login_email(request, email, "GitHub")
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -154,12 +174,10 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
 
     access_token_url = "{0}/oauth/token".format(provider_base_url)
     authorize_url = "{0}/oauth/authorize".format(provider_base_url)
-    profile_url = "{0}/api/{1}/user".format(
-        provider_base_url, provider_api_version)
+    profile_url = "{0}/api/{1}/user".format(provider_base_url, provider_api_version)
 
     def complete_login(self, request, app, token, response):
-        response = requests.get(self.profile_url, params={
-                                "access_token": token.token})
+        response = requests.get(self.profile_url, params={"access_token": token.token})
         data = _check_errors(response)
         login = self.get_provider().sociallogin_from_response(request, data)
 
@@ -174,7 +192,7 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
                     print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email, 'GitLab')
+            send_login_email(request, email, "GitLab")
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -204,26 +222,22 @@ class GitLabLoginView(SocialLoginView):
 
 def logout_view(request):
     logout(request)
-    return JsonResponse({
-        'message': 'Logged out'
-    })
+    return JsonResponse({"message": "Logged out"})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request):
-    return JsonResponse({
-        'status': 'alive'
-    })
+    return JsonResponse({"status": "alive"})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([AllowAny])
 def kms(request, app_id):
-    auth_token = request.headers['authorization']
-    event_type = request.headers['eventtype']
-    phase_node = request.headers['phasenode']
-    ph_size = request.headers['phsize']
+    auth_token = request.headers["authorization"]
+    event_type = request.headers["eventtype"]
+    phase_node = request.headers["phasenode"]
+    ph_size = request.headers["phsize"]
     ip_address = get_client_ip(request)
     app_token = auth_token.split("Bearer ")[1]
 
@@ -233,21 +247,25 @@ def kms(request, app_id):
         app = App.objects.get(app_token=app_token)
         try:
             timestamp = datetime.now().timestamp() * 1000
-            KMSDBLog.objects.create(app_id=app_id, event_type=event_type, phase_node=phase_node, ph_size=float(
-                ph_size), ip_address=ip_address, timestamp=timestamp)
+            KMSDBLog.objects.create(
+                app_id=app_id,
+                event_type=event_type,
+                phase_node=phase_node,
+                ph_size=float(ph_size),
+                ip_address=ip_address,
+                timestamp=timestamp,
+            )
         except:
             pass
-        return JsonResponse({
-            'wrappedKeyShare': app.wrapped_key_share
-        })
+        return JsonResponse({"wrappedKeyShare": app.wrapped_key_share})
     except:
         return HttpResponse(status=404)
 
 
 def user_token_kms(request):
-    auth_token = request.headers['authorization']
+    auth_token = request.headers["authorization"]
 
-    token = auth_token.split(' ')[2]
+    token = auth_token.split(" ")[2]
 
     user_token = UserToken.objects.get(token=token)
 
@@ -257,9 +275,9 @@ def user_token_kms(request):
 
 
 def service_token_kms(request):
-    auth_token = request.headers['authorization']
+    auth_token = request.headers["authorization"]
 
-    token = auth_token.split(' ')[2]
+    token = auth_token.split(" ")[2]
 
     service_token = ServiceToken.objects.get(token=token)
 
@@ -268,19 +286,19 @@ def service_token_kms(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([AllowAny])
 def secrets_tokens(request):
-    auth_token = request.headers['authorization']
+    auth_token = request.headers["authorization"]
 
     if token_is_expired_or_deleted(auth_token):
         return HttpResponse(status=403)
 
     token_type = get_token_type(auth_token)
 
-    if token_type == 'Service':
+    if token_type == "Service":
         return service_token_kms(request)
-    elif token_type == 'User':
+    elif token_type == "User":
         return user_token_kms(request)
     else:
         return HttpResponse(status=403)
@@ -292,33 +310,35 @@ class PrivateGraphQLView(LoginRequiredMixin, GraphQLView):
 
 
 class SecretsView(APIView):
-    permission_classes = [AllowAny, ]
+    permission_classes = [
+        AllowAny,
+    ]
 
     @csrf_exempt
     def dispatch(self, request, *args):
         return super(SecretsView, self).dispatch(request, *args)
 
     def get(self, request):
-        auth_token = request.headers['authorization']
+        auth_token = request.headers["authorization"]
 
         if token_is_expired_or_deleted(auth_token):
             return HttpResponse(status=403)
 
         token_type = get_token_type(auth_token)
 
-        env_id = request.headers['environment']
+        env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        if token_type == 'User':
+        if token_type == "User":
             try:
                 org_member = get_org_member_from_user_token(auth_token)
 
                 if not user_can_access_environment(org_member.user.userId, env_id):
                     return HttpResponse(status=403)
             except Exception as ex:
-                print('EX:', ex)
+                print("EX:", ex)
                 return HttpResponse(status=404)
 
         else:
@@ -327,42 +347,50 @@ class SecretsView(APIView):
         if not env.id:
             return HttpResponse(status=404)
 
-        secrets_filter = {
-            'environment': env,
-            'deleted_at': None
-        }
+        secrets_filter = {"environment": env, "deleted_at": None}
 
         try:
-            key_digest = request.headers['keydigest']
+            key_digest = request.headers["keydigest"]
             if key_digest:
-                secrets_filter['key_digest'] = key_digest
+                secrets_filter["key_digest"] = key_digest
         except:
             pass
 
         secrets = Secret.objects.filter(**secrets_filter)
 
         for secret in secrets:
-            read_event = SecretEvent.objects.create(secret=secret, environment=secret.environment, user=org_member, key=secret.key, key_digest=secret.key_digest,
-                                                    value=secret.value, comment=secret.comment, event_type=SecretEvent.READ, ip_address=ip_address, user_agent=user_agent)
+            read_event = SecretEvent.objects.create(
+                secret=secret,
+                environment=secret.environment,
+                user=org_member,
+                key=secret.key,
+                key_digest=secret.key_digest,
+                value=secret.value,
+                comment=secret.comment,
+                event_type=SecretEvent.READ,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             read_event.tags.set(secret.tags.all())
 
-        serializer = SecretSerializer(secrets, many=True, context={
-                                      'org_member': org_member})
+        serializer = SecretSerializer(
+            secrets, many=True, context={"org_member": org_member}
+        )
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        auth_token = request.headers['authorization']
+        auth_token = request.headers["authorization"]
 
         if token_is_expired_or_deleted(auth_token):
             return HttpResponse(status=403)
 
         token_type = get_token_type(auth_token)
 
-        env_id = request.headers['environment']
+        env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
 
-        if token_type == 'User':
+        if token_type == "User":
             try:
                 user = get_org_member_from_user_token(auth_token)
 
@@ -380,48 +408,50 @@ class SecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        for secret in request_body['secrets']:
-
-            tags = SecretTag.objects.filter(
-                id__in=secret['tags'])
+        for secret in request_body["secrets"]:
+            tags = SecretTag.objects.filter(id__in=secret["tags"])
 
             secret_data = {
-                'environment': env,
-                'key': secret['key'],
-                'key_digest': secret['keyDigest'],
-                'value': secret['value'],
-                'folder_id': secret['folderId'],
-                'version': 1,
-                'comment': secret['comment'],
+                "environment": env,
+                "key": secret["key"],
+                "key_digest": secret["keyDigest"],
+                "value": secret["value"],
+                "folder_id": secret["folderId"],
+                "version": 1,
+                "comment": secret["comment"],
             }
 
             secret_obj = Secret.objects.create(**secret_data)
             secret_obj.tags.set(tags)
 
             event = SecretEvent.objects.create(
-                **{**secret_data, **{
-                    'user': user,
-                    'secret': secret_obj,
-                    'event_type': SecretEvent.CREATE,
-                    'ip_address': ip_address,
-                    'user_agent': user_agent
-                }})
+                **{
+                    **secret_data,
+                    **{
+                        "user": user,
+                        "secret": secret_obj,
+                        "event_type": SecretEvent.CREATE,
+                        "ip_address": ip_address,
+                        "user_agent": user_agent,
+                    },
+                }
+            )
             event.tags.set(tags)
 
         return Response(status=status.HTTP_200_OK)
 
     def put(self, request):
-        auth_token = request.headers['authorization']
+        auth_token = request.headers["authorization"]
 
         if token_is_expired_or_deleted(auth_token):
             return HttpResponse(status=403)
 
         token_type = get_token_type(auth_token)
 
-        env_id = request.headers['environment']
+        env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
 
-        if token_type == 'User':
+        if token_type == "User":
             try:
                 user = get_org_member_from_user_token(auth_token)
 
@@ -437,20 +467,19 @@ class SecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        for secret in request_body['secrets']:
-            secret_obj = Secret.objects.get(id=secret['id'])
+        for secret in request_body["secrets"]:
+            secret_obj = Secret.objects.get(id=secret["id"])
 
-            tags = SecretTag.objects.filter(
-                id__in=secret['tags'])
+            tags = SecretTag.objects.filter(id__in=secret["tags"])
 
             secret_data = {
-                'environment': env,
-                'key': secret['key'],
-                'key_digest': secret['keyDigest'],
-                'value': secret['value'],
-                'folder_id': secret['folderId'],
-                'version': secret_obj.version + 1,
-                'comment': secret['comment'],
+                "environment": env,
+                "key": secret["key"],
+                "key_digest": secret["keyDigest"],
+                "value": secret["value"],
+                "folder_id": secret["folderId"],
+                "version": secret_obj.version + 1,
+                "comment": secret["comment"],
             }
 
             for key, value in secret_data.items():
@@ -461,28 +490,32 @@ class SecretsView(APIView):
             secret_obj.save()
 
             event = SecretEvent.objects.create(
-                **{**secret_data, **{
-                    'user': user,
-                    'secret': secret_obj,
-                    'event_type': SecretEvent.UPDATE,
-                    'ip_address': ip_address,
-                    'user_agent': user_agent
-                }})
+                **{
+                    **secret_data,
+                    **{
+                        "user": user,
+                        "secret": secret_obj,
+                        "event_type": SecretEvent.UPDATE,
+                        "ip_address": ip_address,
+                        "user_agent": user_agent,
+                    },
+                }
+            )
             event.tags.set(tags)
 
         return Response(status=status.HTTP_200_OK)
 
     def delete(self, request):
-        auth_token = request.headers['authorization']
+        auth_token = request.headers["authorization"]
 
         if token_is_expired_or_deleted(auth_token):
             return HttpResponse(status=403)
 
         token_type = get_token_type(auth_token)
 
-        env_id = request.headers['environment']
+        env_id = request.headers["environment"]
 
-        if token_type == 'User':
+        if token_type == "User":
             try:
                 user = get_org_member_from_user_token(auth_token)
 
@@ -498,14 +531,15 @@ class SecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        secrets_to_delete = Secret.objects.filter(
-            id__in=request_body['secrets'])
+        secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"])
 
         for secret in secrets_to_delete:
             if not Secret.objects.filter(id=secret.id).exists():
                 return HttpResponse(status=404)
 
-            if user is not None and not user_can_access_environment(user.user.userId, secret.environment.id):
+            if user is not None and not user_can_access_environment(
+                user.user.userId, secret.environment.id
+            ):
                 return HttpResponse(status=403)
 
         for secret in secrets_to_delete:
@@ -513,8 +547,9 @@ class SecretsView(APIView):
             secret.deleted_at = timezone.now()
             secret.save()
 
-            most_recent_event_copy = SecretEvent.objects.filter(
-                secret=secret).order_by('version').last()
+            most_recent_event_copy = (
+                SecretEvent.objects.filter(secret=secret).order_by("version").last()
+            )
 
             # setting the pk to None and then saving it creates a copy of the instance with updated fields
             most_recent_event_copy.id = None

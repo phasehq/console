@@ -1,0 +1,7 @@
+mutation UpdateProviderCreds($credentialId: ID!,  $name: String!, $credentials: JSONString!) {
+  updateProviderCredentials(credentialId: $credentialId,name: $name, credentials: $credentials) {
+    credential {
+      id
+    }
+  }
+}
