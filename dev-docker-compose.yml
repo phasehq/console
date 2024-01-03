@@ -65,7 +65,7 @@ services:
 
   redis:
     container_name: phase-redis-dev
-    image: redis:alpine
+    image: redis:alpine3.19
     restart: always
     ports:
       - "6379:6379"
