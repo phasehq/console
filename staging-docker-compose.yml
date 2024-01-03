@@ -92,12 +92,6 @@ services:
     container_name: phase-redis
     image: redis:alpine3.19
     restart: always
-    env_file:
-    - .env
-    environment:
-      - "${REDIS_PORT}:${REDIS_PORT}"
-      - "${REDIS_PASSWORD}:${REDIS_PASSWORD}"
-
     networks:
       - phase-net-dev
 
