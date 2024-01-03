@@ -40,6 +40,7 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
+      - redis
     image: phasehq/backend:latest
     env_file: .env
     environment:
@@ -49,11 +50,11 @@ services:
     networks:
       - phase-net
 
-  rqworker0:
-    container_name: phase-rqworker-0
+  worker:
+    container_name: phase-worker
     restart: unless-stopped
     depends_on:
-      - backend
+      - postgres
       - redis
     image: phasehq/backend:latest
     command: python manage.py rqworker default
@@ -84,10 +85,14 @@ services:
 
   redis:
     container_name: phase-redis
-    image: redis:alpine
+    image: redis:alpine3.19
     restart: always
-    ports:
+    env_file:
+    - .env
+    environment:
       - "${REDIS_PORT}:${REDIS_PORT}"
+      - "${REDIS_PASSWORD}:${REDIS_PASSWORD}"
+
     networks:
       - phase-net
 
