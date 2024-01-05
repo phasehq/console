@@ -113,6 +113,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                   credential={credential}
                   setCredential={(cred) => setCredential(cred)}
                   orgId={organisation!.id}
+                  providerFilter={'cloudflare'}
                 />
               </div>
             </div>
