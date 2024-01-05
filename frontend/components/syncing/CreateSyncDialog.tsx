@@ -24,8 +24,8 @@ export const CreateSyncDialog = (props: {
 
   const renderSyncPanel = (service: string) => {
     switch (service) {
-      case 'aws_secrets':
-        return <CreateAWSSecretsSync appId={props.appId} />
+      case 'aws_secrets_manager':
+        return <CreateAWSSecretsSync appId={props.appId} closeModal={closeModal} />
       case 'cloudflare_pages':
         return <CreateCloudflarePagesSync appId={props.appId} closeModal={closeModal} />
       default:
