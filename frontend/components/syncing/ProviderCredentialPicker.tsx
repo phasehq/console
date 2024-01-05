@@ -15,9 +15,11 @@ export const ProviderCredentialPicker = (props: {
   setCredential: (credential: ProviderCredentialsType) => void
   orgId: string
   disabled?: boolean
+  providerFilter?: string
   newCredentialCallback?: () => void
 }) => {
-  const { credential, setCredential, orgId, disabled, newCredentialCallback } = props
+  const { credential, setCredential, orgId, disabled, providerFilter, newCredentialCallback } =
+    props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -26,6 +28,10 @@ export const ProviderCredentialPicker = (props: {
   })
 
   const credentials: ProviderCredentialsType[] = credentialsData?.savedCredentials ?? []
+
+  const filteredCredentials = providerFilter
+    ? credentials.filter((cred) => cred.provider?.id === providerFilter)
+    : credentials
 
   const NewCredentialsLink = () => (
     <Link href={`/${organisation!.name}/integrations?newCredential=true`}>
@@ -37,7 +43,7 @@ export const ProviderCredentialPicker = (props: {
     </Link>
   )
 
-  if (credentials.length === 0)
+  if (filteredCredentials.length === 0)
     return (
       <div>
         <NewCredentialsLink />
@@ -67,7 +73,7 @@ export const ProviderCredentialPicker = (props: {
           </Listbox.Button>
           <Listbox.Options>
             <div className="bg-zinc-100 dark:bg-zinc-800/60 p-2 rounded-b-md shadow-2xl backdrop-blur-md absolute z-10 space-y-2 border border-t-0 dark:border-none border-neutral-500/20">
-              {credentials.map((cred: ProviderCredentialsType) => (
+              {filteredCredentials.map((cred: ProviderCredentialsType) => (
                 <Listbox.Option key={cred.id} value={cred} as={Fragment}>
                   {({ active, selected }) => (
                     <div
