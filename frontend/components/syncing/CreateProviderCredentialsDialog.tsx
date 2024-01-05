@@ -16,6 +16,8 @@ import { toast } from 'react-toastify'
 import { encryptProviderCredentials } from '@/utils/syncing/general'
 import { Card } from '../common/Card'
 import { ProviderIcon } from './ProviderIcon'
+import { AWSRegionPicker } from './AWS/AWSRegionPicker'
+import { awsRegions } from '@/utils/syncing/aws'
 
 interface CredentialState {
   [key: string]: string
@@ -64,18 +66,20 @@ export const CreateProviderCredentialsDialog = (props: {
 
   const providers: ProviderType[] = providersData?.providers ?? []
 
-  const handleProviderChange = (provider: ProviderType) => {
-    if (provider) {
+  useEffect(() => {
+    const handleProviderChange = (provider: ProviderType) => {
       setProvider(provider)
       const initialCredentials: CredentialState = {}
       provider.expectedCredentials!.forEach((cred) => {
         initialCredentials[cred] = '' // Initialize each credential with an empty string
       })
+      if (provider.id === 'aws') initialCredentials['region'] = awsRegions[0].region
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
     }
-  }
+    if (provider) handleProviderChange(provider)
+  }, [provider])
 
   const handleCredentialChange = (key: string, value: string) => {
     setCredentials({ ...credentials, [key]: value })
@@ -169,7 +173,7 @@ export const CreateProviderCredentialsDialog = (props: {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-3xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-3xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       Create new service credentials
@@ -199,16 +203,24 @@ export const CreateProviderCredentialsDialog = (props: {
                         </div>
                       )}
 
-                      {provider?.expectedCredentials.map((credential) => (
-                        <Input
-                          key={credential}
-                          value={credentials[credential]}
-                          setValue={(value) => handleCredentialChange(credential, value)}
-                          label={credential.toUpperCase()}
-                          required
-                          secret={true}
+                      {provider?.expectedCredentials
+                        .filter((credential) => credential !== 'region')
+                        .map((credential) => (
+                          <Input
+                            key={credential}
+                            value={credentials[credential]}
+                            setValue={(value) => handleCredentialChange(credential, value)}
+                            label={credential.replace('_', ' ').toUpperCase()}
+                            required
+                            secret={true}
+                          />
+                        ))}
+
+                      {provider?.id === 'aws' && (
+                        <AWSRegionPicker
+                          onChange={(region) => handleCredentialChange('region', region)}
                         />
-                      ))}
+                      )}
 
                       {provider && (
                         <Input
