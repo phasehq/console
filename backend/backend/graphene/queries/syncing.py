@@ -46,8 +46,6 @@ def resolve_saved_credentials(root, info, org_id):
     if not user_is_org_member(info.context.user.userId, org_id):
         raise GraphQLError("You don't have permission to perform this action")
 
-    # ProviderCredentials.objects.exclude(deleted_at=None).delete()
-
     return ProviderCredentials.objects.filter(organisation_id=org_id, deleted_at=None)
 
 
@@ -73,19 +71,23 @@ def resolve_cloudflare_pages_projects(root, info, credential_id):
         raise GraphQLError(ex)
 
 
-def resolve_aws_secret_manager_secrets(
-    root, info, access_key_id, secret_access_key, region
-):
+def resolve_aws_secret_manager_secrets(root, info, credential_id):
     pk, sk = get_server_keypair()
-    decrypted_access_key_id = decrypt_asymmetric(access_key_id, sk.hex(), pk.hex())
-    decrypted_secret_access_key = decrypt_asymmetric(
-        secret_access_key, sk.hex(), pk.hex()
+
+    credential = ProviderCredentials.objects.get(id=credential_id)
+
+    access_key_id = decrypt_asymmetric(
+        credential.credentials["access_key_id"], sk.hex(), pk.hex()
     )
 
+    secret_access_key = decrypt_asymmetric(
+        credential.credentials["secret_access_key"], sk.hex(), pk.hex()
+    )
+
+    region = decrypt_asymmetric(credential.credentials["region"], sk.hex(), pk.hex())
+
     try:
-        secrets = list_aws_secrets(
-            decrypted_access_key_id, decrypted_secret_access_key, region
-        )
+        secrets = list_aws_secrets(access_key_id, secret_access_key, region)
         return secrets
     except Exception as ex:
         raise GraphQLError(ex)

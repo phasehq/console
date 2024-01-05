@@ -192,9 +192,7 @@ class Query(graphene.ObjectType):
 
     aws_secrets = graphene.List(
         AWSSecretType,
-        access_key_id=graphene.String(),
-        secret_access_key=graphene.String(),
-        region=graphene.String(),
+        credential_id=graphene.ID(),
     )
 
     # --------------------------------------------------------------------
