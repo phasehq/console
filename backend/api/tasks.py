@@ -31,6 +31,15 @@ def trigger_sync_tasks(env_sync):
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
 
+    elif env_sync.service == ServiceConfig.AWS_SECRETS_MANAGER["id"]:
+        env_sync.status = EnvironmentSync.IN_PROGRESS
+        env_sync.save()
+
+        job = sync_aws_secrets_manager.delay(env_sync)
+        job_id = job.get_id()
+
+        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+
 
 # try and cancel running or queued jobs for this sync
 def cancel_sync_tasks(env_sync):
@@ -135,58 +144,82 @@ def sync_cloudflare_pages(environment_sync):
         environment_sync.save()
 
 
-# @job("default", timeout=3600)
-# def sync_aws_secrets_manager(environment_sync):
-#     try:
-#         EnvironmentSync = apps.get_model("api", "EnvironmentSync")
-#         EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
+@job("default", timeout=3600)
+def sync_aws_secrets_manager(environment_sync):
+    try:
+        EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+        EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-#         sync_event = EnvironmentSyncEvent.objects.create(env_sync=environment_sync)
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
+        )
 
-#         kv_pairs = get_environment_secrets(environment_sync)
+        kv_pairs = get_environment_secrets(environment_sync)
 
-#         access_key_id, secret_access_key = get_aws_secrets_manager_credentials(
-#             environment_sync
-#         )
+        if environment_sync.authentication is None:
+            sync_data = (
+                False,
+                {"message": "No authentication credentials for this sync"},
+            )
+            raise Exception("No authentication credentials for this sync")
 
-#         project_info = environment_sync.options
+        credentials = get_aws_secrets_manager_credentials(environment_sync)
 
-#         success, sync_data = sync_aws_secrets(
-#             kv_pairs,
-#             access_key_id,
-#             secret_access_key,
-#             project_info["region"],
-#             project_info["secret_name"],
-#             project_info["arn"],
-#         )
+        project_info = environment_sync.options
 
-#         if success:
-#             sync_event.status = EnvironmentSync.COMPLETED
-#             sync_event.completed_at = timezone.now()
-#             sync_event.meta = sync_data
-#             sync_event.save()
+        success, sync_data = sync_aws_secrets(
+            kv_pairs,
+            credentials.get("access_key_id"),
+            credentials.get("secret_access_key"),
+            credentials.get("region"),
+            project_info.get("secret_name"),
+            project_info.get("arn"),
+            project_info.get("kms_id"),
+        )
 
-#             environment_sync.last_sync = timezone.now()
-#             environment_sync.status = EnvironmentSync.COMPLETED
-#             environment_sync.save()
+        if success:
+            sync_event.status = EnvironmentSync.COMPLETED
+            sync_event.completed_at = timezone.now()
+            sync_event.meta = sync_data
+            sync_event.save()
 
-#         else:
-#             sync_event.status = EnvironmentSync.FAILED
-#             sync_event.completed_at = timezone.now()
-#             sync_event.meta = sync_data
-#             sync_event.save()
+            environment_sync.last_sync = timezone.now()
+            environment_sync.status = EnvironmentSync.COMPLETED
+            environment_sync.save()
 
-#             environment_sync.last_sync = timezone.now()
-#             environment_sync.status = EnvironmentSync.FAILED
-#             environment_sync.save()
+        else:
+            sync_event.status = EnvironmentSync.FAILED
+            sync_event.completed_at = timezone.now()
+            sync_event.meta = sync_data
+            sync_event.save()
 
-#     except JobTimeoutException:
-#         # Handle timeout exception
-#         sync_event.status = EnvironmentSync.TIMED_OUT
-#         sync_event.completed_at = timezone.now()
-#         sync_event.save()
+            environment_sync.last_sync = timezone.now()
+            environment_sync.status = EnvironmentSync.FAILED
+            environment_sync.save()
 
-#         environment_sync.last_sync = timezone.now()
-#         environment_sync.status = EnvironmentSync.TIMED_OUT
-#         environment_sync.save()
-#         raise  # Re-raise the JobTimeoutException
+    except JobTimeoutException:
+        # Handle timeout exception
+        sync_event.status = EnvironmentSync.TIMED_OUT
+        sync_event.completed_at = timezone.now()
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.TIMED_OUT
+        environment_sync.save()
+        raise  # Re-raise the JobTimeoutException
+
+    except Exception:
+        sync_event.status = EnvironmentSync.FAILED
+        sync_event.completed_at = timezone.now()
+
+        try:
+            sync_event.meta = sync_data
+        except:
+            pass
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.FAILED
+        environment_sync.save()
