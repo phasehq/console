@@ -1,11 +1,12 @@
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { FaArrowRight, FaChevronRight, FaPlus } from 'react-icons/fa'
-import { SiCloudflare } from 'react-icons/si'
+import { SiAmazonaws, SiCloudflare } from 'react-icons/si'
 import { CreateSyncDialog } from './CreateSyncDialog'
 import { Card } from '../common/Card'
 import { Button } from '../common/Button'
 import { ReactNode } from 'react'
+import { ProviderIcon } from './ProviderIcon'
 
 interface Service {
   id: string
@@ -42,8 +43,13 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
   const syncOptions: Service[] = [
     {
       name: 'Cloudflare Pages',
-      icon: <SiCloudflare className="text-[#F38020]" />,
+      icon: <ProviderIcon providerId={'cloudflare'} />,
       id: 'cloudflare_pages',
+    },
+    {
+      name: 'AWS Secrets Manager',
+      icon: <ProviderIcon providerId={'aws'} />,
+      id: 'aws_secrets_manager',
     },
   ]
 
