@@ -25,7 +25,7 @@ type Query {
   syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
   envSyncs(envId: ID): [EnvironmentSyncType]
   cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
-  awsSecrets(accessKeyId: String, secretAccessKey: String, region: String): [AWSSecretType]
+  awsSecrets(credentialId: ID): [AWSSecretType]
 }
 
 type OrganisationType {
@@ -446,7 +446,7 @@ type Mutation {
   updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
   deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
   createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
-  createAwsSecretSync(arn: String, credentialId: ID, envId: ID, region: String, secretName: String): CreateAWSSecretsManagerSync
+  createAwsSecretSync(arn: String, credentialId: ID, envId: ID, kmsId: String, secretName: String): CreateAWSSecretsManagerSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
