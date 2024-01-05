@@ -4,25 +4,37 @@ import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql
 import CreateNewAWSSecretsSync from '@/graphql/mutations/syncing/aws/CreateAwsSecretsSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { encryptAsymmetric } from '@/utils/crypto'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import { CloudFlarePagesType, EnvironmentType } from '@/apollo/graphql'
-import { Listbox, RadioGroup } from '@headlessui/react'
+import {
+  AwsSecretType,
+  CloudFlarePagesType,
+  EnvironmentType,
+  ProviderCredentialsType,
+} from '@/apollo/graphql'
+import { Disclosure, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
   FaAngleDoubleDown,
   FaChevronDown,
+  FaChevronRight,
   FaCircle,
   FaDotCircle,
   FaEye,
   FaEyeSlash,
+  FaPlus,
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { SiAmazonaws, SiCloudflarepages } from 'react-icons/si'
 import { AwsRegion, awsRegions } from '@/utils/syncing/aws'
+import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
+import { organisationContext } from '@/contexts/organisationContext'
+import { Input } from '@/components/common/Input'
 
-export const CreateAWSSecretsSync = (props: { appId: string; onComplete?: Function }) => {
-  const { appId } = props
+export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => void }) => {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const { appId, closeModal } = props
 
   const { data } = useQuery(GetAppSyncStatus, { variables: { appId } })
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
@@ -30,70 +42,73 @@ export const CreateAWSSecretsSync = (props: { appId: string; onComplete?: Functi
       appId,
     },
   })
-  const [getAwsSecrets, { data: pagesData, loading }] = useLazyQuery(GetAwsSecrets)
+  const [getAwsSecrets, { loading }] = useLazyQuery(GetAwsSecrets)
 
   const [createAwsSecretSync, { data: syncData, loading: creating }] =
     useMutation(CreateNewAWSSecretsSync)
 
-  const [accessKeyId, setAccessKeyId] = useState('')
-  const [showAccessKeyId, setShowAccessKeyId] = useState(false)
+  const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
-  const [secretAccessKey, setSecretAccessKey] = useState('')
-  const [showSecretAccessKey, setShowSecretAccessKey] = useState(false)
+  const [awsSecrets, setAwsSecrets] = useState<AwsSecretType[]>([])
 
-  const [region, setRegion] = useState<AwsRegion>(awsRegions[0])
+  const [createNewSecret, setCreateNewSecret] = useState(true)
 
-  const [cfProject, setCfProject] = useState<CloudFlarePagesType | null>(null)
-  const [cfEnv, setCfEnv] = useState<'preview' | 'production'>('preview')
+  const [newAwsSecretName, setNewAwsSecretName] = useState<string>('')
+
+  const [kmsKeyId, setKmsKeyId] = useState<string>('')
+
+  const [awsSecret, setCfProject] = useState<AwsSecretType | null>(null)
+
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
 
   const [credentialsValid, setCredentialsValid] = useState(false)
 
   useEffect(() => {
-    if (pagesData?.cloudflarePagesProjects) {
-      setCredentialsValid(true)
+    if (appEnvsData?.appEnvironments.length > 0) {
+      const defaultEnv: EnvironmentType = appEnvsData.appEnvironments[0]
+      setPhaseEnv(defaultEnv)
+      setNewAwsSecretName(`${defaultEnv.app.name}/${defaultEnv.name}`)
     }
-  }, [pagesData])
+  }, [appEnvsData])
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
-    // const encryptedAccountId = await encryptAsymmetric(accessKeyId, data.serverPublicKey)
-    // const encryptedAccessToken = await encryptAsymmetric(accessToken, data.serverPublicKey)
+    if (credential === null) {
+      toast.error('Please select credentials to use for this sync')
+      return false
+    }
 
-    // if (!credentialsValid) {
-    //   await getAwsSecrets({
-    //     variables: {
-    //       accountId: encryptedAccountId,
-    //       accessToken: encryptedAccessToken,
-    //     },
-    //   })
-    // } else {
-    //   await createAwsSecretSync({
-    //     variables: {
-    //       envId: phaseEnv?.id,
-    //       projectName: cfProject?.name,
-    //       deploymentId: cfProject?.deploymentId,
-    //       projectEnv: cfEnv,
-    //       accessToken: encryptedAccessToken,
-    //       accountId: encryptedAccountId,
-    //     },
-    //     refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
-    //   })
+    if (!credentialsValid) {
+      const { data: secretsData } = await getAwsSecrets({
+        variables: {
+          credentialId: credential.id,
+        },
+      })
 
-    //   toast.success('Created new Sync!')
-    //   //props.onComplete()
-    // }
+      if (secretsData.awsSecrets) setAwsSecrets(secretsData.awsSecrets)
+      setCredentialsValid(true)
+    } else {
+      await createAwsSecretSync({
+        variables: {
+          envId: phaseEnv?.id,
+          credentialId: credential.id,
+          secretName: newAwsSecretName || null,
+          arn: awsSecret?.arn || null,
+          kmsId: kmsKeyId || null,
+        },
+        refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
+      })
+
+      toast.success('Created new Sync!')
+      closeModal()
+    }
   }
-
-  const cfProjects: CloudFlarePagesType[] = pagesData?.cloudflarePagesProjects ?? []
-
-  const cfEnvOptions = ['preview', 'production']
 
   return (
     <div className="p-4 space-y-6">
       <div>
-        <div className="text-2xl font-semibold flex items-center gap-1">
+        <div className="text-2xl font-semibold flex items-center gap-2">
           <SiAmazonaws />
           AWS Secrets Manager
         </div>
@@ -102,106 +117,17 @@ export const CreateAWSSecretsSync = (props: { appId: string; onComplete?: Functi
       <form onSubmit={handleSubmit}>
         {!credentialsValid && (
           <div className="space-y-4">
-            <div className="space-y-2 w-full">
-              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="accountId">
-                Access Key ID
-              </label>
-              <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
-                <input
-                  id="accessKeyId"
-                  type={showAccessKeyId ? 'text' : 'password'}
-                  value={accessKeyId}
-                  onChange={(e) => setAccessKeyId(e.target.value)}
-                  required
-                  autoFocus
-                  className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
-                />
-                <button
-                  className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
-                  type="button"
-                  onClick={() => setShowAccessKeyId(!showAccessKeyId)}
-                  tabIndex={-1}
-                >
-                  {secretAccessKey ? <FaEyeSlash /> : <FaEye />}
-                </button>
-              </div>
+            <div className="font-medium text-black dark:text-white">
+              Step 1: Choose authentication credentials
             </div>
-
-            <div className="space-y-2 w-full">
-              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="token">
-                Secret Access Key
-              </label>
-              <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
-                <input
-                  id="secretAccessKey"
-                  type={showSecretAccessKey ? 'text' : 'password'}
-                  value={secretAccessKey}
-                  onChange={(e) => setSecretAccessKey(e.target.value)}
-                  required
-                  className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
+            <div className="flex items-end gap-2 justify-between">
+              <div className="w-full">
+                <ProviderCredentialPicker
+                  credential={credential}
+                  setCredential={(cred) => setCredential(cred)}
+                  orgId={organisation!.id}
+                  providerFilter={'aws'}
                 />
-                <button
-                  className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
-                  type="button"
-                  onClick={() => setShowSecretAccessKey(!showSecretAccessKey)}
-                  tabIndex={-1}
-                >
-                  {showSecretAccessKey ? <FaEyeSlash /> : <FaEye />}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-gray-700 text-sm font-bold mb-2">AWS Region</label>
-              <div className="relative">
-                <Listbox value={region} onChange={setRegion}>
-                  {({ open }) => (
-                    <>
-                      <Listbox.Button as={Fragment} aria-required>
-                        <div
-                          className={clsx(
-                            'p-2 flex items-center justify-between cursor-pointer gap-2 bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-zinc-800 dark:text-white ring-1 ring-inset ring-neutral-500/40 focus:ring-1 focus:ring-emerald-500 group-focus-within:invalid:ring-red-500 focus:ring-inset'
-                          )}
-                        >
-                          <div>
-                            <div className="font-semibold text-sm text-black dark:text-white">
-                              {region.regionName}
-                            </div>
-                            <div className="text-neutral-500 text-xs">{region.region}</div>
-                          </div>
-
-                          <FaChevronDown
-                            className={clsx(
-                              'transition-transform ease duration-300 text-neutral-500',
-                              open ? 'rotate-180' : 'rotate-0'
-                            )}
-                          />
-                        </div>
-                      </Listbox.Button>
-                      <Listbox.Options>
-                        <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full max-h-80 overflow-y-auto">
-                          {awsRegions.map((region) => (
-                            <Listbox.Option key={region.region} value={region} as={Fragment}>
-                              {({ active, selected }) => (
-                                <div
-                                  className={clsx(
-                                    'space-y-0 p-2 cursor-pointer rounded-md w-full',
-                                    active && 'bg-zinc-400 dark:bg-zinc-700'
-                                  )}
-                                >
-                                  <div className="font-semibold text-sm text-black dark:text-white">
-                                    {region.regionName}
-                                  </div>
-                                  <div className="text-neutral-500 text-xs">{region.region}</div>
-                                </div>
-                              )}
-                            </Listbox.Option>
-                          ))}
-                        </div>
-                      </Listbox.Options>
-                    </>
-                  )}
-                </Listbox>
               </div>
             </div>
           </div>
@@ -237,103 +163,180 @@ export const CreateAWSSecretsSync = (props: { appId: string; onComplete?: Functi
               </RadioGroup>
             </div>
 
-            <div className="flex justify-between items-center gap-4">
+            <div className="flex justify-between items-center gap-4 py-8">
               <div className="border-b border-neutral-500/40 w-full"></div>
               <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
             </div>
 
             <div className="grid grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Cloudflare Project
-                </label>
-                <div className="relative">
-                  <Listbox value={cfProject} onChange={setCfProject}>
-                    {({ open }) => (
-                      <>
-                        <Listbox.Button as={Fragment} aria-required>
-                          <div
-                            className={clsx(
-                              'p-2 flex items-center justify-between cursor-pointer rounded-md h-10 gap-2'
-                            )}
-                          >
-                            {cfProject?.name || 'Select a project'}
+              <div
+                role="button"
+                onClick={() => setCreateNewSecret(true)}
+                className={clsx(
+                  'flex items-center gap-2 py-1 px-2 cursor-pointer  hover:border-zinc-700 border border-zinc-800  rounded-full',
 
-                            <FaChevronDown
-                              className={clsx(
-                                'transition-transform ease duration-300 text-neutral-500',
-                                open ? 'rotate-180' : 'rotate-0'
-                              )}
-                            />
-                          </div>
-                        </Listbox.Button>
-                        <Listbox.Options>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
-                            {cfProjects.map((project) => (
-                              <Listbox.Option
-                                key={project.deploymentId}
-                                value={project}
-                                as={Fragment}
-                              >
-                                {({ active, selected }) => (
-                                  <div
-                                    className={clsx(
-                                      'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
-                                      active && 'bg-zinc-400 dark:bg-zinc-700'
-                                    )}
-                                  >
-                                    <div className="font-semibold text-black dark:text-white">
-                                      {project.name}
-                                    </div>
-                                    <div className="text-neutral-500 text-2xs">
-                                      {project.deploymentId}
-                                    </div>
-                                  </div>
-                                )}
-                              </Listbox.Option>
-                            ))}
-                          </div>
-                        </Listbox.Options>
-                      </>
-                    )}
-                  </Listbox>
-                </div>
+                  createNewSecret ? 'bg-zinc-700' : 'bg-zinc-800'
+                )}
+              >
+                {createNewSecret ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
+                Create new AWS Secret
               </div>
 
-              <div>
-                <RadioGroup value={cfEnv} onChange={setCfEnv}>
-                  <RadioGroup.Label as={Fragment}>
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
-                      Cloudflare Project Environment
-                    </label>
-                  </RadioGroup.Label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {cfEnvOptions.map((option) => (
-                      <RadioGroup.Option key={option} value={option} as={Fragment}>
-                        {({ active, checked }) => (
-                          <div
-                            className={clsx(
-                              'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800 rounded-full capitalize',
-                              active && 'border-zinc-700',
-                              checked && 'bg-zinc-700'
-                            )}
-                          >
-                            {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
-                            {option}
-                          </div>
-                        )}
-                      </RadioGroup.Option>
-                    ))}
+              <div
+                role="button"
+                onClick={() => setCreateNewSecret(false)}
+                className={clsx(
+                  'flex items-center gap-2 py-1 px-2 cursor-pointer  hover:border-zinc-700 border border-zinc-800  rounded-full',
+
+                  !createNewSecret ? 'bg-zinc-700' : 'bg-zinc-800'
+                )}
+              >
+                {!createNewSecret ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
+                Use existing AWS Secret
+              </div>
+
+              {createNewSecret ? (
+                <div className={clsx('space-y-2 col-span-2', !createNewSecret && 'opacity-60')}>
+                  <Input
+                    value={newAwsSecretName}
+                    setValue={setNewAwsSecretName}
+                    label={'New AWS Secret name'}
+                    disabled={!createNewSecret}
+                    required={createNewSecret}
+                  />
+                </div>
+              ) : (
+                <div className={clsx('space-y-2 col-span-2', createNewSecret && 'opacity-60')}>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">
+                    AWS Secret{!createNewSecret && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  <div className="relative">
+                    <Listbox value={awsSecret} onChange={setCfProject}>
+                      {({ open }) => (
+                        <>
+                          <Listbox.Button as={Fragment} aria-disabled={createNewSecret}>
+                            <div
+                              className={clsx(
+                                'p-2 flex items-center justify-between rounded-md h-10 gap-2 font-semibold',
+                                createNewSecret ? 'cursor-not-allowed' : 'cursor-pointer'
+                              )}
+                            >
+                              {awsSecret?.name || 'Select a Secret'}
+
+                              <FaChevronDown
+                                className={clsx(
+                                  'transition-transform ease duration-300 text-neutral-500',
+                                  open ? 'rotate-180' : 'rotate-0'
+                                )}
+                              />
+                            </div>
+                          </Listbox.Button>
+                          <Listbox.Options>
+                            <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full max-h-80 overflow-y-auto">
+                              {awsSecrets.map((secret) => (
+                                <Listbox.Option key={secret.arn} value={secret} as={Fragment}>
+                                  {({ active, selected }) => (
+                                    <div
+                                      className={clsx(
+                                        'flex flex-col p-2 cursor-pointer rounded-md w-full',
+                                        active && 'bg-zinc-400 dark:bg-zinc-700'
+                                      )}
+                                    >
+                                      <div className="font-semibold text-black dark:text-white">
+                                        {secret.name}
+                                      </div>
+                                      <div className="text-neutral-500 text-xs">{secret.arn}</div>
+                                    </div>
+                                  )}
+                                </Listbox.Option>
+                              ))}
+                            </div>
+                          </Listbox.Options>
+                        </>
+                      )}
+                    </Listbox>
                   </div>
-                </RadioGroup>
+                </div>
+              )}
+
+              <div className="col-span-2">
+                <Disclosure
+                  as="div"
+                  className="ring-1 ring-inset ring-neutral-500/40 rounded-md p-px flex flex-col divide-y divide-neutral-500/30 w-full"
+                >
+                  {({ open }) => (
+                    <>
+                      <Disclosure.Button>
+                        <div
+                          className={clsx(
+                            'p-2 flex justify-between items-center gap-8 transition ease w-full',
+                            open
+                              ? 'bg-zinc-200 dark:bg-zinc-800 rounded-t-md'
+                              : 'bg-zinc-300 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 rounded-md'
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <FaPlus />
+                            <div className="font-semibold text-black dark:text-white">Advanced</div>
+                          </div>
+                          <FaChevronRight
+                            className={clsx(
+                              'transform transition ease text-neutral-500',
+                              open ? 'rotate-90' : 'rotate-0'
+                            )}
+                          />
+                        </div>
+                      </Disclosure.Button>
+
+                      <Transition
+                        enter="transition duration-100 ease-out"
+                        enterFrom="transform scale-95 opacity-0"
+                        enterTo="transform scale-100 opacity-100"
+                        leave="transition duration-75 ease-out"
+                        leaveFrom="transform scale-100 opacity-100"
+                        leaveTo="transform scale-95 opacity-0"
+                      >
+                        <Disclosure.Panel>
+                          <div className="p-4">
+                            <div className="space-y-8 ">
+                              <div>
+                                <h3 className="text-black dark:text-white font-semibold">
+                                  Customer managed key
+                                </h3>
+                                <div className="text-neutral-500 text-sm">
+                                  Encrypt secrets with AWS KMS CMK (Customer Managed Key)
+                                </div>
+                              </div>
+
+                              <Input
+                                value={kmsKeyId}
+                                setValue={setKmsKeyId}
+                                label={'KMS Key ARN (Optional)'}
+                                required={false}
+                              />
+                            </div>
+                          </div>
+                        </Disclosure.Panel>
+                      </Transition>
+                    </>
+                  )}
+                </Disclosure>
               </div>
             </div>
           </div>
         )}
-        <div className="flex items-center justify-end pt-8">
+        <div className="flex items-center justify-between pt-8">
+          <div>
+            {credentialsValid && (
+              <Button variant="secondary" onClick={() => setCredentialsValid(false)}>
+                Back
+              </Button>
+            )}
+          </div>
+
           <Button isLoading={loading || creating} variant="primary" type="submit">
-            Next
+            {credentialsValid ? 'Create' : 'Next'}
           </Button>
         </div>
       </form>
