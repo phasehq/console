@@ -205,9 +205,11 @@ export const CreateProviderCredentialsDialog = (props: {
                     <form className="space-y-6 p-4" onSubmit={handleSubmit}>
                       {provider && (
                         <div className="border-b border-neutral-500/20 pb-4 flex items-center justify-between">
-                          <div className="flex items-center gap-2 ">
+                          <div className="flex items-center gap-2 text-lg">
                             <ProviderIcon providerId={provider.id} />
-                            <span className="font-semibold text-lg">{provider.name}</span>
+                            <span className="font-semibold text-black dark:text-white">
+                              {provider.name}
+                            </span>
                           </div>
                           <Link href={docsLink(provider)} target="_blank">
                             <Button variant="secondary">
