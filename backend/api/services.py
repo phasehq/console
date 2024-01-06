@@ -6,12 +6,12 @@ class Providers:
         "auth_scheme": "token",
     }
 
-    # AWS = {
-    #     "id": "aws",
-    #     "name": "AWS",
-    #     "expected_credentials": ["access_key_id", "secret_access_key"],
-    #     "auth_scheme": "token",
-    # }
+    AWS = {
+        "id": "aws",
+        "name": "AWS",
+        "expected_credentials": ["access_key_id", "secret_access_key", "region"],
+        "auth_scheme": "token",
+    }
 
     @classmethod
     def get_provider_choices(cls):
@@ -47,13 +47,13 @@ class ServiceConfig:
         "subresource_options": ["production", "preview"],
     }
 
-    # AWS_SECRETS_MANAGER = {
-    #     "id": "aws_secrets_manager",
-    #     "name": "AWS Secrets Manager",
-    #     "provider": Providers.AWS,
-    #     "resource_type": "secret",
-    #     "subresource_options": [],
-    # }
+    AWS_SECRETS_MANAGER = {
+        "id": "aws_secrets_manager",
+        "name": "AWS Secrets Manager",
+        "provider": Providers.AWS,
+        "resource_type": "secret",
+        "subresource_options": [],
+    }
 
     @classmethod
     def get_service_choices(cls):

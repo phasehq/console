@@ -113,6 +113,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                   credential={credential}
                   setCredential={(cred) => setCredential(cred)}
                   orgId={organisation!.id}
+                  providerFilter={'cloudflare'}
                 />
               </div>
             </div>
@@ -152,7 +153,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
               </RadioGroup>
             </div>
 
-            <div className="flex justify-between items-center gap-4">
+            <div className="flex justify-between items-center gap-4 py-8">
               <div className="border-b border-neutral-500/40 w-full"></div>
               <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>

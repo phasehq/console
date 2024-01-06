@@ -7,6 +7,8 @@ import { SyncManagement } from './SyncManagement'
 import { SyncHistory } from './SyncHistory'
 import clsx from 'clsx'
 import { SiCloudflare } from 'react-icons/si'
+import { ProviderIcon } from './ProviderIcon'
+import { ServiceInfo } from './ServiceInfo'
 
 export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: ReactNode }) => {
   const { sync, button } = props
@@ -33,12 +35,6 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
       component: <SyncHistory history={sync.history} />,
     },
   ]
-
-  const serviceIcon = (service: ServiceType) => {
-    if (service.id!.toLowerCase() === 'cloudflare_pages')
-      return <SiCloudflare className="shrink-0" />
-    else return <FaCube />
-  }
 
   return (
     <>
@@ -96,14 +92,11 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
 
                       <div className="text-xl text-black dark:text-white">
                         <div className="flex gap-2 items-center font-semibold">
-                          {serviceIcon(sync.serviceInfo!)}
+                          <ProviderIcon providerId={sync.serviceInfo!.id!} />
                           <div>{sync.serviceInfo?.name}</div>
                         </div>
-                        <div className="flex gap-2 text-base">
-                          {JSON.parse(sync.options)['project_name']}
-                          <span className="text-neutral-500 font-normal">
-                            ({JSON.parse(sync.options)['environment']})
-                          </span>
+                        <div className="text-base">
+                          <ServiceInfo sync={sync} />
                         </div>
                       </div>
                     </div>

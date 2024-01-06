@@ -7,6 +7,7 @@ export const ProviderIcon = (props: { providerId: string }) => {
   if (providerId.toLowerCase().includes('cloudflare'))
     return <SiCloudflare className="shrink-0 text-[#F38020]" />
 
-  if (providerId.includes('aws')) return <SiAmazonaws className="shrink-0 text-[#FF9900]" />
+  if (providerId.toLowerCase().includes('aws'))
+    return <SiAmazonaws className="shrink-0 text-[#FF9900]" />
   else return <FaCube />
 }

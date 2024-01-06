@@ -6,6 +6,7 @@ import { SyncStatusIndicator } from './SyncStatusIndicator'
 import { Button } from '../common/Button'
 import { ManageSyncDialog } from './ManageSyncDialog'
 import { ProviderIcon } from './ProviderIcon'
+import { ServiceInfo } from './ServiceInfo'
 
 export const SyncCard = (props: {
   sync: EnvironmentSyncType
@@ -64,17 +65,12 @@ export const SyncCard = (props: {
 
             <div>{sync.serviceInfo?.name}</div>
           </div>
-          <div className="flex gap-2">
-            {JSON.parse(sync.options)['project_name']}
-            <span className="text-neutral-500 font-normal">
-              ({JSON.parse(sync.options)['environment']})
-            </span>
-          </div>
+          <ServiceInfo sync={sync} />
         </div>
       </div>
 
       <div>
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex items-center gap-2">
           <div>{sync.status && <SyncStatusIndicator status={sync.status} showLabel />}</div>
 
           {sync.status === ApiEnvironmentSyncStatusChoices.InProgress ? (
