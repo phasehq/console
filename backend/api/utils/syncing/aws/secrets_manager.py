@@ -1,7 +1,9 @@
+from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from botocore.exceptions import ClientError
 from .auth import get_client
 import boto3
 import json
+import os
 import graphene
 from graphene import ObjectType
 
@@ -24,21 +26,40 @@ def list_aws_secrets(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region):
         paginator = secrets_client.get_paginator("list_secrets")
         for page in paginator.paginate():
             for secret in page["SecretList"]:
-                secrets_list.append({"Name": secret["Name"], "ARN": secret["ARN"]})
+                secrets_list.append({"name": secret["Name"], "arn": secret["ARN"]})
         return secrets_list
     except ClientError:
         raise Exception("Failed to list AWS Secrets")
 
 
 def sync_aws_secrets(
-    secrets, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region, secret_name, arn
+    secrets,
+    AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY,
+    region,
+    secret_name,
+    arn,
+    kms_id=None,
 ):
     """
-    Sync secrets from secrets.json to AWS Secrets Manager.
-    If an ARN is provided, updates a single secret with key-value pairs from secrets.json.
-    If an ARN is not provided but a secret name is, creates or updates a secret with that name.
+    Sync secrets to AWS Secrets Manager.
+    Args:
+        secrets (list of tuple): List of key-value pairs to sync.
+        AWS_ACCESS_KEY_ID (str): AWS access key ID.
+        AWS_SECRET_ACCESS_KEY (str): AWS secret access key.
+        region (str): AWS region.
+        secret_name (str): The name of the secret.
+        arn (str): The ARN of the secret.
+        path (str, optional): Path to prepend to the secret name.
+        kms_id (str, optional): KMS key ID for encryption.
+    Returns:
+        tuple: (bool, dict) indicating success or failure and a message.
     """
     try:
+        # Convert list of tuples into a dictionary
+        secrets_dict = dict(secrets)
+
+        # Initialize the AWS Secrets Manager client
         secrets_client = boto3.client(
             "secretsmanager",
             aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -46,12 +67,17 @@ def sync_aws_secrets(
             region_name=region,
         )
 
-        if arn:
-            secrets_client.update_secret(SecretId=arn, SecretString=json.dumps(secrets))
-            return True, {"message": f"Secret '{arn}' updated with provided secrets."}
+        # Format the secrets into a JSON string
+        secret_string = json.dumps(secrets_dict)
 
+        # Updating or creating the secret
+        if arn:
+            update_args = {"SecretId": arn, "SecretString": secret_string}
+            if kms_id:
+                update_args["KmsKeyId"] = kms_id
+            secrets_client.update_secret(**update_args)
+            return True, {"message": f"Secret '{arn}' updated with provided secrets."}
         elif secret_name:
-            # Check if the secret exists
             try:
                 secrets_client.get_secret_value(SecretId=secret_name)
                 update_operation = True
@@ -59,16 +85,17 @@ def sync_aws_secrets(
                 update_operation = False
 
             if update_operation:
-                secrets_client.update_secret(
-                    SecretId=secret_name, SecretString=json.dumps(secrets)
-                )
+                update_args = {"SecretId": secret_name, "SecretString": secret_string}
+                if kms_id:
+                    update_args["KmsKeyId"] = kms_id
+                secrets_client.update_secret(**update_args)
                 return True, {"message": f"Existing secret '{secret_name}' updated."}
             else:
-                secrets_client.create_secret(
-                    Name=secret_name, SecretString=json.dumps(secrets)
-                )
+                create_args = {"Name": secret_name, "SecretString": secret_string}
+                if kms_id:
+                    create_args["KmsKeyId"] = kms_id
+                secrets_client.create_secret(**create_args)
                 return True, {"message": f"New secret '{secret_name}' created."}
-
         else:
             return False, {"message": "Please provide either a secret ARN or a name."}
 

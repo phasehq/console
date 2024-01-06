@@ -179,24 +179,14 @@ class CreateCloudflarePagesSync(graphene.Mutation):
 class CreateAWSSecretsManagerSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
-        secret_name = graphene.String()
-        arn = graphene.String()
-        region = graphene.String()
         credential_id = graphene.ID()
+        secret_name = graphene.String()
+        kms_id = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(
-        cls,
-        root,
-        info,
-        env_id,
-        secret_name,
-        arn,
-        region,
-        credential_id,
-    ):
+    def mutate(cls, root, info, env_id, credential_id, secret_name, kms_id=None):
         service_id = "aws_secrets_manager"
 
         env = Environment.objects.get(id=env_id)
@@ -207,11 +197,12 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
-        sync_options = {
-            "secret_name": secret_name,
-            "arn": arn,
-            "region": region,
-        }
+        sync_options = {}
+
+        sync_options["secret_name"] = secret_name
+
+        if kms_id:
+            sync_options["kms_id"] = kms_id
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None
@@ -219,9 +210,7 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
 
         for es in existing_syncs:
             if es.options == sync_options:
-                raise GraphQLError(
-                    "This app is already synced with this Cloudflare Pages deployment!"
-                )
+                raise GraphQLError("This app is already synced with this AWS Secret!")
 
         sync = EnvironmentSync.objects.create(
             environment=env,

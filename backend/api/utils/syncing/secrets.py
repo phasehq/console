@@ -98,7 +98,7 @@ def get_environment_secrets(environment_sync):
                 f"${{{ref_key}}}",
                 secrets_dict.get(
                     ref_key,
-                    f"Warning: Local reference not found for key.",
+                    value,
                 ),
             )
 

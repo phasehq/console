@@ -12,6 +12,7 @@ import { encryptProviderCredentials } from '@/utils/syncing/general'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userIsAdmin } from '@/utils/permissions'
 import { ProviderIcon } from './ProviderIcon'
+import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 
 interface CredentialState {
   [key: string]: string
@@ -99,18 +100,24 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
         disabled={!allowEdit}
       />
 
-      {credential.provider?.expectedCredentials.map((credential: string) => (
-        <Input
-          key={credential}
-          value={credentials[credential]}
-          setValue={(value) => handleCredentialChange(credential, value)}
-          label={credential.toUpperCase()}
-          required
-          secret={true}
-          readOnly={!allowEdit}
-          disabled={!allowEdit}
-        />
-      ))}
+      {credential.provider?.expectedCredentials
+        .filter((credential) => credential !== 'region')
+        .map((credential: string) => (
+          <Input
+            key={credential}
+            value={credentials[credential]}
+            setValue={(value) => handleCredentialChange(credential, value)}
+            label={credential.replace(/_/g, ' ').toUpperCase()}
+            required
+            secret={true}
+            readOnly={!allowEdit}
+            disabled={!allowEdit}
+          />
+        ))}
+
+      {credential.provider?.id === 'aws' && (
+        <AWSRegionPicker onChange={(region) => handleCredentialChange('region', region)} />
+      )}
     </div>
   )
 }

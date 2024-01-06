@@ -21,6 +21,7 @@ import { toast } from 'react-toastify'
 import { Switch } from '@headlessui/react'
 import { userIsAdmin } from '@/utils/permissions'
 import { usePathname } from 'next/navigation'
+import { ServiceInfo } from './ServiceInfo'
 
 export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: () => void }) => {
   const { sync, closeModal } = props
@@ -98,9 +99,9 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Service</div>
         <div className="font-semibold text-black dark:text-white">{sync.serviceInfo?.name}</div>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Project</div>
+        <div className="text-neutral-500 uppercase tracking-widest text-sm">Resource</div>
         <div className="font-semibold text-black dark:text-white">
-          {JSON.parse(sync.options)['project_name']}({JSON.parse(sync.options)['environment']})
+          <ServiceInfo sync={sync} />
         </div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Automatic syncing</div>
