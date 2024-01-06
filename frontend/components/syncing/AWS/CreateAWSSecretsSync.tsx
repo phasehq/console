@@ -54,6 +54,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
   const [createNewSecret, setCreateNewSecret] = useState(true)
 
   const [newAwsSecretName, setNewAwsSecretName] = useState<string>('')
+  const [secretNameIsCustom, setSecretNameIsCustom] = useState(false)
 
   const [kmsKeyId, setKmsKeyId] = useState<string>('')
 
@@ -67,9 +68,21 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
     if (appEnvsData?.appEnvironments.length > 0) {
       const defaultEnv: EnvironmentType = appEnvsData.appEnvironments[0]
       setPhaseEnv(defaultEnv)
-      setNewAwsSecretName(`${defaultEnv.app.name}/${defaultEnv.name}`)
+      setNewAwsSecretName(
+        `${defaultEnv.app.name.replace(/ /g, '-')}/${defaultEnv.name}`.toLowerCase()
+      )
     }
   }, [appEnvsData])
+
+  useEffect(() => {
+    if (phaseEnv && !secretNameIsCustom)
+      setNewAwsSecretName(`${phaseEnv.app.name.replace(/ /g, '-')}/${phaseEnv.name}`.toLowerCase())
+  }, [phaseEnv, secretNameIsCustom])
+
+  const handleUpdateSecretName = (secretName: string) => {
+    setNewAwsSecretName(secretName)
+    setSecretNameIsCustom(true)
+  }
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -200,7 +213,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
                 <div className={clsx('space-y-2 col-span-2', !createNewSecret && 'opacity-60')}>
                   <Input
                     value={newAwsSecretName}
-                    setValue={setNewAwsSecretName}
+                    setValue={handleUpdateSecretName}
                     label={'New AWS Secret name'}
                     disabled={!createNewSecret}
                     required={createNewSecret}
