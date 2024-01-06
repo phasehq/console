@@ -1,5 +1,5 @@
 import { AwsRegion, awsRegions } from '@/utils/syncing/aws'
-import { Listbox } from '@headlessui/react'
+import { Combobox, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { Fragment, useState } from 'react'
 import { FaChevronDown } from 'react-icons/fa'
@@ -8,68 +8,84 @@ export const AWSRegionPicker = (props: { onChange: (region: string) => void }) =
   const { onChange } = props
 
   const [region, setRegion] = useState<AwsRegion>(awsRegions[0])
+  const [query, setQuery] = useState('')
 
   const handleSetRegion = (selectedRegion: AwsRegion) => {
     setRegion(selectedRegion)
     onChange(selectedRegion.region)
   }
 
-  //const selectedRegion = awsRegions.find((awsRegion) => awsRegion.region === region)
+  const filteredRegions =
+    query === ''
+      ? awsRegions
+      : awsRegions.filter(
+          (awsRegion) => awsRegion.region.includes(query) || awsRegion.regionName.includes(query)
+        )
 
   return (
     <div className="space-y-2">
-      <label className="block text-gray-700 text-sm font-bold mb-2">AWS Region</label>
       <div className="relative">
-        <Listbox value={region} onChange={handleSetRegion}>
+        <Combobox value={region} onChange={handleSetRegion}>
           {({ open }) => (
             <>
-              <Listbox.Button as={Fragment} aria-required>
-                <div
-                  className={clsx(
-                    'p-2 flex items-center justify-between cursor-pointer gap-2 bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-zinc-800 dark:text-white ring-1 ring-inset ring-neutral-500/40 focus:ring-1 focus:ring-emerald-500 group-focus-within:invalid:ring-red-500 focus:ring-inset'
-                  )}
-                >
-                  {region && (
-                    <div>
-                      <div className="font-semibold text-sm text-black dark:text-white">
-                        {region.regionName}
-                      </div>
-                      <div className="text-neutral-500 text-xs">{region.region}</div>
-                    </div>
-                  )}
-
-                  <FaChevronDown
-                    className={clsx(
-                      'transition-transform ease duration-300 text-neutral-500',
-                      open ? 'rotate-180' : 'rotate-0'
-                    )}
+              <div className="space-y-2">
+                <Combobox.Label as={Fragment}>
+                  <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
+                    AWS Region
+                  </label>
+                </Combobox.Label>
+                <div className="w-full relative flex items-center">
+                  <Combobox.Input
+                    className="w-full"
+                    onChange={(event) => setQuery(event.target.value)}
+                    required
+                    displayValue={(region: AwsRegion) => region.region}
                   />
+                  <div className="absolute inset-y-0 right-2 flex items-center">
+                    <Combobox.Button>
+                      <FaChevronDown
+                        className={clsx(
+                          'text-neutral-500 transform transition ease cursor-pointer',
+                          open ? 'rotate-180' : 'rotate-0'
+                        )}
+                      />
+                    </Combobox.Button>
+                  </div>
                 </div>
-              </Listbox.Button>
-              <Listbox.Options>
-                <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full max-h-80 overflow-y-auto">
-                  {awsRegions.map((region) => (
-                    <Listbox.Option key={region.region} value={region} as={Fragment}>
-                      {({ active, selected }) => (
-                        <div
-                          className={clsx(
-                            'space-y-0 p-2 cursor-pointer rounded-md w-full',
-                            active && 'bg-zinc-400 dark:bg-zinc-700'
-                          )}
-                        >
-                          <div className="font-semibold text-sm text-black dark:text-white">
-                            {region.regionName}
+              </div>
+              <Transition
+                enter="transition duration-100 ease-out"
+                enterFrom="transform scale-95 opacity-0"
+                enterTo="transform scale-100 opacity-100"
+                leave="transition duration-75 ease-out"
+                leaveFrom="transform scale-100 opacity-100"
+                leaveTo="transform scale-95 opacity-0"
+              >
+                <Combobox.Options as={Fragment}>
+                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto">
+                    {filteredRegions.map((region: AwsRegion) => (
+                      <Combobox.Option key={region.region} value={region}>
+                        {({ active, selected }) => (
+                          <div
+                            className={clsx(
+                              'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
+                              active && 'bg-zinc-400 dark:bg-zinc-700'
+                            )}
+                          >
+                            <div className="font-semibold text-black dark:text-white">
+                              {region.regionName}
+                            </div>
+                            <div className="text-neutral-500 text-2xs">{region.region}</div>
                           </div>
-                          <div className="text-neutral-500 text-xs">{region.region}</div>
-                        </div>
-                      )}
-                    </Listbox.Option>
-                  ))}
-                </div>
-              </Listbox.Options>
+                        )}
+                      </Combobox.Option>
+                    ))}
+                  </div>
+                </Combobox.Options>
+              </Transition>
             </>
           )}
-        </Listbox>
+        </Combobox>
       </div>
     </div>
   )
