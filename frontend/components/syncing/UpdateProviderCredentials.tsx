@@ -107,7 +107,7 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
             key={credential}
             value={credentials[credential]}
             setValue={(value) => handleCredentialChange(credential, value)}
-            label={credential.toUpperCase()}
+            label={credential.replace(/_/g, ' ').toUpperCase()}
             required
             secret={true}
             readOnly={!allowEdit}
