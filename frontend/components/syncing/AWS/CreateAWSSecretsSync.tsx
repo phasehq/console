@@ -101,13 +101,15 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
 
       if (secretsData.awsSecrets) setAwsSecrets(secretsData.awsSecrets)
       setCredentialsValid(true)
+    } else if (!createNewSecret && awsSecret === null) {
+      toast.error('Please select an AWS Secret to use for this sync!')
+      return false
     } else {
       await createAwsSecretSync({
         variables: {
           envId: phaseEnv?.id,
           credentialId: credential.id,
-          secretName: newAwsSecretName || null,
-          arn: awsSecret?.arn || null,
+          secretName: createNewSecret ? newAwsSecretName : awsSecret!.name,
           kmsId: kmsKeyId || null,
         },
         refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],

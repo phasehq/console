@@ -180,16 +180,13 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
         credential_id = graphene.ID()
-        secret_name = graphene.String(required=False)
-        arn = graphene.String(required=False)
+        secret_name = graphene.String()
         kms_id = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(
-        cls, root, info, env_id, credential_id, secret_name=None, arn=None, kms_id=None
-    ):
+    def mutate(cls, root, info, env_id, credential_id, secret_name, kms_id=None):
         service_id = "aws_secrets_manager"
 
         env = Environment.objects.get(id=env_id)
@@ -200,20 +197,9 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
-        credential = ProviderCredentials.objects.get(id=credential_id)
-
-        if secret_name is None and arn is None:
-            raise GraphQLError(
-                "You must provide either an existing Secret ARN or a name for a new Secret"
-            )
-
         sync_options = {}
 
-        if arn:
-            sync_options["arn"] = arn
-
-        if secret_name:
-            sync_options["secret_name"] = secret_name
+        sync_options["secret_name"] = secret_name
 
         if kms_id:
             sync_options["kms_id"] = kms_id

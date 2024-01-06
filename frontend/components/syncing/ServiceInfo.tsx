@@ -14,13 +14,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     )
   } else if (sync.serviceInfo?.id?.includes('aws')) {
     const secretName = JSON.parse(sync.options)['secret_name']
-    const arn = JSON.parse(sync.options)['arn']
 
-    return (
-      <div className="flex gap-2">
-        {secretName}
-        {arn && <span className="text-neutral-500 font-normal">({arn})</span>}
-      </div>
-    )
+    return <div className="flex gap-2">{secretName}</div>
   } else return <>{sync.serviceInfo?.id}</>
 }
