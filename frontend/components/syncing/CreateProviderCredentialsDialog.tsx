@@ -212,7 +212,7 @@ export const CreateProviderCredentialsDialog = (props: {
                             </span>
                           </div>
                           <Link href={docsLink(provider)} target="_blank">
-                            <Button variant="secondary">
+                            <Button type="button" variant="secondary">
                               <FaQuestionCircle className="my-1 shrink-0" />
                               Help
                             </Button>
