@@ -106,7 +106,6 @@ from django.conf import settings
 from logs.models import KMSDBLog
 from itertools import chain
 from django.utils import timezone
-from django.db.models import Case, When, Value, IntegerField
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -298,14 +297,8 @@ class Query(graphene.ObjectType):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
-        # Custom order for 'env_type'
-        ordering = Case(
-            When(env_type=Environment.DEVELOPMENT, then=Value(1)),
-            When(env_type=Environment.STAGING, then=Value(2)),
-            When(env_type=Environment.PRODUCTION, then=Value(3)),
-            default=Value(4),
-            output_field=IntegerField(),
-        )
+        # Define a custom sort order
+        env_sort_order = {"DEV": 1, "STAGING": 2, "PROD": 3}
 
         app = App.objects.get(id=app_id)
 
@@ -325,13 +318,13 @@ class Query(graphene.ObjectType):
 
         app_environments = Environment.objects.filter(**filter)
 
-        app_environments = app_environments.annotate(custom_order=ordering).order_by(
-            "custom_order"
+        sorted_environments = sorted(
+            app_environments, key=lambda env: env_sort_order.get(env.env_type, 4)
         )
 
         return [
             app_env
-            for app_env in app_environments
+            for app_env in sorted_environments
             if EnvironmentKey.objects.filter(
                 user=org_member, environment_id=app_env.id
             ).exists()
