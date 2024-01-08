@@ -849,7 +849,7 @@ export default function SecretRow(props: {
           )}
           value={secret.key}
           onChange={(e) =>
-            handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '').toUpperCase())
+            handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
           }
         />
         <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
