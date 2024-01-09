@@ -81,15 +81,11 @@ def github_callback(request):
             "client_id": client_id,
             "client_secret": client_secret,
             "code": code,
-            "redirect_uri": "https://localhost/service/oauth/github/callback",
+            "redirect_uri": f"{os.getenv('ALLOWED_ORIGINS')}/service/oauth/github/callback",
         },
     )
 
-    
-
     access_token = response.json().get("access_token")
-
-    
 
     store_oauth_token("github", access_token, org_id)
 
