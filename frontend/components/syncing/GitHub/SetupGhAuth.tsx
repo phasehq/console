@@ -12,10 +12,10 @@ export const SetupGhAuth = () => {
 
   useEffect(() => {
     const initiateOAuth = () => {
-      const client_id = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
+      const clientId = process.env.NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
       const hostname = `${window.location.protocol}//${window.location.host}`
-      const redirect_uri = `${hostname}/service/oauth/github/callback`
-      const scope = 'repo,admin:repo_hook'
+      const redirectUri = `${hostname}/service/oauth/github/callback`
+      const scope = 'repo,admin:repo_hook,public_repo'
 
       const statePayload = {
         returnUrl: path,
@@ -24,7 +24,7 @@ export const SetupGhAuth = () => {
 
       const state = btoa(JSON.stringify(statePayload))
 
-      const authUrl = `https://github.com/login/oauth/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&scope=${scope}&state=${state}`
+      const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`
 
       window.open(authUrl, '_self')
     }

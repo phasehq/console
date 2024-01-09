@@ -16,5 +16,14 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const secretName = JSON.parse(sync.options)['secret_name']
 
     return <div className="flex gap-2">{secretName}</div>
+  } else if (sync.serviceInfo?.id?.includes('github')) {
+    const repoName = JSON.parse(sync.options)['repo_name']
+    const owner = JSON.parse(sync.options)['owner']
+
+    return (
+      <div className="flex gap-2">
+        {owner}/{repoName}
+      </div>
+    )
   } else return <>{sync.serviceInfo?.id}</>
 }
