@@ -13,6 +13,13 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    GITHUB = {
+        "id": "github",
+        "name": "GitHub",
+        "expected_credentials": ["access_token", "refresh_token"],
+        "auth_scheme": "oauth",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
