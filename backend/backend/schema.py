@@ -307,6 +307,9 @@ class Query(graphene.ObjectType):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
+        # Define a custom sort order
+        env_sort_order = {"DEV": 1, "STAGING": 2, "PROD": 3}
+
         app = App.objects.get(id=app_id)
 
         if member_id is not None:
@@ -324,9 +327,14 @@ class Query(graphene.ObjectType):
             filter["id"] = environment_id
 
         app_environments = Environment.objects.filter(**filter)
+
+        sorted_environments = sorted(
+            app_environments, key=lambda env: env_sort_order.get(env.env_type, 4)
+        )
+
         return [
             app_env
-            for app_env in app_environments
+            for app_env in sorted_environments
             if EnvironmentKey.objects.filter(
                 user=org_member, environment_id=app_env.id
             ).exists()
