@@ -1,7 +1,9 @@
 from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
+from api.utils.syncing.github.actions import GitHubRepoType
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
+    resolve_gh_repos,
     resolve_server_public_key,
     resolve_providers,
     resolve_sync_enabled,
@@ -31,6 +33,7 @@ from .graphene.mutations.environment import (
 from .graphene.mutations.syncing import (
     CreateAWSSecretsManagerSync,
     CreateCloudflarePagesSync,
+    CreateGitHubActionsSync,
     CreateProviderCredentials,
     DeleteProviderCredentials,
     DeleteSync,
@@ -195,6 +198,11 @@ class Query(graphene.ObjectType):
         credential_id=graphene.ID(),
     )
 
+    github_repos = graphene.List(
+        GitHubRepoType,
+        credential_id=graphene.ID(),
+    )
+
     # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
@@ -212,6 +220,8 @@ class Query(graphene.ObjectType):
     resolve_cloudflare_pages_projects = resolve_cloudflare_pages_projects
 
     resolve_aws_secrets = resolve_aws_secret_manager_secrets
+
+    resolve_github_repos = resolve_gh_repos
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -606,6 +616,9 @@ class Mutation(graphene.ObjectType):
 
     # AWS
     create_aws_secret_sync = CreateAWSSecretsManagerSync.Field()
+
+    # GitHub
+    create_gh_actions_sync = CreateGitHubActionsSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

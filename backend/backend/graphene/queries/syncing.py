@@ -17,6 +17,7 @@ from api.utils.permissions import (
 )
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.aws.secrets_manager import list_aws_secrets
+from api.utils.syncing.github.actions import list_repos
 from backend.graphene.types import ProviderType
 from graphql import GraphQLError
 
@@ -88,6 +89,14 @@ def resolve_aws_secret_manager_secrets(root, info, credential_id):
 
     try:
         secrets = list_aws_secrets(access_key_id, secret_access_key, region)
+        return secrets
+    except Exception as ex:
+        raise GraphQLError(ex)
+
+
+def resolve_gh_repos(root, info, credential_id):
+    try:
+        secrets = list_repos(credential_id)
         return secrets
     except Exception as ex:
         raise GraphQLError(ex)
