@@ -90,7 +90,7 @@ def github_callback(request):
     store_oauth_token("github", access_token, org_id)
 
     # Redirect back to Next.js app with token and original URL
-    return redirect(f"https://localhost{original_url}")
+    return redirect(f"{os.getenv('ALLOWED_ORIGINS')}{original_url}")
 
 
 # for custom gitlab adapter class
