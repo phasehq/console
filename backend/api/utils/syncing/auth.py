@@ -1,9 +1,12 @@
 from api.utils.crypto import encrypt_asymmetric, get_server_keypair
-from api.models import Organisation, ProviderCredentials
 from api.services import Providers
+from django.apps import apps
 
 
 def store_oauth_token(provider_id, access_token, refresh_token, org_id):
+    Organisation = apps.get_model("api", "Organisation")
+    ProviderCredentials = apps.get_model("api", "ProviderCredentials")
+
     pk, _ = get_server_keypair()
 
     encrypted_access_token = encrypt_asymmetric(access_token, pk.hex())
