@@ -15,7 +15,7 @@ export const SetupGhAuth = () => {
       const clientId = process.env.NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
       const hostname = `${window.location.protocol}//${window.location.host}`
       const redirectUri = `${hostname}/service/oauth/github/callback`
-      const scope = 'repo,admin:repo_hook,public_repo'
+      const scope = 'user,repo,admin:repo_hook,read:org'
 
       const statePayload = {
         returnUrl: path,
