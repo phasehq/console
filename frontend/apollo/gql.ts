@@ -43,6 +43,7 @@ const documents = {
     "mutation CreateNewCfPagesSync($envId: ID!, $projectName: String!, $deploymentId: ID!, $projectEnv: String!, $credentialId: ID!) {\n  createCloudflarePagesSync(\n    envId: $envId\n    projectName: $projectName\n    deploymentId: $deploymentId\n    projectEnv: $projectEnv\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}": types.CreateNewCfPagesSyncDocument,
     "mutation DeleteProviderCreds($credentialId: ID!) {\n  deleteProviderCredentials(credentialId: $credentialId) {\n    ok\n  }\n}": types.DeleteProviderCredsDocument,
     "mutation DeleteSync($syncId: ID!) {\n  deleteEnvSync(syncId: $syncId) {\n    ok\n  }\n}": types.DeleteSyncDocument,
+    "mutation CreateNewGhActionsSync($envId: ID!, $repoName: String!, $owner: String!, $credentialId: ID!) {\n  createGhActionsSync(\n    envId: $envId\n    repoName: $repoName\n    owner: $owner\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}": types.CreateNewGhActionsSyncDocument,
     "mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  initEnvSync(appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n    }\n  }\n}": types.InitAppSyncingDocument,
     "mutation SaveNewProviderCreds($orgId: ID!, $provider: String!, $name: String!, $credentials: JSONString!) {\n  createProviderCredentials(\n    orgId: $orgId\n    provider: $provider\n    name: $name\n    credentials: $credentials\n  ) {\n    credential {\n      id\n    }\n  }\n}": types.SaveNewProviderCredsDocument,
     "mutation ToggleSync($syncId: ID!) {\n  toggleSyncActive(syncId: $syncId) {\n    ok\n  }\n}": types.ToggleSyncDocument,
@@ -73,9 +74,10 @@ const documents = {
     "query GetAwsSecrets($credentialId: ID!) {\n  awsSecrets(credentialId: $credentialId) {\n    name\n    arn\n  }\n}": types.GetAwsSecretsDocument,
     "query GetCfPages($credentialId: ID!) {\n  cloudflarePagesProjects(credentialId: $credentialId) {\n    name\n    deploymentId\n    environments\n  }\n}": types.GetCfPagesDocument,
     "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  syncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n      app {\n        id\n        name\n      }\n    }\n    serviceInfo {\n      id\n      name\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n  serverPublicKey\n}": types.GetAppSyncStatusDocument,
-    "query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n  }\n  serverPublicKey\n}": types.GetProviderListDocument,
+    "query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n    authScheme\n  }\n  serverPublicKey\n}": types.GetProviderListDocument,
     "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n    }\n    syncCount\n  }\n}": types.GetSavedCredentialsDocument,
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
+    "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
 };
 
@@ -216,6 +218,10 @@ export function graphql(source: "mutation DeleteSync($syncId: ID!) {\n  deleteEn
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation CreateNewGhActionsSync($envId: ID!, $repoName: String!, $owner: String!, $credentialId: ID!) {\n  createGhActionsSync(\n    envId: $envId\n    repoName: $repoName\n    owner: $owner\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}"): (typeof documents)["mutation CreateNewGhActionsSync($envId: ID!, $repoName: String!, $owner: String!, $credentialId: ID!) {\n  createGhActionsSync(\n    envId: $envId\n    repoName: $repoName\n    owner: $owner\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  initEnvSync(appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  initEnvSync(appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -336,7 +342,7 @@ export function graphql(source: "query GetAppSyncStatus($appId: ID!) {\n  syncEn
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n  }\n  serverPublicKey\n}"): (typeof documents)["query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n  }\n  serverPublicKey\n}"];
+export function graphql(source: "query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n    authScheme\n  }\n  serverPublicKey\n}"): (typeof documents)["query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n    authScheme\n  }\n  serverPublicKey\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -345,6 +351,10 @@ export function graphql(source: "query GetSavedCredentials($orgId: ID!) {\n  sav
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetServerKey {\n  serverPublicKey\n}"): (typeof documents)["query GetServerKey {\n  serverPublicKey\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}"): (typeof documents)["query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
