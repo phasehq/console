@@ -64,8 +64,8 @@ def github_callback(request):
     code = request.GET.get("code")
     state = request.GET.get("state")
 
-    client_id = os.getenv("GITHUB_CLIENT_ID")
-    client_secret = os.getenv("GITHUB_CLIENT_SECRET")
+    client_id = os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
+    client_secret = os.getenv("GITHUB_INTEGRATION_CLIENT_SECRET")
 
     state_decoded = base64.b64decode(state).decode("utf-8")
     state = json.loads(state_decoded)
@@ -85,10 +85,13 @@ def github_callback(request):
         },
     )
 
-    access_token = response.json().get("access_token")
-    refresh_token = response.json().get("refresh_token")
+    
 
-    store_oauth_token("github", access_token, refresh_token, org_id)
+    access_token = response.json().get("access_token")
+
+    
+
+    store_oauth_token("github", access_token, org_id)
 
     # Redirect back to Next.js app with token and original URL
     return redirect(f"https://localhost{original_url}")
