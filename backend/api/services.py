@@ -16,7 +16,7 @@ class Providers:
     GITHUB = {
         "id": "github",
         "name": "GitHub",
-        "expected_credentials": ["access_token", "refresh_token"],
+        "expected_credentials": ["access_token"],
         "auth_scheme": "oauth",
     }
 
@@ -59,6 +59,14 @@ class ServiceConfig:
         "name": "AWS Secrets Manager",
         "provider": Providers.AWS,
         "resource_type": "secret",
+        "subresource_options": [],
+    }
+
+    GITHUB_ACTIONS = {
+        "id": "github_actions",
+        "name": "GitHub Actions",
+        "provider": Providers.GITHUB,
+        "resource_type": "repo",
         "subresource_options": [],
     }
 
