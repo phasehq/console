@@ -164,7 +164,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
               orgId={organisation!.id}
               disabled={!activeUserIsAdmin}
               newCredentialCallback={closeModal}
-              providerFilter={sync.authentication?.provider?.id}
+              providerFilter={sync.serviceInfo?.provider?.id}
             />
           </div>
           {credential === null && (
