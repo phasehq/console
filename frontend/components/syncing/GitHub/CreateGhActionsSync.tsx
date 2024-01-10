@@ -127,6 +127,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                   setCredential={(cred) => setCredential(cred)}
                   orgId={organisation!.id}
                   providerFilter={'github'}
+                  setDefault={true}
                 />
               </div>
             </div>

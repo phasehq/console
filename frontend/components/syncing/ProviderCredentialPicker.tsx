@@ -17,9 +17,17 @@ export const ProviderCredentialPicker = (props: {
   disabled?: boolean
   providerFilter?: string
   newCredentialCallback?: () => void
+  setDefault?: boolean
 }) => {
-  const { credential, setCredential, orgId, disabled, providerFilter, newCredentialCallback } =
-    props
+  const {
+    credential,
+    setCredential,
+    orgId,
+    disabled,
+    providerFilter,
+    newCredentialCallback,
+    setDefault,
+  } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -34,9 +42,9 @@ export const ProviderCredentialPicker = (props: {
     : credentials
 
   useEffect(() => {
-    setCredential(filteredCredentials[0])
+    if (setDefault) setCredential(filteredCredentials[0])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providerFilter, filteredCredentials])
+  }, [providerFilter, filteredCredentials, setDefault])
 
   const NewCredentialsLink = () => (
     <Link href={`/${organisation!.name}/integrations?newCredential=true`}>
