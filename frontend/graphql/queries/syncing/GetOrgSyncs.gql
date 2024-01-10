@@ -22,6 +22,9 @@ query GetOrganisationSyncs($orgId: ID!) {
       id
       name
       credentials
+      provider {
+        id
+      }
     }
     createdAt
     history {
