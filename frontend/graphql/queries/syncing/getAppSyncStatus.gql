@@ -23,6 +23,9 @@ query GetAppSyncStatus($appId: ID!) {
       id
       name
       credentials
+      provider {
+        id
+      }
     }
     createdAt
     history {
