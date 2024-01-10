@@ -43,7 +43,7 @@ def list_repos(credential_id):
                 {
                     "name": repo["name"],
                     "owner": repo["owner"]["login"],
-                    "type": "Private" if repo["private"] else "Public",
+                    "type": "private" if repo["private"] else "public",
                 }
             )
         return repo_list
@@ -52,30 +52,12 @@ def list_repos(credential_id):
 
     # Fetch user repos
     user_repos_response = fetch_repos(
-        f"{GITHUB_API_URL}/user/repos?type=all", access_token
+        f"{GITHUB_API_URL}/user/repos?per_page=100&type=all", access_token
     )
     if user_repos_response.status_code == 200:
         all_repos.extend(serialize_repos(user_repos_response.json()))
     else:
         raise Exception(f"Error fetching user repositories: {user_repos_response.text}")
-
-    # Fetch user organizations
-    orgs_response = fetch_repos(f"{GITHUB_API_URL}/user/orgs", access_token)
-
-    if orgs_response.status_code == 200:
-        orgs = orgs_response.json()
-        for org in orgs:
-            org_repos_response = fetch_repos(
-                f"{GITHUB_API_URL}/orgs/{org['login']}/repos", access_token
-            )
-            if org_repos_response.status_code == 200:
-                all_repos.extend(serialize_repos(org_repos_response.json()))
-            else:
-                raise Exception(
-                    f"Error fetching repositories for organization {org['login']}: {org_repos_response.text}"
-                )
-    else:
-        raise Exception(f"Error fetching organizations: {orgs_response.text}")
 
     return all_repos
 

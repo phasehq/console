@@ -6,19 +6,21 @@ import CreateNewGhActionsSync from '@/graphql/mutations/syncing/github/CreateGhA
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import {
-  CloudFlarePagesType,
-  EnvironmentType,
-  GitHubRepoType,
-  ProviderCredentialsType,
-} from '@/apollo/graphql'
+import { EnvironmentType, GitHubRepoType, ProviderCredentialsType } from '@/apollo/graphql'
 import { Combobox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaAngleDoubleDown, FaChevronDown, FaCircle, FaDotCircle } from 'react-icons/fa'
+import {
+  FaAngleDoubleDown,
+  FaCheckCircle,
+  FaChevronDown,
+  FaCircle,
+  FaDotCircle,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
-import { SiCloudflarepages, SiGithub } from 'react-icons/si'
+
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
+import { SiGithub } from 'react-icons/si'
 
 export const CreateGhActionsSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -43,9 +45,9 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
   const [repos, setRepos] = useState<GitHubRepoType[]>([])
 
-  const [ghRepo, setGhRepo] = useState<GitHubRepoType | null>(null)
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
   const [query, setQuery] = useState('')
-  const [cfEnv, setCfEnv] = useState<'preview' | 'production'>('preview')
+
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
 
   const [credentialsValid, setCredentialsValid] = useState(false)
@@ -72,15 +74,15 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
         setRepos(reposData?.githubRepos)
         setCredentialsValid(true)
       }
-    } else if (ghRepo === null) {
+    } else if (selectedRepo === undefined) {
       toast.error('Please select a repo to sync with!')
       return false
     } else {
       await createGhActionsSync({
         variables: {
           envId: phaseEnv?.id,
-          repoName: ghRepo.name,
-          owner: ghRepo.owner,
+          repoName: selectedRepo.name,
+          owner: selectedRepo.owner,
           credentialId: credential.id,
         },
         refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
@@ -90,10 +92,17 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
     }
   }
 
-  const filteredRepos =
-    query === ''
-      ? repos
-      : repos.filter((repo) => repo.name?.toLowerCase().includes(query.toLowerCase()))
+  const filteredRepos = repos.filter((repo) => {
+    if (query === '') {
+      return true // If the query is empty, include all repos
+    }
+
+    const queryLower = query.toLowerCase()
+    const repoNameMatches = repo.name?.toLowerCase().includes(queryLower) || false
+    const repoOwnerMatches = repo.owner?.toLowerCase().includes(queryLower) || false
+
+    return repoNameMatches || repoOwnerMatches // Include the repo if either name or owner matches the query
+  })
 
   return (
     <div className="p-4 space-y-6">
@@ -157,7 +166,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
               </RadioGroup>
             </div>
 
-            <div className="flex justify-between items-center gap-4 py-8">
+            <div className="flex justify-between items-center gap-4 py-4">
               <div className="border-b border-neutral-500/40 w-full"></div>
               <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
@@ -165,7 +174,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
             <div className="grid grid-cols-2 gap-8">
               <div className="relative col-span-2">
-                <Combobox value={ghRepo} onChange={setGhRepo}>
+                <Combobox value={selectedRepo} onChange={setSelectedRepo}>
                   {({ open }) => (
                     <>
                       <div className="space-y-2">
@@ -179,7 +188,9 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                             className="w-full"
                             onChange={(event) => setQuery(event.target.value)}
                             required
-                            displayValue={(project: CloudFlarePagesType) => project?.name!}
+                            displayValue={(repo: GitHubRepoType) =>
+                              repo ? `${repo?.owner}/${repo?.name}` : query || ''
+                            }
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
                             <Combobox.Button>
@@ -202,20 +213,40 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto">
-                            {filteredRepos.map((project: GitHubRepoType) => (
-                              <Combobox.Option key={project.name} value={project}>
+                          <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto">
+                            {filteredRepos.map((repo: GitHubRepoType) => (
+                              <Combobox.Option key={`${repo.owner}/${repo.name}`} value={repo}>
                                 {({ active, selected }) => (
                                   <div
                                     className={clsx(
-                                      'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
-                                      active && 'bg-zinc-400 dark:bg-zinc-700'
+                                      'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
+                                      active && 'bg-zinc-300 dark:bg-zinc-700'
                                     )}
                                   >
-                                    <div className="font-semibold text-black dark:text-white">
-                                      {project.name}
+                                    <div className="flex items-center gap-2">
+                                      <SiGithub className="shrink-0 text-black dark:text-white" />
+                                      <div>
+                                        <div className="font-semibold text-black dark:text-white">
+                                          {repo.name}{' '}
+                                          <span
+                                            className={clsx(
+                                              'text-2xs px-2 py-0.5 rounded-full font-medium',
+                                              repo.type === 'private'
+                                                ? 'bg-amber-100 dark:bg-amber-400/10 text-amber-800 dark:text-amber-400  ring-1 ring-inset ring-amber-400/20'
+                                                : 'bg-neutral-200 dark:bg-neutral-700 ring-1 ring-inset ring-neutral-500/20 text-neutral-500 dark:text-neutral-300'
+                                            )}
+                                          >
+                                            {repo.type}
+                                          </span>
+                                        </div>
+                                        <div className="text-neutral-500 text-2xs">
+                                          {repo.owner}
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="text-neutral-500 text-2xs">{project.owner}</div>
+                                    {selected && (
+                                      <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                    )}
                                   </div>
                                 )}
                               </Combobox.Option>
