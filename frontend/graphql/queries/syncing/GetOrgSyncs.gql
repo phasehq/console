@@ -13,6 +13,9 @@ query GetOrganisationSyncs($orgId: ID!) {
     serviceInfo {
       id
       name
+      provider {
+        id
+      }
     }
     options
     isActive
@@ -22,9 +25,6 @@ query GetOrganisationSyncs($orgId: ID!) {
       id
       name
       credentials
-      provider {
-        id
-      }
     }
     createdAt
     history {

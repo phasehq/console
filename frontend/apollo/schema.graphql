@@ -381,6 +381,7 @@ type ServiceType {
   name: String
   resourceType: String
   subresourceType: String
+  provider: ProviderType
 }
 
 type EnvironmentSyncEventType {

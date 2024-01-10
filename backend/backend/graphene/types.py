@@ -256,6 +256,7 @@ class ServiceType(ObjectType):
     name = graphene.String()
     resource_type = graphene.String()
     subresource_type = graphene.String()
+    provider = graphene.Field(ProviderType)
 
 
 class ProviderCredentialsType(DjangoObjectType):
