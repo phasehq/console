@@ -21,6 +21,7 @@ type Query {
   serverPublicKey: String
   syncEnabled(appId: ID): Boolean
   providers: [ProviderType]
+  services: [ServiceType]
   savedCredentials(orgId: ID): [ProviderCredentialsType]
   syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
   envSyncs(envId: ID): [EnvironmentSyncType]
@@ -327,6 +328,13 @@ type ProviderType {
   authScheme: String
 }
 
+type ServiceType {
+  id: String
+  name: String
+  resourceType: String
+  provider: ProviderType
+}
+
 type ProviderCredentialsType {
   id: String!
   name: String!
@@ -374,14 +382,6 @@ enum ApiEnvironmentSyncStatusChoices {
 
   """Failed"""
   FAILED
-}
-
-type ServiceType {
-  id: String
-  name: String
-  resourceType: String
-  subresourceType: String
-  provider: ProviderType
 }
 
 type EnvironmentSyncEventType {
