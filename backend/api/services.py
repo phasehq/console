@@ -20,6 +20,13 @@ class Providers:
         "auth_scheme": "oauth",
     }
 
+    HASHICORP_VAULT = {
+        "id": "hashicorp_vault",
+        "name": "Hashicorp Vault",
+        "expected_credentials": ["vault_host", "vault_token"],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
@@ -40,26 +47,21 @@ class ServiceConfig:
         "id": "cloudflare_pages",
         "name": "Cloudflare Pages",
         "provider": Providers.CLOUDFLARE,
-        "api_url": "https://api.cloudflare.com/client/v4",
         "resource_type": "project",
-        "subresource_options": ["production", "preview"],
     }
 
-    CLOUDFLARE_WORKERS = {
-        "id": "cloudflare_workers",
-        "name": "Cloudflare Workers",
-        "provider": Providers.CLOUDFLARE,
-        "api_url": "https://api.cloudflare.com/client/v4",
-        "resource_type": "project",
-        "subresource_options": ["production", "preview"],
-    }
+    # CLOUDFLARE_WORKERS = {
+    #     "id": "cloudflare_workers",
+    #     "name": "Cloudflare Workers",
+    #     "provider": Providers.CLOUDFLARE,
+    #     "resource_type": "project",
+    # }
 
     AWS_SECRETS_MANAGER = {
         "id": "aws_secrets_manager",
         "name": "AWS Secrets Manager",
         "provider": Providers.AWS,
         "resource_type": "secret",
-        "subresource_options": [],
     }
 
     GITHUB_ACTIONS = {
@@ -67,7 +69,13 @@ class ServiceConfig:
         "name": "GitHub Actions",
         "provider": Providers.GITHUB,
         "resource_type": "repo",
-        "subresource_options": [],
+    }
+
+    HASHICORP_VAULT = {
+        "id": "hashicorp_vault",
+        "name": "Hashicorp Vault",
+        "provider": Providers.HASHICORP_VAULT,
+        "resource_type": "path",
     }
 
     @classmethod
