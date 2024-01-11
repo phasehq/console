@@ -374,6 +374,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
           resolve(true)
           closeModal()
         } catch (error) {
+          console.error(error)
           setAppCreating(false)
           reject(error)
         }
