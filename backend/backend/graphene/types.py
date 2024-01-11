@@ -255,7 +255,6 @@ class ServiceType(ObjectType):
     id = graphene.String()
     name = graphene.String()
     resource_type = graphene.String()
-    subresource_type = graphene.String()
     provider = graphene.Field(ProviderType)
 
 

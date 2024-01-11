@@ -6,6 +6,7 @@ from .graphene.queries.syncing import (
     resolve_gh_repos,
     resolve_server_public_key,
     resolve_providers,
+    resolve_services,
     resolve_sync_enabled,
     resolve_saved_credentials,
     resolve_cloudflare_pages_projects,
@@ -83,6 +84,7 @@ from .graphene.types import (
     SecretTagType,
     SecretType,
     ServiceTokenType,
+    ServiceType,
     TimeRange,
     UserTokenType,
 )
@@ -177,6 +179,8 @@ class Query(graphene.ObjectType):
 
     providers = graphene.List(ProviderType)
 
+    services = graphene.List(ServiceType)
+
     saved_credentials = graphene.List(ProviderCredentialsType, org_id=graphene.ID())
 
     syncs = graphene.List(
@@ -210,6 +214,8 @@ class Query(graphene.ObjectType):
     resolve_sync_enabled = resolve_sync_enabled
 
     resolve_providers = resolve_providers
+
+    resolve_services = resolve_services
 
     resolve_saved_credentials = resolve_saved_credentials
 

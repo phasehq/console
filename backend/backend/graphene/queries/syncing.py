@@ -18,7 +18,7 @@ from api.utils.permissions import (
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.aws.secrets_manager import list_aws_secrets
 from api.utils.syncing.github.actions import list_repos
-from backend.graphene.types import ProviderType
+from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
 
@@ -40,6 +40,14 @@ def resolve_providers(self, info):
         ProviderType(**provider)
         for provider in Providers.__dict__.values()
         if isinstance(provider, dict)
+    ]
+
+
+def resolve_services(self, info):
+    return [
+        ServiceType(**service)
+        for service in ServiceConfig.__dict__.values()
+        if isinstance(service, dict)
     ]
 
 
