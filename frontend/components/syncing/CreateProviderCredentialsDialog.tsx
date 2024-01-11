@@ -110,6 +110,8 @@ export const CreateProviderCredentialsDialog = (props: {
       return 'https://docs.phase.dev/integrations/platforms/cloudflare-pages'
     else if (provider.id === 'aws')
       return 'https://docs.phase.dev/integrations/platforms/aws-secrets-manager'
+    else if (provider.id === 'hashicorp_vault')
+      return 'https://docs.phase.dev/integrations/platforms/hashicorp-vault'
     else return 'https://docs.phase.dev/integrations'
   }
 
