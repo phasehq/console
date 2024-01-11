@@ -142,6 +142,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
                   setCredential={(cred) => setCredential(cred)}
                   orgId={organisation!.id}
                   providerFilter={'aws'}
+                  setDefault={true}
                 />
               </div>
             </div>

@@ -26,6 +26,7 @@ type Query {
   envSyncs(envId: ID): [EnvironmentSyncType]
   cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
   awsSecrets(credentialId: ID): [AWSSecretType]
+  githubRepos(credentialId: ID): [GitHubRepoType]
 }
 
 type OrganisationType {
@@ -380,6 +381,7 @@ type ServiceType {
   name: String
   resourceType: String
   subresourceType: String
+  provider: ProviderType
 }
 
 type EnvironmentSyncEventType {
@@ -420,6 +422,12 @@ type AWSSecretType {
   arn: String
 }
 
+type GitHubRepoType {
+  name: String
+  owner: String
+  type: String
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
@@ -447,6 +455,7 @@ type Mutation {
   deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
   createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
   createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, secretName: String): CreateAWSSecretsManagerSync
+  createGhActionsSync(credentialId: ID, envId: ID, owner: String, repoName: String): CreateGitHubActionsSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -579,6 +588,10 @@ type CreateCloudflarePagesSync {
 }
 
 type CreateAWSSecretsManagerSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateGitHubActionsSync {
   sync: EnvironmentSyncType
 }
 

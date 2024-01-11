@@ -5,7 +5,7 @@ import { useQuery } from '@apollo/client'
 import { Listbox } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { Fragment, useContext } from 'react'
+import { Fragment, useContext, useEffect } from 'react'
 import { FaChevronDown, FaKey, FaPlus } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { usePathname } from 'next/navigation'
@@ -17,9 +17,17 @@ export const ProviderCredentialPicker = (props: {
   disabled?: boolean
   providerFilter?: string
   newCredentialCallback?: () => void
+  setDefault?: boolean
 }) => {
-  const { credential, setCredential, orgId, disabled, providerFilter, newCredentialCallback } =
-    props
+  const {
+    credential,
+    setCredential,
+    orgId,
+    disabled,
+    providerFilter,
+    newCredentialCallback,
+    setDefault,
+  } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -32,6 +40,11 @@ export const ProviderCredentialPicker = (props: {
   const filteredCredentials = providerFilter
     ? credentials.filter((cred) => cred.provider?.id === providerFilter)
     : credentials
+
+  useEffect(() => {
+    if (setDefault) setCredential(filteredCredentials[0])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providerFilter, filteredCredentials, setDefault])
 
   const NewCredentialsLink = () => (
     <Link href={`/${organisation!.name}/integrations?newCredential=true`}>

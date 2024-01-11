@@ -1,0 +1,7 @@
+query GetGithubRepos($credentialId: ID!) {
+  githubRepos(credentialId: $credentialId) {
+    name
+    owner
+    type
+  }
+}

@@ -1,21 +1,28 @@
-import GetCfPages from '@/graphql/queries/syncing/cloudflare/getPages.gql'
+import GetGithubRepos from '@/graphql/queries/syncing/github/getRepos.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
-import CreateNewCfPagesSync from '@/graphql/mutations/syncing/cloudflare/CreateCfPagesSync.gql'
+import CreateNewGhActionsSync from '@/graphql/mutations/syncing/github/CreateGhActionsSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import { CloudFlarePagesType, EnvironmentType, ProviderCredentialsType } from '@/apollo/graphql'
+import { EnvironmentType, GitHubRepoType, ProviderCredentialsType } from '@/apollo/graphql'
 import { Combobox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaAngleDoubleDown, FaChevronDown, FaCircle, FaDotCircle } from 'react-icons/fa'
+import {
+  FaAngleDoubleDown,
+  FaCheckCircle,
+  FaChevronDown,
+  FaCircle,
+  FaDotCircle,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
-import { SiCloudflarepages } from 'react-icons/si'
+
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
+import { SiGithub } from 'react-icons/si'
 
-export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: () => void }) => {
+export const CreateGhActionsSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { appId, closeModal } = props
@@ -29,18 +36,18 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
     variables: { orgId: organisation!.id },
   })
 
-  const [getCloudflarePages, { loading }] = useLazyQuery(GetCfPages)
+  const [getGhRepos, { loading }] = useLazyQuery(GetGithubRepos)
 
-  const [createCfPagesSync, { data: syncData, loading: creating }] =
-    useMutation(CreateNewCfPagesSync)
+  const [createGhActionsSync, { data: syncData, loading: creating }] =
+    useMutation(CreateNewGhActionsSync)
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
-  const [cfProjects, setCfProjects] = useState<CloudFlarePagesType[]>([])
+  const [repos, setRepos] = useState<GitHubRepoType[]>([])
 
-  const [cfProject, setCfProject] = useState<CloudFlarePagesType | null>(null)
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
   const [query, setQuery] = useState('')
-  const [cfEnv, setCfEnv] = useState<'preview' | 'production'>('preview')
+
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
 
   const [credentialsValid, setCredentialsValid] = useState(false)
@@ -58,47 +65,53 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
       toast.error('Please select credential to use for this sync')
       return false
     } else if (!credentialsValid) {
-      const { data: pagesData } = await getCloudflarePages({
+      const { data: reposData } = await getGhRepos({
         variables: {
           credentialId: credential.id,
         },
       })
-      if (pagesData?.cloudflarePagesProjects) {
-        setCfProjects(pagesData?.cloudflarePagesProjects)
+      if (reposData?.githubRepos) {
+        setRepos(reposData?.githubRepos)
         setCredentialsValid(true)
       }
+    } else if (selectedRepo === undefined) {
+      toast.error('Please select a repo to sync with!')
+      return false
     } else {
-      await createCfPagesSync({
+      await createGhActionsSync({
         variables: {
           envId: phaseEnv?.id,
-          projectName: cfProject?.name,
-          deploymentId: cfProject?.deploymentId,
-          projectEnv: cfEnv,
+          repoName: selectedRepo.name,
+          owner: selectedRepo.owner,
           credentialId: credential.id,
         },
         refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
       })
-
       toast.success('Created new Sync!')
       closeModal()
     }
   }
 
-  const filteredProjects =
-    query === ''
-      ? cfProjects
-      : cfProjects.filter((project) => project.name?.toLowerCase().includes(query.toLowerCase()))
+  const filteredRepos = repos.filter((repo) => {
+    if (query === '') {
+      return true // If the query is empty, include all repos
+    }
 
-  const cfEnvOptions = ['preview', 'production']
+    const queryLower = query.toLowerCase()
+    const repoNameMatches = repo.name?.toLowerCase().includes(queryLower) || false
+    const repoOwnerMatches = repo.owner?.toLowerCase().includes(queryLower) || false
+
+    return repoNameMatches || repoOwnerMatches // Include the repo if either name or owner matches the query
+  })
 
   return (
     <div className="p-4 space-y-6">
       <div>
-        <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-1">
-          <SiCloudflarepages />
-          Cloudflare Pages
+        <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
+          <SiGithub />
+          GitHub Actions
         </div>
-        <div className="text-neutral-500 text-sm">Sync an environment with Cloudflare pages.</div>
+        <div className="text-neutral-500 text-sm">Sync an environment with GitHub Actions.</div>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -113,7 +126,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                   credential={credential}
                   setCredential={(cred) => setCredential(cred)}
                   orgId={organisation!.id}
-                  providerFilter={'cloudflare'}
+                  providerFilter={'github'}
                   setDefault={true}
                 />
               </div>
@@ -154,21 +167,21 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
               </RadioGroup>
             </div>
 
-            <div className="flex justify-between items-center gap-4 py-8">
+            <div className="flex justify-between items-center gap-4 py-4">
               <div className="border-b border-neutral-500/40 w-full"></div>
               <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
             </div>
 
             <div className="grid grid-cols-2 gap-8">
-              <div className="relative">
-                <Combobox value={cfProject} onChange={setCfProject}>
+              <div className="relative col-span-2">
+                <Combobox value={selectedRepo} onChange={setSelectedRepo}>
                   {({ open }) => (
                     <>
                       <div className="space-y-2">
                         <Combobox.Label as={Fragment}>
                           <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
-                            Cloudflare Project
+                            GitHub Repo
                           </label>
                         </Combobox.Label>
                         <div className="w-full relative flex items-center">
@@ -176,7 +189,9 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                             className="w-full"
                             onChange={(event) => setQuery(event.target.value)}
                             required
-                            displayValue={(project: CloudFlarePagesType) => project?.name!}
+                            displayValue={(repo: GitHubRepoType) =>
+                              repo ? `${repo?.owner}/${repo?.name}` : query || ''
+                            }
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
                             <Combobox.Button>
@@ -199,22 +214,40 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto">
-                            {filteredProjects.map((project: CloudFlarePagesType) => (
-                              <Combobox.Option key={project.deploymentId} value={project}>
+                          <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto">
+                            {filteredRepos.map((repo: GitHubRepoType) => (
+                              <Combobox.Option key={`${repo.owner}/${repo.name}`} value={repo}>
                                 {({ active, selected }) => (
                                   <div
                                     className={clsx(
-                                      'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
-                                      active && 'bg-zinc-400 dark:bg-zinc-700'
+                                      'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
+                                      active && 'bg-zinc-300 dark:bg-zinc-700'
                                     )}
                                   >
-                                    <div className="font-semibold text-black dark:text-white">
-                                      {project.name}
+                                    <div className="flex items-center gap-2">
+                                      <SiGithub className="shrink-0 text-black dark:text-white" />
+                                      <div>
+                                        <div className="font-semibold text-black dark:text-white">
+                                          {repo.name}{' '}
+                                          <span
+                                            className={clsx(
+                                              'text-2xs px-2 py-0.5 rounded-full font-medium',
+                                              repo.type === 'private'
+                                                ? 'bg-amber-100 dark:bg-amber-400/10 text-amber-800 dark:text-amber-400  ring-1 ring-inset ring-amber-400/20'
+                                                : 'bg-neutral-200 dark:bg-neutral-700 ring-1 ring-inset ring-neutral-500/20 text-neutral-500 dark:text-neutral-300'
+                                            )}
+                                          >
+                                            {repo.type}
+                                          </span>
+                                        </div>
+                                        <div className="text-neutral-500 text-2xs">
+                                          {repo.owner}
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="text-neutral-500 text-2xs">
-                                      {project.deploymentId}
-                                    </div>
+                                    {selected && (
+                                      <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                    )}
                                   </div>
                                 )}
                               </Combobox.Option>
@@ -225,34 +258,6 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                     </>
                   )}
                 </Combobox>
-              </div>
-
-              <div>
-                <RadioGroup value={cfEnv} onChange={setCfEnv}>
-                  <RadioGroup.Label as={Fragment}>
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
-                      Cloudflare Project Environment
-                    </label>
-                  </RadioGroup.Label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {cfEnvOptions.map((option) => (
-                      <RadioGroup.Option key={option} value={option} as={Fragment}>
-                        {({ active, checked }) => (
-                          <div
-                            className={clsx(
-                              'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800 rounded-full capitalize',
-                              active && 'border-zinc-700',
-                              checked && 'bg-zinc-700'
-                            )}
-                          >
-                            {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
-                            {option}
-                          </div>
-                        )}
-                      </RadioGroup.Option>
-                    ))}
-                  </div>
-                </RadioGroup>
               </div>
             </div>
           </div>

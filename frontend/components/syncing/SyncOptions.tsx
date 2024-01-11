@@ -51,6 +51,11 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
       icon: <ProviderIcon providerId={'aws'} />,
       id: 'aws_secrets_manager',
     },
+    {
+      name: 'GitHub Actions',
+      icon: <ProviderIcon providerId={'github'} />,
+      id: 'gh_actions',
+    },
   ]
 
   return (

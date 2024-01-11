@@ -13,6 +13,13 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    GITHUB = {
+        "id": "github",
+        "name": "GitHub",
+        "expected_credentials": ["access_token"],
+        "auth_scheme": "oauth",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
@@ -52,6 +59,14 @@ class ServiceConfig:
         "name": "AWS Secrets Manager",
         "provider": Providers.AWS,
         "resource_type": "secret",
+        "subresource_options": [],
+    }
+
+    GITHUB_ACTIONS = {
+        "id": "github_actions",
+        "name": "GitHub Actions",
+        "provider": Providers.GITHUB,
+        "resource_type": "repo",
         "subresource_options": [],
     }
 

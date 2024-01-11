@@ -19,6 +19,7 @@ import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 import { awsRegions } from '@/utils/syncing/aws'
 import Link from 'next/link'
+import { SetupGhAuth } from './GitHub/SetupGhAuth'
 
 interface CredentialState {
   [key: string]: string
@@ -234,18 +235,19 @@ export const CreateProviderCredentialsDialog = (props: {
                         </div>
                       )}
 
-                      {provider?.expectedCredentials
-                        .filter((credential) => credential !== 'region')
-                        .map((credential) => (
-                          <Input
-                            key={credential}
-                            value={credentials[credential]}
-                            setValue={(value) => handleCredentialChange(credential, value)}
-                            label={credential.replace(/_/g, ' ').toUpperCase()}
-                            required
-                            secret={true}
-                          />
-                        ))}
+                      {provider?.authScheme === 'token' &&
+                        provider?.expectedCredentials
+                          .filter((credential) => credential !== 'region')
+                          .map((credential) => (
+                            <Input
+                              key={credential}
+                              value={credentials[credential]}
+                              setValue={(value) => handleCredentialChange(credential, value)}
+                              label={credential.replace(/_/g, ' ').toUpperCase()}
+                              required
+                              secret={true}
+                            />
+                          ))}
 
                       {provider?.id === 'aws' && (
                         <AWSRegionPicker
@@ -253,7 +255,9 @@ export const CreateProviderCredentialsDialog = (props: {
                         />
                       )}
 
-                      {provider && (
+                      {provider?.id === 'github' && <SetupGhAuth />}
+
+                      {provider && provider?.authScheme === 'token' && (
                         <Input
                           required
                           value={name}

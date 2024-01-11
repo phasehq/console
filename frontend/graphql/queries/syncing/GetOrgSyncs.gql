@@ -13,6 +13,9 @@ query GetOrganisationSyncs($orgId: ID!) {
     serviceInfo {
       id
       name
+      provider {
+        id
+      }
     }
     options
     isActive

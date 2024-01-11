@@ -8,6 +8,7 @@ from api.serializers import (
 )
 from api.emails import send_login_email
 from api.utils.permissions import user_can_access_environment
+from api.utils.syncing.auth import store_oauth_token
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from graphene_django.views import GraphQLView
@@ -52,13 +53,47 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-
+import base64
+from django.shortcuts import redirect
+import os
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
+
+def github_callback(request):
+    code = request.GET.get("code")
+    state = request.GET.get("state")
+
+    client_id = os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
+    client_secret = os.getenv("GITHUB_INTEGRATION_CLIENT_SECRET")
+
+    state_decoded = base64.b64decode(state).decode("utf-8")
+    state = json.loads(state_decoded)
+
+    original_url = state.get("returnUrl", "/")
+    org_id = state.get("orgId")
+
+    # Exchange code for token
+    response = requests.post(
+        "https://github.com/login/oauth/access_token",
+        headers={"Accept": "application/json"},
+        data={
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": code,
+            "redirect_uri": f"{os.getenv('ALLOWED_ORIGINS')}/service/oauth/github/callback",
+        },
+    )
+
+    access_token = response.json().get("access_token")
+
+    store_oauth_token("github", access_token, org_id)
+
+    # Redirect back to Next.js app with token and original URL
+    return redirect(f"{os.getenv('ALLOWED_ORIGINS')}{original_url}")
+
+
 # for custom gitlab adapter class
-
-
 def _check_errors(response):
     #  403 error's are presented as user-facing errors
     if response.status_code == 403:

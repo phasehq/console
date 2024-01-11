@@ -1,5 +1,5 @@
 from api.utils.crypto import get_server_keypair
-from api.tasks import sync_cloudflare_pages, trigger_sync_tasks
+from api.tasks import perform_cloudflare_pages_sync, trigger_sync_tasks
 from api.utils.syncing.cloudflare.pages import (
     CloudFlarePagesType,
     get_cf_pages_credentials,
@@ -222,6 +222,50 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateAWSSecretsManagerSync(sync=sync)
+
+
+class CreateGitHubActionsSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        credential_id = graphene.ID()
+        repo_name = graphene.String()
+        owner = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(cls, root, info, env_id, credential_id, repo_name, owner):
+        service_id = "github_actions"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {"repo_name": repo_name, "owner": owner}
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError("A sync already exists for this GitHub repo!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateGitHubActionsSync(sync=sync)
 
 
 class DeleteSync(graphene.Mutation):
