@@ -77,7 +77,9 @@ const documents = {
     "query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n    authScheme\n  }\n  serverPublicKey\n}": types.GetProviderListDocument,
     "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n    }\n    syncCount\n  }\n}": types.GetSavedCredentialsDocument,
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
+    "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": types.GetServiceListDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
+    "query GetVaultMounts($credentialId: ID!) {\n  vaultMounts(credentialId: $credentialId) {\n    name\n    description\n    id\n  }\n}": types.GetVaultMountsDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
 };
 
@@ -354,7 +356,15 @@ export function graphql(source: "query GetServerKey {\n  serverPublicKey\n}"): (
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}"): (typeof documents)["query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}"): (typeof documents)["query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetVaultMounts($credentialId: ID!) {\n  vaultMounts(credentialId: $credentialId) {\n    name\n    description\n    id\n  }\n}"): (typeof documents)["query GetVaultMounts($credentialId: ID!) {\n  vaultMounts(credentialId: $credentialId) {\n    name\n    description\n    id\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

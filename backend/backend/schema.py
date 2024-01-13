@@ -1,6 +1,7 @@
 from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
+from api.utils.syncing.vault.main import VaultMountType
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
@@ -12,6 +13,7 @@ from .graphene.queries.syncing import (
     resolve_cloudflare_pages_projects,
     resolve_syncs,
     resolve_env_syncs,
+    resolve_vault_mounts,
 )
 from .graphene.mutations.environment import (
     CreateEnvironmentKeyMutation,
@@ -207,6 +209,8 @@ class Query(graphene.ObjectType):
         credential_id=graphene.ID(),
     )
 
+    vault_mounts = graphene.List(VaultMountType, credential_id=graphene.ID())
+
     # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
@@ -228,6 +232,8 @@ class Query(graphene.ObjectType):
     resolve_aws_secrets = resolve_aws_secret_manager_secrets
 
     resolve_github_repos = resolve_gh_repos
+
+    resolve_vault_mounts = resolve_vault_mounts
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(

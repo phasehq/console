@@ -28,6 +28,7 @@ type Query {
   cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
   awsSecrets(credentialId: ID): [AWSSecretType]
   githubRepos(credentialId: ID): [GitHubRepoType]
+  vaultMounts(credentialId: ID): [VaultMountType]
 }
 
 type OrganisationType {
@@ -426,6 +427,12 @@ type GitHubRepoType {
   name: String
   owner: String
   type: String
+}
+
+type VaultMountType {
+  name: String
+  description: String
+  id: ID
 }
 
 type Mutation {

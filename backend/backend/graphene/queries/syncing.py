@@ -18,6 +18,7 @@ from api.utils.permissions import (
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.aws.secrets_manager import list_aws_secrets
 from api.utils.syncing.github.actions import list_repos
+from api.utils.syncing.vault.main import list_vault_deployments
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -106,6 +107,14 @@ def resolve_gh_repos(root, info, credential_id):
     try:
         secrets = list_repos(credential_id)
         return secrets
+    except Exception as ex:
+        raise GraphQLError(ex)
+
+
+def resolve_vault_mounts(root, info, credential_id):
+    try:
+        mounts = list_vault_deployments(credential_id)
+        return mounts
     except Exception as ex:
         raise GraphQLError(ex)
 
