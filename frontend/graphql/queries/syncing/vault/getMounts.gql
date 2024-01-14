@@ -1,7 +1,0 @@
-query GetVaultMounts($credentialId: ID!) {
-  vaultMounts(credentialId: $credentialId) {
-    name
-    description
-    id
-  }
-}
