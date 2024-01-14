@@ -13,7 +13,7 @@ from .graphene.queries.syncing import (
     resolve_cloudflare_pages_projects,
     resolve_syncs,
     resolve_env_syncs,
-    resolve_vault_mounts,
+    resolve_test_vault_creds,
 )
 from .graphene.mutations.environment import (
     CreateEnvironmentKeyMutation,
@@ -38,6 +38,7 @@ from .graphene.mutations.syncing import (
     CreateCloudflarePagesSync,
     CreateGitHubActionsSync,
     CreateProviderCredentials,
+    CreateVaultSync,
     DeleteProviderCredentials,
     DeleteSync,
     InitEnvSync,
@@ -209,7 +210,7 @@ class Query(graphene.ObjectType):
         credential_id=graphene.ID(),
     )
 
-    vault_mounts = graphene.List(VaultMountType, credential_id=graphene.ID())
+    test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     # --------------------------------------------------------------------
 
@@ -233,7 +234,7 @@ class Query(graphene.ObjectType):
 
     resolve_github_repos = resolve_gh_repos
 
-    resolve_vault_mounts = resolve_vault_mounts
+    resolve_test_vault_creds = resolve_test_vault_creds
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -639,6 +640,9 @@ class Mutation(graphene.ObjectType):
 
     # GitHub
     create_gh_actions_sync = CreateGitHubActionsSync.Field()
+
+    # Vault
+    create_vault_sync = CreateVaultSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
