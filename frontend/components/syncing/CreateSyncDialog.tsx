@@ -6,6 +6,7 @@ import { CreateCloudflarePagesSync } from './Cloudflare/CreateCloudflarePagesSyn
 import React from 'react'
 import { CreateAWSSecretsSync } from './AWS/CreateAWSSecretsSync'
 import { CreateGhActionsSync } from './GitHub/CreateGhActionsSync'
+import { CreateVaultSync } from './Vault/CreateVaultSync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -31,6 +32,8 @@ export const CreateSyncDialog = (props: {
         return <CreateCloudflarePagesSync appId={props.appId} closeModal={closeModal} />
       case 'gh_actions':
         return <CreateGhActionsSync appId={props.appId} closeModal={closeModal} />
+      case 'hashicorp_vault':
+        return <CreateVaultSync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null
