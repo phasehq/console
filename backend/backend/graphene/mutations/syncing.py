@@ -268,6 +268,50 @@ class CreateGitHubActionsSync(graphene.Mutation):
         return CreateGitHubActionsSync(sync=sync)
 
 
+class CreateVaultSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        credential_id = graphene.ID()
+        engine = graphene.String()
+        path = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(cls, root, info, env_id, credential_id, engine, path):
+        service_id = "hashicorp_vault"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {"engine": engine, "path": path}
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError("A sync already exists for this GitHub repo!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateVaultSync(sync=sync)
+
+
 class DeleteSync(graphene.Mutation):
     class Arguments:
         sync_id = graphene.ID()
