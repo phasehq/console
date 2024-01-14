@@ -3,6 +3,7 @@ class Providers:
         "id": "cloudflare",
         "name": "Cloudflare",
         "expected_credentials": ["account_id", "access_token"],
+        "optional_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -10,6 +11,7 @@ class Providers:
         "id": "aws",
         "name": "AWS",
         "expected_credentials": ["access_key_id", "secret_access_key", "region"],
+        "optional_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -17,13 +19,19 @@ class Providers:
         "id": "github",
         "name": "GitHub",
         "expected_credentials": ["access_token"],
+        "optional_credentials": [],
         "auth_scheme": "oauth",
     }
 
     HASHICORP_VAULT = {
         "id": "hashicorp_vault",
         "name": "Hashicorp Vault",
-        "expected_credentials": ["vault_host", "vault_token"],
+        "expected_credentials": [
+            "vault_addr",
+            "vault_role_id",
+            "vault_secret_id",
+        ],
+        "optional_credentials": ["vault_namespace"],
         "auth_scheme": "token",
     }
 
