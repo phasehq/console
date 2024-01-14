@@ -75,6 +75,11 @@ export const CreateProviderCredentialsDialog = (props: {
       provider.expectedCredentials!.forEach((cred) => {
         initialCredentials[cred] = '' // Initialize each credential with an empty string
       })
+      if (provider.optionalCredentials) {
+        provider.optionalCredentials!.forEach((cred) => {
+          initialCredentials[cred] = ''
+        })
+      }
       if (provider.id === 'aws') initialCredentials['region'] = awsRegions[0].region
       setCredentials(initialCredentials)
 
@@ -247,6 +252,19 @@ export const CreateProviderCredentialsDialog = (props: {
                               setValue={(value) => handleCredentialChange(credential, value)}
                               label={credential.replace(/_/g, ' ').toUpperCase()}
                               required
+                              secret={true}
+                            />
+                          ))}
+
+                      {provider?.authScheme === 'token' &&
+                        provider?.optionalCredentials
+                          .filter((credential) => credential !== 'region')
+                          .map((credential) => (
+                            <Input
+                              key={credential}
+                              value={credentials[credential]}
+                              setValue={(value) => handleCredentialChange(credential, value)}
+                              label={`${credential.replace(/_/g, ' ').toUpperCase()} (Optional)`}
                               secret={true}
                             />
                           ))}
