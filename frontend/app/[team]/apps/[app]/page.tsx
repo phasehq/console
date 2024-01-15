@@ -436,37 +436,61 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               </div>
             </div>
 
-            <table className="table-auto w-full border border-neutral-500/40">
-              <thead id="table-head" className="sticky top-0 bg-zinc-300 dark:bg-zinc-800 z-10">
-                <tr className="divide-x divide-neutral-500/40">
-                  <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
-                    key
-                  </th>
-                  {data?.appEnvironments.map((env: EnvironmentType) => (
-                    <th
-                      key={env.id}
-                      className="group text-center text-sm font-semibold uppercase tracking-widest py-3"
-                    >
-                      <Link href={`${pathname}/environments/${env.id}`}>
-                        <Button variant="outline">
-                          <div className="flex items-center gap-2 justify-center ">
-                            {env.envType}
-                            <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
-                              <FaArrowRight />
-                            </div>
-                          </div>
-                        </Button>
-                      </Link>
+            {appSecrets.length > 0 ? (
+              <table className="table-auto w-full border border-neutral-500/40">
+                <thead id="table-head" className="sticky top-0 bg-zinc-300 dark:bg-zinc-800 z-10">
+                  <tr className="divide-x divide-neutral-500/40">
+                    <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
+                      key
                     </th>
+                    {data?.appEnvironments.map((env: EnvironmentType) => (
+                      <th
+                        key={env.id}
+                        className="group text-center text-sm font-semibold uppercase tracking-widest py-3"
+                      >
+                        <Link href={`${pathname}/environments/${env.id}`}>
+                          <Button variant="outline">
+                            <div className="flex items-center gap-2 justify-center ">
+                              {env.envType}
+                              <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
+                                <FaArrowRight />
+                              </div>
+                            </div>
+                          </Button>
+                        </Link>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-500/40">
+                  {filteredSecrets.map((appSecret, index) => (
+                    <AppSecretRow key={`${appSecret.key}${index}`} appSecret={appSecret} />
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-500/40">
-                {filteredSecrets.map((appSecret, index) => (
-                  <AppSecretRow key={`${appSecret.key}${index}`} appSecret={appSecret} />
-                ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            ) : (
+              <div className="flex flex-col items-center py-40 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
+                <div className="font-semibold text-black dark:text-white text-2xl">No Secrets</div>
+                <div className="text-neutral-500">
+                  There are no secrets in this app yet. Click on an environment below to start
+                  adding secrets.{' '}
+                </div>
+                <div className="flex items-center gap-4 mt-8">
+                  {data?.appEnvironments.map((env: EnvironmentType) => (
+                    <Link key={env.id} href={`${pathname}/environments/${env.id}`}>
+                      <Button variant="primary">
+                        <div className="flex items-center gap-2 justify-center text-xl group">
+                          {env.name}
+                          <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
+                            <FaArrowRight />
+                          </div>
+                        </div>
+                      </Button>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         ))}
     </div>
