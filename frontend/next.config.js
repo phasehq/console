@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval';
+  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://session.phase.dev;
   style-src 'self' 'unsafe-inline';
   object-src 'none';
   base-uri 'self';
