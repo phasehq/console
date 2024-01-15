@@ -1,16 +1,19 @@
 from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
+from api.utils.syncing.vault.main import VaultMountType
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
     resolve_server_public_key,
     resolve_providers,
+    resolve_services,
     resolve_sync_enabled,
     resolve_saved_credentials,
     resolve_cloudflare_pages_projects,
     resolve_syncs,
     resolve_env_syncs,
+    resolve_test_vault_creds,
 )
 from .graphene.mutations.environment import (
     CreateEnvironmentKeyMutation,
@@ -35,6 +38,7 @@ from .graphene.mutations.syncing import (
     CreateCloudflarePagesSync,
     CreateGitHubActionsSync,
     CreateProviderCredentials,
+    CreateVaultSync,
     DeleteProviderCredentials,
     DeleteSync,
     InitEnvSync,
@@ -83,6 +87,7 @@ from .graphene.types import (
     SecretTagType,
     SecretType,
     ServiceTokenType,
+    ServiceType,
     TimeRange,
     UserTokenType,
 )
@@ -177,6 +182,8 @@ class Query(graphene.ObjectType):
 
     providers = graphene.List(ProviderType)
 
+    services = graphene.List(ServiceType)
+
     saved_credentials = graphene.List(ProviderCredentialsType, org_id=graphene.ID())
 
     syncs = graphene.List(
@@ -203,6 +210,8 @@ class Query(graphene.ObjectType):
         credential_id=graphene.ID(),
     )
 
+    test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
+
     # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
@@ -210,6 +219,8 @@ class Query(graphene.ObjectType):
     resolve_sync_enabled = resolve_sync_enabled
 
     resolve_providers = resolve_providers
+
+    resolve_services = resolve_services
 
     resolve_saved_credentials = resolve_saved_credentials
 
@@ -222,6 +233,8 @@ class Query(graphene.ObjectType):
     resolve_aws_secrets = resolve_aws_secret_manager_secrets
 
     resolve_github_repos = resolve_gh_repos
+
+    resolve_test_vault_creds = resolve_test_vault_creds
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -627,6 +640,9 @@ class Mutation(graphene.ObjectType):
 
     # GitHub
     create_gh_actions_sync = CreateGitHubActionsSync.Field()
+
+    # Vault
+    create_vault_sync = CreateVaultSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

@@ -18,7 +18,8 @@ from api.utils.permissions import (
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.aws.secrets_manager import list_aws_secrets
 from api.utils.syncing.github.actions import list_repos
-from backend.graphene.types import ProviderType
+from api.utils.syncing.vault.main import test_vault_creds
+from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
 
@@ -40,6 +41,14 @@ def resolve_providers(self, info):
         ProviderType(**provider)
         for provider in Providers.__dict__.values()
         if isinstance(provider, dict)
+    ]
+
+
+def resolve_services(self, info):
+    return [
+        ServiceType(**service)
+        for service in ServiceConfig.__dict__.values()
+        if isinstance(service, dict)
     ]
 
 
@@ -100,6 +109,14 @@ def resolve_gh_repos(root, info, credential_id):
         return secrets
     except Exception as ex:
         raise GraphQLError(ex)
+
+
+def resolve_test_vault_creds(root, info, credential_id):
+    try:
+        valid = test_vault_creds(credential_id)
+        return valid
+    except Exception as ex:
+        raise GraphQLError(f"Error testing Vault credentials: {str(ex)}")
 
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):

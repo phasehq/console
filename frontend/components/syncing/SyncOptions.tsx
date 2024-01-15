@@ -1,12 +1,14 @@
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { FaArrowRight, FaChevronRight, FaPlus } from 'react-icons/fa'
-import { SiAmazonaws, SiCloudflare } from 'react-icons/si'
+import GetServiceList from '@/graphql/queries/syncing/getServices.gql'
 import { CreateSyncDialog } from './CreateSyncDialog'
 import { Card } from '../common/Card'
 import { Button } from '../common/Button'
 import { ReactNode } from 'react'
 import { ProviderIcon } from './ProviderIcon'
+import { useQuery } from '@apollo/client'
+import { ServiceType } from '@/apollo/graphql'
 
 interface Service {
   id: string
@@ -40,23 +42,13 @@ const ServiceCard = (props: { service: Service }) => {
 export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
   const { defaultOpen, appId } = props
 
-  const syncOptions: Service[] = [
-    {
-      name: 'Cloudflare Pages',
-      icon: <ProviderIcon providerId={'cloudflare'} />,
-      id: 'cloudflare_pages',
-    },
-    {
-      name: 'AWS Secrets Manager',
-      icon: <ProviderIcon providerId={'aws'} />,
-      id: 'aws_secrets_manager',
-    },
-    {
-      name: 'GitHub Actions',
-      icon: <ProviderIcon providerId={'github'} />,
-      id: 'gh_actions',
-    },
-  ]
+  const { data } = useQuery(GetServiceList)
+
+  const syncOptions =
+    data?.services.map((service: ServiceType) => ({
+      ...service,
+      ...{ icon: <ProviderIcon providerId={service.provider!.id} /> },
+    })) ?? []
 
   return (
     <Disclosure
@@ -107,7 +99,7 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8">
-                    {syncOptions.map((service) => (
+                    {syncOptions.map((service: Service) => (
                       <div key={service.name}>
                         <CreateSyncDialog
                           appId={appId}

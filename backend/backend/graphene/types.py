@@ -1,5 +1,5 @@
 from api.services import Providers, ServiceConfig
-from api.utils.crypto import decrypt_asymmetric, get_server_keypair
+from api.utils.syncing.auth import get_credentials
 import graphene
 from enum import Enum
 from graphene import ObjectType, relay, NonNull
@@ -248,6 +248,9 @@ class ProviderType(graphene.ObjectType):
     expected_credentials = graphene.List(
         graphene.NonNull(graphene.String), required=True
     )
+    optional_credentials = graphene.List(
+        graphene.NonNull(graphene.String), required=True
+    )
     auth_scheme = graphene.String()
 
 
@@ -255,7 +258,6 @@ class ServiceType(ObjectType):
     id = graphene.String()
     name = graphene.String()
     resource_type = graphene.String()
-    subresource_type = graphene.String()
     provider = graphene.Field(ProviderType)
 
 
@@ -284,19 +286,7 @@ class ProviderCredentialsType(DjangoObjectType):
         return Providers.get_provider_config(self.provider)
 
     def resolve_credentials(self, info):
-        provider = Providers.get_provider_config(self.provider)
-
-        pk, sk = get_server_keypair()
-
-        authentication_credentials = {}
-        for credential_key in provider["expected_credentials"]:
-            credential_value = decrypt_asymmetric(
-                self.credentials.get(credential_key), sk.hex(), pk.hex()
-            )
-            if credential_value is not None:
-                authentication_credentials[credential_key] = credential_value
-
-        return authentication_credentials
+        return get_credentials(self.id)
 
 
 class EnvironmentSyncEventType(DjangoObjectType):

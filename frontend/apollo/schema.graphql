@@ -21,12 +21,14 @@ type Query {
   serverPublicKey: String
   syncEnabled(appId: ID): Boolean
   providers: [ProviderType]
+  services: [ServiceType]
   savedCredentials(orgId: ID): [ProviderCredentialsType]
   syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
   envSyncs(envId: ID): [EnvironmentSyncType]
   cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
   awsSecrets(credentialId: ID): [AWSSecretType]
   githubRepos(credentialId: ID): [GitHubRepoType]
+  testVaultCreds(credentialId: ID): Boolean
 }
 
 type OrganisationType {
@@ -324,7 +326,15 @@ type ProviderType {
   id: String!
   name: String!
   expectedCredentials: [String!]!
+  optionalCredentials: [String!]!
   authScheme: String
+}
+
+type ServiceType {
+  id: String
+  name: String
+  resourceType: String
+  provider: ProviderType
 }
 
 type ProviderCredentialsType {
@@ -374,14 +384,6 @@ enum ApiEnvironmentSyncStatusChoices {
 
   """Failed"""
   FAILED
-}
-
-type ServiceType {
-  id: String
-  name: String
-  resourceType: String
-  subresourceType: String
-  provider: ProviderType
 }
 
 type EnvironmentSyncEventType {
@@ -456,6 +458,7 @@ type Mutation {
   createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
   createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, secretName: String): CreateAWSSecretsManagerSync
   createGhActionsSync(credentialId: ID, envId: ID, owner: String, repoName: String): CreateGitHubActionsSync
+  createVaultSync(credentialId: ID, engine: String, envId: ID, path: String): CreateVaultSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -592,6 +595,10 @@ type CreateAWSSecretsManagerSync {
 }
 
 type CreateGitHubActionsSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateVaultSync {
   sync: EnvironmentSyncType
 }
 

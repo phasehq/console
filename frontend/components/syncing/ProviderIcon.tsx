@@ -1,5 +1,5 @@
 import { FaCube } from 'react-icons/fa'
-import { SiAmazonaws, SiCloudflare, SiGithub } from 'react-icons/si'
+import { SiAmazonaws, SiCloudflare, SiGithub, SiVault } from 'react-icons/si'
 
 export const ProviderIcon = (props: { providerId: string }) => {
   const { providerId } = props
@@ -12,5 +12,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
 
   if (providerId.toLowerCase().includes('github'))
     return <SiGithub className="shrink-0 text-black dark:text-white" />
+
+  if (providerId.toLowerCase().includes('hashicorp_vault'))
+    return <SiVault className="shrink-0 text-[#FFEC6E]" />
   else return <FaCube />
 }

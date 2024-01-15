@@ -3,6 +3,7 @@ query GetProviderList {
     id
     name
     expectedCredentials
+    optionalCredentials
     authScheme
   }
   serverPublicKey

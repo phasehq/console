@@ -6,6 +6,7 @@ from api.utils.syncing.github.actions import (
     get_gh_actions_credentials,
     sync_github_secrets,
 )
+from api.utils.syncing.vault.main import sync_vault_secrets
 from .utils.syncing.cloudflare.pages import (
     get_cf_pages_credentials,
     sync_cloudflare_secrets,
@@ -53,6 +54,15 @@ def trigger_sync_tasks(env_sync):
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
 
+    elif env_sync.service == ServiceConfig.HASHICORP_VAULT["id"]:
+        env_sync.status = EnvironmentSync.IN_PROGRESS
+        env_sync.save()
+
+        job = perform_vault_sync.delay(env_sync)
+        job_id = job.get_id()
+
+        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+
 
 # try and cancel running or queued jobs for this sync
 def cancel_sync_tasks(env_sync):
@@ -76,6 +86,77 @@ def cancel_sync_tasks(env_sync):
             pass
         except Exception:
             pass
+
+
+# TODO - replace individual 'perform'  job handlers with this generic function
+@job("default", timeout=3600)
+def generic_sync_task(
+    environment_sync, sync_function, get_credentials_function, project_info_keys
+):
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+    EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
+
+    try:
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
+        )
+
+        kv_pairs = get_environment_secrets(environment_sync)
+        if environment_sync.authentication is None:
+            sync_data = (
+                False,
+                {"message": "No authentication credentials for this sync"},
+            )
+            raise Exception("No authentication credentials for this sync")
+
+        credentials = get_credentials_function(environment_sync)
+        project_info = environment_sync.options
+
+        success, sync_data = sync_function(
+            kv_pairs,
+            *[
+                credentials.get(key) if key in credentials else project_info.get(key)
+                for key in project_info_keys
+            ],
+        )
+
+        sync_event.status = (
+            EnvironmentSync.COMPLETED if success else EnvironmentSync.FAILED
+        )
+        sync_event.completed_at = timezone.now()
+        sync_event.meta = sync_data
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = (
+            EnvironmentSync.COMPLETED if success else EnvironmentSync.FAILED
+        )
+        environment_sync.save()
+
+    except JobTimeoutException:
+        sync_event.status = EnvironmentSync.TIMED_OUT
+        sync_event.completed_at = timezone.now()
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.TIMED_OUT
+        environment_sync.save()
+        raise
+
+    except Exception:
+        sync_event.status = EnvironmentSync.FAILED
+        sync_event.completed_at = timezone.now()
+        try:
+            sync_event.meta = sync_data
+        except:
+            pass
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.FAILED
+        environment_sync.save()
 
 
 @job("default", timeout=3600)
@@ -303,6 +384,83 @@ def perform_aws_sm_sync(environment_sync):
         raise  # Re-raise the JobTimeoutException
 
     except Exception:
+        sync_event.status = EnvironmentSync.FAILED
+        sync_event.completed_at = timezone.now()
+
+        try:
+            sync_event.meta = sync_data
+        except:
+            pass
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.FAILED
+        environment_sync.save()
+
+
+@job("default", timeout=3600)
+def perform_vault_sync(environment_sync):
+    try:
+        EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+        EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
+        )
+
+        kv_pairs = get_environment_secrets(environment_sync)
+
+        if environment_sync.authentication is None:
+            sync_data = (
+                False,
+                {"message": "No authentication credentials for this sync"},
+            )
+            raise Exception("No authentication credentials for this sync")
+
+        project_info = environment_sync.options
+
+        success, sync_data = sync_vault_secrets(
+            kv_pairs,
+            environment_sync.authentication.id,
+            project_info.get("engine"),
+            project_info.get("path"),
+        )
+
+        if success:
+            sync_event.status = EnvironmentSync.COMPLETED
+            sync_event.completed_at = timezone.now()
+            sync_event.meta = sync_data
+            sync_event.save()
+
+            environment_sync.last_sync = timezone.now()
+            environment_sync.status = EnvironmentSync.COMPLETED
+            environment_sync.save()
+
+        else:
+            sync_event.status = EnvironmentSync.FAILED
+            sync_event.completed_at = timezone.now()
+            sync_event.meta = sync_data
+            sync_event.save()
+
+            environment_sync.last_sync = timezone.now()
+            environment_sync.status = EnvironmentSync.FAILED
+            environment_sync.save()
+
+    except JobTimeoutException:
+        # Handle timeout exception
+        sync_event.status = EnvironmentSync.TIMED_OUT
+        sync_event.completed_at = timezone.now()
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.TIMED_OUT
+        environment_sync.save()
+        raise  # Re-raise the JobTimeoutException
+
+    except Exception as ex:
+        print(f"EXCEPTION {ex}")
         sync_event.status = EnvironmentSync.FAILED
         sync_event.completed_at = timezone.now()
 

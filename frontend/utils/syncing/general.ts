@@ -14,8 +14,10 @@ export const encryptProviderCredentials = async (
     // Create a deep copy of credentials
     const credentialsCopy = structuredClone(credentials)
 
+    const providerCredentials = [...provider.expectedCredentials, ...provider.optionalCredentials]
+
     // Create a list of promises for each credential encryption
-    const encryptionPromises = provider.expectedCredentials.map(async (credential) => {
+    const encryptionPromises = providerCredentials.map(async (credential) => {
       credentialsCopy[credential] = await encryptAsymmetric(credentials[credential], serverKey)
     })
 
