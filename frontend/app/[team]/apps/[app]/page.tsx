@@ -33,6 +33,7 @@ import { Disclosure, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { userIsAdmin } from '@/utils/permissions'
+import Spinner from '@/components/common/Spinner'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -61,6 +62,8 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const [appSecrets, setAppSecrets] = useState<AppSecret[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
+
+  const [loading, setLoading] = useState(true)
 
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -127,6 +130,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
       })
 
       setAppSecrets(appSecrets)
+      setLoading(false)
     }
 
     if (keyring !== null && data?.appEnvironments) fetchAndDecryptAppEnvs(data?.appEnvironments)
@@ -468,6 +472,10 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                   ))}
                 </tbody>
               </table>
+            ) : loading ? (
+              <div className="w-full flex justify-center py-80">
+                <Spinner size="xl" />
+              </div>
             ) : (
               <div className="flex flex-col items-center py-40 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
                 <div className="font-semibold text-black dark:text-white text-2xl">No Secrets</div>
