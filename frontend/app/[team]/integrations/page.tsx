@@ -35,7 +35,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
     if (organisation) {
       getSavedCredentials({ variables: { orgId: organisation.id }, pollInterval: 10000 })
       getOrgSyncs({ variables: { orgId: organisation.id }, pollInterval: 10000 })
-      getApps({ variables: { organisationId: organisation.id, appId: '' } })
+      getApps({ variables: { organisationId: organisation.id } })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisation])
