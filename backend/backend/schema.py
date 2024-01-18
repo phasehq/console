@@ -135,7 +135,9 @@ class Query(graphene.ObjectType):
     validate_invite = graphene.Field(
         OrganisationMemberInviteType, invite_id=graphene.ID()
     )
-    apps = graphene.List(AppType, organisation_id=graphene.ID(), app_id=graphene.ID())
+    apps = graphene.List(
+        AppType, organisation_id=graphene.ID(), app_id=graphene.ID(required=False)
+    )
 
     logs = graphene.Field(
         LogsResponseType,
@@ -299,7 +301,7 @@ class Query(graphene.ObjectType):
         else:
             raise GraphQLError("This invite is for another user")
 
-    def resolve_apps(root, info, organisation_id, app_id):
+    def resolve_apps(root, info, organisation_id, app_id=None):
         org_member = OrganisationMember.objects.get(
             organisation_id=organisation_id,
             user_id=info.context.user.userId,
@@ -312,7 +314,7 @@ class Query(graphene.ObjectType):
             "is_deleted": False,
         }
 
-        if app_id != "":
+        if app_id:
             filter["id"] = app_id
         return App.objects.filter(**filter)
 
