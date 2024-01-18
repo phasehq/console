@@ -57,6 +57,8 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
+  const [createSuccess, setCreateSuccess] = useState(false)
+
   const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 
   const { keyring, setKeyring } = useContext(KeyringContext)
@@ -74,6 +76,9 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   const reset = () => {
     setName('')
     setPw('')
+    setTimeout(() => {
+      setCreateSuccess(false)
+    }, 2000)
   }
 
   const closeModal = () => {
@@ -362,6 +367,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
           })
 
           setAppCreating(false)
+          setCreateSuccess(true)
           resolve(true)
           closeModal()
         } catch (error) {
@@ -448,113 +454,118 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       {allowNewApp() && 'Create an App'}
-                      {!allowNewApp() && planDisplay()?.dialogTitle}
+                      {!allowNewApp() && !createSuccess && planDisplay()?.dialogTitle}
                     </h3>
                     <Button variant="text" onClick={closeModal}>
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                     </Button>
                   </Dialog.Title>
-                  {allowNewApp() && (
-                    <form onSubmit={handleSubmit}>
-                      <div className="mt-2 space-y-6 group">
-                        <p className="text-sm text-gray-500">
-                          Create a new App by entering an App name below. Your App will be
-                          initialized with 3 new environments.
-                        </p>
-                        <div className="flex flex-col justify-center">
-                          <label
-                            className="block text-gray-700 text-sm font-bold mb-2"
-                            htmlFor="appname"
-                          >
-                            App name
-                          </label>
-                          <input
-                            id="appname"
-                            className="text-lg"
-                            required
-                            maxLength={64}
-                            value={name}
-                            placeholder="MyApp"
-                            onChange={(e) => setName(e.target.value)}
-                          />
-                        </div>
-
-                        {!keyring && (
+                  {allowNewApp() &&
+                    (createSuccess ? (
+                      <div>
+                        <div className="font-semibold text-lg">App Created!</div>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSubmit}>
+                        <div className="mt-2 space-y-6 group">
+                          <p className="text-sm text-gray-500">
+                            Create a new App by entering an App name below. Your App will be
+                            initialized with 3 new environments.
+                          </p>
                           <div className="flex flex-col justify-center">
                             <label
                               className="block text-gray-700 text-sm font-bold mb-2"
-                              htmlFor="password"
+                              htmlFor="appname"
                             >
-                              Sudo password
+                              App name
                             </label>
-                            <div className="relative">
-                              <input
-                                id="password"
-                                value={pw}
-                                onChange={(e) => setPw(e.target.value)}
-                                type={showPw ? 'text' : 'password'}
-                                minLength={16}
-                                required
-                                className="w-full ph-no-capture"
-                              />
-                              <button
-                                className="absolute inset-y-0 right-4"
-                                type="button"
-                                onClick={() => setShowPw(!showPw)}
-                                tabIndex={-1}
-                              >
-                                {showPw ? <FaEyeSlash /> : <FaEye />}
-                              </button>
-                            </div>
+                            <input
+                              id="appname"
+                              className="text-lg"
+                              required
+                              maxLength={64}
+                              value={name}
+                              placeholder="MyApp"
+                              onChange={(e) => setName(e.target.value)}
+                            />
                           </div>
-                        )}
 
-                        <div className="flex items-center gap-2">
-                          <label
-                            className="block text-neutral-500 text-sm font-bold mb-2"
-                            htmlFor="create-starters"
-                          >
-                            Create example secrets
-                          </label>
-                          <Switch
-                            id="create-starters"
-                            checked={createStarters}
-                            onChange={() => setCreateStarters(!createStarters)}
-                            className={`${
-                              createStarters
-                                ? 'bg-emerald-400/10 ring-emerald-400/20'
-                                : 'bg-neutral-500/40 ring-neutral-500/30'
-                            } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
-                          >
-                            <span className="sr-only">Initialize with example secrets</span>
-                            <span
+                          {!keyring && (
+                            <div className="flex flex-col justify-center">
+                              <label
+                                className="block text-gray-700 text-sm font-bold mb-2"
+                                htmlFor="password"
+                              >
+                                Sudo password
+                              </label>
+                              <div className="relative">
+                                <input
+                                  id="password"
+                                  value={pw}
+                                  onChange={(e) => setPw(e.target.value)}
+                                  type={showPw ? 'text' : 'password'}
+                                  minLength={16}
+                                  required
+                                  className="w-full ph-no-capture"
+                                />
+                                <button
+                                  className="absolute inset-y-0 right-4"
+                                  type="button"
+                                  onClick={() => setShowPw(!showPw)}
+                                  tabIndex={-1}
+                                >
+                                  {showPw ? <FaEyeSlash /> : <FaEye />}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <label
+                              className="block text-neutral-500 text-sm font-bold mb-2"
+                              htmlFor="create-starters"
+                            >
+                              Create example secrets
+                            </label>
+                            <Switch
+                              id="create-starters"
+                              checked={createStarters}
+                              onChange={() => setCreateStarters(!createStarters)}
                               className={`${
                                 createStarters
-                                  ? 'translate-x-6 bg-emerald-400'
-                                  : 'translate-x-1 bg-black'
-                              } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
-                            ></span>
-                          </Switch>
+                                  ? 'bg-emerald-400/10 ring-emerald-400/20'
+                                  : 'bg-neutral-500/40 ring-neutral-500/30'
+                              } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+                            >
+                              <span className="sr-only">Initialize with example secrets</span>
+                              <span
+                                className={`${
+                                  createStarters
+                                    ? 'translate-x-6 bg-emerald-400'
+                                    : 'translate-x-1 bg-black'
+                                } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+                              ></span>
+                            </Switch>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="mt-8 flex items-center w-full justify-between">
-                        <Button
-                          variant="secondary"
-                          type="button"
-                          onClick={closeModal}
-                          disabled={appCreating}
-                        >
-                          Cancel
-                        </Button>
-                        <Button type="submit" variant="primary" isLoading={appCreating}>
-                          Create
-                        </Button>
-                      </div>
-                    </form>
-                  )}
+                        <div className="mt-8 flex items-center w-full justify-between">
+                          <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={closeModal}
+                            disabled={appCreating}
+                          >
+                            Cancel
+                          </Button>
+                          <Button type="submit" variant="primary" isLoading={appCreating}>
+                            Create
+                          </Button>
+                        </div>
+                      </form>
+                    ))}
 
-                  {!allowNewApp() && (
+                  {!allowNewApp() && !createSuccess && (
                     <div className="space-y-4 py-4">
                       <p className="text-zinc-400">{planDisplay()?.description}</p>
                       {IS_CLOUD_HOSTED ? (
