@@ -1,9 +1,8 @@
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
-import { copyToClipBoard } from '@/utils/clipboard'
 import { Dialog, Switch, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
-import { Fragment, ReactNode, useContext, useEffect, useState } from 'react'
-import { FaCopy, FaExclamationTriangle, FaEye, FaEyeSlash, FaPlus, FaTimes } from 'react-icons/fa'
+import { Fragment, useContext, useEffect, useState } from 'react'
+import { FaEye, FaEyeSlash, FaPlus, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -43,9 +42,9 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   const [name, setName] = useState<string>('')
   const [pw, setPw] = useState<string>('')
   const [showPw, setShowPw] = useState<boolean>(false)
-  const [appId, setAppId] = useState<string>('')
+
   const [createStarters, setCreateStarters] = useState<boolean>(appCount === 0)
-  const [appSecret, setAppSecret] = useState<string>('')
+
   const [appCreating, setAppCreating] = useState<boolean>(false)
 
   const { data: session } = useSession()
@@ -53,8 +52,9 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   const [createApp] = useMutation(CreateApplication)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
   const [createSecret] = useMutation(CreateNewSecret)
-  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
 
+  const [getApps] = useLazyQuery(GetApps)
+  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
   const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
@@ -71,20 +71,17 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
     }
   }, [getOrgAdmins, organisation])
 
-  const complete = () => appId && appSecret
-
   const reset = () => {
     setName('')
     setPw('')
-    setAppId('')
-    setAppSecret('')
   }
 
   const closeModal = () => {
     if (!appCreating) {
       reset()
-      setIsOpen(false)
     }
+
+    setIsOpen(false)
   }
 
   const openModal = () => {
@@ -349,15 +346,6 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
               identityKey: appKeys.publicKey,
               appVersion: APP_VERSION,
             } as MutationCreateAppArgs,
-            refetchQueries: [
-              {
-                query: GetApps,
-                variables: {
-                  organisationId: organisation.id,
-                  appId: '',
-                },
-              },
-            ],
           })
 
           const newAppId = data.createApp.app.id
@@ -368,8 +356,11 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
             await createExampleSecrets(newAppId)
           }
 
-          setAppSecret(`pss:v${APP_VERSION}:${appToken}:${appKeyShares[0]}:${wrapKey}`)
-          setAppId(`phApp:v${APP_VERSION}:${appKeys.publicKey}`)
+          await getApps({
+            variables: { organisationId: organisation.id },
+            fetchPolicy: 'network-only',
+          })
+
           setAppCreating(false)
           resolve(true)
           closeModal()
@@ -456,14 +447,14 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      {(allowNewApp() || complete()) && 'Create an App'}
-                      {!allowNewApp() && !complete() && planDisplay()?.dialogTitle}
+                      {allowNewApp() && 'Create an App'}
+                      {!allowNewApp() && planDisplay()?.dialogTitle}
                     </h3>
                     <Button variant="text" onClick={closeModal}>
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                     </Button>
                   </Dialog.Title>
-                  {!complete() && allowNewApp() && (
+                  {allowNewApp() && (
                     <form onSubmit={handleSubmit}>
                       <div className="mt-2 space-y-6 group">
                         <p className="text-sm text-gray-500">
@@ -563,7 +554,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                     </form>
                   )}
 
-                  {!complete() && !allowNewApp() && (
+                  {!allowNewApp() && (
                     <div className="space-y-4 py-4">
                       <p className="text-zinc-400">{planDisplay()?.description}</p>
                       {IS_CLOUD_HOSTED ? (
