@@ -76,7 +76,7 @@ const documents = {
     "query GetCfPages($credentialId: ID!) {\n  cloudflarePagesProjects(credentialId: $credentialId) {\n    name\n    deploymentId\n    environments\n  }\n}": types.GetCfPagesDocument,
     "query GetAppSyncStatus($appId: ID!) {\n  syncEnabled(appId: $appId)\n  syncs(appId: $appId) {\n    id\n    environment {\n      id\n      name\n      envType\n      app {\n        id\n        name\n      }\n    }\n    serviceInfo {\n      id\n      name\n      provider {\n        id\n      }\n    }\n    options\n    isActive\n    lastSync\n    status\n    authentication {\n      id\n      name\n      credentials\n    }\n    createdAt\n    history {\n      id\n      status\n      createdAt\n      completedAt\n      meta\n    }\n  }\n  serverPublicKey\n}": types.GetAppSyncStatusDocument,
     "query GetProviderList {\n  providers {\n    id\n    name\n    expectedCredentials\n    optionalCredentials\n    authScheme\n  }\n  serverPublicKey\n}": types.GetProviderListDocument,
-    "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n    }\n    syncCount\n  }\n}": types.GetSavedCredentialsDocument,
+    "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n      optionalCredentials\n    }\n    syncCount\n  }\n}": types.GetSavedCredentialsDocument,
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
     "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": types.GetServiceListDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
@@ -353,7 +353,7 @@ export function graphql(source: "query GetProviderList {\n  providers {\n    id\
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n    }\n    syncCount\n  }\n}"): (typeof documents)["query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n    }\n    syncCount\n  }\n}"];
+export function graphql(source: "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n      optionalCredentials\n    }\n    syncCount\n  }\n}"): (typeof documents)["query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n      optionalCredentials\n    }\n    syncCount\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

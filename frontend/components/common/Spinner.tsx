@@ -11,7 +11,7 @@ const SIZES = {
 
 const COLORS = {
   emerald: 'border-emerald-500',
-  red: 'border-red-500',
+  red: 'border-red-400',
   amber: 'border-amber-500',
 }
 

@@ -26,7 +26,6 @@ export const NavBar = (props: { team: string }) => {
         getApps({
           variables: {
             organisationId: organisation.id,
-            appId: '',
           },
         })
       }
