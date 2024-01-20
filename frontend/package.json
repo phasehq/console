@@ -33,7 +33,7 @@
     "jsonwebtoken": "^9.0.0",
     "jspdf": "^2.5.1",
     "libsodium-wrappers-sumo": "^0.7.11",
-    "next": "13.1.6",
+    "next": "13.5.1",
     "next-auth": "^4.20.1",
     "npm": "^9.9.0",
     "posthog-js": "^1.98.0",
