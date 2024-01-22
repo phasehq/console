@@ -4,7 +4,7 @@ FROM node:alpine AS base
 WORKDIR /app
 
 # install system dependencies
-RUN apk add curl
+RUN apk add curl bash
 
 # Add a new user "app" and change ownership of the /app directory
 RUN addgroup app && adduser -S -G app app && chown -R app:app /app
