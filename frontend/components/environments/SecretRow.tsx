@@ -155,7 +155,7 @@ const TagsDialog = (props: {
         </div>
       ) : (
         <div className="flex items-center justify-center">
-          <Button variant="outline" onClick={openModal} title="Update tags">
+          <Button variant="outline" onClick={openModal} title="Update tags" tabIndex={-1}>
             <FaTags /> Tags
           </Button>
         </div>
@@ -272,7 +272,7 @@ const HistoryDialog = (props: { secret: SecretType; handlePropertyChange: Functi
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="View secret history">
+        <Button variant="outline" onClick={openModal} title="View secret history" tabIndex={-1}>
           <FaHistory /> <span className="hidden 2xl:block text-xs">History</span>
         </Button>
       </div>
@@ -404,7 +404,7 @@ const CommentDialog = (props: {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="Update comment">
+        <Button variant="outline" onClick={openModal} title="Update comment" tabIndex={-1}>
           <FaRegCommentDots className={clsx(comment && 'text-emerald-500')} />{' '}
           <span className="hidden 2xl:block text-xs">Comment</span>
         </Button>
@@ -577,6 +577,7 @@ const OverrideDialog = (props: {
       <div className="flex items-center justify-center">
         <Button
           variant="outline"
+          tabIndex={-1}
           onClick={openModal}
           title={
             activeOverride ? 'A Personal Secret is overriding this value' : 'Override this value'
@@ -722,7 +723,7 @@ const DeleteConfirmDialog = (props: {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="danger" onClick={openModal} title="Delete secret">
+        <Button variant="danger" onClick={openModal} title="Delete secret" tabIndex={-1}>
           <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
             <FaTrashAlt />
           </div>
@@ -881,6 +882,7 @@ export default function SecretRow(props: {
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
             <Button
               variant="outline"
+              tabIndex={-1}
               onClick={toggleReveal}
               title={isRevealed ? 'Mask value' : 'Reveal value'}
             >
