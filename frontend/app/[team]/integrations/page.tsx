@@ -11,14 +11,15 @@ import { SyncCard } from '@/components/syncing/SyncCard'
 import { ProviderCredentialCard } from '@/components/syncing/ProviderCredentialCard'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { Button } from '@/components/common/Button'
-import { SyncOptions } from '@/components/syncing/SyncOptions'
 import { Menu, Transition } from '@headlessui/react'
-import { FaArrowRight, FaPlus } from 'react-icons/fa'
+import { FaArrowRight, FaCubes, FaPlus } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { userIsAdmin } from '@/utils/permissions'
 import { useSearchParams } from 'next/navigation'
 import { FrameworkIntegrations } from '@/components/syncing/FrameworkIntegrations'
+import { CreateProviderCredentials } from '@/components/syncing/CreateProviderCredentials'
+import { AppCard } from '@/components/apps/AppCard'
 
 export default function Integrations({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -45,6 +46,10 @@ export default function Integrations({ params }: { params: { team: string } }) {
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const noCredentials = credentialsData?.savedCredentials.length === 0
+
+  const noSyncs = syncsData?.syncs.length === 0
+
+  const noApps = appsData?.apps.length === 0
 
   const NewSyncMenu = () => {
     return (
@@ -106,28 +111,49 @@ export default function Integrations({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage syncs</p>
         </div>
 
-        {syncsData?.syncs.length > 0 && activeUserIsAdmin && (
+        {!noSyncs && activeUserIsAdmin && (
           <div className="flex justify-end">
             <NewSyncMenu />
           </div>
         )}
 
-        {syncsData?.syncs.length > 0 ? (
+        {noApps && (
+          <div className="flex flex-col items-center text-center gap-4 p-16">
+            <div>
+              <div className="font-semibold text-black dark:text-white text-xl">No Apps</div>
+              <div className="text-neutral-500">
+                You don&apos;t have access to any Apps. Create a new app, or contact your
+                organistion admin for access to start syncing.
+              </div>
+            </div>
+            <Link href={`/${params.team}/apps`}>
+              <Button variant="primary">
+                <FaCubes /> Go to Apps
+              </Button>
+            </Link>
+          </div>
+        )}
+
+        {noSyncs && !noApps ? (
+          <div className="flex flex-col text-center py-4 gap-6">
+            <div>
+              <div className="font-semibold text-black dark:text-white text-xl">No syncs</div>
+              <div className="text-neutral-500">
+                You don&apos;t have any syncs at the moment. Choose an App below to create a sync.
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
+              {apps?.map((app: AppType) => (
+                <Link href={`/${params.team}/apps/${app.id}/syncing`} key={app.id}>
+                  <AppCard app={app} />
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : (
           syncsData?.syncs.map((sync: EnvironmentSyncType) => (
             <SyncCard key={sync.id} sync={sync} showAppName={true} showManageButton={true} />
           ))
-        ) : (
-          <div className="flex flex-col items-center text-center p-16">
-            <div className="font-semibold text-black dark:text-white text-xl">No syncs</div>
-            <div className="text-neutral-500">
-              Create a sync from the &quot;Syncing&quot; tab of an App
-            </div>
-            {activeUserIsAdmin && (
-              <div className="flex justify-center p-4">
-                <NewSyncMenu />
-              </div>
-            )}
-          </div>
         )}
       </div>
 
@@ -135,30 +161,38 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
       <div className="space-y-4">
         <div className="border-b border-neutral-500/20 pb-4">
-          <h2 className="text-black dark:text-white text-xl font-medium"> Service credentials</h2>
+          <h2 className="text-black dark:text-white text-xl font-medium">Service credentials</h2>
           <p className="text-neutral-500">Manage stored credentials for third party services</p>
         </div>
 
         <div
           className={clsx(
-            noCredentials ? 'flex flex-col items-center text-center p-16' : 'flex justify-end'
+            noCredentials ? 'flex flex-col text-center gap-6 py-4' : 'flex justify-end'
           )}
         >
           {noCredentials && (
-            <div className="font-semibold text-black dark:text-white text-xl">
-              No service credentials
+            <div>
+              <div className="font-semibold text-black dark:text-white text-xl">
+                No service credentials
+              </div>
+              <div className="text-neutral-500">
+                Set up a new authentication method to start syncing with third party services.
+              </div>
             </div>
           )}
-          {noCredentials && (
-            <div className="text-neutral-500">
-              Set up a new authentication method to start syncing with third party services.
-            </div>
-          )}
-          {activeUserIsAdmin && (
-            <div className={clsx(noCredentials && 'flex justify-center p-4')}>
-              <CreateProviderCredentialsDialog defaultOpen={openCreateCredentialDialog !== null} />
-            </div>
-          )}
+
+          {activeUserIsAdmin &&
+            (noCredentials ? (
+              <div className="">
+                <CreateProviderCredentials />
+              </div>
+            ) : (
+              <div className={clsx(noCredentials && 'flex justify-center p-4')}>
+                <CreateProviderCredentialsDialog
+                  defaultOpen={openCreateCredentialDialog !== null}
+                />
+              </div>
+            ))}
         </div>
 
         {credentialsData?.savedCredentials.length > 0 &&
