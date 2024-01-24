@@ -30,7 +30,7 @@ export const CreateSyncDialog = (props: {
         return <CreateAWSSecretsSync appId={props.appId} closeModal={closeModal} />
       case 'cloudflare_pages':
         return <CreateCloudflarePagesSync appId={props.appId} closeModal={closeModal} />
-      case 'gh_actions':
+      case 'github_actions':
         return <CreateGhActionsSync appId={props.appId} closeModal={closeModal} />
       case 'hashicorp_vault':
         return <CreateVaultSync appId={props.appId} closeModal={closeModal} />
