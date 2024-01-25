@@ -21,7 +21,7 @@ interface CredentialState {
   [key: string]: string
 }
 
-const ProviderCard = (props: { provider: ProviderType }) => {
+export const ProviderCard = (props: { provider: ProviderType }) => {
   const { provider } = props
 
   return (
@@ -37,10 +37,8 @@ const ProviderCard = (props: { provider: ProviderType }) => {
               Set up authentication credentials to sync with {provider.name}.
             </div>
           </div>
-          <div className="text-emerald-500">
-            <Button variant="link">
-              Create <FaArrowRight />
-            </Button>
+          <div className="text-emerald-500 flex items-center gap-1 font-medium text-sm">
+            Create <FaArrowRight />
           </div>
         </div>
       </div>
@@ -48,10 +46,13 @@ const ProviderCard = (props: { provider: ProviderType }) => {
   )
 }
 
-export const CreateProviderCredentials = () => {
+export const CreateProviderCredentials = (props: {
+  provider: ProviderType | null
+  onComplete: () => void
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [provider, setProvider] = useState<ProviderType | null>(null)
+  const [provider, setProvider] = useState<ProviderType | null>(props.provider || null)
   const [name, setName] = useState<string>('')
   const [credentials, setCredentials] = useState<CredentialState>({})
 
@@ -133,6 +134,7 @@ export const CreateProviderCredentials = () => {
     })
 
     toast.success(`Saved ${name}`)
+    props.onComplete()
   }
 
   return (
@@ -154,7 +156,7 @@ export const CreateProviderCredentials = () => {
         )}
 
         {provider === null && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {providers.map((provider) => (
               <button key={provider.id} type="button" onClick={() => setProvider(provider)}>
                 <ProviderCard provider={provider} />

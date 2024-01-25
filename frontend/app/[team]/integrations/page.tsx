@@ -1,11 +1,17 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { Fragment, useContext, useEffect } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
-import { useLazyQuery } from '@apollo/client'
-import { AppType, EnvironmentSyncType, ProviderCredentialsType } from '@/apollo/graphql'
+import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
+import { useLazyQuery, useQuery } from '@apollo/client'
+import {
+  AppType,
+  EnvironmentSyncType,
+  ProviderCredentialsType,
+  ProviderType,
+} from '@/apollo/graphql'
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
 import { SyncCard } from '@/components/syncing/SyncCard'
 import { ProviderCredentialCard } from '@/components/syncing/ProviderCredentialCard'
@@ -18,7 +24,7 @@ import Link from 'next/link'
 import { userIsAdmin } from '@/utils/permissions'
 import { useSearchParams } from 'next/navigation'
 import { FrameworkIntegrations } from '@/components/syncing/FrameworkIntegrations'
-import { CreateProviderCredentials } from '@/components/syncing/CreateProviderCredentials'
+import { ProviderCard } from '@/components/syncing/CreateProviderCredentials'
 import { AppCard } from '@/components/apps/AppCard'
 
 export default function Integrations({ params }: { params: { team: string } }) {
@@ -27,6 +33,12 @@ export default function Integrations({ params }: { params: { team: string } }) {
   const searchParams = useSearchParams()
 
   const openCreateCredentialDialog = searchParams.get('newCredential')
+
+  const { data: providersData } = useQuery(GetProviderList)
+
+  const providers: ProviderType[] = providersData?.providers ?? []
+
+  const [provider, setProvider] = useState<ProviderType | null>(null)
 
   const [getApps, { data: appsData }] = useLazyQuery(GetApps)
   const [getSavedCredentials, { data: credentialsData }] = useLazyQuery(GetSavedCredentials)
@@ -176,23 +188,38 @@ export default function Integrations({ params }: { params: { team: string } }) {
                 No service credentials
               </div>
               <div className="text-neutral-500">
-                Set up a new authentication method to start syncing with third party services.
+                {activeUserIsAdmin
+                  ? 'Set up a new authentication method to start syncing with third party services.'
+                  : 'Contact your organisation admin or owner to create credentials.'}
               </div>
             </div>
           )}
 
-          {activeUserIsAdmin &&
-            (noCredentials ? (
-              <div className="">
-                <CreateProviderCredentials />
-              </div>
-            ) : (
-              <div className={clsx(noCredentials && 'flex justify-center p-4')}>
+          {activeUserIsAdmin && (
+            <>
+              <div className="flex justify-end">
                 <CreateProviderCredentialsDialog
+                  showButton={!noCredentials}
+                  provider={provider}
                   defaultOpen={openCreateCredentialDialog !== null}
+                  closeDialogCallback={() => setProvider(null)}
                 />
               </div>
-            ))}
+              {noCredentials ? (
+                <div className="">
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
+                    {providers.map((provider) => (
+                      <button key={provider.id} type="button" onClick={() => setProvider(provider)}>
+                        <ProviderCard provider={provider} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className={clsx(noCredentials && 'flex justify-center p-4')}></div>
+              )}
+            </>
+          )}
         </div>
 
         {credentialsData?.savedCredentials.length > 0 &&

@@ -3,14 +3,19 @@ import { useState, Fragment, useEffect } from 'react'
 import { FaPlus, FaTimes } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { CreateProviderCredentials } from './CreateProviderCredentials'
+import { ProviderType } from '@/apollo/graphql'
 
 export const CreateProviderCredentialsDialog = (props: {
   buttonVariant?: 'primary' | 'secondary'
   defaultOpen?: boolean
+  provider: ProviderType | null
+  closeDialogCallback: () => void
+  showButton: boolean
 }) => {
   const [isOpen, setIsOpen] = useState<boolean>(props.defaultOpen || false)
 
   const closeModal = () => {
+    props.closeDialogCallback()
     setIsOpen(false)
   }
 
@@ -22,18 +27,24 @@ export const CreateProviderCredentialsDialog = (props: {
     if (props.defaultOpen) openModal()
   }, [props.defaultOpen])
 
+  useEffect(() => {
+    if (props.provider) openModal()
+  }, [props.provider])
+
   return (
     <>
-      <div className="flex items-center justify-center">
-        <Button
-          type="button"
-          variant={props.buttonVariant || 'primary'}
-          onClick={openModal}
-          title="Store a new credential"
-        >
-          <FaPlus /> Add credentials
-        </Button>
-      </div>
+      {props.showButton && (
+        <div className="flex items-center justify-center">
+          <Button
+            type="button"
+            variant={props.buttonVariant || 'primary'}
+            onClick={openModal}
+            title="Store a new credential"
+          >
+            <FaPlus /> Add credentials
+          </Button>
+        </div>
+      )}
 
       <Transition appear show={isOpen} as={Fragment}>
         <Dialog as="div" className="relative z-10" onClose={closeModal}>
@@ -76,7 +87,7 @@ export const CreateProviderCredentialsDialog = (props: {
                     <p className="text-neutral-500">
                       Add a new set of credentials for third party integrations.
                     </p>
-                    <CreateProviderCredentials />
+                    <CreateProviderCredentials provider={props.provider} onComplete={closeModal} />
                   </div>
                 </Dialog.Panel>
               </Transition.Child>
