@@ -15,7 +15,9 @@ export const DeleteProviderCredentialDialog = (props: {
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
-  const [deleteCredential, { loading: deleteLoading }] = useMutation(DeleteProviderCreds)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  const [deleteCredential] = useMutation(DeleteProviderCreds)
 
   const closeModal = () => {
     setIsOpen(false)
@@ -26,6 +28,7 @@ export const DeleteProviderCredentialDialog = (props: {
   }
 
   const handleDelete = async () => {
+    setDeleteLoading(true)
     await deleteCredential({
       variables: { credentialId: credential.id },
       refetchQueries: [
@@ -97,7 +100,7 @@ export const DeleteProviderCredentialDialog = (props: {
                       <Button variant="secondary" type="button" onClick={closeModal}>
                         Cancel
                       </Button>
-                      <Button variant="danger" onClick={handleDelete}>
+                      <Button variant="danger" onClick={handleDelete} isLoading={deleteLoading}>
                         Delete
                       </Button>
                     </div>

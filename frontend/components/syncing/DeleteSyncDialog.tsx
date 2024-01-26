@@ -12,7 +12,9 @@ export const DeleteSyncDialog = (props: { sync: EnvironmentSyncType }) => {
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
-  const [deleteSync, { loading: deleteLoading }] = useMutation(DeleteSync)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  const [deleteSync] = useMutation(DeleteSync)
 
   const closeModal = () => {
     setIsOpen(false)
@@ -23,6 +25,7 @@ export const DeleteSyncDialog = (props: { sync: EnvironmentSyncType }) => {
   }
 
   const handleDelete = async () => {
+    setDeleteLoading(true)
     await deleteSync({
       variables: { syncId: sync.id },
       refetchQueries: [
@@ -86,7 +89,7 @@ export const DeleteSyncDialog = (props: { sync: EnvironmentSyncType }) => {
                       <Button variant="secondary" type="button" onClick={closeModal}>
                         Cancel
                       </Button>
-                      <Button variant="danger" onClick={handleDelete}>
+                      <Button variant="danger" onClick={handleDelete} isLoading={deleteLoading}>
                         Delete
                       </Button>
                     </div>
