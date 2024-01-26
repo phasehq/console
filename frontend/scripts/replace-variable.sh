@@ -5,11 +5,16 @@
 MANDATORY_VARS=("NEXT_PUBLIC_BACKEND_API_BASE" "NEXT_PUBLIC_NEXTAUTH_PROVIDERS")
 
 # Define a list of optional environment variables (no check needed)
-OPTIONAL_VARS=("APP_HOST" "NEXT_PUBLIC_POSTHOG_KEY" "NEXT_PUBLIC_POSTHOG_HOST" "NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID")
+OPTIONAL_VARS=("APP_HOST" "NEXT_PUBLIC_POSTHOG_KEY" "NEXT_PUBLIC_POSTHOG_HOST")
 
 # Infer NEXT_PUBLIC_APP_HOST from APP_HOST if not already set
 if [ -z "$NEXT_PUBLIC_APP_HOST" ] && [ ! -z "$APP_HOST" ]; then
     export NEXT_PUBLIC_APP_HOST="$APP_HOST"
+fi
+
+# Infer NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID from GITHUB_INTEGRATION_CLIENT_ID if not already set
+if [ -z "$NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID" ] && [ ! -z "$GITHUB_INTEGRATION_CLIENT_ID" ]; then
+    export NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID="$GITHUB_INTEGRATION_CLIENT_ID"
 fi
 
 # Check if each mandatory variable is set
@@ -23,8 +28,8 @@ done
 # Combine mandatory and optional variables for replacement
 ALL_VARS=("${MANDATORY_VARS[@]}" "${OPTIONAL_VARS[@]}")
 
-# Add NEXT_PUBLIC_APP_HOST to the list for replacement
-ALL_VARS+=("NEXT_PUBLIC_APP_HOST")
+# Add NEXT_PUBLIC_APP_HOST and NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID to the list for replacement
+ALL_VARS+=("NEXT_PUBLIC_APP_HOST" "NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID")
 
 # Find and replace BAKED values with real values
 find /app/public /app/.next -type f -name "*.js" |
