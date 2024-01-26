@@ -29,7 +29,7 @@ done
 ALL_VARS=("${MANDATORY_VARS[@]}" "${OPTIONAL_VARS[@]}")
 
 # Add NEXT_PUBLIC_APP_HOST and NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID to the list for replacement
-ALL_VARS+=("NEXT_PUBLIC_APP_HOST NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID")
+ALL_VARS+=("NEXT_PUBLIC_APP_HOST" "NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID")
 
 # Find and replace BAKED values with real values
 find /app/public /app/.next -type f -name "*.js" |
