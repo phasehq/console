@@ -46,7 +46,7 @@ export default function SignInButtons() {
 
   const searchParams = useSearchParams()
 
-  const callbackUrl = searchParams.get('callbackUrl')
+  const callbackUrl = searchParams?.get('callbackUrl')
 
   const titleText = () => (loading ? 'Logging you in' : 'Phase Console')
 
