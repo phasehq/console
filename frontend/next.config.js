@@ -70,7 +70,6 @@ const nextConfig = {
         ]
   },
   experimental: {
-    appDir: true,
     esmExternals: 'loose',
   },
   webpack: (config, options) => {
