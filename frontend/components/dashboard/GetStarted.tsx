@@ -122,6 +122,15 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     }
   }, [])
 
+  const clearLocalStorageKey = () => {
+    localStorage.removeItem('hideGettingStartedGuide')
+  }
+
+  const handleShowGuide = () => {
+    setShowGuide(true)
+    clearLocalStorageKey()
+  }
+
   const appCreated = data?.apps.length > 0
 
   const cliSetup = data?.userTokens.length > 0
@@ -218,7 +227,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
   if (!showGuide)
     return (
       <div className="flex justify-end">
-        <Button onClick={() => setShowGuide(true)} variant="secondary">
+        <Button onClick={handleShowGuide} variant="secondary">
           <FaQuestionCircle /> Help
         </Button>
       </div>
