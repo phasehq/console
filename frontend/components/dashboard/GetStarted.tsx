@@ -271,7 +271,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   )}
                 >
                   {memberAdded ? <FaCheckCircle /> : <FaRegCircle />}
-                  User joined Organisation
+                  Member joined Organisation
                 </div>
               </div>
 
@@ -305,17 +305,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   Integrations handle the syncing of secrets from a specific environment of an App
                   to a resource in a third party service.
                 </li>
-                <li>
-                  To get started with integrations, you need to:
-                  <ol className="list-decimal list-inside ml-4">
-                    <li>Set up an authentication method for the third party service.</li>
-                    <li>Enable syncing for your App</li>
-                    <li>
-                      Create a sync by choosing an environment as the source for Secrets, and a
-                      resource as the destination to sync secrets to.
-                    </li>
-                  </ol>
-                </li>
+                <li>To get started with Integrations, you need to:</li>
               </ul>
 
               <div className="space-y-2">
