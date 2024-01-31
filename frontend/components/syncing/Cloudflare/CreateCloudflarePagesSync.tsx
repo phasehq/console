@@ -51,6 +51,14 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
     }
   }, [credentialsData])
 
+  // Preselect the first available env
+  useEffect(() => {
+    if (appEnvsData?.appEnvironments.length > 0) {
+      const defaultEnv: EnvironmentType = appEnvsData.appEnvironments[0]
+      setPhaseEnv(defaultEnv)
+    }
+  }, [appEnvsData])
+
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
