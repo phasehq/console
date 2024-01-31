@@ -1,7 +1,15 @@
-import { Disclosure, Transition } from '@headlessui/react'
+import { Disclosure, Menu, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { ReactNode } from 'react'
-import { FaCheckCircle, FaChevronRight, FaRegCircle, FaRegDotCircle } from 'react-icons/fa'
+import { Fragment, ReactNode, useEffect, useState } from 'react'
+import {
+  FaCheckCircle,
+  FaChevronRight,
+  FaMinusCircle,
+  FaQuestionCircle,
+  FaRegCircle,
+  FaRegDotCircle,
+  FaTimesCircle,
+} from 'react-icons/fa'
 
 import { GetDashboard } from '@/graphql/queries/getDashboard.gql'
 import { useQuery } from '@apollo/client'
@@ -105,6 +113,15 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     variables: { organisationId: organisation.id },
   })
 
+  const [showGuide, setShowGuide] = useState(true)
+
+  useEffect(() => {
+    const hideGuide = localStorage.getItem('hideGettingStartedGuide')
+    if (hideGuide === 'true') {
+      setShowGuide(false)
+    }
+  }, [])
+
   const appCreated = data?.apps.length > 0
 
   const cliSetup = data?.userTokens.length > 0
@@ -133,14 +150,93 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     syncEnabled ||
     syncCreated
 
+  const DismissMenu = () => {
+    const handleDismissOnce = () => {
+      setShowGuide(false)
+    }
+
+    const handleDismissPermanently = () => {
+      localStorage.setItem('hideGettingStartedGuide', 'true')
+      handleDismissOnce()
+    }
+
+    return (
+      <div className="">
+        <Menu as="div" className="relative inline-block text-left">
+          <Menu.Button as="div">
+            <Button variant="secondary">
+              <FaMinusCircle /> Dismiss
+            </Button>
+          </Menu.Button>
+          <Transition
+            as={Fragment}
+            enter="transition ease-out duration-100"
+            enterFrom="transform opacity-0 scale-95"
+            enterTo="transform opacity-100 scale-100"
+            leave="transition ease-in duration-75"
+            leaveFrom="transform opacity-100 scale-100"
+            leaveTo="transform opacity-0 scale-95"
+          >
+            <Menu.Items className="absolute z-10 -right-2 top-10 w-56 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+              <div className="px-1 py-1">
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={handleDismissOnce}
+                      className={`${
+                        active
+                          ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
+                          : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
+                      } group flex w-full gap-2 items-center rounded-md px-2 py-2 text-sm`}
+                    >
+                      <FaMinusCircle /> Dismiss once
+                    </button>
+                  )}
+                </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={handleDismissPermanently}
+                      className={`${
+                        active
+                          ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
+                          : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
+                      } group flex w-full gap-2 items-center rounded-md px-2 py-2 text-sm`}
+                    >
+                      <FaTimesCircle /> Don&apos;t show this again
+                    </button>
+                  )}
+                </Menu.Item>
+              </div>
+            </Menu.Items>
+          </Transition>
+        </Menu>
+      </div>
+    )
+  }
+
+  if (!showGuide)
+    return (
+      <div className="flex justify-end">
+        <Button onClick={() => setShowGuide(true)} variant="secondary">
+          <FaQuestionCircle /> Help
+        </Button>
+      </div>
+    )
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-black dark:text-white font-semibold text-2xl">Getting started</h1>
-        <p className="text-neutral-500">
-          Learn how to start using the Phase Console by creating an App, setting up your local dev
-          environment, adding your team members and setting up a third party integration.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-black dark:text-white font-semibold text-2xl">Getting started</h1>
+          <p className="text-neutral-500">
+            Learn how to start using the Phase Console by creating an App, setting up your local dev
+            environment, adding your team members and setting up a third party integration.
+          </p>
+        </div>
+        <div>
+          <DismissMenu />
+        </div>
       </div>
 
       {loading ? (
