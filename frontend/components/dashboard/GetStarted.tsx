@@ -292,73 +292,85 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
           </TaskPanel>
 
           <TaskPanel
-            title="Install and Setup the CLI"
-            defaultOpen={!cliSetup && guideStarted}
-            progress={cliSetup ? '100%' : '0%'}
-          >
-            <div className="space-y-4">
-              <ul className="list-disc list-inside text-sm">
-                <li>
-                  The Phase CLI is how you can integrate Phase with your local  development environment.
-                </li>
-              </ul>
+          title="Install and Setup the CLI"
+          defaultOpen={!cliSetup && guideStarted}
+          progress={cliSetup ? '100%' : '0%'}
+        >
+          <div className="space-y-4">
+            <ul className="list-disc list-inside text-sm">
+              <li>
+                The Phase CLI is how you can integrate Phase with your local development environment.
+              </li>
+            </ul>
+        
+            {/* Show as plain text before completion */}
+            {!cliSetup && (
+              <div>
+                <div className="my-4">
+                  1. Install the Phase CLI
+                </div>
+                <CliInstallCommands />
+              </div>
+            )}
+        
+            {/* Show as a completed step after completion */}
+            {cliSetup && (
               <div className="my-4">
-              <div className="space-y-3">
-                <div
-                  className={clsx(
-                    'flex items-center gap-2 text-sm',
-                    cliSetup ? 'text-emerald-500' : 'text-neutral-500'
-                  )}
-                >
-                  {cliSetup ? <FaCheckCircle /> : <FaRegCircle />}
-                  Install and authenticate CLI
-                </div>
-              </div>
-              </div>
-              {!cliSetup && (
                 <div className="space-y-3">
-                  <div>
-                    <CliInstallCommands />
-                  </div>
-                  <div className="my-4">
-                    <div className="space-y-3">
-                      <div>
-                        2. Authenticate
-                      </div>
-                      <div>
-                        <CliAuthenticateCommand />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="my-4">
-                    <div className="space-y-3">
-                      <div>
-                        3. Link your app
-                      </div>
-                      <div>
-                        <CliInitCommand />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="my-4">
-                    <div className="space-y-3">
-                      <div>
-                        4. Inject secrets to your application
-                      </div>
-                      <div>
-                        <CliRunCommand />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <Link href="https://docs.phase.dev/cli/install" target="_blank">
-                      <Button variant="secondary">View Docs</Button>
-                    </Link>
+                  <div
+                    className={clsx(
+                      'flex items-center gap-2 text-sm',
+                      'text-emerald-500'
+                    )}
+                  >
+                    <FaCheckCircle />
+                    Install and authenticate the Phase CLI
                   </div>
                 </div>
-              )}
-            </div>
-          </TaskPanel>
+              </div>
+            )}
+        
+            {!cliSetup && (
+              <div className="space-y-3">
+                <div className="my-4">
+                  <div className="space-y-3">
+                    <div>
+                      2. Authenticate
+                    </div>
+                    <div>
+                      <CliAuthenticateCommand />
+                    </div>
+                  </div>
+                </div>
+                <div className="my-4">
+                  <div className="space-y-3">
+                    <div>
+                      3. Link your app
+                    </div>
+                    <div>
+                      <CliInitCommand />
+                    </div>
+                  </div>
+                </div>
+                <div className="my-4">
+                  <div className="space-y-3">
+                    <div>
+                      4. Inject secrets to your application
+                    </div>
+                    <div>
+                      <CliRunCommand />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <Link href="https://docs.phase.dev/cli/install" target="_blank">
+                    <Button variant="secondary">View Docs</Button>
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        </TaskPanel>
 
           <TaskPanel
             title="Add an Organisation member"
