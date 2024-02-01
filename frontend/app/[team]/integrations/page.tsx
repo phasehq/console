@@ -32,7 +32,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
   const searchParams = useSearchParams()
 
-  const openCreateCredentialDialog = searchParams.get('newCredential')
+  const openCreateCredentialDialog = searchParams?.get('newCredential')
 
   const { data: providersData } = useQuery(GetProviderList)
 
