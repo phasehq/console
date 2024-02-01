@@ -17,6 +17,9 @@ import { AppType, OrganisationType } from '@/apollo/graphql'
 import Link from 'next/link'
 import { Button } from '../common/Button'
 import { CliInstallCommands } from './CliInstallCommands'
+import { CliAuthenticateCommand } from './CliAuthenticateCommand'
+import { CliInitCommand } from './CliInitCommand'
+import { CliRunCommand } from './CliRunCommand'
 import { RoleLabel } from '../users/RoleLabel'
 import Spinner from '../common/Spinner'
 
@@ -262,13 +265,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
             <div className="space-y-4">
               <ul className="list-disc list-inside text-sm">
                 <li>
-                  Apps are where you can store, sync and manage secrets for a project, application
-                  or repo.
-                </li>
-                <li>
-                  When you create an App, it will be initilized with 3 default environments for
-                  managing secrets: <code>Development</code>, <code>Staging</code> and{' '}
-                  <code>Production</code>.
+                  Apps are where you can store, manage and sync secrets across <code>Development</code>  <code>Staging</code> and{' '}
+                  <code>Production</code> environments.
                 </li>
               </ul>
               <div
@@ -294,27 +292,18 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
           </TaskPanel>
 
           <TaskPanel
-            title="Install the CLI"
+            title="Install and Setup the CLI"
             defaultOpen={!cliSetup && guideStarted}
             progress={cliSetup ? '100%' : '0%'}
           >
             <div className="space-y-4">
               <ul className="list-disc list-inside text-sm">
                 <li>
-                  The Phase CLI is how you can integrate Phase with your local development
-                  environment. You can import secrets from your existing .env files into your App.
-                </li>
-                <li>
-                  The CLI lets you decrypt and inject secrets into your application with{' '}
-                  <code>phase run</code>, along with a host of other features to manage secrets.
-                </li>
-                <li>
-                  Install the CLI and run <code>phase auth</code> to authenticate it with your
-                  account.
+                  The Phase CLI is how you can integrate Phase with your local  development environment.
                 </li>
               </ul>
-
-              <div className="space-y-2">
+              <div className="my-4">
+              <div className="space-y-3">
                 <div
                   className={clsx(
                     'flex items-center gap-2 text-sm',
@@ -325,11 +314,41 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   Install and authenticate CLI
                 </div>
               </div>
-
+              </div>
               {!cliSetup && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div>
                     <CliInstallCommands />
+                  </div>
+                  <div className="my-4">
+                    <div className="space-y-3">
+                      <div>
+                        2. Authenticate
+                      </div>
+                      <div>
+                        <CliAuthenticateCommand />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="my-4">
+                    <div className="space-y-3">
+                      <div>
+                        3. Link your app
+                      </div>
+                      <div>
+                        <CliInitCommand />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="my-4">
+                    <div className="space-y-3">
+                      <div>
+                        4. Inject secrets to your application
+                      </div>
+                      <div>
+                        <CliRunCommand />
+                      </div>
+                    </div>
                   </div>
                   <div className="flex gap-4">
                     <Link href="https://docs.phase.dev/cli/install" target="_blank">
