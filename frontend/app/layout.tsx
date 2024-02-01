@@ -6,6 +6,7 @@ import { Inter } from '@next/font/google'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.min.css'
 import '@/utils/logoAnimation.css'
+import NextTopLoader from 'nextjs-toploader'
 
 const inter = Inter({
   weight: 'variable',
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <body
           className={`${inter.className} w-full bg-neutral-200 dark:bg-neutral-900 min-h-screen antialiased`}
         >
+          <NextTopLoader color="#10B981" showSpinner={false} height={1} />
           <ToastContainer
             position="bottom-right"
             autoClose={5000}
