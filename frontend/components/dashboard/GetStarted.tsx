@@ -380,14 +380,6 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
             <div className="space-y-4">
               <ul className="list-disc list-inside text-sm">
                 <li>Invite team members to collaborate with you and securely share secrets.</li>
-                <li>
-                  Team members need accept the invite and join the organisation before they can be
-                  added to specific apps to get access to secrets.
-                </li>
-                <li>
-                  Team members can be given either the <RoleLabel role="dev" /> or{' '}
-                  <RoleLabel role="admin" /> role.
-                </li>
               </ul>
 
               <div className="space-y-2">
@@ -435,11 +427,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
             <div className="space-y-4">
               <ul className="list-disc list-inside text-sm">
                 <li>
-                  Integrations allow secrets to automatically be synced with third party services.
-                </li>
-                <li>
-                  Integrations handle the syncing of secrets from a specific environment of an App
-                  to a resource in a third party service.
+                  Integrations keep your secret from a specific environment synced with third party services.
                 </li>
                 <li>To get started with Integrations, you need to:</li>
               </ul>
@@ -452,7 +440,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   )}
                 >
                   {syncAuthAdded ? <FaCheckCircle /> : <FaRegCircle />}
-                  Add 3rd party authentication credentials
+                  Add third party service credentials
                 </div>
                 <div
                   className={clsx(
@@ -470,7 +458,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   )}
                 >
                   {syncCreated ? <FaCheckCircle /> : <FaRegCircle />}
-                  Create a Sync
+                  Set up a Sync
                 </div>
               </div>
 
