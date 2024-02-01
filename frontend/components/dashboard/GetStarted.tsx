@@ -303,7 +303,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
               </li>
             </ul>
         
-            {/* Show as plain text before completion */}
+            {/* Show as plain text step before completion */}
             {!cliSetup && (
               <div>
                 <div className="my-4">
@@ -355,7 +355,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 <div className="my-4">
                   <div className="space-y-3">
                     <div>
-                      4. Inject secrets to your application
+                      4. Start your app and inject secrets
                     </div>
                     <div>
                       <CliRunCommand />
