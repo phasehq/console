@@ -41,7 +41,7 @@ function CopyButton(props: { code: string }) {
           copied && '-translate-y-1.5 opacity-0'
         )}
       >
-        <FaCopy className="h-5 w-5 transition-colors" />
+        <FaCopy className="h-4 w-4 transition-colors" />
         Copy
       </span>
       <span
@@ -59,15 +59,6 @@ function CopyButton(props: { code: string }) {
 
 export const CliInstallCommands = () => {
   const platformScripts = [
-    {
-      name: 'Pip',
-      rawScript: 'pip install phase',
-      styledScript: (
-        <pre>
-          <span className="text-violet-300">pip</span> install phase-cli
-        </pre>
-      ),
-    },
     {
       name: 'MacOS',
       rawScript: 'brew install phase/cli/phase',
@@ -94,18 +85,7 @@ export const CliInstallCommands = () => {
       ),
     },
     {
-      name: 'Alpine Linux',
-      rawScript: 'apk add --no-cache curl && curl -fsSL https://pkg.phase.dev/install.sh | sh',
-      styledScript: (
-        <pre>
-          <span className="text-violet-300">apk</span> add --no-cache curl &&
-          <span className="text-violet-300"> curl</span> -fsSL https://pkg.phase.dev/install.sh |
-          <span className="text-violet-300">sh</span>
-        </pre>
-      ),
-    },
-    {
-      name: 'RedHat/CentOS/Amazon Linux',
+      name: 'Ubuntu/Debian',
       rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
       styledScript: (
         <pre>
@@ -115,7 +95,7 @@ export const CliInstallCommands = () => {
       ),
     },
     {
-      name: 'Ubuntu/Debian',
+      name: 'RedHat/CentOS/Amazon Linux',
       rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
       styledScript: (
         <pre>
@@ -131,6 +111,26 @@ export const CliInstallCommands = () => {
         <pre>
           <span className="text-violet-300">curl</span> -fsSL https://pkg.phase.dev/install.sh |
           bash
+        </pre>
+      ),
+    },
+    {
+      name: 'Python Pip',
+      rawScript: 'pip install phase',
+      styledScript: (
+        <pre>
+          <span className="text-violet-300">pip3</span> install phase-cli
+        </pre>
+      ),
+    },
+    {
+      name: 'Alpine Linux',
+      rawScript: 'apk add --no-cache curl && curl -fsSL https://pkg.phase.dev/install.sh | sh',
+      styledScript: (
+        <pre>
+          <span className="text-violet-300">apk</span> add --no-cache curl &&
+          <span className="text-violet-300"> curl</span> -fsSL https://pkg.phase.dev/install.sh |
+          <span className="text-violet-300">sh</span>
         </pre>
       ),
     },
