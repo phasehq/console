@@ -1,5 +1,6 @@
 # ---- Base Node ----
 FROM node:lts-alpine3.19@sha256:2f46fd49c767554c089a5eb219115313b72748d8f62f5eccb58ef52bc36db4ad AS base
+
 # Set working directory
 WORKDIR /app
 
@@ -25,8 +26,6 @@ ENV NODE_ENV production
 RUN yarn install --production --frozen-lockfile --no-cache && yarn cache clean
 # Copy production node_modules aside
 RUN cp -R node_modules /tmp/node_modules
-# Install ALL node_modules, including 'devDependencies'
-RUN yarn install --frozen-lockfile
 
 # ---- Build ----
 FROM dependencies AS build
