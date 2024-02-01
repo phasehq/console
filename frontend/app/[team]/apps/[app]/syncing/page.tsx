@@ -31,7 +31,7 @@ export default function Syncing({ params }: { params: { team: string; app: strin
 
   const searchParams = useSearchParams()
 
-  const openCreateSyncPanel = searchParams.get('newSync')
+  const openCreateSyncPanel = searchParams?.get('newSync')
 
   const { data } = useQuery(GetAppSyncStatus, {
     variables: { appId: params.app },

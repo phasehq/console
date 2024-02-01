@@ -64,7 +64,7 @@ export default function Environment({
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const secretToHighlight = searchParams.get('secret')
+  const secretToHighlight = searchParams?.get('secret')
   const highlightedRef = useRef<HTMLDivElement>(null)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
