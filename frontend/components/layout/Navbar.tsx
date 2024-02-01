@@ -11,6 +11,7 @@ import { Button } from '../common/Button'
 import { StatusIndicator } from '../common/StatusIndicator'
 import { organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
+import { SiSlack, SiGithub } from 'react-icons/si'
 
 export const NavBar = (props: { team: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -92,7 +93,21 @@ export const NavBar = (props: { team: string }) => {
         {activeEnv && <span className="text-black dark:text-white">{activeEnv.name}</span>}
       </div>
       <div className="flex gap-4 items-center justify-end">
+        <Link href="https://slack.phase.dev">
+          {' '}
+          <Button variant="secondary">
+            <SiSlack className="text-neutral-500 hover:text-neutral-600" /> Slack
+          </Button>
+        </Link>
+
+        <Link href="https://github.com/phasehq">
+          <Button variant="secondary">
+            <SiGithub className="text-neutral-500 hover:text-neutral-600" /> GitHub
+          </Button>
+        </Link>
+
         {IS_CLOUD_HOSTED && <StatusIndicator />}
+
         <Link href="https://docs.phase.dev" target="_blank">
           <Button variant="secondary">Docs</Button>
         </Link>
