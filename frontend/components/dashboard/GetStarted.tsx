@@ -550,17 +550,17 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
 
         <div className="pt-4 border-t border-neutral-500/40">
           <div className="flex items-center gap-4 justify-end">
-            <Link href="https://slack.phase.dev">
+            <a href="https://slack.phase.dev" target="_blank" rel="noopener noreferrer">
               <SiSlack className="text-neutral-500 hover:text-neutral-600" />
-            </Link>
+            </a>
 
-            <Link href="https://github.com/phasehq">
+            <a href="https://github.com/phasehq" target="_blank" rel="noopener noreferrer">
               <SiGithub className="text-neutral-500 hover:text-neutral-600" />
-            </Link>
+            </a>
 
-            <Link href="https://twitter.com/phasedotdev">
+            <a href="https://twitter.com/phasedotdev" target="_blank" rel="noopener noreferrer">
               <SiX className="text-neutral-500 hover:text-neutral-600" />
-            </Link>
+            </a>
           </div>
         </div>
       </div>
