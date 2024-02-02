@@ -10,7 +10,8 @@ export const CliInstallCommands = () => {
       rawScript: 'brew install phase/cli/phase',
       styledScript: (
         <pre>
-          <span className="text-violet-300">brew</span> install phasehq/cli/phase
+          <span className="text-emerald-800 dark:text-emerald-300">brew</span> install
+          phasehq/cli/phase
         </pre>
       ),
     },
@@ -21,11 +22,11 @@ export const CliInstallCommands = () => {
       styledScript: (
         <div className="space-y-1">
           <pre>
-            <span className="text-violet-300">scoop</span> scoop bucket add phasehq
-            https://github.com/phasehq/scoop-cli.git
+            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> scoop bucket add
+            phasehq https://github.com/phasehq/scoop-cli.git
           </pre>
           <pre>
-            <span className="text-violet-300">scoop</span> install phase
+            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> install phase
           </pre>
         </div>
       ),
@@ -35,8 +36,8 @@ export const CliInstallCommands = () => {
       rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
       styledScript: (
         <pre>
-          <span className="text-violet-300">curl</span> -fsSL https://pkg.phase.dev/install.sh |
-          bash
+          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
+          https://pkg.phase.dev/install.sh | bash
         </pre>
       ),
     },
@@ -45,8 +46,8 @@ export const CliInstallCommands = () => {
       rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
       styledScript: (
         <pre>
-          <span className="text-violet-300">curl</span> -fsSL https://pkg.phase.dev/install.sh |
-          bash
+          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
+          https://pkg.phase.dev/install.sh | bash
         </pre>
       ),
     },
@@ -55,8 +56,8 @@ export const CliInstallCommands = () => {
       rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
       styledScript: (
         <pre>
-          <span className="text-violet-300">curl</span> -fsSL https://pkg.phase.dev/install.sh |
-          bash
+          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
+          https://pkg.phase.dev/install.sh | bash
         </pre>
       ),
     },
@@ -65,7 +66,7 @@ export const CliInstallCommands = () => {
       rawScript: 'pip install phase',
       styledScript: (
         <pre>
-          <span className="text-violet-300">pip3</span> install phase-cli
+          <span className="text-emerald-800 dark:text-emerald-300">pip3</span> install phase-cli
         </pre>
       ),
     },
@@ -74,9 +75,10 @@ export const CliInstallCommands = () => {
       rawScript: 'apk add --no-cache curl && curl -fsSL https://pkg.phase.dev/install.sh | sh',
       styledScript: (
         <pre>
-          <span className="text-violet-300">apk</span> add --no-cache curl &&
-          <span className="text-violet-300"> curl</span> -fsSL https://pkg.phase.dev/install.sh |
-          <span className="text-violet-300">sh</span>
+          <span className="text-emerald-800 dark:text-emerald-300">apk</span> add --no-cache curl &&
+          <span className="text-emerald-800 dark:text-emerald-300"> curl</span> -fsSL
+          https://pkg.phase.dev/install.sh |
+          <span className="text-emerald-800 dark:text-emerald-300">sh</span>
         </pre>
       ),
     },
@@ -85,7 +87,7 @@ export const CliInstallCommands = () => {
       rawScript: 'docker run phasehq/cli',
       styledScript: (
         <pre>
-          <span className="text-violet-300">docker</span> run phase/cli
+          <span className="text-emerald-800 dark:text-emerald-300">docker</span> run phase/cli
         </pre>
       ),
     },
@@ -113,7 +115,7 @@ export const CliInstallCommands = () => {
       <Tab.Panels>
         {platformScripts.map((platform) => (
           <Tab.Panel as={Fragment} key={platform.name}>
-            <div className="group relative overflow-x-auto rounded-b-lg border-x border-b border-neutral-500/40 bg-zinc-900/50 p-4 text-left text-sm text-zinc-100">
+            <div className="group relative overflow-x-auto rounded-b-lg border-x border-b border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-4 text-left text-sm text-zinc-900 dark:text-zinc-100">
               <code>{platform.styledScript}</code>
               <CopyButton code={platform.rawScript} />
             </div>

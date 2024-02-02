@@ -10,7 +10,6 @@ import {
   FaRegCircle,
   FaRegDotCircle,
   FaSlack,
-  FaTimesCircle,
 } from 'react-icons/fa'
 import { TbPackages } from 'react-icons/tb'
 import { PiMonitorDuotone, PiMagicWandFill, PiTerminalWindow } from 'react-icons/pi'
@@ -20,13 +19,11 @@ import { AppType, OrganisationType } from '@/apollo/graphql'
 import Link from 'next/link'
 import { Button } from '../common/Button'
 import { CliInstallCommands } from './CliInstallCommands'
-import { CliAuthenticateCommand } from './CliAuthenticateCommand'
-import { CliRunCommand } from './CliRunCommand'
-import { CliInitCommand } from './CliInitCommand'
 import Spinner from '../common/Spinner'
 import { Card } from '../common/Card'
 import { SiGithub, SiSlack, SiX } from 'react-icons/si'
 import { RoleLabel } from '../users/RoleLabel'
+import { CliCommand } from './CliCommand'
 
 const TaskPanel = (props: {
   title: string
@@ -282,7 +279,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
               </TaskPanel>
 
               <TaskPanel
-                title="Install and Setup the CLI"
+                title="Install and setup the CLI"
                 defaultOpen={!cliSetup && guideStarted}
                 progress={cliSetup ? '100%' : '0%'}
               >
@@ -296,10 +293,18 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
 
                   {/* Show as plain text step before completion */}
                   {!cliSetup && (
-                    <div>
-                      <div className="my-4">1. Install the Phase CLI</div>
-                      <CliInstallCommands />
-                    </div>
+                    <>
+                      <div>
+                        <div className="my-4 text-sm">1. Install the Phase CLI</div>
+                        <CliInstallCommands />
+                      </div>
+                      <div className="space-y-3 text-sm">
+                        <div>2. Authenticate</div>
+                        <div>
+                          <CliCommand command="auth" />
+                        </div>
+                      </div>
+                    </>
                   )}
 
                   {/* Show as a completed step after completion */}
@@ -310,45 +315,46 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                           className={clsx('flex items-center gap-2 text-sm', 'text-emerald-500')}
                         >
                           <FaCheckCircle />
-                          Install and authenticate the Phase CLI
+                          Install the Phase CLI
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <div
+                          className={clsx('flex items-center gap-2 text-sm', 'text-emerald-500')}
+                        >
+                          <FaCheckCircle />
+                          Authenticate
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {!cliSetup && (
-                    <div className="space-y-3">
-                      <div className="my-4">
-                        <div className="space-y-3">
-                          <div>2. Authenticate</div>
-                          <div>
-                            <CliAuthenticateCommand />
-                          </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="my-4">
+                      <div className="space-y-3">
+                        <div>3. Link your App</div>
+                        <div>
+                          <CliCommand command="init" />
                         </div>
-                      </div>
-                      <div className="my-4">
-                        <div className="space-y-3">
-                          <div>3. Link your app</div>
-                          <div>
-                            <CliInitCommand />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="my-4">
-                        <div className="space-y-3">
-                          <div>4. Start your app and inject secrets</div>
-                          <div>
-                            <CliRunCommand />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-4">
-                        <Link href="https://docs.phase.dev/cli/install" target="_blank">
-                          <Button variant="secondary">View Docs</Button>
-                        </Link>
                       </div>
                     </div>
-                  )}
+                    <div className="my-4">
+                      <div className="space-y-3">
+                        <div>4. Start your application and inject secrets</div>
+                        <div>
+                          <CliCommand
+                            command="run <your_start_command>"
+                            comment="eg: phase run yarn start"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <Link href="https://docs.phase.dev/cli/install" target="_blank">
+                        <Button variant="secondary">View Docs</Button>
+                      </Link>
+                    </div>
+                  </div>
                 </div>
               </TaskPanel>
 
