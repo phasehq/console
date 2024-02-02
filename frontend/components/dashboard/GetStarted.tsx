@@ -233,8 +233,9 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
             <div>
               <h1 className="text-black dark:text-white font-semibold text-2xl">Getting started</h1>
               <p className="text-neutral-500">
-                Learn how to start using the Phase Console by creating an App, setting up your local
-                dev environment, adding your team members and setting up a third party integration.
+                Start using Phase by creating an App and setting up your local dev environment. Add
+                your team members to start collaborating and set up syncing with third party
+                services.
               </p>
             </div>
           </div>
@@ -503,22 +504,6 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 </Link>
               </Card>
             ))}
-          </div>
-
-          <div className="pt-4 border-t border-neutral-500/40">
-            <div className="flex items-center gap-4 justify-end">
-              <a href="https://slack.phase.dev" target="_blank" rel="noopener noreferrer">
-                <SiSlack className="text-neutral-500 hover:text-neutral-600" />
-              </a>
-
-              <a href="https://github.com/phasehq" target="_blank" rel="noopener noreferrer">
-                <SiGithub className="text-neutral-500 hover:text-neutral-600" />
-              </a>
-
-              <a href="https://twitter.com/phasedotdev" target="_blank" rel="noopener noreferrer">
-                <SiX className="text-neutral-500 hover:text-neutral-600" />
-              </a>
-            </div>
           </div>
         </div>
       </div>
