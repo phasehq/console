@@ -16,7 +16,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   return (
     <>
-      <div className="overflow-x-hidden text-black dark:text-white">
+      <div className="text-black dark:text-white">
         <div className="flex h-full w-full gap-8 ">
           <div className="w-full space-y-16 p-8">
             <h1 className="text-3xl font-bold capitalize">{organisation?.name} Home</h1>
