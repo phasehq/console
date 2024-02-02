@@ -6,6 +6,7 @@ import {
   FaCheckCircle,
   FaChevronRight,
   FaMinusCircle,
+  FaPlug,
   FaQuestionCircle,
   FaRegCircle,
   FaRegDotCircle,
@@ -201,13 +202,14 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
       title: 'Framework Integrations',
       description:
         'Learn how to inject secrets into frameworks like Node.js, Django, Rails, Laravel etc.',
-      logo: <TbPackages className="shrink-0" />,
+      logo: <FaPlug className="shrink-0" />,
     },
     {
       href: 'https://slack.phase.dev',
       title: 'Join Slack',
       description: 'Need help? Ping us on Slack',
       logo: <FaSlack className="shrink-0" />,
+      linkText: 'Join',
     },
   ]
 
@@ -249,13 +251,13 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 progress={appCreated ? '100%' : '0%'}
               >
                 <div className="space-y-4">
-                  <ul className="list-disc list-inside text-sm">
-                    <li>
-                      Apps are where you can store, manage and sync secrets across{' '}
-                      <code>Development</code> <code>Staging</code> and <code>Production</code>{' '}
-                      environments.
-                    </li>
-                  </ul>
+                  <div className="text-sm">
+                    Apps are where you can store, manage and sync secrets across{' '}
+                    <code className="bg-neutral-500/40 rounded-full py-0.5 px-2">Development</code>{' '}
+                    <code className="bg-neutral-500/40 rounded-full py-0.5 px-2">Staging</code> and{' '}
+                    <code className="bg-neutral-500/40 rounded-full py-0.5 px-2">Production</code>{' '}
+                    environments.
+                  </div>
                   <div
                     className={clsx(
                       'flex items-center gap-2 text-sm',
@@ -284,12 +286,10 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 progress={cliSetup ? '100%' : '0%'}
               >
                 <div className="space-y-4">
-                  <ul className="list-disc list-inside text-sm">
-                    <li>
-                      The Phase CLI is how you can integrate Phase with your local development
-                      environment.
-                    </li>
-                  </ul>
+                  <div className="text-sm">
+                    The Phase CLI is how you can integrate Phase with your local development
+                    environment.
+                  </div>
 
                   {/* Show as plain text step before completion */}
                   {!cliSetup && (
@@ -367,8 +367,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   <ul className="list-disc list-inside text-sm">
                     <li>Invite team members to collaborate with you and securely share secrets.</li>
                     <li>
-                      Team members need accept the invite and join the organisation before they can
-                      be added to specific apps to get access to secrets.
+                      Team members need accept your invite and join the Organisation before they can
+                      be added to specific Apps to get access to Secrets.
                     </li>
                     <li>
                       Team members can be given either the <RoleLabel role="dev" /> or{' '}
@@ -421,8 +421,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 <div className="space-y-4">
                   <ul className="list-disc list-inside text-sm">
                     <li>
-                      Integrations keep your secret from a specific environment synced with third
-                      party services.
+                      Integrations sync your secrets from a specific Environment to third-party
+                      services.
                     </li>
                     <li>To get started with Integrations, you need to:</li>
                   </ul>
@@ -435,7 +435,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       )}
                     >
                       {syncAuthAdded ? <FaCheckCircle /> : <FaRegCircle />}
-                      Add third party service credentials
+                      Add third party Service Credentials
                     </div>
                     <div
                       className={clsx(
@@ -493,7 +493,9 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       {resource.description}
                     </p>
                     <div className="mt-4 flex items-center gap-1 text-sm">
-                      <div className="flex items-center text-emerald-500">Explore</div>
+                      <div className="flex items-center text-emerald-500">
+                        {resource.linkText || 'Explore'}
+                      </div>
                       <FaArrowRight className="text-emerald-500 text-xs" />
                     </div>
                   </div>
