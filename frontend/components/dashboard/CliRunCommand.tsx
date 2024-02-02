@@ -62,7 +62,7 @@ export const CliRunCommand = () => {
   return (
     <div className="group relative overflow-x-auto rounded-lg border border-neutral-500/40 bg-zinc-900/50 p-4 text-left text-sm text-zinc-100">
       <pre>
-        <span className="text-violet-300">phase</span> run <span className="text-[#FF8700]">{"YOUR_APPLICATION_START_COMMAND"}</span>
+        <span className="text-violet-300">phase</span> run <span className="text-[#4f4e4e]">{"YOUR_APPLICATION_START_COMMAND"}</span>
       </pre>
       <CopyButton code={command} />
     </div>
