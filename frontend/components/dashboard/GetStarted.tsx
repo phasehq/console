@@ -3,29 +3,30 @@ import clsx from 'clsx'
 import { Fragment, ReactNode, useEffect, useState } from 'react'
 import {
   FaArrowRight,
-  FaBoxOpen,
   FaCheckCircle,
   FaChevronRight,
-  FaDesktop,
-  FaMagic,
   FaMinusCircle,
   FaQuestionCircle,
   FaRegCircle,
   FaRegDotCircle,
-  FaTerminal,
+  FaSlack,
   FaTimesCircle,
 } from 'react-icons/fa'
-
+import { TbPackages } from 'react-icons/tb'
+import { PiMonitorDuotone, PiMagicWandFill, PiTerminalWindow } from 'react-icons/pi'
 import { GetDashboard } from '@/graphql/queries/getDashboard.gql'
 import { useQuery } from '@apollo/client'
 import { AppType, OrganisationType } from '@/apollo/graphql'
 import Link from 'next/link'
 import { Button } from '../common/Button'
 import { CliInstallCommands } from './CliInstallCommands'
-import { RoleLabel } from '../users/RoleLabel'
+import { CliAuthenticateCommand } from './CliAuthenticateCommand'
+import { CliRunCommand } from './CliRunCommand'
+import { CliInitCommand } from './CliInitCommand'
 import Spinner from '../common/Spinner'
 import { Card } from '../common/Card'
 import { SiGithub, SiSlack, SiX } from 'react-icons/si'
+import { RoleLabel } from '../users/RoleLabel'
 
 const TaskPanel = (props: {
   title: string
@@ -183,32 +184,33 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     {
       href: 'https://docs.phase.dev/quickstart',
       title: 'Quickstart',
-      description: 'A step-by-step guide on getting up and running with Phase',
-      logo: <FaMagic className="shrink-0" />,
+      description: 'A step-by-step guide on getting up and running with Phase in minutes',
+      logo: <PiMagicWandFill className="shrink-0" />,
     },
     {
       href: 'https://docs.phase.dev/console',
       title: 'Console',
       description: 'Complete documentation for the Phase Console',
-      logo: <FaDesktop className="shrink-0" />,
+      logo: <PiMonitorDuotone className="shrink-0" />,
     },
     {
       href: 'https://docs.phase.dev/cli/commands',
       title: 'CLI',
       description: 'Complete documentation for the Phase CLI',
-      logo: <FaTerminal className="shrink-0" />,
+      logo: <PiTerminalWindow className="shrink-0" />,
     },
     {
       href: 'https://docs.phase.dev/integrations',
       title: 'Framework Integrations',
-      description: 'Learn how to inject secrets into your application runtime',
-      logo: <FaBoxOpen className="shrink-0" />,
+      description:
+        'Learn how to inject secrets into frameworks like Node.js, Django, Rails, Laravel etc.',
+      logo: <TbPackages className="shrink-0" />,
     },
     {
       href: 'https://slack.phase.dev',
       title: 'Join Slack',
-      description: 'Join the Phase community on Slack',
-      logo: <SiSlack className="shrink-0" />,
+      description: 'Need help? Ping us on Slack',
+      logo: <FaSlack className="shrink-0" />,
     },
   ]
 
@@ -252,13 +254,9 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 <div className="space-y-4">
                   <ul className="list-disc list-inside text-sm">
                     <li>
-                      Apps are where you can store, sync and manage secrets for a project,
-                      application or repo.
-                    </li>
-                    <li>
-                      When you create an App, it will be initilized with 3 default environments for
-                      managing secrets: <code>Development</code>, <code>Staging</code> and{' '}
-                      <code>Production</code>.
+                      Apps are where you can store, manage and sync secrets across{' '}
+                      <code>Development</code> <code>Staging</code> and <code>Production</code>{' '}
+                      environments.
                     </li>
                   </ul>
                   <div
@@ -284,7 +282,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
               </TaskPanel>
 
               <TaskPanel
-                title="Install the CLI"
+                title="Install and Setup the CLI"
                 defaultOpen={!cliSetup && guideStarted}
                 progress={cliSetup ? '100%' : '0%'}
               >
@@ -292,35 +290,57 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   <ul className="list-disc list-inside text-sm">
                     <li>
                       The Phase CLI is how you can integrate Phase with your local development
-                      environment. You can import secrets from your existing .env files into your
-                      App.
-                    </li>
-                    <li>
-                      The CLI lets you decrypt and inject secrets into your application with{' '}
-                      <code>phase run</code>, along with a host of other features to manage secrets.
-                    </li>
-                    <li>
-                      Install the CLI and run <code>phase auth</code> to authenticate it with your
-                      account.
+                      environment.
                     </li>
                   </ul>
 
-                  <div className="space-y-2">
-                    <div
-                      className={clsx(
-                        'flex items-center gap-2 text-sm',
-                        cliSetup ? 'text-emerald-500' : 'text-neutral-500'
-                      )}
-                    >
-                      {cliSetup ? <FaCheckCircle /> : <FaRegCircle />}
-                      Install and authenticate CLI
+                  {/* Show as plain text step before completion */}
+                  {!cliSetup && (
+                    <div>
+                      <div className="my-4">1. Install the Phase CLI</div>
+                      <CliInstallCommands />
                     </div>
-                  </div>
+                  )}
+
+                  {/* Show as a completed step after completion */}
+                  {cliSetup && (
+                    <div className="my-4">
+                      <div className="space-y-3">
+                        <div
+                          className={clsx('flex items-center gap-2 text-sm', 'text-emerald-500')}
+                        >
+                          <FaCheckCircle />
+                          Install and authenticate the Phase CLI
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {!cliSetup && (
-                    <div className="space-y-2">
-                      <div>
-                        <CliInstallCommands />
+                    <div className="space-y-3">
+                      <div className="my-4">
+                        <div className="space-y-3">
+                          <div>2. Authenticate</div>
+                          <div>
+                            <CliAuthenticateCommand />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="my-4">
+                        <div className="space-y-3">
+                          <div>3. Link your app</div>
+                          <div>
+                            <CliInitCommand />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="my-4">
+                        <div className="space-y-3">
+                          <div>4. Start your app and inject secrets</div>
+                          <div>
+                            <CliRunCommand />
+                          </div>
+                        </div>
                       </div>
                       <div className="flex gap-4">
                         <Link href="https://docs.phase.dev/cli/install" target="_blank">
@@ -395,12 +415,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 <div className="space-y-4">
                   <ul className="list-disc list-inside text-sm">
                     <li>
-                      Integrations allow secrets to automatically be synced with third party
-                      services.
-                    </li>
-                    <li>
-                      Integrations handle the syncing of secrets from a specific environment of an
-                      App to a resource in a third party service.
+                      Integrations keep your secret from a specific environment synced with third
+                      party services.
                     </li>
                     <li>To get started with Integrations, you need to:</li>
                   </ul>
@@ -413,7 +429,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       )}
                     >
                       {syncAuthAdded ? <FaCheckCircle /> : <FaRegCircle />}
-                      Add 3rd party authentication credentials
+                      Add third party service credentials
                     </div>
                     <div
                       className={clsx(
@@ -431,7 +447,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       )}
                     >
                       {syncCreated ? <FaCheckCircle /> : <FaRegCircle />}
-                      Create a Sync
+                      Set up a Sync
                     </div>
                   </div>
 
@@ -455,7 +471,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
           <div>
             <h1 className="text-black dark:text-white font-semibold text-2xl">Resources</h1>
             <p className="text-neutral-500">
-              Need more help? Here are some more resources to help you get started with Phase.
+              Here are some more resources to help you get started with Phase.
             </p>
           </div>
 
@@ -483,17 +499,17 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
 
           <div className="pt-4 border-t border-neutral-500/40">
             <div className="flex items-center gap-4 justify-end">
-              <Link href="https://slack.phase.dev">
+              <a href="https://slack.phase.dev" target="_blank" rel="noopener noreferrer">
                 <SiSlack className="text-neutral-500 hover:text-neutral-600" />
-              </Link>
+              </a>
 
-              <Link href="https://github.com/phasehq">
+              <a href="https://github.com/phasehq" target="_blank" rel="noopener noreferrer">
                 <SiGithub className="text-neutral-500 hover:text-neutral-600" />
-              </Link>
+              </a>
 
-              <Link href="https://twitter.com/phasedotdev">
+              <a href="https://twitter.com/phasedotdev" target="_blank" rel="noopener noreferrer">
                 <SiX className="text-neutral-500 hover:text-neutral-600" />
-              </Link>
+              </a>
             </div>
           </div>
         </div>
