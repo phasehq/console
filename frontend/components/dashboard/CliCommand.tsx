@@ -9,7 +9,7 @@ export const CliCommand = (props: { command: string; comment?: string }) => {
         <span className="text-emerald-800 dark:text-emerald-300">phase</span> {props.command}{' '}
         {props.comment && (
           <span className="text-neutral-500">
-            {'//'}
+            {'#'}
             {props.comment}
           </span>
         )}
