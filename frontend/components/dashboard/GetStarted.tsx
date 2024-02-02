@@ -23,11 +23,8 @@ import Link from 'next/link'
 import { Button } from '../common/Button'
 import { CliInstallCommands } from './CliInstallCommands'
 import { CliAuthenticateCommand } from './CliAuthenticateCommand'
-import { CliInitCommand } from './CliInitCommand'
 import { CliRunCommand } from './CliRunCommand'
-import { CliAuthenticateCommand } from './CliAuthenticateCommand'
 import { CliInitCommand } from './CliInitCommand'
-import { CliRunCommand } from './CliRunCommand'
 import { RoleLabel } from '../users/RoleLabel'
 import Spinner from '../common/Spinner'
 import { Card } from '../common/Card'
@@ -296,45 +293,6 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
           </div>
         </div>
 
-      {loading ? (
-        <div className="p-40 flex items-center justify-center">
-          <Spinner size="lg" />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <TaskPanel
-            title="Create an App"
-            defaultOpen={!appCreated}
-            progress={appCreated ? '100%' : '0%'}
-          >
-            <div className="space-y-4">
-              <ul className="list-disc list-inside text-sm">
-                <li>
-                  Apps are where you can store, manage and sync secrets across <code>Development</code>  <code>Staging</code> and{' '}
-                  <code>Production</code> environments.
-                </li>
-              </ul>
-              <div
-                className={clsx(
-                  'flex items-center gap-2 text-sm',
-                  appCreated ? 'text-emerald-500' : 'text-neutral-500'
-                )}
-              >
-                {appCreated ? <FaCheckCircle /> : <FaRegCircle />}
-                Create an App
-              </div>
-              {!appCreated && (
-                <div className="flex gap-4">
-                  <Link href={`/${organisation.name}/apps`}>
-                    <Button variant="primary">Go to Apps</Button>
-                  </Link>
-                  <Link href="https://docs.phase.dev/console/apps" target="_blank">
-                    <Button variant="secondary">View Docs</Button>
-                  </Link>
-                </div>
-              )}
-            </div>
-          </TaskPanel>
       {loading ? (
         <div className="p-40 flex items-center justify-center">
           <Spinner size="lg" />
