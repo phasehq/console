@@ -1,4 +1,7 @@
+import { Tab } from '@headlessui/react'
+import clsx from 'clsx'
 import CopyButton from 'components/common/CopyButton'
+import { Fragment } from 'react'
 
 export const CliInstallCommands = () => {
   const platformScripts = [
