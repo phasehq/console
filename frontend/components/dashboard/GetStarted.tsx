@@ -187,13 +187,13 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     },
     {
       href: 'https://docs.phase.dev/console',
-      title: 'Console',
+      title: 'Console Docs',
       description: 'Complete documentation for the Phase Console',
       logo: <PiMonitorDuotone className="shrink-0" />,
     },
     {
       href: 'https://docs.phase.dev/cli/commands',
-      title: 'CLI',
+      title: 'CLI Docs',
       description: 'Complete documentation for the Phase CLI',
       logo: <PiTerminalWindow className="shrink-0" />,
     },
