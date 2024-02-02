@@ -93,18 +93,17 @@ export const NavBar = (props: { team: string }) => {
         {activeEnv && <span className="text-black dark:text-white">{activeEnv.name}</span>}
       </div>
       <div className="flex gap-4 items-center justify-end">
-        <Link href="https://slack.phase.dev">
-          {' '}
+        <a href="https://slack.phase.dev" target="_blank" rel="noopener noreferrer">
           <Button variant="secondary">
             <SiSlack className="text-neutral-500 hover:text-neutral-600" /> Slack
           </Button>
-        </Link>
+        </a>
 
-        <Link href="https://github.com/phasehq">
+        <a href="https://github.com/phasehq" target="_blank" rel="noopener noreferrer">
           <Button variant="secondary">
             <SiGithub className="text-neutral-500 hover:text-neutral-600" /> GitHub
           </Button>
-        </Link>
+        </a>
 
         {IS_CLOUD_HOSTED && <StatusIndicator />}
 
