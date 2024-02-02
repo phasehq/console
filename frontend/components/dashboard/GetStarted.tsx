@@ -253,13 +253,13 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     {
       href: 'https://docs.phase.dev/integrations',
       title: 'Framework Integrations',
-      description: 'Learn how to inject secrets into your application runtime',
+      description: 'Learn how to inject secrets into frameworks like Node.js, Django, Rails, Laravel etc.',
       logo: <TbPackages className="shrink-0" />,
     },
     {
       href: 'https://slack.phase.dev',
       title: 'Join Slack',
-      description: 'Join the Phase community on Slack',
+      description: 'Need help? Ping us on Slack',
       logo: <FaSlack className="shrink-0" />,
     },
   ]
