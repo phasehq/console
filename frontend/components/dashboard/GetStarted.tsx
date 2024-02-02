@@ -3,19 +3,17 @@ import clsx from 'clsx'
 import { Fragment, ReactNode, useEffect, useState } from 'react'
 import {
   FaArrowRight,
-  FaBoxOpen,
   FaCheckCircle,
   FaChevronRight,
-  FaDesktop,
-  FaMagic,
   FaMinusCircle,
   FaQuestionCircle,
   FaRegCircle,
   FaRegDotCircle,
-  FaTerminal,
+  FaSlack,
   FaTimesCircle,
 } from 'react-icons/fa'
-
+import { TbPackages } from "react-icons/tb";
+import { PiMonitorDuotone , PiMagicWandFill, PiTerminalWindow} from "react-icons/pi";
 import { GetDashboard } from '@/graphql/queries/getDashboard.gql'
 import { useQuery } from '@apollo/client'
 import { AppType, OrganisationType } from '@/apollo/graphql'
@@ -25,11 +23,9 @@ import { CliInstallCommands } from './CliInstallCommands'
 import { CliAuthenticateCommand } from './CliAuthenticateCommand'
 import { CliRunCommand } from './CliRunCommand'
 import { CliInitCommand } from './CliInitCommand'
-import { RoleLabel } from '../users/RoleLabel'
 import Spinner from '../common/Spinner'
 import { Card } from '../common/Card'
 import { SiGithub, SiSlack, SiX } from 'react-icons/si'
-import { title } from 'process'
 
 const TaskPanel = (props: {
   title: string
@@ -239,32 +235,32 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     {
       href: 'https://docs.phase.dev/quickstart',
       title: 'Quickstart',
-      description: 'A step-by-step guide on getting up and running with Phase',
-      logo: <FaMagic className="shrink-0" />,
+      description: 'A step-by-step guide on getting up and running with Phase in minutes',
+      logo: <PiMagicWandFill className="shrink-0" />,
     },
     {
       href: 'https://docs.phase.dev/console',
       title: 'Console',
       description: 'Complete documentation for the Phase Console',
-      logo: <FaDesktop className="shrink-0" />,
+      logo: <PiMonitorDuotone className="shrink-0" />,
     },
     {
       href: 'https://docs.phase.dev/cli/commands',
       title: 'CLI',
       description: 'Complete documentation for the Phase CLI',
-      logo: <FaTerminal className="shrink-0" />,
+      logo: <PiTerminalWindow className="shrink-0" />,
     },
     {
       href: 'https://docs.phase.dev/integrations',
       title: 'Framework Integrations',
       description: 'Learn how to inject secrets into your application runtime',
-      logo: <FaBoxOpen className="shrink-0" />,
+      logo: <TbPackages className="shrink-0" />,
     },
     {
       href: 'https://slack.phase.dev',
       title: 'Join Slack',
       description: 'Join the Phase community on Slack',
-      logo: <SiSlack className="shrink-0" />,
+      logo: <FaSlack className="shrink-0" />,
     },
   ]
 
@@ -524,7 +520,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
         <div>
           <h1 className="text-black dark:text-white font-semibold text-2xl">Resources</h1>
           <p className="text-neutral-500">
-            Need more help? Here are some more resources to help you get started with Phase.
+            Here are some more resources to help you get started with Phase.
           </p>
         </div>
 
