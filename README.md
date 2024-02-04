@@ -1,10 +1,6 @@
 <h1 align="center">
-  <picture>
-    <!-- Image for dark theme -->
-    <source media="(prefers-color-scheme: dark)" srcset="img/wordmark-dark.svg#gh-dark-mode-only">
-    <!-- Image for light theme (fallback image) -->
-    <img height="68" width="306" src="img/wordmark-light.svg" alt="Phase" srcset="img/wordmark-light.svg#gh-light-mode-only">
-  </picture>
+  <!-- Phase Console -->
+  <img height="68" width="306" src="img/phase-lattice-logo.svg" alt="Phase">
 </h1>
 
 <h3 align="center">Open Source, end-to-end encrypted, self-hostable all in one platform for developers to manage secrets and environment variables. From their laptop 💻 to the cloud ☁️.</h3>
@@ -17,6 +13,7 @@
 </div>
 
 <hr/>
+
 
 <img src="img/phase-console-secrets-development.webp" width="100%" alt="Phase Console" />
 
