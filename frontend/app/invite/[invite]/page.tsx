@@ -17,8 +17,8 @@ import { toast } from 'react-toastify'
 import { OrganisationMemberInviteType } from '@/apollo/graphql'
 import { useSession } from 'next-auth/react'
 import { setLocalKeyring } from '@/utils/localStorage'
-import { Logo } from '@/components/common/Logo'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
+import { LogoMark } from '@/components/common/LogoMark'
 
 const bip39 = require('bip39')
 
@@ -192,7 +192,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
     <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
       <div className="space-y-2">
         <div className="flex justify-center">
-          <Logo boxSize={80} />
+          <LogoMark className="w-32 fill-black dark:fill-white" />
         </div>
 
         <h1 className="font-bold text-3xl">Welcome to Phase</h1>
