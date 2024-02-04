@@ -1,6 +1,6 @@
 <h1 align="center">
   <!-- Phase Console -->
-  <img height="68" width="306" src="img/phase-lattice-logo.svg" alt="Phase">
+  <img height="120" width="450" src="img/phase-lattice-logo.svg" alt="Phase">
 </h1>
 
 <h3 align="center">Open Source, end-to-end encrypted, self-hostable all in one platform for developers to manage secrets and environment variables. From their laptop 💻 to the cloud ☁️.</h3>
@@ -13,7 +13,6 @@
 </div>
 
 <hr/>
-
 
 <img src="img/phase-console-secrets-development.webp" width="100%" alt="Phase Console" />
 
