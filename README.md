@@ -1,7 +1,11 @@
 <h1 align="center">
   <!-- Phase Console -->
+  <a href="https://phase.dev">
   <img height="120" width="450" src="img/phase-lattice-logo.svg" alt="Phase">
+  </a>
 </h1>
+
+<h1> Console </h1>
 
 <h3 align="center">Open Source, end-to-end encrypted, self-hostable all in one platform for developers to manage secrets and environment variables. From their laptop 💻 to the cloud ☁️.</h3>
 
@@ -31,7 +35,9 @@ And much more.
 
 ---
 
-## CLI
+## CLI - Import, Encrypt and Inject secrets
+
+![Phase CI](img/phase-cli-import-run.webp)
 
 ```fish
 λ phase
@@ -77,41 +83,7 @@ Commands:
     users keyring    🔐 Display information about the Phase keyring
     console          🖥️ Open the Phase Console in your browser
     update           🆙 Update the Phase CLI to the latest version
-
-# Your existing secrets
-> cat .env
-AWS_ACCESS_KEY_ID="AKIA2OGYBAH63UA3VNFG"
-AWS_SECRET_ACCESS_KEY="V5yWXDe82Gohf9DYBhpatYZ74a5fiKfJVx8rx6W1"
-
-# Import your existing secrets
-> phase secrets import .env
-Successfully imported and encrypted 2 secrets.
-To view them please run: phase secrets list
-
-# View your secrets in Phase
-> phase secrets list
-KEY 🗝️                    | VALUE ✨
-----------------------------------------------------------------------------------------------------
-AWS_ACCESS_KEY_ID        | AKI**************NFG
-AWS_SECRET_ACCESS_KEY    | V5y**********************************6W1
-
-🥽 To uncover the secrets, use: phase secrets list --show
-
-# Get rid of your .env
-> rm .env
-
-# Seamlessly inject secrets during runtime
-> phase run yarn dev
-$ next dev
-ready - started server on 0.0.0.0:3000, url: http://localhost:3000
 ```
-
-- **CLI**: Fetch, decrypt and inject secrets and environment variables to your application. Zero code changes required.
-- Inject
-- Export secrets in a dotenv format
-- **Cross platform**: Easily install the Phase CLI on macOS, Ubuntu/Arch/Redhat/Alpine Linux, Windows, Docker.
-- **Keyring Integration** - Store keys and credentials securely in [macOS Keychain](https://en.wikipedia.org/wiki/Keychain_%28software%29), [Windows Credential Locker](https://learn.microsoft.com/en-us/windows/uwp/security/credential-locker), [KDE Wallet](https://en.wikipedia.org/wiki/KWallet), [GNOME Keyring](https://en.wikipedia.org/wiki/GNOME_Keyring) etc.
-- **[Private Key Sharding](https://docs.phase.dev/security#dual-key-model)**: Avoid single point of compromise of the private key via [secret splitting schemes](https://en.wikipedia.org/wiki/Secret_sharing)
 
 ---
 
