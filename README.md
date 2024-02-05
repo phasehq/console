@@ -4,17 +4,25 @@
   <img height="120" width="450" src="img/phase-lattice-logo.svg" alt="Phase">
   </a>
 </h1>
-
-<h1> Console </h1>
-
-<h3 align="center">Open Source, end-to-end encrypted, self-hostable all in one platform for developers to manage secrets and environment variables. From their laptop 💻 to the cloud ☁️.</h3>
-
 <div align="center">
   <a href="https://phase.dev">Website</a> |
-  <a href="https://docs.phase.dev">Docs</a> |
+  <a href="https://docs.phase.dev">Documentation</a> |
   <a href="https://docs.phase.dev/security">Security</a> |
-  <a href="https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg">Slack</a>
+    <a href="https://github.com/phasehq/console/blob/main/CONTRIBUTING.md">Contributing</a> |
+  <a href="https://slack.phase.dev">Join Slack</a>
 </div>
+
+---
+
+<h1> PHase Console </h1>
+
+[Phase](https://phase.dev) is all one platform for developers to seucurely create, manage and deploy secrets across local development 💻, CI tools 🔨, cloud ☁️ providers etc. and keep them in sync with your team 🧑‍💻.
+
+An open source and developer-friendly alternative to HashiCorp Vault and AWS Secrets Manager.
+
+
+
+
 
 <hr/>
 
@@ -22,7 +30,7 @@
 
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 📺  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables)                    |
+| 📈  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables)                    |
 | 🔐  | **[Hold your keys](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your root keys via 24 word mnemonic phrase |
 | 🤫  | **Secret management**: Diffs, version control and Point-in-time Recovery                                                                                    |
 | 🙋  | **RBAC**: Fine-grained, role-based and cryptographic access control, per application, per environment.                                                      |
