@@ -22,6 +22,8 @@ import {
   FaUserEdit,
   FaTrash,
   FaCheck,
+  FaDotCircle,
+  FaCircle,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Dialog, Switch, Transition } from '@headlessui/react'
@@ -40,36 +42,17 @@ import { encryptAsymmetric } from '@/utils/crypto'
 import { toast } from 'react-toastify'
 
 export const Tag = (props: { tag: SecretTagType }) => {
-  const { name, color } = props.tag;
-
-  // Utility function to create a dimmer color
-  const dimColor = (color: string, amount: number) => {
-    // Assuming color is in hex format (e.g., #RRGGBB)
-    const r = parseInt(color.slice(1, 3), 16);
-    const g = parseInt(color.slice(3, 5), 16);
-    const b = parseInt(color.slice(5, 7), 16);
-    
-    // Calculate the transparency based on the amount
-    const alpha = Math.max(0, Math.min(1, 1 - amount)).toFixed(2); // Ensures between 0 and 1
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`; // Return rgba color with transparency
-  };
-
-  // Calculate padding based on the length of the tag name
-  const paddingX = name.length <= 3 ? 'px-4' : 'px-2';
+  const { name, color } = props.tag
 
   return (
-    <div 
-      className={`flex items-center rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-neutral-500 text-base ${paddingX}`}
-      style={{ backgroundColor: dimColor(color, 0.5) }}  // Apply the dimmed color as background
-    >
-      <div className="flex items-center justify-center h-4 w-4"> {/* Adjust size as needed */}
-        <FaTags color={color} />  {/* Color of the icon */}
+    <div className="flex items-center rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 text-base px-2">
+      <div className="flex items-center justify-center h-4 w-4">
+        <FaCircle className="text-sm" color={color} />
       </div>
       <span>{name}</span>
     </div>
-  );
-};
-
+  )
+}
 
 const TagsDialog = (props: {
   orgId: string
@@ -865,8 +848,8 @@ export default function SecretRow(props: {
             keyIsBlank
               ? 'ring-1 ring-inset ring-red-500'
               : keyIsDuplicate
-              ? 'ring-1 ring-inset ring-amber-500'
-              : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
+                ? 'ring-1 ring-inset ring-amber-500'
+                : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
             secretHasBeenModified() && '!text-amber-500'
           )}
           value={secret.key}
