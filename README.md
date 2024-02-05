@@ -1,10 +1,9 @@
-<h1 align="center">
+<div align="center">
   <!-- Phase Console -->
   <a href="https://phase.dev">
   <img height="120" width="450" src="img/phase-lattice-logo.svg" alt="Phase">
   </a>
-</h1>
-<div align="center">
+
   <a href="https://phase.dev">Website</a> |
   <a href="https://docs.phase.dev">Documentation</a> |
   <a href="https://docs.phase.dev/security">Security</a> |
@@ -12,26 +11,22 @@
   <a href="https://slack.phase.dev">Join Slack</a>
 </div>
 
----
-
-<h1> PHase Console </h1>
-
-[Phase](https://phase.dev) is all one platform for developers to seucurely create, manage and deploy secrets across local development 💻, CI tools 🔨, cloud ☁️ providers etc. and keep them in sync with your team 🧑‍💻.
+[Phase](https://phase.dev) is all one platform for developers to securely create, manage and deploy application secrets across local development 💻, CI tools 🔨, cloud ☁️ providers etc. and keep them in sync with your team 🧑‍💻.
 
 An open source and developer-friendly alternative to HashiCorp Vault and AWS Secrets Manager.
 
+---
 
-
-
-
-<hr/>
+# Phase Console
 
 <img src="img/phase-console-secrets-development.webp" width="100%" alt="Phase Console" />
+<img src="img/phase-console-integration-nasa-sync.webp" width="100%" alt="Phase Console Integrations" />
+
 
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 📈  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables)                    |
-| 🔐  | **[Hold your keys](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your root keys via 24 word mnemonic phrase |
+| 🔐  | **[CLI](https://docs.phase.dev/security/phase-encryption#account-keyring)**: Maintain self-custody of your root keys via 24 word mnemonic phrase |
 | 🤫  | **Secret management**: Diffs, version control and Point-in-time Recovery                                                                                    |
 | 🙋  | **RBAC**: Fine-grained, role-based and cryptographic access control, per application, per environment.                                                      |
 | 🔑  | **Service Tokens**: Authenticate CI runners, build tools and production environment with granualar-scope                                                    |
@@ -93,6 +88,8 @@ Commands:
     update           🆙 Update the Phase CLI to the latest version
 ```
 
+[Explore Phase CLI](https://github.com/phasehq/cli)
+
 ---
 
 ## Getting started
@@ -146,13 +143,4 @@ For more information see: [SECURITY.md](/SECURITY.md)
 
 We love contributions. See [CONTRIBUTING.md](/CONTRIBUTING.md)
 
-You can join our [Slack](https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg) if you have any questions!
-
----
-
-## Resources
-
-- [Website](https://phase.dev)
-- [Docs](https://docs.phase.dev)
-- [GitHub](https://github.com/phasehq/console)
-- [Slack](https://join.slack.com/t/phase-community/shared_invite/zt-1tkwzl31z-a6yCB5Uqlj~V2x43ep2Evg)
+You can join our [Slack](https://slack.phase.dev) if you have any questions!
