@@ -10,7 +10,7 @@ import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
 import { useSession } from 'next-auth/react'
 import { HeroPattern } from '@/components/common/HeroPattern'
-import { Logo } from '@/components/common/Logo'
+import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { RoleLabel } from '@/components/users/RoleLabel'
 
 export default function Home() {
@@ -73,9 +73,9 @@ export default function Home() {
           <HeroPattern />
 
           <div className="mx-auto my-auto space-y-6 divide-y divide-neutral-500/40 rounded-md bg-zinc-100 dark:bg-zinc-800 text-center">
-            <div className="space-y-0 p-2">
+            <div className="space-y-0 p-4">
               <div className="flex justify-center">
-                <Logo boxSize={80} />
+                <LogoWordMark className="w-32 fill-black dark:fill-white" />
               </div>
               <p className="text-xl font-semibold text-neutral-500">Choose a workspace</p>
             </div>

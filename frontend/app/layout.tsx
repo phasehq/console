@@ -23,6 +23,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" type="image/svg+xml" href={`favicon.svg`} key="favicon" />
+        <link
+          rel="mask-icon"
+          type="image/svg+xml"
+          href={`/favicon.svg`}
+          key="favicon-safari"
+          color="#000000"
+        />
+      </head>
       <Providers>
         <body
           className={`${inter.className} w-full bg-neutral-200 dark:bg-neutral-900 min-h-screen antialiased`}
