@@ -21,8 +21,7 @@ An open source and developer-friendly alternative to HashiCorp Vault and AWS Sec
 
 # Phase Console
 
-<img src="img/phase-console-secrets-development.webp" width="100%" alt="Phase Console" />
-<img src="img/phase-console-integration-nasa-sync.webp" width="100%" alt="Phase Console Integrations" />
+<img src="img/phase-console-secrets.webp" width="100%" alt="Phase Console" />
 
 
 |     | **Features**                                                                                                                                                |
