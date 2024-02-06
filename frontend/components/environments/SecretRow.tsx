@@ -22,6 +22,8 @@ import {
   FaUserEdit,
   FaTrash,
   FaCheck,
+  FaDotCircle,
+  FaCircle,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Dialog, Switch, Transition } from '@headlessui/react'
@@ -43,8 +45,10 @@ export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
 
   return (
-    <div className="flex items-center px-2 rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-neutral-500 text-base">
-      <div className={`h-2 w-2 rounded-full`} style={{ backgroundColor: color }}></div>
+    <div className="flex items-center rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 text-base px-2">
+      <div className="flex items-center justify-center h-4 w-4">
+        <FaCircle className="text-sm" color={color} />
+      </div>
       <span>{name}</span>
     </div>
   )
@@ -844,8 +848,8 @@ export default function SecretRow(props: {
             keyIsBlank
               ? 'ring-1 ring-inset ring-red-500'
               : keyIsDuplicate
-              ? 'ring-1 ring-inset ring-amber-500'
-              : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
+                ? 'ring-1 ring-inset ring-amber-500'
+                : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
             secretHasBeenModified() && '!text-amber-500'
           )}
           value={secret.key}
