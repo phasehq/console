@@ -136,7 +136,7 @@ dmypy.json
 .pnp.js
 
 # testing
-/coverage
+/frontend/coverage
 
 # next.js
 *.next/

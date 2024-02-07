@@ -42,9 +42,28 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
+      - redis
     build:
       context: ./backend
       dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      ALLOWED_HOSTS: "${HOST},backend"
+      ALLOWED_ORIGINS: "${HTTP_PROTOCOL}${HOST}"
+      SESSION_COOKIE_DOMAIN: "${HOST}"
+    networks:
+      - phase-net-dev
+
+  worker:
+    container_name: phase-worker-staging
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python manage.py rqworker default
     env_file: .env
     environment:
       ALLOWED_HOSTS: "${HOST},backend"
@@ -66,6 +85,13 @@ services:
       POSTGRES_HOST_AUTH_METHOD: "trust"
     volumes:
       - phase-postgres-data-dev:/var/lib/postgresql/data
+    networks:
+      - phase-net-dev
+
+  redis:
+    container_name: phase-redis
+    image: redis:alpine3.19
+    restart: always
     networks:
       - phase-net-dev
 

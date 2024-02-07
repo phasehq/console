@@ -22,6 +22,8 @@ import {
   FaUserEdit,
   FaTrash,
   FaCheck,
+  FaDotCircle,
+  FaCircle,
 } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Dialog, Switch, Transition } from '@headlessui/react'
@@ -43,8 +45,10 @@ export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
 
   return (
-    <div className="flex items-center px-2 rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-neutral-500 text-base">
-      <div className={`h-2 w-2 rounded-full`} style={{ backgroundColor: color }}></div>
+    <div className="flex items-center rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 text-base px-2">
+      <div className="flex items-center justify-center h-4 w-4">
+        <FaCircle className="text-sm" color={color} />
+      </div>
       <span>{name}</span>
     </div>
   )
@@ -155,7 +159,7 @@ const TagsDialog = (props: {
         </div>
       ) : (
         <div className="flex items-center justify-center">
-          <Button variant="outline" onClick={openModal} title="Update tags">
+          <Button variant="outline" onClick={openModal} title="Update tags" tabIndex={-1}>
             <FaTags /> Tags
           </Button>
         </div>
@@ -272,7 +276,7 @@ const HistoryDialog = (props: { secret: SecretType; handlePropertyChange: Functi
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="View secret history">
+        <Button variant="outline" onClick={openModal} title="View secret history" tabIndex={-1}>
           <FaHistory /> <span className="hidden 2xl:block text-xs">History</span>
         </Button>
       </div>
@@ -404,7 +408,7 @@ const CommentDialog = (props: {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="Update comment">
+        <Button variant="outline" onClick={openModal} title="Update comment" tabIndex={-1}>
           <FaRegCommentDots className={clsx(comment && 'text-emerald-500')} />{' '}
           <span className="hidden 2xl:block text-xs">Comment</span>
         </Button>
@@ -577,6 +581,7 @@ const OverrideDialog = (props: {
       <div className="flex items-center justify-center">
         <Button
           variant="outline"
+          tabIndex={-1}
           onClick={openModal}
           title={
             activeOverride ? 'A Personal Secret is overriding this value' : 'Override this value'
@@ -722,7 +727,7 @@ const DeleteConfirmDialog = (props: {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="danger" onClick={openModal} title="Delete secret">
+        <Button variant="danger" onClick={openModal} title="Delete secret" tabIndex={-1}>
           <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
             <FaTrashAlt />
           </div>
@@ -806,7 +811,7 @@ export default function SecretRow(props: {
 
   const handleRevealSecret = async () => {
     setIsRevealed(true)
-    await readSecret({ variables: { id: secret.id } })
+    if (cannonicalSecret !== undefined) await readSecret({ variables: { id: secret.id } })
   }
 
   const handleHideSecret = () => setIsRevealed(false)
@@ -843,12 +848,14 @@ export default function SecretRow(props: {
             keyIsBlank
               ? 'ring-1 ring-inset ring-red-500'
               : keyIsDuplicate
-              ? 'ring-1 ring-inset ring-amber-500'
-              : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
+                ? 'ring-1 ring-inset ring-amber-500'
+                : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
             secretHasBeenModified() && '!text-amber-500'
           )}
           value={secret.key}
-          onChange={(e) => handlePropertyChange(secret.id, 'key', e.target.value.toUpperCase())}
+          onChange={(e) =>
+            handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
+          }
         />
         <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
           <div
@@ -879,6 +886,7 @@ export default function SecretRow(props: {
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
             <Button
               variant="outline"
+              tabIndex={-1}
               onClick={toggleReveal}
               title={isRevealed ? 'Mask value' : 'Reveal value'}
             >

@@ -1,0 +1,21 @@
+query GetDashboard($organisationId: ID!) {
+  apps(organisationId: $organisationId) {
+    id
+    syncEnabled
+  }
+  userTokens(organisationId: $organisationId) {
+    id
+  }
+  organisationInvites(orgId: $organisationId) {
+    id
+  }
+  organisationMembers(organisationId: $organisationId, role: null) {
+    id
+  }
+  savedCredentials(orgId: $organisationId) {
+    id
+  }
+  syncs(orgId: $organisationId) {
+    id
+  }
+}

@@ -22,7 +22,6 @@ export default function AppsHome({ params }: { params: { team: string } }) {
         getApps({
           variables: {
             organisationId: organisation.id,
-            appId: '',
           },
         })
       }

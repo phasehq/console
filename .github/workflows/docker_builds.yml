@@ -27,6 +27,21 @@ jobs:
         id: short_sha
         run: echo "::set-output name=sha::$(git rev-parse --verify HEAD | cut -c 1-7)"
 
+      - name: Set Node.js environment
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          yarn install
+
+      - name: Run Jest Tests
+        run: |
+          cd frontend
+          yarn test
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
@@ -79,6 +94,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Set Node.js environment
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          yarn install
+
+      - name: Run Jest Tests
+        run: |
+          cd frontend
+          yarn test
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
@@ -94,7 +124,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
 
       - name: Login to AWS Public ECR
         run: |
@@ -130,6 +159,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Set Node.js environment
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          yarn install
+
+      - name: Run Jest Tests
+        run: |
+          cd frontend
+          yarn test
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1

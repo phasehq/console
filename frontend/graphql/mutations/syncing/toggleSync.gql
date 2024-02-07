@@ -1,0 +1,5 @@
+mutation ToggleSync($syncId: ID!) {
+  toggleSyncActive(syncId: $syncId) {
+    ok
+  }
+}

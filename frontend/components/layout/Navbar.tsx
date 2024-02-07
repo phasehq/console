@@ -1,4 +1,3 @@
-import { Logo } from '../common/Logo'
 import UserMenu from '../UserMenu'
 import { useLazyQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -11,6 +10,7 @@ import { Button } from '../common/Button'
 import { StatusIndicator } from '../common/StatusIndicator'
 import { organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
+import { LogoMark } from '../common/LogoMark'
 
 export const NavBar = (props: { team: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -26,7 +26,6 @@ export const NavBar = (props: { team: string }) => {
         getApps({
           variables: {
             organisationId: organisation.id,
-            appId: '',
           },
         })
       }
@@ -55,10 +54,10 @@ export const NavBar = (props: { team: string }) => {
   const activeEnv = activeApp ? envs.find((env) => env.id === envId) : undefined
 
   return (
-    <header className="px-8 w-full h-16 border-b border-neutral-500/20 fixed top-0 flex gap-4 items-center justify-between text-neutral-500 font-medium bg-neutral-100/30 dark:bg-neutral-900/30 backdrop-blur-md">
-      <div className="flex items-center gap-4">
+    <header className="px-8 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 flex gap-4 items-center justify-between text-neutral-500 font-medium bg-neutral-100/30 dark:bg-neutral-900/30 backdrop-blur-md">
+      <div className="flex items-center gap-2">
         <Link href="/">
-          <Logo boxSize={40} />
+          <LogoMark className="w-10 fill-black dark:fill-white" />
         </Link>
         <span>/</span>
 
@@ -94,6 +93,7 @@ export const NavBar = (props: { team: string }) => {
       </div>
       <div className="flex gap-4 items-center justify-end">
         {IS_CLOUD_HOSTED && <StatusIndicator />}
+
         <Link href="https://docs.phase.dev" target="_blank">
           <Button variant="secondary">Docs</Button>
         </Link>

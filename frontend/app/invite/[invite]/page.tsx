@@ -17,8 +17,8 @@ import { toast } from 'react-toastify'
 import { OrganisationMemberInviteType } from '@/apollo/graphql'
 import { useSession } from 'next-auth/react'
 import { setLocalKeyring } from '@/utils/localStorage'
-import { Logo } from '@/components/common/Logo'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
+import { LogoMark } from '@/components/common/LogoMark'
 
 const bip39 = require('bip39')
 
@@ -192,7 +192,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
     <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
       <div className="space-y-2">
         <div className="flex justify-center">
-          <Logo boxSize={80} />
+          <LogoMark className="w-32 fill-black dark:fill-white" />
         </div>
 
         <h1 className="font-bold text-3xl">Welcome to Phase</h1>
@@ -218,8 +218,12 @@ export default function Invite({ params }: { params: { invite: string } }) {
     return (
       <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
         <div className="flex flex-col gap-y-2 items-center">
-          <h1 className="text-4xl text-black dark:text-white text-center font-bold">You're All Set</h1>
-          <p className="text-black/30 dark:text-white/40 text-center">Your account is ready to go!</p>
+          <h1 className="text-4xl text-black dark:text-white text-center font-bold">
+            You&apos;re All Set
+          </h1>
+          <p className="text-black/30 dark:text-white/40 text-center">
+            Your account is ready to go!
+          </p>
           <div className="mx-auto pt-8">
             <Button
               variant="primary"

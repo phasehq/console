@@ -45,12 +45,16 @@ class PersonalSecretSerializer(serializers.ModelSerializer):
 
 
 class SecretSerializer(serializers.ModelSerializer):
+    tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
 
     class Meta:
         model = Secret
         fields = '__all__'
 
+    def get_tags(self, obj):
+        return [tag.name for tag in obj.tags.all()]
+    
     def get_override(self, obj):
         # Assuming 'request' is passed to the context of the serializer.
         org_member = self.context.get('org_member')

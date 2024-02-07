@@ -1,0 +1,38 @@
+query GetOrganisationSyncs($orgId: ID!) {
+  syncs(orgId: $orgId) {
+    id
+    environment {
+      id
+      name
+      envType
+      app {
+        id
+        name
+      }
+    }
+    serviceInfo {
+      id
+      name
+      provider {
+        id
+      }
+    }
+    options
+    isActive
+    lastSync
+    status
+    authentication {
+      id
+      name
+      credentials
+    }
+    createdAt
+    history {
+      id
+      status
+      createdAt
+      completedAt
+      meta
+    }
+  }
+}

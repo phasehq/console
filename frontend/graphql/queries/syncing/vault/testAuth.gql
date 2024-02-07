@@ -1,0 +1,3 @@
+query TestVaultAuth($credentialId: ID!) {
+  testVaultCreds(credentialId: $credentialId) 
+}

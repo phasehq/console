@@ -1,6 +1,6 @@
 import _sodium from 'libsodium-wrappers-sumo'
 import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
-import { splitSecret } from './keyshares'
+import { splitSecret } from '@/utils/keyshares'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationMemberRoleChoices,
@@ -238,6 +238,26 @@ export const wrapEnvSecretsForUser = async (
 
   return {
     user,
+    wrappedSeed,
+    wrappedSalt,
+  }
+}
+
+/**
+ * Wraps environment secrets for the server.
+ *
+ * @param {{ seed: string; salt: string }} envSecrets - The environment secrets to be wrapped.
+ * @param {string} serverPubKey - The server public key.
+ * @returns {Promise<{ user: OrganisationMemberType; wrappedSeed: string; wrappedSalt: string }>} - An object containing the wrapped environment secrets and user information.
+ */
+export const wrapEnvSecretsForServer = async (
+  envSecrets: { seed: string; salt: string },
+  serverPubKey: string
+) => {
+  const wrappedSeed = await encryptAsymmetric(envSecrets.seed, serverPubKey)
+  const wrappedSalt = await encryptAsymmetric(envSecrets.salt, serverPubKey)
+
+  return {
     wrappedSeed,
     wrappedSalt,
   }

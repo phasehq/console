@@ -61,7 +61,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const { keyring } = useContext(KeyringContext)
 
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
-    variables: { organisationId: organisation!.id, appId: '' },
+    variables: { organisationId: organisation!.id },
   })
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
@@ -228,7 +228,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
 
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
-    variables: { organisationId, appId: '' },
+    variables: { organisationId },
   })
   const [createInvite] = useMutation(InviteMember)
 
