@@ -15,7 +15,7 @@
 
 [Phase](https://phase.dev) is an all-in-one platform for developers to securely create, manage and deploy application secrets across local development 💻, CI tools 🔨, and cloud ☁️ infrastructure.
 
-An open source and developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manager**.
+An open source and developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manager** that works with your whole team 🧑‍💻.
 
 ---
 
