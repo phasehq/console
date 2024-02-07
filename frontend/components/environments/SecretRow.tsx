@@ -40,6 +40,7 @@ import { Avatar } from '../common/Avatar'
 import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 import { encryptAsymmetric } from '@/utils/crypto'
 import { toast } from 'react-toastify'
+import { toggleBooleanKeepingCase } from '@/utils/secrets'
 
 export const Tag = (props: { tag: SecretTagType }) => {
   const { name, color } = props.tag
@@ -805,6 +806,10 @@ export default function SecretRow(props: {
 }) {
   const { orgId, secret, cannonicalSecret, secretNames, handlePropertyChange, handleDelete } = props
 
+  const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
+
+  const booleanValue = secret.value.toLowerCase() === 'true'
+
   const [isRevealed, setIsRevealed] = useState<boolean>(false)
 
   const [readSecret] = useMutation(LogSecretRead)
@@ -819,6 +824,10 @@ export default function SecretRow(props: {
   const toggleReveal = () => {
     isRevealed ? handleHideSecret() : handleRevealSecret()
   }
+
+  useEffect(() => {
+    if (isBoolean) setIsRevealed(true)
+  }, [isBoolean])
 
   const INPUT_BASE_STYLE =
     'w-full text-zinc-800 font-mono custom bg-zinc-100 dark:bg-zinc-800 dark:text-white transition ease ph-no-capture'
@@ -836,6 +845,11 @@ export default function SecretRow(props: {
       secret.comment !== cannonicalSecret.comment ||
       !areTagsAreSame(secret.tags, cannonicalSecret.tags)
     )
+  }
+
+  const handleToggleBoolean = () => {
+    const toggledValue = toggleBooleanKeepingCase(secret.value)
+    handlePropertyChange(secret.id, 'value', toggledValue)
   }
 
   return (
@@ -875,8 +889,33 @@ export default function SecretRow(props: {
         </div>
       </div>
       <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-zinc-100 dark:bg-zinc-800 p-px">
+        {isBoolean && (
+          <div className="flex items-center px-2">
+            <Switch
+              checked={booleanValue}
+              onChange={handleToggleBoolean}
+              className={`${
+                booleanValue
+                  ? 'bg-emerald-400/10 ring-emerald-400/20'
+                  : 'bg-neutral-500/40 ring-neutral-500/30'
+              } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+            >
+              <span className="sr-only">Toggle</span>
+              <span
+                className={`${
+                  booleanValue ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500'
+                } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+              ></span>
+            </Switch>
+          </div>
+        )}
+
         <input
-          className={clsx(INPUT_BASE_STYLE, 'w-full focus:outline-none p-2')}
+          className={clsx(
+            INPUT_BASE_STYLE,
+            'w-full focus:outline-none p-2',
+            isBoolean && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
+          )}
           value={secret.value}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
@@ -884,15 +923,17 @@ export default function SecretRow(props: {
 
         <div className="flex gap-1 items-center group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10">
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-            <Button
-              variant="outline"
-              tabIndex={-1}
-              onClick={toggleReveal}
-              title={isRevealed ? 'Mask value' : 'Reveal value'}
-            >
-              <span className="2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
-              <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
-            </Button>
+            {!isBoolean && (
+              <Button
+                variant="outline"
+                tabIndex={-1}
+                onClick={toggleReveal}
+                title={isRevealed ? 'Mask value' : 'Reveal value'}
+              >
+                <span className="2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+                <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
+              </Button>
+            )}
           </div>
 
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
