@@ -15,7 +15,7 @@
 
 [Phase](https://phase.dev) is an all one platform for developers to securely create, manage and deploy application secrets across local development 💻, CI tools 🔨, cloud ☁️ providers etc. and keep them in sync with your team 🧑‍💻.
 
-An open source and developer-friendly alternative to HashiCorp Vault and AWS Secrets Manager.
+An open source and developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manager**.
 
 ---
 
@@ -27,14 +27,14 @@ An open source and developer-friendly alternative to HashiCorp Vault and AWS Sec
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 📈  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables                |
-| ⌨️  | **[CLI](https://github.com/phasehq/cli)**: Import existing secrets from `.env` files, encrypt them and securely inject them in your application runtime  |
-| 🤫  | **[Secret management](https://docs.phase.dev/console/apps)**: Diffs, version control and Point-in-time Recovery                                                                                    |
+| ⌨️  | **[CLI](https://github.com/phasehq/cli)**: Import existing secrets from `.env` files, encrypt them and securely inject them in your application at runtime  |
+| 🤫  | **[Secret management](https://docs.phase.dev/console/apps)**: Secret Diffs, version control and Point-in-time Recovery                                                                                    |
 | 🙋  | **[RBAC](https://docs.phase.dev/console/users#user-roles)**: Fine-grained, role-based and cryptographic access control, per application, per environment.                                                      |
-| 🔑  | **[Service Tokens](https://docs.phase.dev/console/tokens#service-tokens)**: Authenticate CI runners, build tools and production environment with granualar-scope                                                    |
 | 🔌  | **[Integrations](https://docs.phase.dev/#integrate-phase)**: Automatically sync secrets to GitHub, Cloudflare Pages, AWS Secrets Manager etc.                                                        |
 | ![Kubernets](img/kubernetes.svg)  | **[Kubernetes](https://docs.phase.dev/integrations/platforms/kubernetes)**: Automatically deploy secrets to your Kubernetes Cluster with End-to-End encryption via Phase Secrets Operator   |
 | ⛓️  | **[Secret referencing & overrides](https://docs.phase.dev/console/secrets)**: Create personal secrets. Inherit values from other secrets                                                              |
 | 🥡  | **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure                                                                            |
+| 🔑  | **[Service Tokens](https://docs.phase.dev/console/tokens#service-tokens)**: Authenticate CI runners, build tools and production environment with granualar-scope                                                    |
 | 🔍  | **[Audit Logs]()**: Compelte visibility into every change and access event                                                                                  |
 
 [Explore Phase Console](https://docs.phase.dev/console)
