@@ -35,7 +35,7 @@ An open source and developer-friendly alternative to **HashiCorp Vault** and **A
 | ⛓️  | **[Secret referencing & overrides](https://docs.phase.dev/console/secrets)**: Create personal secrets. Inherit values from other secrets                                                              |
 | 🥡  | **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure                                                                            |
 | 🔑  | **[Service Tokens](https://docs.phase.dev/console/tokens#service-tokens)**: Authenticate CI runners, build tools and production environment with granular scope                                                    |
-| 🔍  | **[Audit Logs]()**: Compelte visibility into every change and access event                                                                                  |
+| 🔍  | **[Audit Logs]()**: Complete visibility into every change and access event                                                                                  |
 
 [Explore Phase Console](https://docs.phase.dev/console)
 
