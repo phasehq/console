@@ -2,52 +2,40 @@ import { SecretTagType } from '@/apollo/graphql'
 import { useLazyQuery, useMutation } from '@apollo/client'
 import clsx from 'clsx'
 import { Dialog, Transition } from '@headlessui/react'
-import { useState, useEffect, Fragment } from 'react'
-import { FaCheckSquare, FaSquare, FaTags, FaTimes, FaPlus } from 'react-icons/fa'
+import { useState, useEffect, Fragment, useRef } from 'react'
+import { FaCheckSquare, FaSquare, FaTags, FaTimes, FaPlus, FaPalette } from 'react-icons/fa'
 import { Tag } from '../Tag'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
 import { Button } from '../../common/Button'
 
-export const TagsDialog = (props: {
-  orgId: string
-  secretId: string
-  secretName: string
-  tags: Array<SecretTagType>
-  handlePropertyChange: Function
-}) => {
-  const { orgId, secretId, secretName, tags, handlePropertyChange } = props
+/**
+ * Generates a random hexadecimal color string.
+ *
+ * @returns {string} A string representing a random hex color in the format "#RRGGBB".
+ */
+const generateRandomHexColor = (): string => {
+  // Generate a random number between 0 and 0xFFFFFF, then convert to a hexadecimal string
+  const randomColor = Math.floor(Math.random() * 0xffffff).toString(16)
+  // Pad the string with leading zeros if necessary to ensure it has a length of 6 characters
+  return '#' + randomColor.padStart(6, '0')
+}
 
-  const [getOrgTags, { data: orgTags }] = useLazyQuery(GetSecretTags)
+const TagCreator = (props: { orgId: string }) => {
+  const { orgId } = props
+
+  const colorInputRef = useRef<HTMLInputElement>(null)
+
+  const handleTriggerClick = () => {
+    colorInputRef.current?.click()
+  }
+
   const [createSecretTag] = useMutation(CreateNewSecretTag)
 
-  const [secretTags, setSecretTags] = useState<Array<SecretTagType>>(tags)
-
-  const [isOpen, setIsOpen] = useState<boolean>(false)
-
-  const [newTag, setNewTag] = useState<Partial<SecretTagType>>({ name: '', color: '' })
-
-  useEffect(() => {
-    if (isOpen)
-      getOrgTags({
-        variables: {
-          orgId,
-        },
-      })
-  }, [getOrgTags, isOpen, orgId])
-
-  const closeModal = () => {
-    setIsOpen(false)
-  }
-
-  const openModal = () => {
-    setIsOpen(true)
-  }
-
-  const handleClose = () => {
-    handlePropertyChange(secretId, 'tags', secretTags)
-    closeModal()
-  }
+  const [newTag, setNewTag] = useState<Partial<SecretTagType>>({
+    name: '',
+    color: generateRandomHexColor(),
+  })
 
   const handleNewTagNameChange = (name: string) => setNewTag({ ...newTag, ...{ name } })
 
@@ -73,7 +61,83 @@ export const TagsDialog = (props: {
         },
       ],
     })
-    setNewTag({ name: '', color: '' })
+    setNewTag({ name: '', color: generateRandomHexColor() })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="font-semibold text-black dark:text-white">Create a new tag</div>
+      <div className="flex items-center w-full justify-between ">
+        <div className="flex items-center gap-2 bg-zinc-200 dark:bg-zinc-800 rounded-full px-2">
+          <button
+            className="h-6 w-6 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: `${newTag.color}` }}
+            onClick={handleTriggerClick}
+          >
+            <FaPalette className="text-sm" />
+          </button>
+          <input
+            className="text-sm text-black dark:text-white custom rounded-full bg-zinc-200 dark:bg-zinc-800"
+            placeholder="Tag name"
+            value={newTag.name}
+            onChange={(e) => handleNewTagNameChange(e.target.value)}
+          />
+          <input
+            type="color"
+            ref={colorInputRef}
+            value={newTag.color}
+            onChange={(e) => handleNewTagColorChange(e.target.value)}
+            className="hidden"
+          />
+        </div>
+        <Button
+          variant={newTag.name!.length === 0 ? 'secondary' : 'primary'}
+          disabled={newTag.name!.length === 0}
+          onClick={handleCreateTag}
+        >
+          <FaPlus />
+          Create new tag
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export const TagsDialog = (props: {
+  orgId: string
+  secretId: string
+  secretName: string
+  tags: Array<SecretTagType>
+  handlePropertyChange: Function
+}) => {
+  const { orgId, secretId, secretName, tags, handlePropertyChange } = props
+
+  const [getOrgTags, { data: orgTags }] = useLazyQuery(GetSecretTags)
+
+  const [secretTags, setSecretTags] = useState<Array<SecretTagType>>(tags)
+
+  const [isOpen, setIsOpen] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (isOpen)
+      getOrgTags({
+        variables: {
+          orgId,
+        },
+      })
+  }, [getOrgTags, isOpen, orgId])
+
+  const closeModal = () => {
+    setIsOpen(false)
+  }
+
+  const openModal = () => {
+    setIsOpen(true)
+  }
+
+  const handleClose = () => {
+    handlePropertyChange(secretId, 'tags', secretTags)
+    closeModal()
   }
 
   const TagSelector = (props: { tag: SecretTagType }) => {
@@ -161,32 +225,13 @@ export const TagsDialog = (props: {
                   </Dialog.Title>
 
                   <div className="space-y-6 p-4">
-                    <div className="space-y-1">
+                    <div className="grid grid-cols-2">
                       {orgTags?.secretTags.map((tag: SecretTagType) => (
                         <TagSelector key={tag.id} tag={tag} />
                       ))}
-                      <div className="flex items-center w-full justify-between border-t border-zinc-700 py-4">
-                        <div className="flex items-center gap-2">
-                          <input
-                            className="text-sm"
-                            value={newTag.name}
-                            onChange={(e) => handleNewTagNameChange(e.target.value)}
-                          />
-                          <input
-                            type="color"
-                            value={newTag.color}
-                            onChange={(e) => handleNewTagColorChange(e.target.value)}
-                          />
-                        </div>
-                        <Button
-                          variant={newTag.name!.length === 0 ? 'secondary' : 'primary'}
-                          disabled={newTag.name!.length === 0}
-                          onClick={handleCreateTag}
-                        >
-                          <FaPlus />
-                          Create new tag
-                        </Button>
-                      </div>
+                    </div>
+                    <div className="border-t border-neutral-500/40 pt-4">
+                      <TagCreator orgId={orgId} />
                     </div>
                   </div>
                 </Dialog.Panel>
