@@ -1,12 +1,6 @@
 'use client'
 
-import {
-  ApiEnvironmentSyncStatusChoices,
-  EnvironmentSyncType,
-  EnvironmentType,
-  SecretInput,
-  SecretType,
-} from '@/apollo/graphql'
+import { EnvironmentType, SecretInput, SecretType } from '@/apollo/graphql'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
@@ -26,13 +20,11 @@ import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import {
-  FaArrowRight,
   FaChevronDown,
   FaDownload,
   FaExchangeAlt,
   FaPlus,
   FaSearch,
-  FaSync,
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
@@ -40,13 +32,10 @@ import SecretRow from '@/components/environments/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Menu, Popover, Transition } from '@headlessui/react'
+import { Menu, Transition } from '@headlessui/react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Alert } from '@/components/common/Alert'
-import { SyncStatusIndicator } from '@/components/syncing/SyncStatusIndicator'
-import { SyncCard } from '@/components/syncing/SyncCard'
-import { StatusIndicator } from '@/components/common/StatusIndicator'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 
 type EnvKeyring = {
