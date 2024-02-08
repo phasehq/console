@@ -125,7 +125,8 @@ export const TagsDialog = (props: {
           orgId,
         },
       })
-  }, [getOrgTags, isOpen, orgId])
+    setSecretTags(tags)
+  }, [getOrgTags, isOpen, orgId, tags])
 
   const closeModal = () => {
     setIsOpen(false)
@@ -185,7 +186,7 @@ export const TagsDialog = (props: {
       )}
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal}>
+        <Dialog as="div" className="relative z-10" onClose={handleClose}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -229,6 +230,11 @@ export const TagsDialog = (props: {
                       {orgTags?.secretTags.map((tag: SecretTagType) => (
                         <TagSelector key={tag.id} tag={tag} />
                       ))}
+                    </div>
+                    <div className="flex justify-end">
+                      <Button variant="primary" onClick={handleClose}>
+                        Done
+                      </Button>
                     </div>
                     <div className="border-t border-neutral-500/40 pt-4">
                       <TagCreator orgId={orgId} />
