@@ -8,6 +8,7 @@ import { Tag } from '../Tag'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
 import { Button } from '../../common/Button'
+import { areTagsAreSame } from '@/utils/tags'
 
 /**
  * Generates a random hexadecimal color string.
@@ -137,7 +138,9 @@ export const TagsDialog = (props: {
   }
 
   const handleClose = () => {
-    handlePropertyChange(secretId, 'tags', secretTags)
+    if (!areTagsAreSame(tags, secretTags)) {
+      handlePropertyChange(secretId, 'tags', secretTags)
+    }
     closeModal()
   }
 
