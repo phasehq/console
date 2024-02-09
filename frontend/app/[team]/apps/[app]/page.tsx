@@ -34,6 +34,7 @@ import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { userIsAdmin } from '@/utils/permissions'
 import Spinner from '@/components/common/Spinner'
+import { Card } from '@/components/common/Card'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -395,47 +396,93 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           <section className="space-y-8 p-4">
             <div className="space-y-2">
               <div className="space-y-1">
-                <h1 className="h3 font-semibold text-2xl">Secrets</h1>
+                <h1 className="h3 font-semibold text-2xl">Environments</h1>
                 <p className="text-neutral-500">
                   An overview of secrets across all environments in this App.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
-              <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-                <div className="">
-                  <FaSearch className="text-neutral-500" />
-                </div>
-                <input
-                  placeholder="Search"
-                  className="custom bg-zinc-100 dark:bg-zinc-800"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <FaTimesCircle
-                  className={clsx(
-                    'cursor-pointer text-neutral-500 transition-opacity ease',
-                    searchQuery ? 'opacity-100' : 'opacity-0'
-                  )}
-                  role="button"
-                  onClick={() => setSearchQuery('')}
-                />
-              </div>
+            <div className="grid grid-cols-6 gap-4 pb-8 border-b border-neutral-500/40">
+              <Card>
+                <div className="space-y-8">
+                  <div>
+                    <div className="font-semibold text-xl">Development</div>
+                  </div>
 
-              <div className="flex items-center justify-end gap-8 p-4 text-neutral-500">
-                <div className="flex items-center gap-2">
-                  <FaCheckCircle className="text-emerald-500 shrink-0" /> Secret is present
+                  <Button variant="primary">
+                    Manage <FaArrowRight />
+                  </Button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <FaCheckCircle className="text-amber-500 shrink-0" /> Secret is the same as
-                  Production
+              </Card>
+
+              <Card>
+                <div className="space-y-8">
+                  <div>
+                    <div className="font-semibold text-xl">Staging</div>
+                  </div>
+
+                  <Button variant="primary">
+                    Manage <FaArrowRight />
+                  </Button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <FaCircle className="text-neutral-500 shrink-0" /> Secret is blank
+              </Card>
+
+              <Card>
+                <div className="space-y-8">
+                  <div>
+                    <div className="font-semibold text-xl">Production</div>
+                  </div>
+
+                  <Button variant="primary">
+                    Manage <FaArrowRight />
+                  </Button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <FaTimesCircle className="text-red-500 shrink-0" /> Secret is missing
+              </Card>
+            </div>
+
+            <div>
+              <div className="space-y-1">
+                <h1 className="h3 font-semibold text-2xl">Secrets</h1>
+                <p className="text-neutral-500">
+                  An overview of secrets across all environments in this App.
+                </p>
+              </div>
+              <div className="flex items-center w-full justify-between border-b border-neutral-500/20 pb-4">
+                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+                  <div className="">
+                    <FaSearch className="text-neutral-500" />
+                  </div>
+                  <input
+                    placeholder="Search"
+                    className="custom bg-zinc-100 dark:bg-zinc-800"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <FaTimesCircle
+                    className={clsx(
+                      'cursor-pointer text-neutral-500 transition-opacity ease',
+                      searchQuery ? 'opacity-100' : 'opacity-0'
+                    )}
+                    role="button"
+                    onClick={() => setSearchQuery('')}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-8 p-4 text-neutral-500">
+                  <div className="flex items-center gap-2">
+                    <FaCheckCircle className="text-emerald-500 shrink-0" /> Secret is present
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FaCheckCircle className="text-amber-500 shrink-0" /> Secret is the same as
+                    Production
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FaCircle className="text-neutral-500 shrink-0" /> Secret is blank
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FaTimesCircle className="text-red-500 shrink-0" /> Secret is missing
+                  </div>
                 </div>
               </div>
             </div>
