@@ -5,8 +5,8 @@ import { signIn, useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ReactNode, useEffect, useState } from 'react'
 import { FaGithub, FaGitlab, FaGoogle } from 'react-icons/fa'
-import { AnimatedLogo } from '../common/AnimatedLogo'
 import Spinner from '../common/Spinner'
+import { LogoWordMark } from '../common/LogoWordMark'
 
 type ProviderButton = { id: string; name: string; icon: ReactNode; style: string }
 
@@ -48,7 +48,7 @@ export default function SignInButtons() {
 
   const callbackUrl = searchParams?.get('callbackUrl')
 
-  const titleText = () => (loading ? 'Logging you in' : 'Phase Console')
+  const titleText = () => (loading ? 'Logging in' : 'CONSOLE')
 
   useEffect(() => {
     const isDarkMode = document.documentElement.classList.contains('dark')
@@ -69,9 +69,9 @@ export default function SignInButtons() {
 
   return (
     <>
-      <div className="gap-y-2 flex flex-col items-center p-16 border border-neutral-500/20 shadow-2xl rounded-lg bg-neutral-800/80 text-white">
+      <div className="gap-y-8 flex flex-col items-center p-16 border border-neutral-500/20 shadow-2xl rounded-lg bg-neutral-800/80 text-white">
         <div className={clsx(status === 'loading' && 'animate-pulse')}>
-          <AnimatedLogo boxSize={96} />
+          <LogoWordMark className="w-60 fill-white" />
         </div>
         {status === 'unauthenticated' && (
           <div className="space-y-4">
