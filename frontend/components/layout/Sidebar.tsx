@@ -13,12 +13,15 @@ import {
   FaPlus,
   FaUsersCog,
   FaProjectDiagram,
+  FaCube,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Fragment, useContext } from 'react'
-import { OrganisationType } from '@/apollo/graphql'
+import { Fragment, useContext, useEffect } from 'react'
+import { AppType, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
+import { GetApps } from '@/graphql/queries/getApps.gql'
+import { useLazyQuery } from '@apollo/client'
 
 export type SidebarLinkT = {
   name: string
@@ -48,10 +51,25 @@ const SidebarLink = (props: SidebarLinkT) => {
 const Sidebar = () => {
   const team = usePathname()?.split('/')[1]
 
-  const { organisations, activeOrganisation, setActiveOrganisation } =
-    useContext(organisationContext)
+  const [getApps, { data: appsData }] = useLazyQuery(GetApps)
+
+  const { organisations, activeOrganisation: organisation } = useContext(organisationContext)
 
   const showOrgsMenu = organisations === null ? false : organisations?.length > 1
+
+  useEffect(() => {
+    if (organisation) {
+      const fetchData = async () => {
+        getApps({
+          variables: {
+            organisationId: organisation.id,
+          },
+        })
+      }
+
+      fetchData()
+    }
+  }, [getApps, organisation])
 
   const OrgsMenu = () => {
     const router = useRouter()
@@ -66,7 +84,7 @@ const Sidebar = () => {
               as="div"
               className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between"
             >
-              {activeOrganisation?.name}
+              {organisation?.name}
               <FaChevronDown
                 className={clsx('transition ease', open ? 'rotate-180' : 'rotate-0')}
               />
@@ -156,21 +174,64 @@ const Sidebar = () => {
     },
   ]
 
+  const pathname = usePathname()
+
   return (
     <div className="h-screen flex flex-col pt-[64px]">
       <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
         <div className="gap-4 p-4 grid grid-cols-1">
           <OrgsMenu />
 
-          {links.slice(0, 5).map((link) => (
-            <SidebarLink
-              key={link.name}
-              name={link.name}
-              href={link.href}
-              icon={link.icon}
-              active={link.active}
-            />
-          ))}
+          <SidebarLink
+            name="Home"
+            href={`/${team}`}
+            icon={<FaHome />}
+            active={usePathname() === `/${team}`}
+          />
+
+          <SidebarLink
+            name="Apps"
+            href={`/${team}/apps`}
+            icon={<FaCubes />}
+            active={usePathname()?.split('/')[2] === 'apps'}
+          />
+
+          <div className="pl-4">
+            <div className="space-y-1 border-l border-neutral-500/40">
+              {appsData?.apps.map((app: AppType) => (
+                <div key={app.id} className="flex items-center">
+                  <div className="w-4 border-t border-neutral-500/40"></div>
+                  <SidebarLink
+                    name={app.name}
+                    href={`/${team}/apps/${app.id}`}
+                    icon={<FaCube />}
+                    active={pathname?.includes(app.id) || false}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <SidebarLink
+            name="Members"
+            href={`/${team}/members`}
+            icon={<FaUsersCog />}
+            active={usePathname() === `/${team}/members`}
+          />
+
+          <SidebarLink
+            name="Integrations"
+            href={`/${team}/integrations`}
+            icon={<FaProjectDiagram />}
+            active={usePathname() === `/${team}/integrations`}
+          />
+
+          <SidebarLink
+            name="Access tokens"
+            href={`/${team}/tokens`}
+            icon={<FaKey />}
+            active={usePathname() === `/${team}/tokens`}
+          />
         </div>
         <div className="p-4">
           <SidebarLink
