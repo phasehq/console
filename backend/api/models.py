@@ -360,7 +360,8 @@ class UserToken(models.Model):
 class SecretFolder(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    parent = models.ForeignKey("self", on_delete=models.CASCADE)
+    path = models.TextField(default="/")
+    folder = models.ForeignKey("self", on_delete=models.CASCADE, null=True)
     name = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -381,6 +382,7 @@ class Secret(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    path = models.TextField(default="/")
     key = models.TextField()
     key_digest = models.TextField()
     value = models.TextField()
@@ -418,6 +420,7 @@ class SecretEvent(models.Model):
     secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    path = models.TextField(default="/")
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
     )
