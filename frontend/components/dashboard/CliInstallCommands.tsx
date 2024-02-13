@@ -7,7 +7,7 @@ export const CliInstallCommands = () => {
   const platformScripts = [
     {
       name: 'MacOS',
-      rawScript: 'brew install phase/cli/phase',
+      rawScript: 'brew install phasehq/cli/phase',
       styledScript: (
         <pre>
           <span className="text-emerald-800 dark:text-emerald-300">brew</span> install
@@ -18,7 +18,7 @@ export const CliInstallCommands = () => {
     {
       name: 'Windows',
       rawScript:
-        'scoop bucket add phasehq https://github.com/phasehq/scoop-cli.git; scoop install phase',
+        'scoop bucket add phasehq https://github.com/phasehq/scoop-cli.git && scoop install phase',
       styledScript: (
         <div className="space-y-1">
           <pre>
@@ -87,7 +87,7 @@ export const CliInstallCommands = () => {
       rawScript: 'docker run phasehq/cli',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">docker</span> run phase/cli
+          <span className="text-emerald-800 dark:text-emerald-300">docker</span> run phasehq/cli
         </pre>
       ),
     },
