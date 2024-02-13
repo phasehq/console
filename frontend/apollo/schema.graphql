@@ -11,7 +11,8 @@ type Query {
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(appId: ID, environmentId: ID, memberId: ID): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
-  secrets(envId: ID): [SecretType]
+  secrets(envId: ID, path: String): [SecretType]
+  folders(envId: ID, path: String): [SecretFolderType]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
   environmentKeys(appId: ID, environmentId: ID, memberId: ID): [EnvironmentKeyType]
@@ -164,6 +165,7 @@ type SecretEventType {
   id: String!
   secret: SecretType!
   environment: EnvironmentType!
+  path: String!
   user: OrganisationMemberType
   key: String!
   value: String!
@@ -179,6 +181,7 @@ type SecretEventType {
 type SecretType {
   id: String!
   folder: SecretFolderType
+  path: String!
   key: String!
   value: String!
   version: Int!
@@ -192,25 +195,13 @@ type SecretType {
 
 type SecretFolderType {
   id: String!
+  environment: EnvironmentType!
+  path: String!
   name: String!
   createdAt: DateTime
   updatedAt: DateTime!
-}
-
-type SecretTagType {
-  id: String!
-  name: String!
-  color: String!
-}
-
-type PersonalSecretType {
-  id: String!
-  secret: SecretType!
-  user: OrganisationMemberType!
-  value: String
-  isActive: Boolean!
-  createdAt: DateTime
-  updatedAt: DateTime!
+  folderCount: Int
+  secretCount: Int
 }
 
 type EnvironmentType {
@@ -235,6 +226,22 @@ enum ApiEnvironmentEnvTypeChoices {
 
   """Production"""
   PROD
+}
+
+type SecretTagType {
+  id: String!
+  name: String!
+  color: String!
+}
+
+type PersonalSecretType {
+  id: String!
+  secret: SecretType!
+  user: OrganisationMemberType!
+  value: String
+  isActive: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime!
 }
 
 """An enumeration."""
@@ -463,7 +470,8 @@ type Mutation {
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
   deleteServiceToken(tokenId: ID!): DeleteServiceTokenMutation
-  createSecretFolder(envId: ID!, id: ID!, name: String!, parentFolderId: ID): CreateSecretFolderMutation
+  createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
+  deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
   createSecret(secretData: SecretInput): CreateSecretMutation
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
@@ -623,6 +631,10 @@ type CreateSecretFolderMutation {
   folder: SecretFolderType
 }
 
+type DeleteSecretFolderMutation {
+  ok: Boolean
+}
+
 type CreateSecretTagMutation {
   tag: SecretTagType
 }
@@ -633,7 +645,7 @@ type CreateSecretMutation {
 
 input SecretInput {
   envId: ID
-  folderId: ID
+  path: String
   key: String!
   keyDigest: String!
   value: String!
