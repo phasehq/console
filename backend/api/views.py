@@ -9,6 +9,7 @@ from api.serializers import (
 from api.emails import send_login_email
 from api.utils.permissions import user_can_access_environment
 from api.utils.syncing.auth import store_oauth_token
+from api.utils.secrets import create_environment_folder_structure
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from graphene_django.views import GraphQLView
@@ -33,6 +34,7 @@ from .models import (
     EnvironmentToken,
     Secret,
     SecretEvent,
+    SecretFolder,
     SecretTag,
     ServiceToken,
     UserToken,
@@ -362,6 +364,7 @@ class SecretsView(APIView):
         token_type = get_token_type(auth_token)
 
         env_id = request.headers["environment"]
+
         env = Environment.objects.get(id=env_id)
 
         ip_address, user_agent = get_resolver_request_meta(request)
@@ -453,8 +456,21 @@ class SecretsView(APIView):
         for secret in request_body["secrets"]:
             tags = SecretTag.objects.filter(id__in=secret["tags"])
 
+            try:
+                path = secret["path"]
+            except:
+                path = "/"
+            # path = secret["path"] if secret["path"] is not None else "/"
+
+            folder = None
+
+            if path != "/":
+                folder = create_environment_folder_structure(path, env_id)
+
             secret_data = {
                 "environment": env,
+                "path": path,
+                "folder": folder,
                 "key": secret["key"],
                 "key_digest": secret["keyDigest"],
                 "value": secret["value"],
