@@ -391,6 +391,13 @@ class SecretsView(APIView):
         except:
             pass
 
+        try:
+            path = request.headers["path"]
+            if path:
+                secrets_filter["path"] = path
+        except:
+            pass
+
         secrets = Secret.objects.filter(**secrets_filter)
 
         for secret in secrets:
