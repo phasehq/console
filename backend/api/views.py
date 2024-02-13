@@ -474,7 +474,6 @@ class SecretsView(APIView):
                 "key": secret["key"],
                 "key_digest": secret["keyDigest"],
                 "value": secret["value"],
-                "folder_id": secret["folderId"],
                 "version": 1,
                 "comment": secret["comment"],
             }
@@ -530,12 +529,24 @@ class SecretsView(APIView):
 
             tags = SecretTag.objects.filter(id__in=secret["tags"])
 
+            try:
+                path = secret["path"]
+            except:
+                path = "/"
+            # path = secret["path"] if secret["path"] is not None else "/"
+
+            folder = None
+
+            if path != "/":
+                folder = create_environment_folder_structure(path, env_id)
+
             secret_data = {
                 "environment": env,
+                "path": path,
                 "key": secret["key"],
                 "key_digest": secret["keyDigest"],
                 "value": secret["value"],
-                "folder_id": secret["folderId"],
+                "folder": folder,
                 "version": secret_obj.version + 1,
                 "comment": secret["comment"],
             }
