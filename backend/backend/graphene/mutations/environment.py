@@ -59,7 +59,7 @@ class EnvironmentKeyInput(graphene.InputObjectType):
 
 class SecretInput(graphene.InputObjectType):
     env_id = graphene.ID(required=False)
-    folder_id = graphene.ID(required=False)
+    path = graphene.String(required=False)
     key = graphene.String(required=True)
     key_digest = graphene.String(required=True)
     value = graphene.String(required=True)
@@ -398,22 +398,61 @@ class DeleteServiceTokenMutation(graphene.Mutation):
 
 class CreateSecretFolderMutation(graphene.Mutation):
     class Arguments:
-        id = graphene.ID(required=True)
-        env_id = graphene.ID(required=True)
-        parent_folder_id = graphene.ID(required=False)
-        name = graphene.String(required=True)
+        env_id = graphene.ID()
+        path = graphene.String()
+        name = graphene.String()
 
     folder = graphene.Field(SecretFolderType)
 
     @classmethod
-    def mutate(cls, root, info, id, env_id, name, parent_folder_id=None):
+    def mutate(cls, root, info, env_id, name, path):
         user = info.context.user
-        if user_can_access_environment(user.id, env_id):
-            folder = SecretFolder.objects.create(
-                id=id, environment_id=env_id, parent_id=parent_folder_id, name=name
+
+        if not user_can_access_environment(user.userId, env_id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if SecretFolder.objects.filter(
+            environment_id=env_id, path=path, name=name
+        ).exists():
+            raise GraphQLError("A folder with that name already exists at this path!")
+
+        folder = None
+
+        if path != "/":
+            folder_name = path.split("/")[-1]
+
+            folder_path, _, _ = path.rpartition("/" + folder_name)
+            folder_path = folder_path if folder_path else "/"
+
+            folder = SecretFolder.objects.get(
+                environment_id=env_id, path=folder_path, name=folder_name
             )
 
-            return CreateSecretFolderMutation(folder=folder)
+        folder = SecretFolder.objects.create(
+            environment_id=env_id, folder=folder, path=path, name=name
+        )
+
+        return CreateSecretFolderMutation(folder=folder)
+
+
+class DeleteSecretFolderMutation(graphene.Mutation):
+    class Arguments:
+        folder_id = graphene.ID()
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, folder_id):
+        user = info.context.user
+
+        folder = SecretFolder.objects.get(id=folder_id)
+
+        if not user_can_access_environment(user.userId, folder.environment.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        folder.delete()
+
+        return DeleteSecretFolderMutation(ok=True)
 
 
 class CreateSecretTagMutation(graphene.Mutation):
@@ -454,9 +493,25 @@ class CreateSecretMutation(graphene.Mutation):
 
         tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
+        path = secret_data.path if secret_data.path is not None else "/"
+
+        folder = None
+
+        if path != "/":
+
+            folder_name = path.split("/")[-1]
+
+            folder_path, _, _ = path.rpartition("/" + folder_name)
+            folder_path = folder_path if folder_path else "/"
+
+            folder = SecretFolder.objects.get(
+                environment_id=env.id, path=folder_path, name=folder_name
+            )
+
         secret_obj_data = {
             "environment_id": env.id,
-            "folder_id": secret_data.folder_id,
+            "path": path,
+            "folder_id": folder.id if folder is not None else None,
             "key": secret_data.key,
             "key_digest": secret_data.key_digest,
             "value": secret_data.value,
@@ -507,8 +562,10 @@ class EditSecretMutation(graphene.Mutation):
 
         tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
+        path = secret_data.path if secret_data.path is not None else "/"
+
         secret_obj_data = {
-            "folder_id": secret_data.folder_id,
+            "path": path,
             "key": secret_data.key,
             "key_digest": secret_data.key_digest,
             "value": secret_data.value,
