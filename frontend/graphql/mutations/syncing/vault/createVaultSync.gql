@@ -1,5 +1,5 @@
-mutation CreateNewVaultSync($envId: ID!, $engine: String!, $path: String!, $credentialId: ID!) {
-  createVaultSync(envId: $envId, engine: $engine, path: $path, credentialId: $credentialId) {
+mutation CreateNewVaultSync($envId: ID!, $path: String! $engine: String!, $vaultPath: String!, $credentialId: ID!) {
+  createVaultSync(envId: $envId, path: $path, engine: $engine, vaultPath: $vaultPath, credentialId: $credentialId) {
     sync {
       id
       environment {

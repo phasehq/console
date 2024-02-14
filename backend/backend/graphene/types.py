@@ -304,6 +304,7 @@ class EnvironmentSyncType(DjangoObjectType):
         fields = (
             "id",
             "environment",
+            "path",
             "service_info",
             "options",
             "is_active",

@@ -30,7 +30,9 @@ def get_environment_secrets(environment_sync):
     env_pubkey, env_privkey = env_keypair(env_seed)
 
     secrets = Secret.objects.filter(
-        environment=environment_sync.environment, deleted_at=None
+        environment=environment_sync.environment,
+        path=environment_sync.path,
+        deleted_at=None,
     )
 
     kv_pairs = []

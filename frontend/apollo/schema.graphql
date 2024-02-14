@@ -365,6 +365,7 @@ scalar JSONString
 type EnvironmentSyncType {
   id: String!
   environment: EnvironmentType!
+  path: String!
   options: JSONString!
   authentication: ProviderCredentialsType
   isActive: Boolean!
@@ -462,10 +463,10 @@ type Mutation {
   createProviderCredentials(credentials: JSONString, name: String, orgId: ID, provider: String): CreateProviderCredentials
   updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
   deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
-  createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, projectEnv: String, projectName: String): CreateCloudflarePagesSync
-  createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, secretName: String): CreateAWSSecretsManagerSync
-  createGhActionsSync(credentialId: ID, envId: ID, owner: String, repoName: String): CreateGitHubActionsSync
-  createVaultSync(credentialId: ID, engine: String, envId: ID, path: String): CreateVaultSync
+  createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
+  createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, path: String, secretName: String): CreateAWSSecretsManagerSync
+  createGhActionsSync(credentialId: ID, envId: ID, owner: String, path: String, repoName: String): CreateGitHubActionsSync
+  createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation

@@ -278,6 +278,7 @@ class EnvironmentSync(models.Model):
     ]
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    path = models.TextField(default="/")
     service = models.CharField(
         max_length=50, choices=ServiceConfig.get_service_choices()
     )
@@ -366,6 +367,9 @@ class SecretFolder(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        unique_together = (("environment", "folder", "name", "path"),)
 
 
 class SecretTag(models.Model):

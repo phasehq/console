@@ -14,6 +14,7 @@ import { toast } from 'react-toastify'
 import { SiCloudflarepages } from 'react-icons/si'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
+import { Input } from '@/components/common/Input'
 
 export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -42,6 +43,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
   const [query, setQuery] = useState('')
   const [cfEnv, setCfEnv] = useState<'preview' | 'production'>('preview')
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
+  const [path, setPath] = useState('/')
 
   const [credentialsValid, setCredentialsValid] = useState(false)
 
@@ -79,6 +81,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
       await createCfPagesSync({
         variables: {
           envId: phaseEnv?.id,
+          path,
           projectName: cfProject?.name,
           deploymentId: cfProject?.deploymentId,
           projectEnv: cfEnv,
@@ -134,7 +137,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
             <div className="font-medium text-black dark:text-white">
               Step 2: Select source and destination for Secrets
             </div>
-            <div>
+            <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
                   <label className="block text-gray-700 text-sm font-bold mb-2">
@@ -160,6 +163,8 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                   ))}
                 </div>
               </RadioGroup>
+
+              <Input value={path} setValue={setPath} label="Path" />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-8">

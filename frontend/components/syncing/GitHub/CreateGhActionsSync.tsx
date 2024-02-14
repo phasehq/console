@@ -21,6 +21,7 @@ import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { SiGithub } from 'react-icons/si'
+import { Input } from '@/components/common/Input'
 
 export const CreateGhActionsSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -49,6 +50,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   const [query, setQuery] = useState('')
 
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
+  const [path, setPath] = useState('/')
 
   const [credentialsValid, setCredentialsValid] = useState(false)
 
@@ -89,6 +91,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
       await createGhActionsSync({
         variables: {
           envId: phaseEnv?.id,
+          path,
           repoName: selectedRepo.name,
           owner: selectedRepo.owner,
           credentialId: credential.id,
@@ -147,7 +150,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
             <div className="font-medium text-black dark:text-white">
               Step 2: Select source and destination for Secrets
             </div>
-            <div>
+            <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
                   <label className="block text-gray-700 text-sm font-bold mb-2">
@@ -173,6 +176,8 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                   ))}
                 </div>
               </RadioGroup>
+
+              <Input value={path} setValue={setPath} label="Path" />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-4">
