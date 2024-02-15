@@ -19,12 +19,12 @@ export const SecretFolderRow = (props: { folder: SecretFolderType; handleDelete:
           <FaFolder className="text-emerald-500" /> {folder.name}
         </div>
 
-        <div className="flex items-center gap-8 text-neutral-500 text-sm">
+        <div className="grid grid-cols-2 gap-8 text-neutral-500 text-sm w-80">
           <span className="flex items-center gap-2">
-            {folder.folderCount} <FaFolder />
+            <FaFolder /> {folder.folderCount} folder{folder.folderCount !== 1 && 's'}
           </span>
           <span className="flex items-center gap-2">
-            {folder.secretCount} <FaKey />
+            <FaKey /> {folder.secretCount} secret{folder.secretCount !== 1 && 's'}
           </span>
         </div>
       </Link>
