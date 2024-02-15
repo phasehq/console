@@ -23,6 +23,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import {
+  FaArrowUp,
   FaCheckCircle,
   FaChevronDown,
   FaDownload,
@@ -30,6 +31,7 @@ import {
   FaFolder,
   FaFolderPlus,
   FaForward,
+  FaHome,
   FaPlus,
   FaSearch,
   FaSlash,
@@ -50,6 +52,7 @@ import { Input } from '@/components/common/Input'
 import { SplitButton } from '@/components/common/SplitButton'
 import path from 'path'
 import { SecretFolderRow } from '@/components/environments/folders/SecretFolderRow'
+import { MdKeyboardReturn } from 'react-icons/md'
 
 type EnvKeyring = {
   privateKey: string
@@ -643,10 +646,13 @@ export default function Environment({
     }
 
     return (
-      <div className="flex flex-wrap">
+      <div className="flex flex-wrap items-center">
         {/* Link to the base path */}
-        <Link href={basePath} className="p-2 flex items-center gap-2 font-light">
-          <span className="text-neutral-500">/</span>
+        <Link
+          href={basePath}
+          className="p-2 flex items-center gap-2 font-light text-neutral-500 group"
+        >
+          <FaHome className="group-hover:text-white" />/
         </Link>
         {/* Map over path segments */}
         {path.map((segment, index) => {
@@ -654,19 +660,34 @@ export default function Environment({
           const href = `${basePath}/${path.slice(0, index + 1).join('/')}`
 
           return (
-            <Link
+            <div
               key={index} // Using index as key; consider a more stable key if possible
-              href={href}
               className={clsx(
-                'p-2 flex items-center gap-2',
+                'flex items-center gap-1',
                 index === path.length - 1 ? 'font-semibold' : 'font-light'
               )}
             >
-              {segment}
-              {index < path.length - 1 && <span className="text-neutral-500 pl-2">/</span>}
-            </Link>
+              <Link href={href}>
+                <span className="px-1 py-0.5 text-black dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-md">
+                  {segment}
+                </span>
+              </Link>
+              {index < path.length - 1 && <span className="text-neutral-500 p-1">/</span>}
+            </div>
           )
         })}
+        {
+          <div className="px-4">
+            <Link
+              href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
+              title="Go up one level"
+            >
+              <Button variant="secondary">
+                <MdKeyboardReturn className="shrink-0" />
+              </Button>
+            </Link>
+          </div>
+        }
       </div>
     )
   }
@@ -675,7 +696,7 @@ export default function Environment({
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null && !loading && (
-        <div className="flex flex-col py-4 gap-8">
+        <div className="flex flex-col py-4 gap-4">
           <div className="flex items-center gap-8">
             {envLinks.length > 1 ? (
               <Menu as="div" className="relative group">
