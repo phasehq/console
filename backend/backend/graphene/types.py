@@ -165,6 +165,9 @@ class AppType(DjangoObjectType):
 
 
 class EnvironmentType(DjangoObjectType):
+    folder_count = graphene.Int()
+    secret_count = graphene.Int()
+
     class Meta:
         model = Environment
         fields = (
@@ -178,6 +181,12 @@ class EnvironmentType(DjangoObjectType):
             "created_at",
             "updated_at",
         )
+
+    def resolve_folder_count(self, info):
+        return SecretFolder.objects.filter(environment=self).count()
+
+    def resolve_secret_count(self, info):
+        return Secret.objects.filter(environment=self, deleted_at=None).count()
 
     def resolve_wrapped_seed(self, info):
         org_member = OrganisationMember.objects.get(

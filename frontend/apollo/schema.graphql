@@ -214,6 +214,8 @@ type EnvironmentType {
   wrappedSalt: String!
   createdAt: DateTime
   updatedAt: DateTime!
+  folderCount: Int
+  secretCount: Int
 }
 
 """An enumeration."""
