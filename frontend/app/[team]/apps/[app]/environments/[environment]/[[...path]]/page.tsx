@@ -23,18 +23,14 @@ import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import {
-  FaArrowUp,
   FaCheckCircle,
   FaChevronDown,
   FaDownload,
   FaExchangeAlt,
-  FaFolder,
   FaFolderPlus,
-  FaForward,
   FaHome,
   FaPlus,
   FaSearch,
-  FaSlash,
   FaTimes,
   FaTimesCircle,
   FaUndo,
@@ -50,7 +46,6 @@ import { Alert } from '@/components/common/Alert'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { Input } from '@/components/common/Input'
 import { SplitButton } from '@/components/common/SplitButton'
-import path from 'path'
 import { SecretFolderRow } from '@/components/environments/folders/SecretFolderRow'
 import { MdKeyboardReturn } from 'react-icons/md'
 

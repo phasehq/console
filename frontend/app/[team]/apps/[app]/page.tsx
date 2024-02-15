@@ -24,16 +24,10 @@ import {
   FaCircle,
   FaCopy,
   FaExternalLinkAlt,
-  FaFileCode,
   FaFolder,
-  FaListOl,
-  FaListUl,
-  FaPlus,
   FaRegEye,
   FaRegEyeSlash,
   FaSearch,
-  FaSlidersH,
-  FaThList,
   FaTimesCircle,
 } from 'react-icons/fa'
 import Link from 'next/link'
