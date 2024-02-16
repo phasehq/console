@@ -116,7 +116,6 @@ export default function Environment({
       path: secretPath,
     },
     pollInterval: unsavedChanges ? 0 : 5000,
-    fetchPolicy: 'cache-and-network',
   })
 
   const folders: SecretFolderType[] = data?.folders ?? []
