@@ -304,11 +304,6 @@ export default function SecretLogs(props: { app: string }) {
                     open ? 'border-b border-l-2 border-l-emerald-500 border-r shadow-xl' : ''
                   )}
                 >
-                  <div className="text-sm font-mono border-b border-dashed border-neutral-500/20">
-                    <span className="text-neutral-500">Event ID: </span>
-                    <span className="font-semibold">{log.id}</span>
-                  </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-4 text-sm">
                     <LogField label="Environment">
                       <div className="flex items-center gap-2 ph-no-capture">
