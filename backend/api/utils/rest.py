@@ -4,16 +4,16 @@ import base64
 
 
 def get_client_ip(request):
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
+        ip = x_forwarded_for.split(",")[0]
     else:
-        ip = request.META.get('REMOTE_ADDR')
+        ip = request.META.get("REMOTE_ADDR")
     return ip
 
 
 def get_resolver_request_meta(request):
-    user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
+    user_agent = request.META.get("HTTP_USER_AGENT", "Unknown")
     ip_address = get_client_ip(request)
 
     return ip_address, user_agent
@@ -49,25 +49,36 @@ def get_org_member_from_user_token(auth_token):
         return False
 
 
+def get_service_token(auth_token):
+    prefix, token_type, token_value = auth_token.split(" ")
+
+    if token_type == "User":
+        return None
+
+    return ServiceToken.objects.get(token=token_value)
+
+
 def token_is_expired_or_deleted(auth_token):
     prefix, token_type, token_value = auth_token.split(" ")
 
-    if token_type == 'User':
+    if token_type == "User":
         token = UserToken.objects.get(token=token_value)
     else:
         token = ServiceToken.objects.get(token=token_value)
 
-    return token.deleted_at is not None or (token.expires_at is not None and token.expires_at < timezone.now())
+    return token.deleted_at is not None or (
+        token.expires_at is not None and token.expires_at < timezone.now()
+    )
 
 
 def encode_string_to_base64(s):
     # Convert string to bytes
-    byte_representation = s.encode('utf-8')
+    byte_representation = s.encode("utf-8")
 
     # Base64 encode the bytes
     base64_bytes = base64.b64encode(byte_representation)
 
     # Convert the encoded bytes back to a string
-    base64_string = base64_bytes.decode('utf-8')
+    base64_string = base64_bytes.decode("utf-8")
 
     return base64_string

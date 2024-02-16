@@ -428,6 +428,9 @@ class SecretEvent(models.Model):
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
     )
+    service_token = models.ForeignKey(
+        ServiceToken, on_delete=models.SET_NULL, blank=True, null=True
+    )
     key = models.TextField()
     key_digest = models.TextField()
     value = models.TextField()

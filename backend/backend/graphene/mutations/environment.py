@@ -6,6 +6,7 @@ from api.utils.permissions import (
     user_can_access_environment,
     user_is_org_member,
 )
+from api.utils.audit_logging import log_secret_event
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -528,19 +529,9 @@ class CreateSecretMutation(graphene.Mutation):
             user=info.context.user, organisation=org, deleted_at=None
         )
 
-        event = SecretEvent.objects.create(
-            **{
-                **secret_obj_data,
-                **{
-                    "user": org_member,
-                    "secret": secret,
-                    "event_type": SecretEvent.CREATE,
-                    "ip_address": ip_address,
-                    "user_agent": user_agent,
-                },
-            }
+        log_secret_event(
+            secret, SecretEvent.CREATE, org_member, None, ip_address, user_agent
         )
-        event.tags.set(tags)
 
         return CreateSecretMutation(secret=secret)
 
@@ -586,20 +577,9 @@ class EditSecretMutation(graphene.Mutation):
             user=info.context.user, organisation=org, deleted_at=None
         )
 
-        event = SecretEvent.objects.create(
-            **{
-                **secret_obj_data,
-                **{
-                    "user": org_member,
-                    "environment": env,
-                    "secret": secret,
-                    "event_type": SecretEvent.UPDATE,
-                    "ip_address": ip_address,
-                    "user_agent": user_agent,
-                },
-            }
+        log_secret_event(
+            secret, SecretEvent.UPDATE, org_member, None, ip_address, user_agent
         )
-        event.tags.set(tags)
 
         return EditSecretMutation(secret=secret)
 
@@ -629,17 +609,9 @@ class DeleteSecretMutation(graphene.Mutation):
             user=info.context.user, organisation=org, deleted_at=None
         )
 
-        most_recent_event_copy = (
-            SecretEvent.objects.filter(secret=secret).order_by("version").last()
+        log_secret_event(
+            secret, SecretEvent.DELETE, org_member, None, ip_address, user_agent
         )
-
-        # setting the pk to None and then saving it creates a copy of the instance with updated fields
-        most_recent_event_copy.id = None
-        most_recent_event_copy.event_type = SecretEvent.DELETE
-        most_recent_event_copy.user = org_member
-        most_recent_event_copy.ip_address = ip_address
-        most_recent_event_copy.user_agent = user_agent
-        most_recent_event_copy.save()
 
         return DeleteSecretMutation(secret=secret)
 
@@ -664,19 +636,9 @@ class ReadSecretMutation(graphene.Mutation):
                 user=info.context.user, organisation=org, deleted_at=None
             )
 
-            read_event = SecretEvent.objects.create(
-                secret=secret,
-                environment=secret.environment,
-                user=org_member,
-                key=secret.key,
-                key_digest=secret.key_digest,
-                value=secret.value,
-                comment=secret.comment,
-                event_type=SecretEvent.READ,
-                ip_address=ip_address,
-                user_agent=user_agent,
+            log_secret_event(
+                secret, SecretEvent.READ, org_member, None, ip_address, user_agent
             )
-            read_event.tags.set(secret.tags.all())
             return ReadSecretMutation(ok=True)
 
 
@@ -697,7 +659,7 @@ class CreatePersonalSecretMutation(graphene.Mutation):
         if not user_can_access_environment(info.context.user, secret.environment.id):
             raise GraphQLError("You don't have access to this secret")
 
-        override, created = PersonalSecret.objects.get_or_create(
+        override, _ = PersonalSecret.objects.get_or_create(
             secret_id=override_data.secret_id, user=org_member
         )
         override.value = override_data.value

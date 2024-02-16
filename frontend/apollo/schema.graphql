@@ -167,6 +167,7 @@ type SecretEventType {
   environment: EnvironmentType!
   path: String!
   user: OrganisationMemberType
+  serviceToken: ServiceTokenType
   key: String!
   value: String!
   version: Int!
@@ -246,6 +247,29 @@ type PersonalSecretType {
   updatedAt: DateTime!
 }
 
+type ServiceTokenType {
+  id: String!
+  keys: [ServerEnvironmentKeyType!]!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  name: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime
+}
+
+type ServerEnvironmentKeyType {
+  id: String!
+  environment: EnvironmentType!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
 """An enumeration."""
 enum ApiSecretEventEventTypeChoices {
   """Create"""
@@ -306,29 +330,6 @@ type UserTokenType {
   createdAt: DateTime
   updatedAt: DateTime!
   expiresAt: DateTime
-}
-
-type ServiceTokenType {
-  id: String!
-  keys: [ServerEnvironmentKeyType!]!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  name: String!
-  createdBy: OrganisationMemberType
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
-}
-
-type ServerEnvironmentKeyType {
-  id: String!
-  environment: EnvironmentType!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
 }
 
 type ProviderType {
