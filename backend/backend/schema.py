@@ -26,6 +26,7 @@ from .graphene.mutations.environment import (
     CreateServiceTokenMutation,
     CreateUserTokenMutation,
     DeletePersonalSecretMutation,
+    DeleteSecretFolderMutation,
     DeleteSecretMutation,
     DeleteServiceTokenMutation,
     DeleteUserTokenMutation,
@@ -84,6 +85,7 @@ from .graphene.types import (
     ProviderCredentialsType,
     ProviderType,
     SecretEventType,
+    SecretFolderType,
     SecretTagType,
     SecretType,
     ServiceTokenType,
@@ -104,6 +106,7 @@ from api.models import (
     OrganisationMemberInvite,
     Secret,
     SecretEvent,
+    SecretFolder,
     SecretTag,
     ServiceToken,
     UserToken,
@@ -163,7 +166,12 @@ class Query(graphene.ObjectType):
         member_id=graphene.ID(required=False),
     )
     app_users = graphene.List(OrganisationMemberType, app_id=graphene.ID())
-    secrets = graphene.List(SecretType, env_id=graphene.ID())
+    secrets = graphene.List(
+        SecretType, env_id=graphene.ID(), path=graphene.String(required=False)
+    )
+    folders = graphene.List(
+        SecretFolderType, env_id=graphene.ID(), path=graphene.String(required=False)
+    )
     secret_history = graphene.List(SecretEventType, secret_id=graphene.ID())
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
     environment_keys = graphene.List(
@@ -362,13 +370,27 @@ class Query(graphene.ObjectType):
         app = App.objects.get(id=app_id)
         return app.members.filter(deleted_at=None)
 
-    def resolve_secrets(root, info, env_id):
+    def resolve_secrets(root, info, env_id, path=None):
         if not user_can_access_environment(info.context.user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
 
-        return Secret.objects.filter(environment_id=env_id, deleted_at=None).order_by(
-            "created_at"
-        )
+        filter = {"environment_id": env_id, "deleted_at": None}
+
+        if path:
+            filter["path"] = path
+
+        return Secret.objects.filter(**filter).order_by("created_at")
+
+    def resolve_folders(root, info, env_id, path=None):
+        if not user_can_access_environment(info.context.user.userId, env_id):
+            raise GraphQLError("You don't have access to this environment")
+
+        filter = {"environment_id": env_id}
+
+        if path:
+            filter["path"] = path
+
+        return SecretFolder.objects.filter(**filter).order_by("created_at")
 
     def resolve_secret_history(root, info, secret_id):
         secret = Secret.objects.get(id=secret_id)
@@ -653,11 +675,15 @@ class Mutation(graphene.ObjectType):
     delete_service_token = DeleteServiceTokenMutation.Field()
 
     create_secret_folder = CreateSecretFolderMutation.Field()
+    delete_secret_folder = DeleteSecretFolderMutation.Field()
+
     create_secret_tag = CreateSecretTagMutation.Field()
+
     create_secret = CreateSecretMutation.Field()
     edit_secret = EditSecretMutation.Field()
     delete_secret = DeleteSecretMutation.Field()
     read_secret = ReadSecretMutation.Field()
+
     create_override = CreatePersonalSecretMutation.Field()
     remove_override = DeletePersonalSecretMutation.Field()
 

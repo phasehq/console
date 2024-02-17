@@ -269,7 +269,10 @@ export default function Tokens({ params }: { params: { team: string; app: string
                       : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
                   )}
                 >
-                  KMS
+                  KMS{' '}
+                  <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
+                    Legacy
+                  </span>
                 </div>
               )}
             </div>

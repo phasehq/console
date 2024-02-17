@@ -1,0 +1,5 @@
+mutation DeleteFolder($folderId: ID!) {
+  deleteSecretFolder(folderId: $folderId) {
+    ok
+  }
+}
