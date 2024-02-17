@@ -656,7 +656,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               </div>
             </div>
 
-            {appSecrets.length > 0 ? (
+            {appSecrets.length > 0 || appFolders.length > 0 ? (
               <table className="table-auto w-full border border-neutral-500/40">
                 <thead id="table-head" className="sticky top-0 bg-zinc-300 dark:bg-zinc-800 z-10">
                   <tr className="divide-x divide-neutral-500/40">
