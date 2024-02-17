@@ -1,9 +1,5 @@
-from api.utils.crypto import get_server_keypair
-from api.tasks import perform_cloudflare_pages_sync, trigger_sync_tasks
-from api.utils.syncing.cloudflare.pages import (
-    CloudFlarePagesType,
-    get_cf_pages_credentials,
-)
+from api.tasks import trigger_sync_tasks
+
 import graphene
 from graphql import GraphQLError
 from api.utils.permissions import (
@@ -22,7 +18,6 @@ from api.models import (
     ServerEnvironmentKey,
 )
 from api.services import ServiceConfig
-from django.utils import timezone
 
 
 class InitEnvSync(graphene.Mutation):
@@ -119,6 +114,7 @@ class DeleteProviderCredentials(graphene.Mutation):
 class CreateCloudflarePagesSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
+        path = graphene.String()
         credential_id = graphene.ID()
         project_name = graphene.String()
         deployment_id = graphene.ID()
@@ -132,6 +128,7 @@ class CreateCloudflarePagesSync(graphene.Mutation):
         root,
         info,
         env_id,
+        path,
         credential_id,
         project_name,
         deployment_id,
@@ -166,6 +163,7 @@ class CreateCloudflarePagesSync(graphene.Mutation):
 
         sync = EnvironmentSync.objects.create(
             environment=env,
+            path=path,
             service=service_id,
             options=sync_options,
             authentication_id=credential_id,
@@ -179,6 +177,7 @@ class CreateCloudflarePagesSync(graphene.Mutation):
 class CreateAWSSecretsManagerSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
+        path = graphene.String()
         credential_id = graphene.ID()
         secret_name = graphene.String()
         kms_id = graphene.String(required=False)
@@ -186,7 +185,7 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(cls, root, info, env_id, credential_id, secret_name, kms_id=None):
+    def mutate(cls, root, info, env_id, path, credential_id, secret_name, kms_id=None):
         service_id = "aws_secrets_manager"
 
         env = Environment.objects.get(id=env_id)
@@ -214,6 +213,7 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
 
         sync = EnvironmentSync.objects.create(
             environment=env,
+            path=path,
             service=service_id,
             options=sync_options,
             authentication_id=credential_id,
@@ -227,6 +227,7 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
 class CreateGitHubActionsSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
+        path = graphene.String()
         credential_id = graphene.ID()
         repo_name = graphene.String()
         owner = graphene.String()
@@ -234,7 +235,7 @@ class CreateGitHubActionsSync(graphene.Mutation):
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(cls, root, info, env_id, credential_id, repo_name, owner):
+    def mutate(cls, root, info, env_id, path, credential_id, repo_name, owner):
         service_id = "github_actions"
         service_config = ServiceConfig.get_service_config(service_id)
 
@@ -258,6 +259,7 @@ class CreateGitHubActionsSync(graphene.Mutation):
 
         sync = EnvironmentSync.objects.create(
             environment=env,
+            path=path,
             service=service_id,
             options=sync_options,
             authentication_id=credential_id,
@@ -271,14 +273,15 @@ class CreateGitHubActionsSync(graphene.Mutation):
 class CreateVaultSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
+        path = graphene.String()
         credential_id = graphene.ID()
         engine = graphene.String()
-        path = graphene.String()
+        vault_path = graphene.String()
 
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(cls, root, info, env_id, credential_id, engine, path):
+    def mutate(cls, root, info, env_id, path, credential_id, engine, vault_path):
         service_id = "hashicorp_vault"
         service_config = ServiceConfig.get_service_config(service_id)
 
@@ -290,7 +293,7 @@ class CreateVaultSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
-        sync_options = {"engine": engine, "path": path}
+        sync_options = {"engine": engine, "path": vault_path}
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None
@@ -302,6 +305,7 @@ class CreateVaultSync(graphene.Mutation):
 
         sync = EnvironmentSync.objects.create(
             environment=env,
+            path=path,
             service=service_id,
             options=sync_options,
             authentication_id=credential_id,

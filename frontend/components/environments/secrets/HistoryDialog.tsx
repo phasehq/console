@@ -4,7 +4,7 @@ import clsx from 'clsx'
 
 import { useState, Fragment } from 'react'
 import { FaHistory, FaTimes, FaKey } from 'react-icons/fa'
-import { SecretPropertyDiffs } from '../SecretPropertyDiffs'
+import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 import { Button } from '../../common/Button'
 import { Dialog, Transition } from '@headlessui/react'
 import { Avatar } from '../../common/Avatar'

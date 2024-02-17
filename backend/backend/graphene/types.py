@@ -165,6 +165,9 @@ class AppType(DjangoObjectType):
 
 
 class EnvironmentType(DjangoObjectType):
+    folder_count = graphene.Int()
+    secret_count = graphene.Int()
+
     class Meta:
         model = Environment
         fields = (
@@ -178,6 +181,12 @@ class EnvironmentType(DjangoObjectType):
             "created_at",
             "updated_at",
         )
+
+    def resolve_folder_count(self, info):
+        return SecretFolder.objects.filter(environment=self).count()
+
+    def resolve_secret_count(self, info):
+        return Secret.objects.filter(environment=self, deleted_at=None).count()
 
     def resolve_wrapped_seed(self, info):
         org_member = OrganisationMember.objects.get(
@@ -304,6 +313,7 @@ class EnvironmentSyncType(DjangoObjectType):
         fields = (
             "id",
             "environment",
+            "path",
             "service_info",
             "options",
             "is_active",
@@ -357,16 +367,25 @@ class ServiceTokenType(DjangoObjectType):
 
 
 class SecretFolderType(DjangoObjectType):
+    folder_count = graphene.Int()
+    secret_count = graphene.Int()
+
     class Meta:
         model = SecretFolder
         fields = (
             "id",
-            "environment_id",
-            "parent_folder_id",
+            "environment",
+            "path",
             "name",
             "created_at",
             "updated_at",
         )
+
+    def resolve_folder_count(self, info):
+        return SecretFolder.objects.filter(folder=self).count()
+
+    def resolve_secret_count(self, info):
+        return Secret.objects.filter(folder=self).count()
 
 
 class SecretTagType(DjangoObjectType):
@@ -389,9 +408,11 @@ class SecretEventType(DjangoObjectType):
             "event_type",
             "timestamp",
             "user",
+            "service_token",
             "ip_address",
             "user_agent",
             "environment",
+            "path",
         )
 
 
@@ -420,6 +441,7 @@ class SecretType(DjangoObjectType):
             "key",
             "value",
             "folder",
+            "path",
             "version",
             "tags",
             "comment",

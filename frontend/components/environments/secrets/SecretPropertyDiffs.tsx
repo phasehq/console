@@ -1,8 +1,8 @@
 import { SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
 import { areTagsAreSame } from '@/utils/tags'
 import { FaRedoAlt, FaUndoAlt } from 'react-icons/fa'
-import { Button } from '../common/Button'
-import { Tag } from './Tag'
+import { Button } from '../../common/Button'
+import { Tag } from '../Tag'
 
 export const SecretPropertyDiffs = (props: {
   secret: SecretType

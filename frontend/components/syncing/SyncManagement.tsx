@@ -96,6 +96,9 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Environment</div>
         <div className="font-semibold text-black dark:text-white">{sync.environment.name}</div>
 
+        <div className="text-neutral-500 uppercase tracking-widest text-sm">Path</div>
+        <code className="font-semibold text-black dark:text-white">{sync.path}</code>
+
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Service</div>
         <div className="font-semibold text-black dark:text-white">{sync.serviceInfo?.name}</div>
 

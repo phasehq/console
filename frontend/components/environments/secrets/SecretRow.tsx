@@ -1,18 +1,18 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
 import { useState } from 'react'
 import { FaEyeSlash, FaEye } from 'react-icons/fa'
-import { Button } from '../common/Button'
+import { Button } from '../../common/Button'
 
 import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
 import clsx from 'clsx'
 import { useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
 
-import { DeleteConfirmDialog } from './secrets/DeleteDialog'
-import { CommentDialog } from './secrets/CommentDialog'
-import { HistoryDialog } from './secrets/HistoryDialog'
-import { OverrideDialog } from './secrets/OverrideDialog'
-import { TagsDialog } from './secrets/TagsDialog'
+import { DeleteConfirmDialog } from './DeleteDialog'
+import { CommentDialog } from './CommentDialog'
+import { HistoryDialog } from './HistoryDialog'
+import { OverrideDialog } from './OverrideDialog'
+import { TagsDialog } from './TagsDialog'
 
 export default function SecretRow(props: {
   orgId: string
@@ -41,7 +41,7 @@ export default function SecretRow(props: {
   }
 
   const INPUT_BASE_STYLE =
-    'w-full text-zinc-800 font-mono custom bg-zinc-100 dark:bg-zinc-800 dark:text-white transition ease ph-no-capture'
+    'w-full text-zinc-800 font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 dark:text-white transition ease ph-no-capture'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -59,7 +59,7 @@ export default function SecretRow(props: {
   }
 
   return (
-    <div className="flex flex-row w-full gap-2 group">
+    <div className="flex flex-row w-full gap-2 group relative z-0">
       <div className="w-1/3 relative">
         <input
           className={clsx(
@@ -94,7 +94,7 @@ export default function SecretRow(props: {
           </div>
         </div>
       </div>
-      <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-zinc-100 dark:bg-zinc-800 p-px">
+      <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-transparent group-hover:bg-zinc-100 dark:group-hover:bg-zinc-700 transition ease p-px">
         <input
           className={clsx(INPUT_BASE_STYLE, 'w-full focus:outline-none p-2')}
           value={secret.value}

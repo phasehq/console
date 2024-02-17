@@ -150,7 +150,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
             key: encryptedKey,
             keyDigest,
             value: encryptedValue,
-            folderId: null,
+            path: '/',
             comment: encryptedComment,
             tags: [],
           } as SecretInput,
