@@ -395,6 +395,8 @@ class SecretsView(APIView):
         try:
             path = request.headers["path"]
             if path:
+                if not path.startswith("/"):
+                    path = "/" + path
                 secrets_filter["path"] = path
         except:
             pass
@@ -453,6 +455,9 @@ class SecretsView(APIView):
 
             try:
                 path = secret["path"]
+                # Ensure path starts with a "/"
+                if not path.startswith("/"):
+                    path = "/" + path
             except:
                 path = "/"
             # path = secret["path"] if secret["path"] is not None else "/"
@@ -533,6 +538,11 @@ class SecretsView(APIView):
             try:
                 folder = None
                 path = secret["path"]
+
+                # Ensure path starts with a "/"
+                if not path.startswith("/"):
+                    path = "/" + path
+
                 if path != "/":
                     folder = create_environment_folder_structure(path, env_id)
 
