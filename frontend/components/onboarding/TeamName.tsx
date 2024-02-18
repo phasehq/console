@@ -64,7 +64,7 @@ export const TeamName = (props: TeamNameProps) => {
         id="teamname"
         className="text-lg"
         required
-        maxLength={64}
+        maxLength={16}
         value={props.name}
         placeholder="MyTeam"
         onChange={(e) => props.setName(e.target.value.replace(/[^a-z0-9]/gi, ''))}

@@ -483,7 +483,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                               id="appname"
                               className="text-lg"
                               required
-                              maxLength={64}
+                              maxLength={16}
                               value={name}
                               placeholder="MyApp"
                               onChange={(e) => setName(e.target.value)}
