@@ -395,8 +395,7 @@ class SecretsView(APIView):
         try:
             path = request.headers["path"]
             if path:
-                if not path.startswith("/"):
-                    path = "/" + path
+                path = normalize_path_string(path)
                 secrets_filter["path"] = path
         except:
             pass
