@@ -63,6 +63,10 @@ def normalize_path_string(path):
     if path == "/":
         return path
 
+    # Ensure the string doesn't contain repeated "/"s
+    while "//" in path:
+        path = path.replace("//", "/")
+
     # Ensure the string has a leading "/"
     if not path.startswith("/"):
         path = "/" + path
@@ -70,9 +74,5 @@ def normalize_path_string(path):
     # Remove trailing slash if present
     if path.endswith("/"):
         path = path[:-1]
-
-    # Ensure the string doesn't contain repeated "/"s
-    while "//" in path:
-        path = path.replace("//", "/")
 
     return path
