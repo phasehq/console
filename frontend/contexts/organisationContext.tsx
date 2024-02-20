@@ -59,6 +59,7 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
       setOrganisation(orgsData.organisations[0])
 
       orgsData.organisations.forEach((org: OrganisationType) => {
+        // This exists to grandfather legacy accounts that relied exclusively on localstorage for encrypted keyrings to the new spec
         // Update wrapped secrets on the backend if they are blank
         if (org.keyring === '' || org.recovery === '') {
           const localKeyring = getLocalKeyring(session?.user?.email!, org.id)

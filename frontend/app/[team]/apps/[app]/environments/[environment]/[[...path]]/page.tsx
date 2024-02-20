@@ -688,7 +688,6 @@ export default function Environment({
 
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white">
-      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null && !loading && (
         <div className="flex flex-col py-4 gap-4">
           <div className="flex items-center gap-8">

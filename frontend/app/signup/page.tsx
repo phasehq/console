@@ -14,7 +14,6 @@ import { toast } from 'react-toastify'
 import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
-import { setLocalKeyring } from '@/utils/localStorage'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 
 const bip39 = require('bip39')
@@ -158,12 +157,6 @@ const Onboard = () => {
         })
         const { data } = result
         const newOrg = data.createOrganisation.organisation
-        setLocalKeyring({
-          email: session?.user?.email!,
-          org: newOrg,
-          keyring: encryptedKeyring,
-          recovery: encryptedMnemonic,
-        })
       } catch (e) {
         setIsLoading(false)
         reject()

@@ -1,3 +1,5 @@
+// Legacy utils to handle keyrings stored in local storage.
+
 import { OrganisationType } from '@/apollo/graphql'
 
 interface LocalKeyring {

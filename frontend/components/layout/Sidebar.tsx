@@ -48,8 +48,7 @@ const SidebarLink = (props: SidebarLinkT) => {
 const Sidebar = () => {
   const team = usePathname()?.split('/')[1]
 
-  const { organisations, activeOrganisation, setActiveOrganisation } =
-    useContext(organisationContext)
+  const { organisations, activeOrganisation } = useContext(organisationContext)
 
   const showOrgsMenu = organisations === null ? false : organisations?.length > 1
 

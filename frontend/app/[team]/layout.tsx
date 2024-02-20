@@ -9,6 +9,7 @@ import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect } from 'react'
 import { notFound } from 'next/navigation'
+import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
 export default function RootLayout({
   children,
@@ -41,7 +42,7 @@ export default function RootLayout({
 
   const path = usePathname()
 
-  const showNav = !path?.split('/').includes('newdevice')
+  const showNav = !path?.split('/').includes('recovery')
 
   return (
     <div
@@ -51,6 +52,7 @@ export default function RootLayout({
       )}
     >
       <HeroPattern />
+      {activeOrganisation && <UnlockKeyringDialog organisation={activeOrganisation} />}
       {showNav && <NavBar team={params.team} />}
       {showNav && <Sidebar />}
       <div className={clsx('min-h-screen overflow-auto', showNav && 'pt-16')}>{children}</div>

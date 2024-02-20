@@ -242,7 +242,6 @@ export default function Tokens({ params }: { params: { team: string; app: string
   return (
     <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
       <section className="max-w-screen-xl">
-        {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
         {keyring !== null && (
           <div className="flex gap-8 mt-6 divide-x divide-neutral-500/20 items-start">
             <div className="space-y-4 border-l border-neutral-500/40 h-min">
