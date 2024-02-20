@@ -1,4 +1,5 @@
 from api.tasks import trigger_sync_tasks
+from api.utils.secrets import normalize_path_string
 
 import graphene
 from graphql import GraphQLError
@@ -163,7 +164,7 @@ class CreateCloudflarePagesSync(graphene.Mutation):
 
         sync = EnvironmentSync.objects.create(
             environment=env,
-            path=path,
+            path=normalize_path_string(path),
             service=service_id,
             options=sync_options,
             authentication_id=credential_id,
@@ -213,7 +214,7 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
 
         sync = EnvironmentSync.objects.create(
             environment=env,
-            path=path,
+            path=normalize_path_string(path),
             service=service_id,
             options=sync_options,
             authentication_id=credential_id,
@@ -259,7 +260,7 @@ class CreateGitHubActionsSync(graphene.Mutation):
 
         sync = EnvironmentSync.objects.create(
             environment=env,
-            path=path,
+            path=normalize_path_string(path),
             service=service_id,
             options=sync_options,
             authentication_id=credential_id,
@@ -305,7 +306,7 @@ class CreateVaultSync(graphene.Mutation):
 
         sync = EnvironmentSync.objects.create(
             environment=env,
-            path=path,
+            path=normalize_path_string(path),
             service=service_id,
             options=sync_options,
             authentication_id=credential_id,
