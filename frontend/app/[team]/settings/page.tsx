@@ -84,7 +84,7 @@ const ViewRecoveryDialog = () => {
 
             <p>
               Store your account recovery kit in a safe place if you haven&apos;t already. If you
-              forget your sudo password, it is the only way to restore your accout keys.
+              forget your sudo password, it is the only way to restore your account keys.
             </p>
           </div>
         </Alert>
