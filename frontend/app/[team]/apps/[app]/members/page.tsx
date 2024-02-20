@@ -31,7 +31,6 @@ import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
-import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { userIsAdmin } from '@/utils/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
@@ -40,7 +39,7 @@ import Link from 'next/link'
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppMembers, { variables: { appId: params.app } })
 
-  const { keyring, setKeyring } = useContext(KeyringContext)
+  const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
@@ -48,21 +47,6 @@ export default function Members({ params }: { params: { team: string; app: strin
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
   const { data: session } = useSession()
-
-  const validateKeyring = async (password: string) => {
-    return new Promise<OrganisationKeyring>(async (resolve) => {
-      if (keyring) resolve(keyring)
-      else {
-        const decryptedKeyring = await cryptoUtils.getKeyring(
-          session?.user?.email!,
-          organisation!.id,
-          password
-        )
-        setKeyring(decryptedKeyring)
-        resolve(decryptedKeyring)
-      }
-    })
-  }
 
   const AddMemberDialog = () => {
     const [getMembers, { data: orgMembersData }] = useLazyQuery(GetOrganisationMembers)
@@ -109,8 +93,6 @@ export default function Members({ params }: { params: { team: string; app: strin
     const [query, setQuery] = useState('')
     const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
     const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
-    const [password, setPassword] = useState<string>('')
-    const [showPw, setShowPw] = useState<boolean>(false)
 
     const filteredPeople =
       query === ''
@@ -135,8 +117,6 @@ export default function Members({ params }: { params: { team: string; app: strin
         setShowEnvHint(true)
         return false
       }
-
-      const keyring = await validateKeyring(password)
 
       const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
@@ -392,37 +372,6 @@ export default function Members({ params }: { params: { team: string; app: strin
                                     </div>
                                   </Listbox.Options>
                                 </Transition>
-
-                                {!keyring && (
-                                  <div className="space-y-4 w-full">
-                                    <label
-                                      className="block text-gray-700 text-sm font-bold mb-2"
-                                      htmlFor="password"
-                                    >
-                                      Sudo password
-                                    </label>
-                                    <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
-                                      <input
-                                        id="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        type={showPw ? 'text' : 'password'}
-                                        minLength={16}
-                                        required
-                                        autoFocus
-                                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
-                                      />
-                                      <button
-                                        className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
-                                        type="button"
-                                        onClick={() => setShowPw(!showPw)}
-                                        tabIndex={-1}
-                                      >
-                                        {showPw ? <FaEyeSlash /> : <FaEye />}
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
                               </>
                             )}
                           </Listbox>
@@ -570,8 +519,6 @@ export default function Members({ params }: { params: { team: string; app: strin
 
     const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
     const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
-    const [password, setPassword] = useState<string>('')
-    const [showPw, setShowPw] = useState<boolean>(false)
 
     const memberIsAdmin = userIsAdmin(props.member.role) || false
 
@@ -617,8 +564,6 @@ export default function Members({ params }: { params: { team: string; app: strin
         setShowEnvHint(true)
         return false
       }
-
-      const keyring = await validateKeyring(password)
 
       const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
@@ -803,36 +748,6 @@ export default function Members({ params }: { params: { team: string; app: strin
                           )}
                         </Listbox>
                       </div>
-                      {!keyring && !memberIsAdmin && (
-                        <div className="space-y-2 w-full">
-                          <label
-                            className="block text-gray-700 text-sm font-bold mb-2"
-                            htmlFor="password"
-                          >
-                            Sudo password
-                          </label>
-                          <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
-                            <input
-                              id="password"
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              type={showPw ? 'text' : 'password'}
-                              minLength={16}
-                              required
-                              autoFocus
-                              className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
-                            />
-                            <button
-                              className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
-                              type="button"
-                              onClick={() => setShowPw(!showPw)}
-                              tabIndex={-1}
-                            >
-                              {showPw ? <FaEyeSlash /> : <FaEye />}
-                            </button>
-                          </div>
-                        </div>
-                      )}
 
                       {memberIsAdmin && (
                         <Alert variant="info" icon={true}>
