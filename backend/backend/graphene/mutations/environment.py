@@ -7,6 +7,7 @@ from api.utils.permissions import (
     user_is_org_member,
 )
 from api.utils.audit_logging import log_secret_event
+from api.utils.secrets import normalize_path_string
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -412,17 +413,20 @@ class CreateSecretFolderMutation(graphene.Mutation):
         if not user_can_access_environment(user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
 
+        normalized_path = normalize_path_string(path)
+
         if SecretFolder.objects.filter(
-            environment_id=env_id, path=path, name=name
+            environment_id=env_id, path=normalized_path, name=name
         ).exists():
             raise GraphQLError("A folder with that name already exists at this path!")
 
         folder = None
 
-        if path != "/":
-            folder_name = path.split("/")[-1]
+        if normalized_path != "/":
 
-            folder_path, _, _ = path.rpartition("/" + folder_name)
+            folder_name = normalized_path.split("/")[-1]
+
+            folder_path, _, _ = normalized_path.rpartition("/" + folder_name)
             folder_path = folder_path if folder_path else "/"
 
             folder = SecretFolder.objects.get(
@@ -430,7 +434,7 @@ class CreateSecretFolderMutation(graphene.Mutation):
             )
 
         folder = SecretFolder.objects.create(
-            environment_id=env_id, folder=folder, path=path, name=name
+            environment_id=env_id, folder=folder, path=normalized_path, name=name
         )
 
         return CreateSecretFolderMutation(folder=folder)
@@ -494,7 +498,11 @@ class CreateSecretMutation(graphene.Mutation):
 
         tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
-        path = secret_data.path if secret_data.path is not None else "/"
+        path = (
+            normalize_path_string(secret_data.path)
+            if secret_data.path is not None
+            else "/"
+        )
 
         folder = None
 
@@ -553,7 +561,11 @@ class EditSecretMutation(graphene.Mutation):
 
         tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
-        path = secret_data.path if secret_data.path is not None else "/"
+        path = (
+            normalize_path_string(secret_data.path)
+            if secret_data.path is not None
+            else "/"
+        )
 
         secret_obj_data = {
             "path": path,
