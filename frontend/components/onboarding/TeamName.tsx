@@ -1,3 +1,4 @@
+import { MAX_INPUT_STRING_LENGTH, MAX_STRING_LENGTH } from '@/constants'
 import { useSession } from 'next-auth/react'
 import { useEffect } from 'react'
 
@@ -64,7 +65,7 @@ export const TeamName = (props: TeamNameProps) => {
         id="teamname"
         className="text-lg"
         required
-        maxLength={16}
+        maxLength={MAX_INPUT_STRING_LENGTH}
         value={props.name}
         placeholder="MyTeam"
         onChange={(e) => props.setName(e.target.value.replace(/[^a-z0-9]/gi, ''))}

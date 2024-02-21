@@ -32,6 +32,7 @@ import {
   getUserKxPrivateKey,
   getUserKxPublicKey,
 } from '@/utils/crypto'
+import { MAX_INPUT_STRING_LENGTH, MAX_STRING_LENGTH } from '@/constants'
 
 const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
@@ -483,7 +484,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                               id="appname"
                               className="text-lg"
                               required
-                              maxLength={16}
+                              maxLength={MAX_INPUT_STRING_LENGTH}
                               value={name}
                               placeholder="MyApp"
                               onChange={(e) => setName(e.target.value)}
