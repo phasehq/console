@@ -1,4 +1,4 @@
-import { MAX_INPUT_STRING_LENGTH, MAX_STRING_LENGTH } from '@/constants'
+import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 import { useSession } from 'next-auth/react'
 import { useEffect } from 'react'
 
