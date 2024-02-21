@@ -157,7 +157,7 @@ const Sidebar = () => {
 
   return (
     <div className="h-screen flex flex-col pt-[64px]">
-      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
+      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/30 dark:bg-neutral-900/30 text-black dark:text-white">
         <div className="gap-4 p-4 grid grid-cols-1">
           <OrgsMenu />
 
