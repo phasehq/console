@@ -8,7 +8,7 @@ from api.serializers import (
 from api.emails import send_login_email
 from api.utils.permissions import user_can_access_environment
 from api.utils.syncing.auth import store_oauth_token
-from api.utils.secrets import create_environment_folder_structure
+from api.utils.secrets import create_environment_folder_structure, normalize_path_string
 from api.utils.audit_logging import log_secret_event
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -395,8 +395,7 @@ class SecretsView(APIView):
         try:
             path = request.headers["path"]
             if path:
-                if not path.startswith("/"):
-                    path = "/" + path
+                path = normalize_path_string(path)
                 secrets_filter["path"] = path
         except:
             pass
@@ -454,13 +453,9 @@ class SecretsView(APIView):
             tags = SecretTag.objects.filter(id__in=secret["tags"])
 
             try:
-                path = secret["path"]
-                # Ensure path starts with a "/"
-                if not path.startswith("/"):
-                    path = "/" + path
+                path = normalize_path_string(secret["path"])
             except:
                 path = "/"
-            # path = secret["path"] if secret["path"] is not None else "/"
 
             folder = None
 
@@ -537,11 +532,7 @@ class SecretsView(APIView):
 
             try:
                 folder = None
-                path = secret["path"]
-
-                # Ensure path starts with a "/"
-                if not path.startswith("/"):
-                    path = "/" + path
+                path = normalize_path_string(secret["path"])
 
                 if path != "/":
                     folder = create_environment_folder_structure(path, env_id)

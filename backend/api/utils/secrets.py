@@ -48,3 +48,31 @@ def create_environment_folder_structure(complete_path, environment_id):
             current_folder = folder
 
     return current_folder
+
+
+def normalize_path_string(path):
+    """
+    Ensures the given string is a valid path string following specific rules.
+
+    Args:
+    - path (str): The input string to be normalized as a path.
+
+    Returns:
+    - str: The normalized path string.
+    """
+    if path == "/":
+        return path
+
+    # Ensure the string doesn't contain repeated "/"s
+    while "//" in path:
+        path = path.replace("//", "/")
+
+    # Ensure the string has a leading "/"
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # Remove trailing slash if present
+    if path.endswith("/"):
+        path = path[:-1]
+
+    return path
