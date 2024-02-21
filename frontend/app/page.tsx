@@ -10,6 +10,7 @@ import { FaArrowRight } from 'react-icons/fa'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 
 export default function Home() {
   const router = useRouter()
@@ -44,6 +45,8 @@ export default function Home() {
       {showOrgCards && (
         <>
           <HeroPattern />
+
+          <OnboardingNavbar />
 
           <div className="mx-auto my-auto space-y-6 divide-y divide-neutral-500/40 rounded-md bg-zinc-100 dark:bg-zinc-800 text-center">
             <div className="space-y-0 p-4">
