@@ -32,7 +32,7 @@ import {
   getUserKxPrivateKey,
   getUserKxPublicKey,
 } from '@/utils/crypto'
-import { MAX_INPUT_STRING_LENGTH, MAX_STRING_LENGTH } from '@/constants'
+import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 
 const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
