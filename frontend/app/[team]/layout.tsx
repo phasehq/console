@@ -4,11 +4,11 @@ import '@/app/globals.css'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { NavBar } from '@/components/layout/Navbar'
 import Sidebar from '@/components/layout/Sidebar'
-import { OrganisationProvider, organisationContext } from '@/contexts/organisationContext'
+import { organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect } from 'react'
-import { notFound } from 'next/navigation'
+
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
 export default function RootLayout({
@@ -30,15 +30,21 @@ export default function RootLayout({
         router.push('/signup')
       }
 
-      // try and get org being access from route params in the list of organisations for this user
+      // try and get org being accessed from route params in the list of organisations for this user
       const org = organisations.find((org) => org.name === params.team)
 
       // update active organisation if it exists
       if (org) setActiveOrganisation(org)
-      // else update the route to the active organisation
-      else router.push(`/${activeOrganisation!.name}`)
+      // if there's only one available organisation
+      else if (organisations.length === 1) setActiveOrganisation(organisations[0])
+      // else send to home
+      else router.push(`/`)
     }
-  }, [activeOrganisation, organisations, params.team, router, loading, setActiveOrganisation])
+  }, [organisations, params.team, router, loading, setActiveOrganisation])
+
+  useEffect(() => {
+    if (activeOrganisation) router.push(`/${activeOrganisation.name}`)
+  }, [activeOrganisation, router])
 
   const path = usePathname()
 

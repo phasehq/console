@@ -48,15 +48,16 @@ const SidebarLink = (props: SidebarLinkT) => {
 const Sidebar = () => {
   const team = usePathname()?.split('/')[1]
 
-  const { organisations, activeOrganisation } = useContext(organisationContext)
+  const { organisations, activeOrganisation, setActiveOrganisation } =
+    useContext(organisationContext)
 
   const showOrgsMenu = organisations === null ? false : organisations?.length > 1
 
   const OrgsMenu = () => {
-    const router = useRouter()
     const switchOrg = (org: OrganisationType) => {
-      router.push(`/${org!.name}`)
+      setActiveOrganisation(org)
     }
+
     return (
       <Menu as="div" className="relative inline-block text-left">
         {({ open }) => (
