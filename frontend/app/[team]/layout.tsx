@@ -43,8 +43,9 @@ export default function RootLayout({
   }, [organisations, params.team, router, loading, setActiveOrganisation])
 
   useEffect(() => {
-    if (activeOrganisation) router.push(`/${activeOrganisation.name}`)
-  }, [activeOrganisation, router])
+    if (activeOrganisation && params.team !== activeOrganisation.name)
+      router.push(`/${activeOrganisation.name}`)
+  }, [activeOrganisation, params.team, router])
 
   const path = usePathname()
 
