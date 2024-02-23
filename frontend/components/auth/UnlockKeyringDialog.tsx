@@ -2,16 +2,7 @@
 
 import { Dialog, Transition } from '@headlessui/react'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
-import {
-  FaCheckCircle,
-  FaCircle,
-  FaEye,
-  FaEyeSlash,
-  FaLock,
-  FaShieldAlt,
-  FaSignOutAlt,
-  FaUnlock,
-} from 'react-icons/fa'
+import { FaEye, FaEyeSlash, FaLock, FaShieldAlt, FaSignOutAlt, FaUnlock } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { cryptoUtils } from '@/utils/auth'
@@ -26,6 +17,7 @@ import Link from 'next/link'
 import { handleSignout } from '@/apollo/client'
 import { SplitButton } from '../common/SplitButton'
 import { getDevicePassword, setDevicePassword } from '@/utils/localStorage'
+import { ToggleSwitch } from '../common/ToggleSwitch'
 
 export default function UnlockKeyringDialog(props: { organisation: OrganisationType }) {
   const { organisation } = props
@@ -157,7 +149,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full gap-2 items-center">
                     <FaLock
                       className={clsx(
@@ -254,23 +246,29 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                             variant="primary"
                             isLoading={unlocking}
                             menuContent={
-                              <div className="w-40">
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  isLoading={unlocking}
-                                  onClick={() => setTrustDevice(!trustDevice)}
-                                >
-                                  <div
-                                    className={clsx(
-                                      'flex items-center gap-2',
-                                      trustDevice ? 'text-emerald-500' : 'text-neutral-500'
-                                    )}
-                                  >
-                                    {trustDevice ? <FaCheckCircle /> : <FaCircle />} Trust this
-                                    device
+                              <div className="space-y-4 w-96 p-2">
+                                <div>
+                                  <div className="text-black dark:text-white font-semibold">
+                                    Remember password
                                   </div>
-                                </Button>
+                                  <div className="text-neutral-500 text-sm">
+                                    Using this option will store your sudo password on this device
+                                    and automatically unlock your keyring when you log in.
+                                  </div>
+                                </div>
+
+                                <div
+                                  className={clsx(
+                                    'flex items-center gap-2 text-sm pt-2',
+                                    trustDevice ? 'text-emerald-500' : 'text-neutral-500'
+                                  )}
+                                >
+                                  <ToggleSwitch
+                                    value={trustDevice}
+                                    onToggle={() => setTrustDevice(!trustDevice)}
+                                  />
+                                  Remember password on this device
+                                </div>
                               </div>
                             }
                           >
@@ -279,7 +277,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                             ) : (
                               <FaUnlock className="shrink-0" />
                             )}{' '}
-                            {trustDevice ? 'Trust' : 'Unlock'}
+                            {trustDevice ? 'Remember' : 'Unlock'}
                           </SplitButton>
                         </div>
                       </div>
