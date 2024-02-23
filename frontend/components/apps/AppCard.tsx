@@ -22,7 +22,7 @@ export const AppCard = (props: AppCardProps) => {
     <Card>
       <div className="rounded-xl p-8 flex flex-col w-full gap-8 justify-between">
         <div className="space-y-2">
-          <div className="text-3xl font-bold flex items-center gap-2">
+          <div className="text-2xl font-bold flex items-center gap-2">
             <FaCube
               size="28"
               className="text-neutral-800 dark:text-neutral-300 group-hover:text-emerald-500 transition-colors duration-300"

@@ -75,7 +75,7 @@ const Environments = (props: { environments: EnvironmentType[] }) => {
   const pathname = usePathname()
 
   return (
-    <div className="grid grid-cols-4 2xl:grid-cols-6 gap-8 py-4">
+    <div className="grid grid-cols-4 gap-4 py-4">
       {environments.map((env: EnvironmentType) => (
         <Link key={env.id} href={`${pathname}/environments/${env.id}`}>
           {' '}
