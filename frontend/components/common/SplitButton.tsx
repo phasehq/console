@@ -113,7 +113,7 @@ export function SplitButton(buttonProps: ButtonProps) {
               className="absolute z-20 right-0 origin-bottom-right top-10"
             >
               <Menu.Items as={Fragment}>
-                <div className="p-2 ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md z-20">
+                <div className="p-2 ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md z-20 shadow-xl">
                   {menuContent}
                 </div>
               </Menu.Items>
