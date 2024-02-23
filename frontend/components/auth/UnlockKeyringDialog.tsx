@@ -237,10 +237,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                             </button>
                           </div>
                         </div>
-                        <div>
-                          {/* <Button type="submit" variant="primary" isLoading={unlocking}>
-                            <FaUnlock /> Unlock
-                          </Button> */}
+                        <div className="pb-1">
                           <SplitButton
                             type="submit"
                             variant="primary"
@@ -252,8 +249,8 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                                     Remember password
                                   </div>
                                   <div className="text-neutral-500 text-sm">
-                                    Using this option will store your sudo password on this device
-                                    and automatically unlock your keyring when you log in.
+                                    Store your sudo password on this device to automatically unlock
+                                    your keyring when you log in.
                                   </div>
                                 </div>
 
@@ -287,7 +284,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                           className="text-xs text-neutral-500 hover:text-black dark:hover:text-white transition ease"
                           href={`/${organisation.name}/recovery`}
                         >
-                          Reset password
+                          Forgot password?
                         </Link>
                       </div>
                     </div>
