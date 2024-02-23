@@ -125,7 +125,7 @@ export const FrameworkIntegrations = () => {
       {frameworks.map((framework) => (
         <Card key={framework.name}>
           <Link
-            href={`https://docs.phase.dev/${framework.href}`}
+            href={`https://docs.phase.dev${framework.href}`}
             target="_blank"
             className="flex flex-row-reverse gap-6"
           >
