@@ -6,6 +6,7 @@ import { Button } from '@/components/common/Button'
 import { ModeToggle } from '@/components/common/ModeToggle'
 import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { cryptoUtils } from '@/utils/auth'
 import { deleteDevicePassword, getDevicePassword } from '@/utils/localStorage'
@@ -18,15 +19,18 @@ import { toast } from 'react-toastify'
 
 const TrustedDeviceStatus = () => {
   const { activeOrganisation } = useContext(organisationContext)
+  const { keyring } = useContext(KeyringContext)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const [isTrusted, setIsTrusted] = useState(false)
 
   useEffect(() => {
-    const devicePassword = getDevicePassword(activeOrganisation?.memberId!)
-    if (devicePassword) setIsTrusted(true)
-  }, [activeOrganisation?.memberId])
+    if (keyring !== null) {
+      const devicePassword = getDevicePassword(activeOrganisation?.memberId!)
+      if (devicePassword) setIsTrusted(true)
+    }
+  }, [activeOrganisation?.memberId, keyring])
 
   const closeModal = () => {
     setIsOpen(false)
