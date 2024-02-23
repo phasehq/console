@@ -46,7 +46,7 @@ export const getLocalKeyring = (email: string, orgId: string) => {
 }
 
 /**
- * Encodes a given password in Base64 and stores it along with the member ID
+ * Encodes a given password in Base64 and stores or updates it along with the member ID
  * in the local storage array 'phaseDevicePasswords'.
  *
  * @param {string} memberId - Organisation member uuid.
@@ -60,8 +60,18 @@ export const setDevicePassword = (memberId: string, password: string): void => {
   // Base64 encode the password
   const encodedPassword = btoa(password)
 
-  // Add the new memberId and encoded password to the array
-  passwordsArray.push({ memberId, password: encodedPassword })
+  // Find the index of the existing entry with the same memberId
+  const index = passwordsArray.findIndex(
+    (entry: { memberId: string; password: string }) => entry.memberId === memberId
+  )
+
+  if (index !== -1) {
+    // If an existing entry is found, update the password
+    passwordsArray[index].password = encodedPassword
+  } else {
+    // If no existing entry is found, add a new entry to the array
+    passwordsArray.push({ memberId, password: encodedPassword })
+  }
 
   // Save the updated array back to localStorage
   localStorage.setItem('phaseDevicePasswords', JSON.stringify(passwordsArray))
