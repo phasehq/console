@@ -398,7 +398,6 @@ export default function SecretLogs(props: { app: string }) {
 
   return (
     <>
-      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       <div className="w-full text-black dark:text-white flex flex-col">
         <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
           <span className="text-neutral-500 font-light text-lg">

@@ -99,7 +99,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
     return new Promise<OrganisationKeyring>(async (resolve) => {
       const decryptedKeyring = await cryptoUtils.getKeyring(
         session?.user?.email!,
-        organisation!.id,
+        organisation,
         password
       )
 

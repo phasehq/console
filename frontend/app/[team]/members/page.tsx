@@ -794,9 +794,6 @@ export default function Members({ params }: { params: { team: string } }) {
           </table>
         </div>
       </div>
-      {activeUserIsAdmin && organisation && (
-        <UnlockKeyringDialog organisationId={organisation.id} />
-      )}
     </section>
   )
 }

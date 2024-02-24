@@ -578,7 +578,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid gap-16 relative">
-      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null &&
         (setupRequired ? (
           <div className="flex flex-col gap-4 w-full items-center p-16">
