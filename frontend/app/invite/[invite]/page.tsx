@@ -16,7 +16,6 @@ import { MdKey, MdOutlinePassword } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import { OrganisationMemberInviteType } from '@/apollo/graphql'
 import { useSession } from 'next-auth/react'
-import { setLocalKeyring } from '@/utils/localStorage'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { LogoMark } from '@/components/common/LogoMark'
 
@@ -130,18 +129,6 @@ export default function Invite({ params }: { params: { invite: string } }) {
           inviteId: invite.id,
         },
       })
-
-      try {
-        setLocalKeyring({
-          email: session?.user?.email!,
-          org: invite.organisation,
-          keyring: encryptedKeyring,
-          recovery: encryptedMnemonic,
-        })
-      } catch (e) {
-        setIsLoading(false)
-        reject()
-      }
 
       setIsLoading(false)
       if (data.createOrganisationMember.orgMember.id) {

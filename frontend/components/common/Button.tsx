@@ -53,7 +53,7 @@ export function Button(buttonProps: ButtonProps) {
     'inline-flex gap-1 justify-center items-center overflow-hidden text-sm font-medium transition-all ease-in-out',
     variantStyles[variant],
     classString,
-    (buttonProps.disabled || isLoading) && 'opacity-60 cursor-not-allowed'
+    (buttonProps.disabled || isLoading) && 'opacity-60 pointer-events-none'
   )
 
   let arrowIcon = (

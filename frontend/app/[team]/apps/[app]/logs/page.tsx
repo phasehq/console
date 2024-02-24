@@ -42,7 +42,12 @@ export default function Logs({ params }: { params: { team: string; app: string }
                         : ' border-transparent cursor-pointer'
                     )}
                   >
-                    {tab.label}
+                    {tab.label}{' '}
+                    {tab.label === 'KMS' && (
+                      <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
+                        Legacy
+                      </span>
+                    )}
                   </div>
                 )}
               </Tab>

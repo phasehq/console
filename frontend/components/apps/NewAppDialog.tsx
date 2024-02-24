@@ -32,6 +32,7 @@ import {
   getUserKxPrivateKey,
   getUserKxPublicKey,
 } from '@/utils/crypto'
+import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 
 const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
@@ -40,14 +41,10 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   const { organisation, appCount } = props
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')
-  const [pw, setPw] = useState<string>('')
-  const [showPw, setShowPw] = useState<boolean>(false)
 
   const [createStarters, setCreateStarters] = useState<boolean>(appCount === 0)
 
   const [appCreating, setAppCreating] = useState<boolean>(false)
-
-  const { data: session } = useSession()
 
   const [createApp] = useMutation(CreateApplication)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
@@ -61,7 +58,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
   const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 
-  const { keyring, setKeyring } = useContext(KeyringContext)
+  const { keyring } = useContext(KeyringContext)
 
   useEffect(() => {
     if (organisation) {
@@ -75,7 +72,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
   const reset = () => {
     setName('')
-    setPw('')
+
     setTimeout(() => {
       setCreateSuccess(false)
     }, 2000)
@@ -93,25 +90,6 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
     setIsOpen(true)
   }
 
-  const validateKeyring = async (password: string) => {
-    return new Promise<OrganisationKeyring>(async (resolve, reject) => {
-      if (keyring) resolve(keyring)
-      else {
-        try {
-          const decryptedKeyring = await cryptoUtils.getKeyring(
-            session?.user?.email!,
-            organisation!.id,
-            password
-          )
-          setKeyring(decryptedKeyring)
-          resolve(decryptedKeyring)
-        } catch (error) {
-          reject(error)
-        }
-      }
-    })
-  }
-
   /**
    * Encrypts a set of secrets for the given env and creates them server-side
    *
@@ -122,11 +100,9 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
    * @throws {Error} If the specified environment is invalid or if an error occurs during processing.
    */
   async function processSecrets(env: EnvironmentType, secrets: Array<Partial<SecretType>>) {
-    const keyring = await validateKeyring(pw)
-
     const userKxKeys = {
-      publicKey: await getUserKxPublicKey(keyring.publicKey),
-      privateKey: await getUserKxPrivateKey(keyring.privateKey),
+      publicKey: await getUserKxPublicKey(keyring!.publicKey),
+      privateKey: await getUserKxPrivateKey(keyring!.privateKey),
     }
 
     const envSalt = await decryptAsymmetric(
@@ -150,7 +126,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
             key: encryptedKey,
             keyDigest,
             value: encryptedValue,
-            folderId: null,
+            path: '/',
             comment: encryptedComment,
             tags: [],
           } as SecretInput,
@@ -333,8 +309,10 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
         const id = crypto.randomUUID()
 
         try {
-          const keyring = await validateKeyring(pw)
-          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(appSeed, keyring.symmetricKey)
+          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(
+            appSeed,
+            keyring!.symmetricKey
+          )
           const appKeys = await cryptoUtils.appKeyring(appSeed)
           const appKeyShares = await splitSecret(appKeys.privateKey)
 
@@ -483,42 +461,12 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                               id="appname"
                               className="text-lg"
                               required
-                              maxLength={64}
+                              maxLength={MAX_INPUT_STRING_LENGTH}
                               value={name}
                               placeholder="MyApp"
                               onChange={(e) => setName(e.target.value)}
                             />
                           </div>
-
-                          {!keyring && (
-                            <div className="flex flex-col justify-center">
-                              <label
-                                className="block text-gray-700 text-sm font-bold mb-2"
-                                htmlFor="password"
-                              >
-                                Sudo password
-                              </label>
-                              <div className="relative">
-                                <input
-                                  id="password"
-                                  value={pw}
-                                  onChange={(e) => setPw(e.target.value)}
-                                  type={showPw ? 'text' : 'password'}
-                                  minLength={16}
-                                  required
-                                  className="w-full ph-no-capture"
-                                />
-                                <button
-                                  className="absolute inset-y-0 right-4"
-                                  type="button"
-                                  onClick={() => setShowPw(!showPw)}
-                                  tabIndex={-1}
-                                >
-                                  {showPw ? <FaEyeSlash /> : <FaEye />}
-                                </button>
-                              </div>
-                            </div>
-                          )}
 
                           <div className="flex items-center gap-2">
                             <label

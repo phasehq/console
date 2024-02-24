@@ -154,7 +154,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
                 You don&apos;t have any syncs at the moment. Choose an App below to create a sync.
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-3">
               {apps?.map((app: AppType) => (
                 <Link href={`/${params.team}/apps/${app.id}/syncing`} key={app.id}>
                   <AppCard app={app} />

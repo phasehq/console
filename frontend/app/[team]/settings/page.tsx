@@ -6,14 +6,123 @@ import { Button } from '@/components/common/Button'
 import { ModeToggle } from '@/components/common/ModeToggle'
 import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { cryptoUtils } from '@/utils/auth'
+import { deleteDevicePassword, getDevicePassword } from '@/utils/localStorage'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { Dialog, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
-import { Fragment, useContext, useState } from 'react'
-import { FaEye, FaEyeSlash, FaMoon, FaSun, FaTimes } from 'react-icons/fa'
+import { Fragment, useContext, useEffect, useState } from 'react'
+import { FaEye, FaEyeSlash, FaMoon, FaShieldAlt, FaSun, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
+
+const TrustedDeviceStatus = () => {
+  const { activeOrganisation } = useContext(organisationContext)
+  const { keyring } = useContext(KeyringContext)
+
+  const [isOpen, setIsOpen] = useState<boolean>(false)
+
+  const [isTrusted, setIsTrusted] = useState(false)
+
+  useEffect(() => {
+    if (keyring !== null) {
+      const devicePassword = getDevicePassword(activeOrganisation?.memberId!)
+      if (devicePassword) setIsTrusted(true)
+    }
+  }, [activeOrganisation?.memberId, keyring])
+
+  const closeModal = () => {
+    setIsOpen(false)
+  }
+
+  const openModal = () => {
+    setIsOpen(true)
+  }
+
+  const handleRemovePassword = () => {
+    deleteDevicePassword(activeOrganisation?.memberId!)
+    setIsTrusted(false)
+    closeModal()
+  }
+
+  return (
+    <>
+      {isTrusted && (
+        <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
+          <div className="text-lg font-medium">Device</div>
+          <div>
+            <div className="flex items-center gap-2 text-emerald-500 text-lg font-medium">
+              <FaShieldAlt /> This device is trusted
+            </div>
+            <div className="text-neutral-500">
+              Your <code>sudo</code> password is stored locally on this device.
+            </div>
+          </div>
+          <div>
+            <Button variant="danger" onClick={openModal}>
+              <FaTimes /> Remove stored password
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <Transition appear show={isOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-screen-md transform overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Title as="div" className="flex w-full justify-between">
+                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                      Remove stored password
+                    </h3>
+
+                    <Button variant="text" onClick={closeModal}>
+                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
+                    </Button>
+                  </Dialog.Title>
+
+                  <div className="py-4">
+                    <div className="text-neutral-500">
+                      Are you sure you want to remove your password from this device? Doing so will
+                      require manually unlocking your user keyring on this device when logging in.{' '}
+                    </div>
+                    <div className="flex justify-end">
+                      <Button variant="danger" onClick={handleRemovePassword}>
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+    </>
+  )
+}
 
 const ViewRecoveryDialog = () => {
   const { activeOrganisation } = useContext(organisationContext)
@@ -84,7 +193,7 @@ const ViewRecoveryDialog = () => {
 
             <p>
               Store your account recovery kit in a safe place if you haven&apos;t already. If you
-              forget your sudo password, it is the only way to restore your accout keys.
+              forget your sudo password, it is the only way to restore your account keys.
             </p>
           </div>
         </Alert>
@@ -226,12 +335,14 @@ export default function Settings({ params }: { params: { team: string } }) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
             <div className="text-lg font-medium">Recovery</div>
             <ViewRecoveryDialog />
           </div>
 
-          <div className="flex flex-col gap-4">
+          <TrustedDeviceStatus />
+
+          <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
             <div className="text-lg font-medium">Public key</div>
             <code className="font-mono text-neutral-500 bg-zinc-300 dark:bg-zinc-800 p-4 rounded-md">
               {activeOrganisation?.identityKey}
@@ -240,7 +351,7 @@ export default function Settings({ params }: { params: { team: string } }) {
         </div>
       )}
 
-      <div className="space-y-6 py-4">
+      <div className="space-y-6 py-4 border-t border-neutral-500/20">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold">App</h2>
           <p className="text-neutral-500">Control the behavior and appearance of UI elements.</p>

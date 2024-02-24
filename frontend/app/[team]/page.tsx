@@ -10,6 +10,7 @@ import { GetStarted } from '@/components/dashboard/GetStarted'
 import clsx from 'clsx'
 import { FaChevronRight } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
+import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -19,7 +20,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
       <div className="text-black dark:text-white">
         <div className="flex h-full w-full gap-8 ">
           <div className="w-full space-y-16 p-8">
-            <h1 className="text-3xl font-bold capitalize">{organisation?.name} Home</h1>
+            <h1 className="text-3xl font-bold capitalize text-wrap">{organisation?.name} Home</h1>
 
             {organisation && (
               <div className="w-full">

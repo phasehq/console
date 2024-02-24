@@ -37,7 +37,7 @@ const providerButtons: ProviderButton[] = [
 ]
 
 const BUTTON_BASE_STYLE =
-  'py-2 px-20 mx-auto rounded-full shadow-2xl flex items-center gap-x-5 text-lg ring-1 ring-inset transition-colors ease-in-out'
+  'p-2 px-4 md:py-2 md:px-20 mx-auto rounded-full shadow-2xl flex items-center gap-x-5 text-lg ring-1 ring-inset transition-colors ease-in-out'
 
 export default function SignInButtons() {
   const [loading, setLoading] = useState<boolean>(false)
@@ -69,7 +69,7 @@ export default function SignInButtons() {
 
   return (
     <>
-      <div className="gap-y-8 flex flex-col items-center p-16 border border-neutral-500/20 shadow-2xl rounded-lg bg-neutral-800/80 text-white">
+      <div className="gap-y-8 flex flex-col items-center p-5 md:p-16 border border-neutral-500/20 shadow-2xl rounded-lg bg-neutral-800/80 text-white">
         <div className={clsx(status === 'loading' && 'animate-pulse')}>
           <LogoWordMark className="w-60 fill-white" />
         </div>

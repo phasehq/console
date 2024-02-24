@@ -54,19 +54,21 @@ const Sidebar = () => {
   const showOrgsMenu = organisations === null ? false : organisations?.length > 1
 
   const OrgsMenu = () => {
-    const router = useRouter()
     const switchOrg = (org: OrganisationType) => {
-      router.push(`/${org!.name}`)
+      setActiveOrganisation(org)
     }
+
     return (
-      <Menu as="div" className="relative inline-block text-left">
+      <Menu as="div" className="relative inline-block text-left ">
         {({ open }) => (
           <>
             <Menu.Button
               as="div"
-              className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between"
+              className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between  w-full "
             >
+              <span className="truncate">
               {activeOrganisation?.name}
+              </span>
               <FaChevronDown
                 className={clsx('transition ease', open ? 'rotate-180' : 'rotate-0')}
               />
@@ -92,7 +94,7 @@ const Sidebar = () => {
                               active
                                 ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
                                 : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
-                            } group flex w-full gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium`}
+                            } group flex  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium  `}
                           >
                             {org.name}
                             <FaExchangeAlt />
@@ -157,8 +159,8 @@ const Sidebar = () => {
   ]
 
   return (
-    <div className="h-screen flex flex-col pt-[64px]">
-      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
+    <div className="h-screen flex flex-col pt-[64px] w-[300px]">
+      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/30 dark:bg-neutral-900/30 text-black dark:text-white">
         <div className="gap-4 p-4 grid grid-cols-1">
           <OrgsMenu />
 

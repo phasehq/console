@@ -40,8 +40,9 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
 
   const [engine, setEngine] = useState<string>('phase-console-kv-sync/')
+  const [path, setPath] = useState('/')
 
-  const [path, setPath] = useState<string>('')
+  const [vaultPath, setVaultPath] = useState<string>('')
   const [pathIsCustom, setPathIsCustom] = useState(false)
 
   const [credentialsValid, setCredentialsValid] = useState(false)
@@ -50,13 +51,13 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
     if (appEnvsData?.appEnvironments.length > 0) {
       const defaultEnv: EnvironmentType = appEnvsData.appEnvironments[0]
       setPhaseEnv(defaultEnv)
-      setPath(`${defaultEnv.app.name.replace(/ /g, '-')}/${defaultEnv.name}`.toLowerCase())
+      setVaultPath(`${defaultEnv.app.name.replace(/ /g, '-')}/${defaultEnv.name}`.toLowerCase())
     }
   }, [appEnvsData])
 
   useEffect(() => {
     if (phaseEnv && !pathIsCustom)
-      setPath(`${phaseEnv.app.name.replace(/ /g, '-')}/${phaseEnv.name}`.toLowerCase())
+      setVaultPath(`${phaseEnv.app.name.replace(/ /g, '-')}/${phaseEnv.name}`.toLowerCase())
   }, [phaseEnv, pathIsCustom])
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
   }, [credentialsData])
 
   const handleUpdatePath = (pathValue: string) => {
-    setPath(pathValue)
+    setVaultPath(pathValue)
     setPathIsCustom(true)
   }
 
@@ -88,6 +89,7 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
         variables: {
           envId: phaseEnv?.id,
           path,
+          vaultPath,
           engine,
           credentialId: credential.id,
         },
@@ -133,7 +135,7 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
             <div className="font-medium text-black dark:text-white">
               Step 2: Select source and destination for Secrets
             </div>
-            <div>
+            <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
                   <label className="block text-gray-700 text-sm font-bold mb-2">
@@ -159,6 +161,8 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
                   ))}
                 </div>
               </RadioGroup>
+
+              <Input value={path} setValue={setPath} label="Path" />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-4">
@@ -170,7 +174,12 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
             <div className="grid gap-8">
               <Input value={engine} setValue={setEngine} label="Vault KV Secret Engine" required />
 
-              <Input value={path} setValue={handleUpdatePath} label="Vault Secret path" required />
+              <Input
+                value={vaultPath}
+                setValue={handleUpdatePath}
+                label="Vault Secret path"
+                required
+              />
 
               <div className="text-sm ">
                 <label className="block text-gray-700 font-bold mb-2">
@@ -179,7 +188,7 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
                 <div className="p-2 font-mono text-neutral-700 dark:text-neutral-200 border border-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800">
                   {engine}
                   data/
-                  {path}
+                  {vaultPath}
                 </div>
               </div>
             </div>
