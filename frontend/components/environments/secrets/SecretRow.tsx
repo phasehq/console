@@ -1,5 +1,5 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FaEyeSlash, FaEye } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 
@@ -28,6 +28,11 @@ export default function SecretRow(props: {
   const [isRevealed, setIsRevealed] = useState<boolean>(false)
 
   const [readSecret] = useMutation(LogSecretRead)
+
+  // Reveal newly created secrets by default
+  useEffect(() => {
+    if (cannonicalSecret === undefined) setIsRevealed(true)
+  }, [cannonicalSecret])
 
   const handleRevealSecret = async () => {
     setIsRevealed(true)
