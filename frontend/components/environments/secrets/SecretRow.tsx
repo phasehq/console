@@ -1,5 +1,5 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FaEyeSlash, FaEye } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 
@@ -27,11 +27,18 @@ export default function SecretRow(props: {
 
   const [isRevealed, setIsRevealed] = useState<boolean>(false)
 
+  const keyInputRef = useRef<HTMLInputElement>(null)
+
   const [readSecret] = useMutation(LogSecretRead)
 
   // Reveal newly created secrets by default
   useEffect(() => {
-    if (cannonicalSecret === undefined) setIsRevealed(true)
+    if (cannonicalSecret === undefined) {
+      setIsRevealed(true)
+      if (keyInputRef.current) {
+        keyInputRef.current.focus()
+      }
+    }
   }, [cannonicalSecret])
 
   const handleRevealSecret = async () => {
@@ -67,6 +74,7 @@ export default function SecretRow(props: {
     <div className="flex flex-row w-full gap-2 group relative z-0">
       <div className="w-1/3 relative">
         <input
+          ref={keyInputRef}
           className={clsx(
             INPUT_BASE_STYLE,
             'rounded-sm',
