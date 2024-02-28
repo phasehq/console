@@ -52,6 +52,23 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     },
     providers,
     callbacks: {
+      async signIn({ user }) {
+        const domainWhitelist = process.env.USER_EMAIL_DOMAIN_WHITELIST?.split(',') || []
+
+        if (domainWhitelist.length) {
+          let userEmail = user.email!
+
+          // Extract domain from email
+          const domain = userEmail?.split('@')[1]
+
+          if (domainWhitelist.includes(domain)) {
+            return true // Sign-in allowed
+          } else {
+            return false // Sign-in denied
+          }
+        }
+        return true
+      },
       async jwt({ token, user, account, profile }) {
         if (user) {
           if (account?.provider) {
