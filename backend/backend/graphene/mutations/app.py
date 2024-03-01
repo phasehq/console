@@ -166,13 +166,17 @@ class AddAppMemberMutation(graphene.Mutation):
         org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
 
         app.members.add(org_member)
+
+        # Create new env keys
         for key in env_keys:
-            EnvironmentKey.objects.create(
+            EnvironmentKey.objects.update_or_create(
                 environment_id=key.env_id,
                 user_id=key.user_id,
-                wrapped_seed=key.wrapped_seed,
-                wrapped_salt=key.wrapped_salt,
-                identity_key=key.identity_key,
+                defaults={
+                    "wrapped_seed": key.wrapped_seed,
+                    "wrapped_salt": key.wrapped_salt,
+                    "identity_key": key.identity_key,
+                },
             )
 
         return AddAppMemberMutation(app=app)
