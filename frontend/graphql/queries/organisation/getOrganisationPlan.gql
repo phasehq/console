@@ -1,0 +1,14 @@
+query GetOrganisationPlan($organisationId: ID!) {
+  organisationPlan(organisationId: $organisationId) {
+    name
+    maxUsers
+    maxApps
+    maxEnvsPerApp
+  }
+  organisationMembers(organisationId: $organisationId, role: null) {
+    id
+  }
+  apps(organisationId: $organisationId, appId: null) {
+    id
+  }
+}

@@ -1,5 +1,6 @@
 type Query {
   organisations: [OrganisationType]
+  organisationPlan(organisationId: ID): OrganisationPlanType
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
   organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
@@ -61,6 +62,13 @@ enum ApiOrganisationPlanChoices {
 
   """Enterprise"""
   EN
+}
+
+type OrganisationPlanType {
+  name: String
+  maxUsers: Int
+  maxApps: Int
+  maxEnvsPerApp: Int
 }
 
 type OrganisationMemberType {
