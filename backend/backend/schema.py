@@ -15,6 +15,7 @@ from .graphene.queries.syncing import (
     resolve_env_syncs,
     resolve_test_vault_creds,
 )
+from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.mutations.environment import (
     CreateEnvironmentKeyMutation,
     CreateEnvironmentMutation,
@@ -81,6 +82,7 @@ from .graphene.types import (
     LogsResponseType,
     OrganisationMemberInviteType,
     OrganisationMemberType,
+    OrganisationPlanType,
     OrganisationType,
     ProviderCredentialsType,
     ProviderType,
@@ -123,6 +125,9 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
+    organisation_plan = graphene.Field(
+        OrganisationPlanType, organisation_id=graphene.ID()
+    )
     organisation_members = graphene.List(
         OrganisationMemberType,
         organisation_id=graphene.ID(),
@@ -252,6 +257,8 @@ class Query(graphene.ObjectType):
         )
 
         return [membership.organisation for membership in memberships]
+
+    resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
         if not user_is_org_member(info.context.user.userId, organisation_id):
