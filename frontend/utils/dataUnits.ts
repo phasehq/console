@@ -38,3 +38,22 @@ export const humanFileSize = (bytes: number, si = false, dp = 1) => {
 export const humanReadableNumber = (num: number): string => {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
+
+/**
+ * Calculate the percentage based on a given value and maximum value.
+ * @param {number} value - The value to calculate the percentage for.
+ * @param {number} maxValue - The maximum value to be considered for percentage calculation.
+ * @returns {number} The calculated percentage.
+ */
+export const calculatePercentage = (value: number, maxValue: number): number => {
+  // Ensure maxValue is positive, otherwise return 0
+  if (maxValue <= 0) {
+    return 0
+  }
+
+  // Ensure value is non-negative
+  const nonNegativeValue = Math.max(value, 0)
+
+  // Calculate the percentage
+  return Math.min((nonNegativeValue / maxValue) * 100, 100)
+}
