@@ -9,10 +9,9 @@ import { OrganisationProvider } from '@/contexts/organisationContext'
 import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 import { initializePostHog } from '@/utils/posthog'
+import { isCloudHosted } from '@/utils/appConfig'
 
-const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
-
-if (IS_CLOUD_HOSTED) initializePostHog()
+if (isCloudHosted()) initializePostHog()
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
