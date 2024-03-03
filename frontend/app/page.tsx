@@ -15,8 +15,7 @@ import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 export default function Home() {
   const router = useRouter()
 
-  const { organisations, activeOrganisation, setActiveOrganisation, loading } =
-    useContext(organisationContext)
+  const { organisations, setActiveOrganisation, loading } = useContext(organisationContext)
 
   const [showOrgCards, setShowOrgCards] = useState<boolean>(false)
 
@@ -26,13 +25,18 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading && organisations !== null) {
-      // if there is no org setup on the server, send to onboarding page
+      // if there is no org membership, send to onboarding
       if (organisations.length === 0) router.push('/signup')
+      // if there is a single org membership, send to org home
       else if (organisations.length === 1) {
         const organisation = organisations[0]
         setActiveOrganisation(organisation)
         router.push(`/${organisation!.name}`)
-      } else {
+      }
+
+      // if there are multiple memberships, show orgs
+      else {
+        setActiveOrganisation(null)
         setShowOrgCards(true)
       }
     }

@@ -10,7 +10,7 @@ import posthog from 'posthog-js'
 interface OrganisationContextValue {
   activeOrganisation: OrganisationType | null
   organisations: OrganisationType[] | null
-  setActiveOrganisation: (organisation: OrganisationType) => void
+  setActiveOrganisation: (organisation: OrganisationType | null) => void
   loading: boolean
 }
 
