@@ -32,7 +32,7 @@ ALL_VARS=("${MANDATORY_VARS[@]}" "${OPTIONAL_VARS[@]}")
 ALL_VARS+=("NEXT_PUBLIC_APP_HOST" "NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID")
 
 # Find and replace BAKED values with real values
-find /app/public /app/.next -type f -name "*.js" |
+find /app/public /app/.next -type f -name "*.js" | xargs grep -i -l "BAKED_" |
 while read file; do
     for VAR in "${ALL_VARS[@]}"; do
         if [ ! -z "${!VAR}" ]; then
