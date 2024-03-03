@@ -26,6 +26,8 @@ def can_add_app(organisation):
         organisation=organisation, is_deleted=False
     ).count()
     plan_limits = PLAN_CONFIG[organisation.plan]
+    if plan_limits["max_apps"] is None:
+        return True
     return current_app_count < plan_limits["max_apps"]
 
 
@@ -38,6 +40,8 @@ def can_add_user(organisation):
         organisation=organisation, deleted_at=None
     ).count()
     plan_limits = PLAN_CONFIG[organisation.plan]
+    if plan_limits["max_users"] is None:
+        return True
     return current_user_count < plan_limits["max_users"]
 
 
@@ -48,4 +52,6 @@ def can_add_environment(app):
 
     current_env_count = Environment.objects.filter(app=app).count()
     plan_limits = PLAN_CONFIG[app.organisation.plan]
+    if plan_limits["max_envs_per_app"] is None:
+        return True
     return current_env_count < plan_limits["max_envs_per_app"]
