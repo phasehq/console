@@ -9,6 +9,10 @@ import { calculatePercentage } from '@/utils/dataUnits'
 import { Button } from '@/components/common/Button'
 import { FaCubes, FaUsersCog } from 'react-icons/fa'
 import Link from 'next/link'
+import GenericDialog from '@/components/common/GenericDialog'
+import { UpgradeRequestForm } from '@/components/forms/UpgradeRequestForm'
+import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { isCloudHosted } from '@/utils/appConfig'
 
 export const PlanInfo = () => {
   const { activeOrganisation } = useContext(organisationContext)
@@ -39,39 +43,66 @@ export const PlanInfo = () => {
 
   return (
     <div className="space-y-6 py-4 divide-y divide-neutral-500/20">
-      {activeOrganisation && (
+      <div className="flex justify-between items-center">
         <div className="flex items-center gap-4">
           <div className="font-semibold text-4xl">{activeOrganisation.name}</div>
           <PlanLabel plan={activeOrganisation.plan} />
         </div>
-      )}
+        {activeOrganisation.plan !== ApiOrganisationPlanChoices.En && (
+          <div className="flex items-center">
+            <GenericDialog
+              title="Request an Upgrade"
+              buttonVariant="secondary"
+              buttonContent={'Upgrade'}
+              onClose={() => {}}
+            >
+              <div className="space-y-2">
+                <div className="text-neutral-500">Request an upgrade to your account.</div>
+                {isCloudHosted() ? (
+                  <UpgradeRequestForm onSuccess={() => {}} />
+                ) : (
+                  <div>
+                    Please contact us at{' '}
+                    <a href="mailto:info@phase.dev" className="text-emerald-500">
+                      info@phase.dev
+                    </a>{' '}
+                    to request an upgrade.
+                  </div>
+                )}
+              </div>
+            </GenericDialog>
+          </div>
+        )}
+      </div>
 
-      {data && (
-        <div className="space-y-10 py-4">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-medium text-black dark:text-white">Apps</div>
-              <div className="text-neutral-500">{`${data.apps.length} of ${data.organisationPlan.maxApps} Apps used`}</div>
-            </div>
+      <div className="space-y-10 py-4">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-lg font-medium text-black dark:text-white">Apps</div>
+            <div className="text-neutral-500">{`${data.apps.length} of ${data.organisationPlan.maxApps || '∞'} Apps used`}</div>
+          </div>
+          {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr && (
             <ProgressBar
               percentage={appQuotaUsage}
               color={progressBarColor(data.apps.length, data.organisationPlan.maxApps)}
               size="sm"
             />
-            <div className="flex justify-start">
-              <Link href={`/${activeOrganisation.name}/apps`}>
-                <Button variant="secondary">
-                  <FaCubes /> Manage
-                </Button>
-              </Link>
-            </div>
+          )}
+          <div className="flex justify-start">
+            <Link href={`/${activeOrganisation.name}/apps`}>
+              <Button variant="secondary">
+                <FaCubes /> Manage
+              </Button>
+            </Link>
           </div>
+        </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-medium text-black dark:text-white">Members</div>
-              <div className="text-neutral-500">{`${data.organisationMembers.length} of ${data.organisationPlan.maxUsers} Users added`}</div>
-            </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-lg font-medium text-black dark:text-white">Members</div>
+            <div className="text-neutral-500">{`${data.organisationMembers.length} of ${data.organisationPlan.maxUsers || '∞'}  Users added`}</div>
+          </div>
+          {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr && (
             <ProgressBar
               percentage={memberQuotaUsage}
               color={progressBarColor(
@@ -80,16 +111,16 @@ export const PlanInfo = () => {
               )}
               size="sm"
             />
-            <div className="flex justify-start">
-              <Link href={`/${activeOrganisation.name}/members`}>
-                <Button variant="secondary">
-                  <FaUsersCog /> Manage
-                </Button>
-              </Link>
-            </div>
+          )}
+          <div className="flex justify-start">
+            <Link href={`/${activeOrganisation.name}/members`}>
+              <Button variant="secondary">
+                <FaUsersCog /> Manage
+              </Button>
+            </Link>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
