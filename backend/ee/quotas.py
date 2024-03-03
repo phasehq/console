@@ -4,15 +4,15 @@ PLAN_CONFIG = {
     "FR": {"name": "Free", "max_users": 5, "max_apps": 3, "max_envs_per_app": 3},
     "PR": {
         "name": "Pro",
-        "max_users": float("inf"),
-        "max_apps": float("inf"),
+        "max_users": None,
+        "max_apps": None,
         "max_envs_per_app": 10,
     },
     "EN": {
         "name": "Enterprise",
-        "max_users": float("inf"),
-        "max_apps": float("inf"),
-        "max_envs_per_app": float("inf"),
+        "max_users": None,
+        "max_apps": None,
+        "max_envs_per_app": None,
     },
 }
 
