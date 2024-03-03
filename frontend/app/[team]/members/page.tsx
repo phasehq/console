@@ -44,6 +44,7 @@ import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import { Alert } from '@/components/common/Alert'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -230,7 +231,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
     variables: { organisationId },
   })
-  const [createInvite] = useMutation(InviteMember)
+  const [createInvite, { error }] = useMutation(InviteMember)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
@@ -368,6 +369,11 @@ const InviteDialog = (props: { organisationId: string }) => {
                       <div>
                         {!inviteLink && (
                           <form className="space-y-6 p-4" onSubmit={handleInvite}>
+                            {error && (
+                              <Alert variant="danger" icon={true}>
+                                {error.message}
+                              </Alert>
+                            )}
                             <div className="space-y-4">
                               <div className="space-y-2 w-full">
                                 <label
