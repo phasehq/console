@@ -4,9 +4,9 @@ import { Avatar } from '@/components/common/Avatar'
 import { ModeToggle } from '@/components/common/ModeToggle'
 import { TrustedDeviceManager } from '@/components/settings/account/TrustedDeviceManager'
 import { ViewRecoveryDialog } from '@/components/settings/account/ViewRecoveryDialog'
-import { PlanInfo } from '@/components/settings/organisation/PlanInfo'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
+import { PlanInfo } from '@/ee/components/settings/organisation/PlanInfo'
 import { userIsAdmin } from '@/utils/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
@@ -22,7 +22,7 @@ export default function Settings({ params }: { params: { team: string } }) {
   const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
 
   return (
-    <section className="w-full max-w-screen-lg mx-auto  p-8 text-black dark:text-white">
+    <section className="w-full max-w-screen-lg mx-auto p-4 text-black dark:text-white">
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
@@ -61,7 +61,7 @@ export default function Settings({ params }: { params: { team: string } }) {
             </Tab.List>
           )}
           <Tab.Panels>
-            <div className="max-h-[80vh] overflow-y-auto">
+            <div className="max-h-[80vh] overflow-y-auto px-4">
               <Tab.Panel>
                 <div className="space-y-10 divide-y divide-neutral-500/40">
                   {activeOrganisation && (
