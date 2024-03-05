@@ -1,4 +1,5 @@
 from django.apps import apps
+from django.utils import timezone
 
 PLAN_CONFIG = {
     "FR": {"name": "Free", "max_users": 5, "max_apps": 3, "max_envs_per_app": 3},
@@ -35,10 +36,16 @@ def can_add_user(organisation):
     """Check if a new user can be added to the organisation."""
 
     OrganisationMember = apps.get_model("api", "OrganisationMember")
+    OrganisationMemberInvite = apps.get_model("api", "OrganisationMemberInvite")
 
-    current_user_count = OrganisationMember.objects.filter(
-        organisation=organisation, deleted_at=None
-    ).count()
+    current_user_count = (
+        OrganisationMember.objects.filter(
+            organisation=organisation, deleted_at=None
+        ).count()
+        + OrganisationMemberInvite.objects.filter(
+            organisation=organisation, valid=True, expires_at__gte=timezone.now()
+        ).count()
+    )
     plan_limits = PLAN_CONFIG[organisation.plan]
     if plan_limits["max_users"] is None:
         return True

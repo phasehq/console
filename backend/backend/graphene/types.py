@@ -533,3 +533,5 @@ class OrganisationPlanType(ObjectType):
     max_users = graphene.Int()
     max_apps = graphene.Int()
     max_envs_per_app = graphene.Int()
+    user_count = graphene.Int()
+    app_count = graphene.Int()
