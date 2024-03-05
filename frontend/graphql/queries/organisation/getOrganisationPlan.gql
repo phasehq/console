@@ -4,11 +4,7 @@ query GetOrganisationPlan($organisationId: ID!) {
     maxUsers
     maxApps
     maxEnvsPerApp
-  }
-  organisationMembers(organisationId: $organisationId, role: null) {
-    id
-  }
-  apps(organisationId: $organisationId, appId: null) {
-    id
+    userCount
+    appCount
   }
 }

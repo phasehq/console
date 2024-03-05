@@ -69,6 +69,8 @@ type OrganisationPlanType {
   maxUsers: Int
   maxApps: Int
   maxEnvsPerApp: Int
+  userCount: Int
+  appCount: Int
 }
 
 type OrganisationMemberType {
