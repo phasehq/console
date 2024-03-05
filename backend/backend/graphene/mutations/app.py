@@ -1,9 +1,7 @@
 from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import EnvironmentKeyInput
 from api.utils.permissions import user_can_access_app, user_is_admin, user_is_org_member
-from ee.feature_flags import allow_new_app
 import graphene
-from django.utils import timezone
 from graphql import GraphQLError
 from api.models import App, EnvironmentKey, Organisation, OrganisationMember
 from backend.graphene.types import AppType
@@ -43,11 +41,6 @@ class CreateAppMutation(graphene.Mutation):
         org = Organisation.objects.get(id=organisation_id)
         if not user_is_org_member(user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
-
-        if allow_new_app(org) == False:
-            raise GraphQLError(
-                "You have reached the App limit for your current plan. Please upgrade your account to add more."
-            )
 
         if App.objects.filter(identity_key=identity_key).exists():
             raise GraphQLError("This app already exists")
