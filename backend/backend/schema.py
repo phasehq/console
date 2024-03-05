@@ -478,9 +478,13 @@ class Query(graphene.ObjectType):
             end = datetime.now().timestamp() * 1000
 
         if CLOUD_HOSTED:
-            kms_logs = get_app_logs(
-                f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25
-            )
+            try:
+                kms_logs = get_app_logs(
+                    f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25
+                )
+            except:
+                print("Error fetching KMS logs")
+                kms_logs = []
 
         else:
             kms_logs = list(
