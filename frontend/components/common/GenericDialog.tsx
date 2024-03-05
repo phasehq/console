@@ -31,7 +31,7 @@ const GenericDialog: React.FC<GenericDialogProps> = ({
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant={buttonVariant} onClick={openModal} title="Remove member">
+        <Button variant={buttonVariant} onClick={openModal} title={title}>
           {buttonContent}
         </Button>
       </div>
