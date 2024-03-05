@@ -20,9 +20,6 @@ const plansInfo = {
     id: ApiOrganisationPlanChoices.Fr,
     name: 'Free',
     description: 'Try Phase without any commitments.',
-    priceMonthly: '$0',
-    priceYearly: '$0',
-    priceDetail: undefined,
     featureSummary: [
       '5 Users',
       '3 Apps',
@@ -52,15 +49,16 @@ const plansInfo = {
     id: ApiOrganisationPlanChoices.Pr,
     name: 'Pro',
     description: 'For fast moving teams with production applications.',
-    priceMonthly: '$14/mo ',
-    priceYearly: '$12/mo',
-    priceDetail: 'per user',
     featureSummary: [
-      'Everything in Free',
       'Unlimited Users',
       'Unlimited Apps',
-      '10 Environments',
+      '10 Environments per App',
+      'End-to-end Encryption',
+      'Google/GitHub/Gitlab SSO',
       'Role-based Access Control',
+      'Unlimited Service Tokens',
+      'Secret Versioning',
+      'Secret Referencing',
       'Point-in-time Recovery',
       'Source IP-based allow listing',
       '90-day audit log retention',
@@ -79,13 +77,18 @@ const plansInfo = {
     name: 'Enterprise',
     description:
       'Secure existing data in your enterprise workload. Get full onboarding and priority technical support.',
-    priceMonthly: 'Custom pricing',
-    priceYearly: 'Custom pricing',
-    priceDetail: undefined,
     featureSummary: [
-      'Everything in Pro',
-      'Unlimited Environments',
-      'SAML SSO',
+      'Unlimited Users',
+      'Unlimited Apps',
+      'Unlimited Environments per App',
+      'End-to-end Encryption',
+      'Google/GitHub/Gitlab/SAML SSO',
+      'Role-based Access Control',
+      'Unlimited Service Tokens',
+      'Secret Versioning',
+      'Secret Referencing',
+      'Point-in-time Recovery',
+      'Source IP-based allow listing',
       '99.99% Uptime SLA',
       'Custom RBAC',
       'Dedicated support',
@@ -121,15 +124,15 @@ export const PlanInfo = () => {
   })
 
   const appQuotaUsage = data
-    ? calculatePercentage(data.apps.length, data.organisationPlan.maxApps)
+    ? calculatePercentage(data.organisationPlan.appCount, data.organisationPlan.maxApps)
     : 0
 
   const memberQuotaUsage = data
-    ? calculatePercentage(data.organisationMembers.length, data.organisationPlan.maxUsers)
+    ? calculatePercentage(data.organisationPlan.userCount, data.organisationPlan.maxUsers)
     : 0
 
   const progressBarColor = (value: number, maxValue: number) =>
-    value >= maxValue ? 'bg-red-500' : value === maxValue - 1 ? 'bg-amber-500' : 'bg-sky-500'
+    value >= maxValue ? 'bg-red-500' : value === maxValue - 1 ? 'bg-amber-500' : 'bg-emerald-500'
 
   if (loading || !activeOrganisation)
     return (
@@ -140,7 +143,7 @@ export const PlanInfo = () => {
 
   return (
     <div className="space-y-6 divide-y divide-neutral-500/40">
-      <div className="space-y-4">
+      <div className="space-y-4 ">
         <div className="text-lg font-medium py-2 border-b border-neutral-500/20">Current plan</div>
 
         <div className="flex justify-between items-center py-4">
@@ -191,14 +194,16 @@ export const PlanInfo = () => {
               ))}
             </div>
 
-            <div>
-              <div className="text-neutral-500 font-medium text-lg py-2">Not included:</div>
-              {planInfo.notIncluded.map((feature) => (
-                <PlanFeatureItem key={feature} iconColor="text-red-500" iconType="cross">
-                  {feature}
-                </PlanFeatureItem>
-              ))}
-            </div>
+            {planInfo.notIncluded.length > 0 && (
+              <div>
+                <div className="text-neutral-500 font-medium text-lg py-2">Not included:</div>
+                {planInfo.notIncluded.map((feature) => (
+                  <PlanFeatureItem key={feature} iconColor="text-red-500" iconType="cross">
+                    {feature}
+                  </PlanFeatureItem>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -209,12 +214,15 @@ export const PlanInfo = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-lg font-medium text-black dark:text-white">Apps</div>
-            <div className="text-neutral-500">{`${data.apps.length} of ${data.organisationPlan.maxApps || '∞'} Apps used`}</div>
+            <div className="text-neutral-500">{`${data.organisationPlan.appCount} ${data.organisationPlan.maxApps ? `of ${data.organisationPlan.maxApps}` : ''}  Apps used`}</div>
           </div>
           {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr && (
             <ProgressBar
               percentage={appQuotaUsage}
-              color={progressBarColor(data.apps.length, data.organisationPlan.maxApps)}
+              color={progressBarColor(
+                data.organisationPlan.appCount,
+                data.organisationPlan.maxApps
+              )}
               size="sm"
             />
           )}
@@ -230,13 +238,13 @@ export const PlanInfo = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-lg font-medium text-black dark:text-white">Members</div>
-            <div className="text-neutral-500">{`${data.organisationMembers.length} of ${data.organisationPlan.maxUsers || '∞'}  Users added`}</div>
+            <div className="text-neutral-500">{`${data.organisationPlan.userCount} ${data.organisationPlan.maxUsers ? `of ${data.organisationPlan.maxUsers}` : ''}  Seats used`}</div>
           </div>
           {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr && (
             <ProgressBar
               percentage={memberQuotaUsage}
               color={progressBarColor(
-                data.organisationMembers.length,
+                data.organisationPlan.userCount,
                 data.organisationPlan.maxUsers
               )}
               size="sm"

@@ -22,7 +22,7 @@ export default function Settings({ params }: { params: { team: string } }) {
   const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
 
   return (
-    <section className="w-full max-w-screen-lg mx-auto p-4 text-black dark:text-white">
+    <section className="w-full max-w-screen-lg mx-auto py-4 text-black dark:text-white">
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
@@ -39,7 +39,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                         : ' border-transparent cursor-pointer'
                     )}
                   >
-                    Account
+                    Organisation
                   </div>
                 )}
               </Tab>
@@ -54,7 +54,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                         : ' border-transparent cursor-pointer'
                     )}
                   >
-                    Organisation
+                    Account
                   </div>
                 )}
               </Tab>
@@ -62,6 +62,21 @@ export default function Settings({ params }: { params: { team: string } }) {
           )}
           <Tab.Panels>
             <div className="max-h-[80vh] overflow-y-auto px-4">
+              {activeUserIsAdmin && (
+                <Tab.Panel>
+                  <div className="space-y-10  py-4">
+                    <div className="space-y-1">
+                      <h2 className="text-2xl font-semibold">Organisation</h2>
+                      <p className="text-neutral-500">Organisation info and settings</p>
+                    </div>
+
+                    <div>
+                      <PlanInfo />
+                    </div>
+                  </div>
+                </Tab.Panel>
+              )}
+
               <Tab.Panel>
                 <div className="space-y-10 divide-y divide-neutral-500/40">
                   {activeOrganisation && (
@@ -119,21 +134,6 @@ export default function Settings({ params }: { params: { team: string } }) {
                   </div>
                 </div>
               </Tab.Panel>
-
-              {activeUserIsAdmin && (
-                <Tab.Panel>
-                  <div className="space-y-10  py-4">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-semibold">Organisation</h2>
-                      <p className="text-neutral-500">Organisation info and settings</p>
-                    </div>
-
-                    <div>
-                      <PlanInfo />
-                    </div>
-                  </div>
-                </Tab.Panel>
-              )}
             </div>
           </Tab.Panels>
         </Tab.Group>
