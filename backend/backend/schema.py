@@ -2,6 +2,7 @@ from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.vault.main import VaultMountType
+from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
@@ -697,6 +698,9 @@ class Mutation(graphene.ObjectType):
 
     create_override = CreatePersonalSecretMutation.Field()
     remove_override = DeletePersonalSecretMutation.Field()
+
+    # Lockbox
+    create_lockbox = CreateLockboxMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

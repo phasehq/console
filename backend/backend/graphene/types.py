@@ -11,6 +11,7 @@ from api.models import (
     EnvironmentSync,
     EnvironmentSyncEvent,
     EnvironmentToken,
+    Lockbox,
     Organisation,
     App,
     OrganisationMember,
@@ -535,3 +536,9 @@ class OrganisationPlanType(ObjectType):
     max_envs_per_app = graphene.Int()
     user_count = graphene.Int()
     app_count = graphene.Int()
+
+
+class LockboxType(DjangoObjectType):
+    class Meta:
+        model = Lockbox
+        fields = "__all__"
