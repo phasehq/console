@@ -94,9 +94,11 @@ const Sidebar = () => {
                               active
                                 ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
                                 : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
-                            } group flex  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium  `}
+                            } group flex  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium w-[95%]`}
                           >
+                            <span className="truncate w-[80%] text-left">
                             {org.name}
+                            </span>
                             <FaExchangeAlt />
                           </button>
                         )}
