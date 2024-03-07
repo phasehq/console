@@ -2,16 +2,16 @@ import { SecretType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { CreateSharedSecret } from '@/graphql/mutations/environments/shareSecret.gql'
-import { encryptAsymmetric, randomKeyPair } from '@/utils/crypto'
 import { useMutation } from '@apollo/client'
 import { Fragment, useState } from 'react'
-import { FaCircle, FaDotCircle, FaShare, FaShareAlt } from 'react-icons/fa'
+import { FaChevronDown, FaCircle, FaDotCircle, FaInfo, FaShare, FaShareAlt } from 'react-icons/fa'
 import _sodium from 'libsodium-wrappers-sumo'
 import { getUnixTimeStampinFuture } from '@/utils/time'
-import { RadioGroup } from '@headlessui/react'
+import { Listbox, RadioGroup } from '@headlessui/react'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import CopyButton from '@/components/common/CopyButton'
+import { boxExpiryString, encryptBox, newBoxSeed } from '@/utils/lockbox'
 
 interface ExpiryOptionT {
   name: string
@@ -24,6 +24,14 @@ const lockboxExpiryOptions: ExpiryOptionT[] = [
     getExpiry: () => null,
   },
   {
+    name: '1 day',
+    getExpiry: () => getUnixTimeStampinFuture(1),
+  },
+  {
+    name: '2 days',
+    getExpiry: () => getUnixTimeStampinFuture(2),
+  },
+  {
     name: '7 days',
     getExpiry: () => getUnixTimeStampinFuture(7),
   },
@@ -31,15 +39,9 @@ const lockboxExpiryOptions: ExpiryOptionT[] = [
     name: '30 days',
     getExpiry: () => getUnixTimeStampinFuture(30),
   },
-  {
-    name: '60 days',
-    getExpiry: () => getUnixTimeStampinFuture(60),
-  },
-  {
-    name: '90 days',
-    getExpiry: () => getUnixTimeStampinFuture(90),
-  },
 ]
+
+const lockboxAllowedViews = [1, 2, 3, 4, 5, 10, 25, 50]
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
@@ -55,25 +57,30 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
 
   const [secretData, setSecretData] = useState({ text: props.secret.value })
   const [allowedViews, setAllowedViews] = useState(1)
-  const [expiry, setExpiry] = useState<ExpiryOptionT>(lockboxExpiryOptions[0])
+  const [expiry, setExpiry] = useState<ExpiryOptionT>(lockboxExpiryOptions[1])
 
-  const [box, setBox] = useState<{ lockboxId: string; key: string } | null>(null)
+  const [box, setBox] = useState<{ lockboxId: string; password: string } | null>(null)
+
+  const reset = () => {
+    setSecretData({ text: props.secret.value })
+    setAllowedViews(1)
+    setExpiry(lockboxExpiryOptions[1])
+    setBox(null)
+  }
 
   const handleTextChange = (value: string) => {
     setSecretData({ text: value })
   }
 
   const handleCreateLockbox = () => {
-    return new Promise<{ lockboxId: string; key: string }>((resolve, reject) => {
+    return new Promise<{ lockboxId: string; password: string }>((resolve, reject) => {
       setTimeout(async () => {
-        await _sodium.ready
-        const sodium = _sodium
+        const seed = await newBoxSeed()
 
-        const { publicKey, privateKey } = await randomKeyPair()
-        const ciphertext = await encryptAsymmetric(secretData.text, sodium.to_hex(publicKey))
+        const boxData = await encryptBox(JSON.stringify({ text: secretData.text }), seed)
 
         const mutationPayload = {
-          data: JSON.stringify({ text: ciphertext }),
+          data: boxData,
           expiry: expiry.getExpiry(),
           allowedViews,
         }
@@ -81,7 +88,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
         const { data } = await createLockbox({ variables: { input: mutationPayload } })
 
         if (data.createLockbox.lockbox) {
-          resolve({ lockboxId: data.createLockbox.lockbox.id, key: sodium.to_hex(privateKey) })
+          resolve({ lockboxId: data.createLockbox.lockbox.id, password: seed })
         } else {
           reject(error?.message || 'Something went wrong. Please try again')
         }
@@ -97,11 +104,11 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
         pending: 'Encrypting secret...',
         success: 'Shareable link created',
       })
-      .then((box: { lockboxId: string; key: string }) => setBox(box))
+      .then((box: { lockboxId: string; password: string }) => setBox(box))
   }
 
   const hostname = `${window.location.protocol}//${window.location.host}`
-  const link = box ? `${hostname}/lockbox/${box.lockboxId}#${box.key}` : ''
+  const link = box ? `${hostname}/lockbox/${box.lockboxId}#${box.password}` : ''
 
   return (
     <GenericDialog
@@ -112,7 +119,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
           <FaShareAlt />
         </span>
       }
-      onClose={() => {}}
+      onClose={reset}
     >
       {box ? (
         <div className="space-y-6">
@@ -147,31 +154,77 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
               ></textarea>
             </div>
 
-            <div>
-              <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
-                <RadioGroup.Label as={Fragment}>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">Expiry</label>
-                </RadioGroup.Label>
-                <div className="flex flex-wrap items-center gap-2">
-                  {lockboxExpiryOptions.map((option) => (
-                    <RadioGroup.Option key={option.name} value={option} as={Fragment}>
-                      {({ active, checked }) => (
-                        <div
-                          className={clsx(
-                            'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full',
-                            active && 'border-zinc-700',
-                            checked && 'bg-zinc-700'
-                          )}
-                        >
-                          {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
-                          {option.name}
+            <div className="grid grid-cols-2 gap-8">
+              <div>
+                <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
+                  <RadioGroup.Label as={Fragment}>
+                    <label className="block text-gray-700 text-sm font-bold mb-2">Expiry</label>
+                  </RadioGroup.Label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {lockboxExpiryOptions.map((option) => (
+                      <RadioGroup.Option key={option.name} value={option} as={Fragment}>
+                        {({ active, checked }) => (
+                          <div
+                            className={clsx(
+                              'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full text-sm',
+                              active && 'border-zinc-700',
+                              checked && 'bg-zinc-700'
+                            )}
+                          >
+                            {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
+                            {option.name}
+                          </div>
+                        )}
+                      </RadioGroup.Option>
+                    ))}
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="secret">
+                  Maximum allowed views
+                </label>
+                <Listbox value={allowedViews} onChange={setAllowedViews}>
+                  {({ open }) => (
+                    <>
+                      <Listbox.Button as={Fragment} aria-required>
+                        <div className="p-2 flex items-center justify-between  rounded-md h-10 cursor-pointer bg-zinc-200 dark:bg-zinc-800">
+                          {allowedViews}
+                          <FaChevronDown
+                            className={clsx(
+                              'transition-transform ease duration-300 text-neutral-500',
+                              open ? 'rotate-180' : 'rotate-0'
+                            )}
+                          />
                         </div>
-                      )}
-                    </RadioGroup.Option>
-                  ))}
-                </div>
-              </RadioGroup>
-              <span className="text-sm text-neutral-500">{humanReadableExpiry(expiry)}</span>
+                      </Listbox.Button>
+                      <Listbox.Options>
+                        <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-20 w-full">
+                          {lockboxAllowedViews.map((num: number) => (
+                            <Listbox.Option key={num} value={num} as={Fragment}>
+                              {({ active, selected }) => (
+                                <div
+                                  className={clsx(
+                                    'flex items-center gap-2 p-2 cursor-pointer rounded-full',
+                                    active && 'bg-zinc-400 dark:bg-zinc-700'
+                                  )}
+                                >
+                                  {num} Days
+                                </div>
+                              )}
+                            </Listbox.Option>
+                          ))}
+                        </div>
+                      </Listbox.Options>
+                    </>
+                  )}
+                </Listbox>
+              </div>
+            </div>
+
+            <div className="text-sm text-neutral-500 flex items-center gap-2">
+              <FaInfo /> {boxExpiryString(expiry.getExpiry() || undefined, allowedViews)}
             </div>
 
             <div className="flex justify-end">
