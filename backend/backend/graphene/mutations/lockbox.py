@@ -24,7 +24,7 @@ class CreateLockboxMutation(graphene.Mutation):
             expires_at = None
 
         lockbox = Lockbox.objects.create(
-            data=input.data, expires_at=expires_at, allowed_view=input.allowed_views
+            data=input.data, expires_at=expires_at, allowed_views=input.allowed_views
         )
 
         return CreateLockboxMutation(lockbox=lockbox)
