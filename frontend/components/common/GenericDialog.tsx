@@ -70,7 +70,7 @@ const GenericDialog: React.FC<GenericDialogProps> = ({
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                     </Button>
                   </Dialog.Title>
-                  <div className="space-y-6 p-4">{children}</div>
+                  <div>{children}</div>
                 </Dialog.Panel>
               </Transition.Child>
             </div>
