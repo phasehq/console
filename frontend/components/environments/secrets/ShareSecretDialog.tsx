@@ -154,8 +154,8 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
               ></textarea>
             </div>
 
-            <div className="grid grid-cols-2 gap-8">
-              <div>
+            <div className="grid grid-cols-3 gap-8">
+              <div className="col-span-2">
                 <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
                   <RadioGroup.Label as={Fragment}>
                     <label className="block text-gray-700 text-sm font-bold mb-2">Expiry</label>
@@ -210,7 +210,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
                                     active && 'bg-zinc-400 dark:bg-zinc-700'
                                   )}
                                 >
-                                  {num} Days
+                                  {num} Views
                                 </div>
                               )}
                             </Listbox.Option>
