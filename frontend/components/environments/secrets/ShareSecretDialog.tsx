@@ -124,7 +124,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
             <pre className="text-xs">{link}</pre>
             <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent to-zinc-800"></div>
             <div className="absolute right-1 top-2.5 ">
-              <CopyButton code={link} />
+              <CopyButton value={link} />
             </div>
           </div>
         </div>

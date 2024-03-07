@@ -14,7 +14,9 @@ export const CliCommand = (props: { command: string; comment?: string }) => {
           </span>
         )}
       </pre>
-      <CopyButton code={prefixedCommand} />
+      <div className="absolute right-4 top-3.5 ">
+        <CopyButton value={prefixedCommand} />
+      </div>
     </div>
   )
 }
