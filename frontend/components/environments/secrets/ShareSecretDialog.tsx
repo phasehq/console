@@ -128,7 +128,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
           </div>
 
           <div className="group relative overflow-x-hidden rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-sm text-emerald-800 dark:text-emerald-300">
-            <pre className="text-xs">{link}</pre>
+            <pre className="text-xs ph-no-capture">{link}</pre>
             <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent to-zinc-800"></div>
             <div className="absolute right-1 top-2.5 ">
               <CopyButton value={link} />
@@ -149,7 +149,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
               <textarea
                 rows={5}
                 value={secretData.text}
-                className="w-full"
+                className="w-full ph-no-capture"
                 onChange={(e) => handleTextChange(e.target.value)}
               ></textarea>
             </div>
