@@ -493,6 +493,7 @@ type Mutation {
   readSecret(id: ID!): ReadSecretMutation
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
+  createLockbox(input: LockboxInput): CreateLockboxMutation
 }
 
 type CreateOrganisationMutation {
@@ -691,4 +692,23 @@ input PersonalSecretInput {
 
 type DeletePersonalSecretMutation {
   ok: Boolean
+}
+
+type CreateLockboxMutation {
+  lockbox: LockboxType
+}
+
+type LockboxType {
+  id: String!
+  data: JSONString!
+  views: Int!
+  createdAt: DateTime
+  expiresAt: DateTime
+  allowedViews: Int
+}
+
+input LockboxInput {
+  data: JSONString
+  allowedViews: Int
+  expiry: BigInt
 }
