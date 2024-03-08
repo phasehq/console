@@ -639,7 +639,7 @@ class LockboxView(APIView):
                 Q(id=box_id)
                 & (Q(expires_at__gte=timezone.now()) | Q(expires_at__isnull=True))
             )
-            if box.allowed_views and box.views < box.allowed_views:
+            if box.allowed_views is None or box.views < box.allowed_views:
                 serializer = LockboxSerializer(box)
                 return Response(serializer.data, status=status.HTTP_200_OK)
             else:
