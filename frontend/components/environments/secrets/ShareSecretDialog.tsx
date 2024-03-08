@@ -124,7 +124,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
 
           <div className="group relative overflow-x-hidden rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-sm text-emerald-800 dark:text-emerald-300">
             <pre className="text-xs ph-no-capture">{link}</pre>
-            <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent to-zinc-800"></div>
+            <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent to-zinc-300 dark:to-zinc-800"></div>
             <div className="absolute right-1 top-2.5 ">
               <CopyButton value={link} />
             </div>
@@ -185,7 +185,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
                   {({ open }) => (
                     <>
                       <Listbox.Button as={Fragment} aria-required>
-                        <div className="p-2 flex items-center justify-between  rounded-md h-10 cursor-pointer bg-zinc-200 dark:bg-zinc-800">
+                        <div className="p-2 flex items-center justify-between  rounded-md h-10 cursor-pointer bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100">
                           {allowedViews || 'Unlimited'}
                           <FaChevronDown
                             className={clsx(
@@ -202,7 +202,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
                               {({ active, selected }) => (
                                 <div
                                   className={clsx(
-                                    'flex items-center gap-2 p-2 cursor-pointer rounded-full text-sm',
+                                    'flex items-center gap-2 p-2 cursor-pointer rounded-full text-sm text-zinc-900 dark:text-zinc-100',
                                     active && 'bg-zinc-400 dark:bg-zinc-700'
                                   )}
                                 >
