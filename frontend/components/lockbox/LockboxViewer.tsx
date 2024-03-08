@@ -52,7 +52,7 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
           <Card>
             <div className="p-20  rounded-lg flex items-center justify-center">
               <Button variant="primary" onClick={handleOpenBox}>
-                View
+                View Secret
               </Button>
             </div>
           </Card>
