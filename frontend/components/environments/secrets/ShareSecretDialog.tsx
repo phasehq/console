@@ -37,7 +37,7 @@ const lockboxExpiryOptions: ExpiryOptionT[] = [
   },
   {
     name: '3 months',
-    getExpiry: () => getUnixTimeStampinFuture(30),
+    getExpiry: () => getUnixTimeStampinFuture(90),
   },
 ]
 
