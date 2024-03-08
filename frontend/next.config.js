@@ -67,16 +67,6 @@ const nextConfig = {
             source: '/:path*',
             headers: securityHeaders,
           },
-          {
-            // Apply Cache-Control header to paths under /lockbox.
-            source: '/lockbox/:path*',
-            headers: [
-              {
-                key: 'Cache-Control',
-                value: 'no-store, s-maxage=0',
-              },
-            ],
-          },
         ]
   },
   experimental: {
