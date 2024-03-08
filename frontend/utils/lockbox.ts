@@ -14,7 +14,15 @@ export const newBoxSeed = async () => {
   const seed = sodium.crypto_kdf_keygen()
   return sodium.to_hex(seed)
 }
-
+/**
+ * Encrypts data using an asymmetric encryption with a randomly generated key pair.
+ *
+ *
+ * @param {string} data - The data to be encrypted
+ * @param {string} seed - The seed used to generate the reciever key pair
+ *
+ * @returns {string} - The encrypted data as a JSON string
+ */
 export const encryptBox = async (data: string, seed: string) => {
   await _sodium.ready
   const sodium = _sodium
@@ -44,7 +52,9 @@ export const decryptBox = async (boxData: string, seed: string) => {
 }
 
 export const getBox = async (boxId: string) => {
-  const res = await fetch(`${process.env.BACKEND_API_BASE}/lockbox/${boxId}`)
+  const res = await fetch(`${process.env.BACKEND_API_BASE}/lockbox/${boxId}`, {
+    cache: 'no-store',
+  })
 
   if (!res.ok) {
     throw new Error('Failed to fetch data')
