@@ -41,18 +41,18 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
   return (
     <div className="space-y-4">
       {secret ? (
-        <div className="p-4 relative group font-mono text-sm break-all ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-lg ph-no-capture">
+        <div className="p-4 relative group font-mono text-sm break-all ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-lg ph-no-capture shadow-2xl">
           <div className="absolute right-2 top-3.5 z-20 ">
             <CopyButton value={secret} />
           </div>
-          {secret}
+          <div className="max-h-[80vh] overflow-y-auto">{secret}</div>
         </div>
       ) : (
         <div className="space-y-4">
           <Card>
             <div className="p-20  rounded-lg flex items-center justify-center">
               <Button variant="primary" onClick={handleOpenBox}>
-                Decrypt and Open
+                View
               </Button>
             </div>
           </Card>

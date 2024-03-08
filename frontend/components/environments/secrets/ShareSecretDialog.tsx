@@ -20,10 +20,6 @@ interface ExpiryOptionT {
 
 const lockboxExpiryOptions: ExpiryOptionT[] = [
   {
-    name: 'Never',
-    getExpiry: () => null,
-  },
-  {
     name: '1 day',
     getExpiry: () => getUnixTimeStampinFuture(1),
   },
@@ -36,27 +32,26 @@ const lockboxExpiryOptions: ExpiryOptionT[] = [
     getExpiry: () => getUnixTimeStampinFuture(7),
   },
   {
-    name: '30 days',
+    name: '1 month',
+    getExpiry: () => getUnixTimeStampinFuture(30),
+  },
+  {
+    name: '3 months',
     getExpiry: () => getUnixTimeStampinFuture(30),
   },
 ]
 
-const lockboxAllowedViews = [1, 2, 3, 4, 5, 10, 25, 50]
+const lockboxAllowedViews = [1, 2, 3, 4, 5, 10, 25, 50, undefined]
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
 }
 
-const humanReadableExpiry = (expiryOption: ExpiryOptionT) =>
-  expiryOption.getExpiry() === null
-    ? 'This link will never expire.'
-    : `This link will expire on ${new Date(expiryOption.getExpiry()!).toLocaleDateString()}.`
-
 export const ShareSecretDialog = (props: { secret: SecretType }) => {
   const [createLockbox, { error, loading }] = useMutation(CreateSharedSecret)
 
   const [secretData, setSecretData] = useState({ text: props.secret.value })
-  const [allowedViews, setAllowedViews] = useState(1)
+  const [allowedViews, setAllowedViews] = useState<number | undefined>(1)
   const [expiry, setExpiry] = useState<ExpiryOptionT>(lockboxExpiryOptions[1])
 
   const [box, setBox] = useState<{ lockboxId: string; password: string } | null>(null)
@@ -123,8 +118,8 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
     >
       {box ? (
         <div className="space-y-6">
-          <div>
-            <div className="text-neutral-500">{humanReadableExpiry(expiry)}</div>
+          <div className="text-neutral-500 flex items-center gap-2">
+            {boxExpiryString(expiry.getExpiry() || undefined, allowedViews)}
           </div>
 
           <div className="group relative overflow-x-hidden rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-sm text-emerald-800 dark:text-emerald-300">
@@ -148,6 +143,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
               </label>
               <textarea
                 rows={5}
+                maxLength={10000}
                 value={secretData.text}
                 className="w-full ph-no-capture"
                 onChange={(e) => handleTextChange(e.target.value)}
@@ -166,7 +162,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
                         {({ active, checked }) => (
                           <div
                             className={clsx(
-                              'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full text-sm',
+                              'flex items-center gap-2 py-0.5 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full text-sm',
                               active && 'border-zinc-700',
                               checked && 'bg-zinc-700'
                             )}
@@ -181,7 +177,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
                 </RadioGroup>
               </div>
 
-              <div>
+              <div className="relative">
                 <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="secret">
                   Maximum allowed views
                 </label>
@@ -190,7 +186,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
                     <>
                       <Listbox.Button as={Fragment} aria-required>
                         <div className="p-2 flex items-center justify-between  rounded-md h-10 cursor-pointer bg-zinc-200 dark:bg-zinc-800">
-                          {allowedViews}
+                          {allowedViews || 'Unlimited'}
                           <FaChevronDown
                             className={clsx(
                               'transition-transform ease duration-300 text-neutral-500',
@@ -200,17 +196,17 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
                         </div>
                       </Listbox.Button>
                       <Listbox.Options>
-                        <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-20 w-full">
-                          {lockboxAllowedViews.map((num: number) => (
+                        <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute mt-1 z-20 ring-1 ring-inset ring-neutral-500/40 w-full">
+                          {lockboxAllowedViews.map((num: number | undefined) => (
                             <Listbox.Option key={num} value={num} as={Fragment}>
                               {({ active, selected }) => (
                                 <div
                                   className={clsx(
-                                    'flex items-center gap-2 p-2 cursor-pointer rounded-full',
+                                    'flex items-center gap-2 p-2 cursor-pointer rounded-full text-sm',
                                     active && 'bg-zinc-400 dark:bg-zinc-700'
                                   )}
                                 >
-                                  {num} Views
+                                  {num || 'Unlimited'} Views
                                 </div>
                               )}
                             </Listbox.Option>
@@ -229,7 +225,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
 
             <div className="flex justify-end">
               <Button type="submit" variant="primary" isLoading={loading}>
-                <FaShare /> Share
+                <FaShareAlt /> Generate link
               </Button>
             </div>
           </form>
