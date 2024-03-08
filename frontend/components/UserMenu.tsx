@@ -13,6 +13,8 @@ export default function UserMenu() {
 
   const firstName = session?.user?.name?.split(' ')[0]
 
+  if (!session) return <></>
+
   return (
     <div className="">
       <Menu as="div" className="relative inline-block text-left">

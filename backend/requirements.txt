@@ -21,6 +21,7 @@ django-cors-headers==3.14.0
 django-filter==23.1
 django-rq==2.9.0
 djangorestframework==3.14.0
+djangorestframework-camel-case==1.4.2
 graphene==3.2.1
 graphene-django==3.0.0
 graphql-core==3.2.3

@@ -61,7 +61,7 @@ const GenericDialog: React.FC<GenericDialogProps> = ({
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       {title}
@@ -70,7 +70,7 @@ const GenericDialog: React.FC<GenericDialogProps> = ({
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                     </Button>
                   </Dialog.Title>
-                  <div className="space-y-6 p-4">{children}</div>
+                  <div>{children}</div>
                 </Dialog.Panel>
               </Transition.Child>
             </div>

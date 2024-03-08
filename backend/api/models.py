@@ -487,3 +487,12 @@ class PersonalSecret(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+
+class Lockbox(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    data = models.JSONField()
+    views = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    expires_at = models.DateTimeField(null=True)
+    allowed_views = models.IntegerField(null=True)

@@ -165,7 +165,7 @@ export const PlanInfo = () => {
                 buttonContent={'Upgrade'}
                 onClose={() => {}}
               >
-                <div className="space-y-2">
+                <div className="space-y-4">
                   <div className="text-neutral-500">Request an upgrade to your account.</div>
                   {isCloudHosted() ? (
                     <UpgradeRequestForm onSuccess={() => {}} />

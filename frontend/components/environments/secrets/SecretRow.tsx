@@ -13,6 +13,7 @@ import { CommentDialog } from './CommentDialog'
 import { HistoryDialog } from './HistoryDialog'
 import { OverrideDialog } from './OverrideDialog'
 import { TagsDialog } from './TagsDialog'
+import { ShareSecretDialog } from './ShareSecretDialog'
 
 export default function SecretRow(props: {
   orgId: string
@@ -145,6 +146,7 @@ export default function SecretRow(props: {
               handlePropertyChange={handlePropertyChange}
             />
           </div>
+
           <div
             className={clsx(
               (!secret.override || !secret.override.isActive) &&
@@ -157,6 +159,10 @@ export default function SecretRow(props: {
               environment={props.environment}
               override={secret.override!}
             />
+          </div>
+
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+            <ShareSecretDialog secret={secret} />
           </div>
         </div>
       </div>
