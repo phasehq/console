@@ -59,7 +59,7 @@ const Onboard = () => {
       icon: <MdOutlinePassword />,
       title: 'Set a sudo password',
       description:
-        'This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks.',
+        'This will be used to encrypt your account keys. You will need to enter this password to unlock your workspace when logging in.',
     },
     {
       index: 2,
