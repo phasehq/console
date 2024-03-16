@@ -1,20 +1,42 @@
 #!/bin/bash
+# replace-variables.sh
 
-# Ensure NEXT_PUBLIC_BACKEND_API_BASE and NEXT_PUBLIC_NEXTAUTH_PROVIDERS are set
-if [ -z "$NEXT_PUBLIC_BACKEND_API_BASE" ]; then
-    echo "NEXT_PUBLIC_BACKEND_API_BASE is not set. Please set it and rerun the script."
-    exit 1
+# Define a list of mandatory environment variables to check
+MANDATORY_VARS=("NEXT_PUBLIC_BACKEND_API_BASE" "NEXT_PUBLIC_NEXTAUTH_PROVIDERS")
+
+# Define a list of optional environment variables (no check needed)
+OPTIONAL_VARS=("APP_HOST" "NEXT_PUBLIC_POSTHOG_KEY" "NEXT_PUBLIC_POSTHOG_HOST")
+
+# Infer NEXT_PUBLIC_APP_HOST from APP_HOST if not already set
+if [ -z "$NEXT_PUBLIC_APP_HOST" ] && [ ! -z "$APP_HOST" ]; then
+    export NEXT_PUBLIC_APP_HOST="$APP_HOST"
 fi
 
-if [ -z "$NEXT_PUBLIC_NEXTAUTH_PROVIDERS" ]; then
-    echo "NEXT_PUBLIC_NEXTAUTH_PROVIDERS is not set. Please set it and rerun the script."
-    exit 1
+# Infer NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID from GITHUB_INTEGRATION_CLIENT_ID if not already set
+if [ -z "$NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID" ] && [ ! -z "$GITHUB_INTEGRATION_CLIENT_ID" ]; then
+    export NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID="$GITHUB_INTEGRATION_CLIENT_ID"
 fi
 
-find /app/public /app/.next -type f -name "*.js" |
+# Check if each mandatory variable is set
+for VAR in "${MANDATORY_VARS[@]}"; do
+    if [ -z "${!VAR}" ]; then
+        echo "$VAR is not set. Please set it and rerun the script."
+        exit 1
+    fi
+done
+
+# Combine mandatory and optional variables for replacement
+ALL_VARS=("${MANDATORY_VARS[@]}" "${OPTIONAL_VARS[@]}")
+
+# Add NEXT_PUBLIC_APP_HOST and NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID to the list for replacement
+ALL_VARS+=("NEXT_PUBLIC_APP_HOST" "NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID")
+
+# Find and replace BAKED values with real values
+find /app/public /app/.next -type f -name "*.js" | xargs grep -i -l "BAKED_" |
 while read file; do
-    sed -i "s|BAKED_NEXT_PUBLIC_BACKEND_API_BASE|$NEXT_PUBLIC_BACKEND_API_BASE|g" "$file"
-    sed -i "s|BAKED_NEXT_PUBLIC_NEXTAUTH_PROVIDERS|$NEXT_PUBLIC_NEXTAUTH_PROVIDERS|g" "$file"
-    sed -i "s|BAKED_NEXT_PUBLIC_APP_HOST|$APP_HOST|g" "$file"
-    sed -i "s|BAKED_NEXT_PUBLIC_POSTHOG_KEY|$NEXT_PUBLIC_POSTHOG_KEY|g" "$file"
+    for VAR in "${ALL_VARS[@]}"; do
+        if [ ! -z "${!VAR}" ]; then
+            sed -i "s|BAKED_$VAR|${!VAR}|g" "$file"
+        fi
+    done
 done

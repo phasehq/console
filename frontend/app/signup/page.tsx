@@ -14,7 +14,6 @@ import { toast } from 'react-toastify'
 import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
-import { setLocalKeyring } from '@/utils/localStorage'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 
 const bip39 = require('bip39')
@@ -60,7 +59,7 @@ const Onboard = () => {
       icon: <MdOutlinePassword />,
       title: 'Set a sudo password',
       description:
-        'This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks.',
+        'This will be used to encrypt your account keys. You will need to enter this password to unlock your workspace when logging in.',
     },
     {
       index: 2,
@@ -158,12 +157,6 @@ const Onboard = () => {
         })
         const { data } = result
         const newOrg = data.createOrganisation.organisation
-        setLocalKeyring({
-          email: session?.user?.email!,
-          org: newOrg,
-          keyring: encryptedKeyring,
-          recovery: encryptedMnemonic,
-        })
       } catch (e) {
         setIsLoading(false)
         reject()
@@ -210,7 +203,9 @@ const Onboard = () => {
   const SuccessPane = () => {
     return (
       <div className="flex flex-col gap-y-2 items-center">
-        <h1 className="text-4xl text-black dark:text-white text-center font-bold">You're All Set</h1>
+        <h1 className="text-4xl text-black dark:text-white text-center font-bold">
+          You&apos;re All Set
+        </h1>
         <p className="text-black/30 dark:text-white/40 text-center">Your account is ready to go!</p>
         <div className="mx-auto pt-8">
           <Button

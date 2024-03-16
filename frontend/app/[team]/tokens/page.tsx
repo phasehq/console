@@ -445,7 +445,6 @@ export default function Tokens({ params }: { params: { team: string } }) {
 
   return (
     <section className="h-screen overflow-y-auto">
-      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       <div className="w-full space-y-8 p-8 text-black dark:text-white">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold">User tokens</h1>

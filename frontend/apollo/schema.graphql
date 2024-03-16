@@ -1,5 +1,6 @@
 type Query {
   organisations: [OrganisationType]
+  organisationPlan(organisationId: ID): OrganisationPlanType
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
   organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
@@ -11,13 +12,25 @@ type Query {
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(appId: ID, environmentId: ID, memberId: ID): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
-  secrets(envId: ID): [SecretType]
+  secrets(envId: ID, path: String): [SecretType]
+  folders(envId: ID, path: String): [SecretFolderType]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
   environmentKeys(appId: ID, environmentId: ID, memberId: ID): [EnvironmentKeyType]
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
+  serverPublicKey: String
+  syncEnabled(appId: ID): Boolean
+  providers: [ProviderType]
+  services: [ServiceType]
+  savedCredentials(orgId: ID): [ProviderCredentialsType]
+  syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
+  envSyncs(envId: ID): [EnvironmentSyncType]
+  cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
+  awsSecrets(credentialId: ID): [AWSSecretType]
+  githubRepos(credentialId: ID): [GitHubRepoType]
+  testVaultCreds(credentialId: ID): Boolean
 }
 
 type OrganisationType {
@@ -49,6 +62,15 @@ enum ApiOrganisationPlanChoices {
 
   """Enterprise"""
   EN
+}
+
+type OrganisationPlanType {
+  name: String
+  maxUsers: Int
+  maxApps: Int
+  maxEnvsPerApp: Int
+  userCount: Int
+  appCount: Int
 }
 
 type OrganisationMemberType {
@@ -99,6 +121,7 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
+  syncEnabled: Boolean
 }
 
 """An enumeration."""
@@ -152,7 +175,9 @@ type SecretEventType {
   id: String!
   secret: SecretType!
   environment: EnvironmentType!
+  path: String!
   user: OrganisationMemberType
+  serviceToken: ServiceTokenType
   key: String!
   value: String!
   version: Int!
@@ -167,6 +192,7 @@ type SecretEventType {
 type SecretType {
   id: String!
   folder: SecretFolderType
+  path: String!
   key: String!
   value: String!
   version: Int!
@@ -180,9 +206,39 @@ type SecretType {
 
 type SecretFolderType {
   id: String!
+  environment: EnvironmentType!
+  path: String!
   name: String!
   createdAt: DateTime
   updatedAt: DateTime!
+  folderCount: Int
+  secretCount: Int
+}
+
+type EnvironmentType {
+  id: String!
+  app: AppType!
+  name: String!
+  envType: ApiEnvironmentEnvTypeChoices!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  folderCount: Int
+  secretCount: Int
+}
+
+"""An enumeration."""
+enum ApiEnvironmentEnvTypeChoices {
+  """Development"""
+  DEV
+
+  """Staging"""
+  STAGING
+
+  """Production"""
+  PROD
 }
 
 type SecretTagType {
@@ -201,27 +257,27 @@ type PersonalSecretType {
   updatedAt: DateTime!
 }
 
-type EnvironmentType {
+type ServiceTokenType {
   id: String!
+  keys: [ServerEnvironmentKeyType!]!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
   name: String!
-  envType: ApiEnvironmentEnvTypeChoices!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime
+}
+
+type ServerEnvironmentKeyType {
+  id: String!
+  environment: EnvironmentType!
   identityKey: String!
   wrappedSeed: String!
   wrappedSalt: String!
   createdAt: DateTime
   updatedAt: DateTime!
-}
-
-"""An enumeration."""
-enum ApiEnvironmentEnvTypeChoices {
-  """Development"""
-  DEV
-
-  """Staging"""
-  STAGING
-
-  """Production"""
-  PROD
 }
 
 """An enumeration."""
@@ -286,17 +342,113 @@ type UserTokenType {
   expiresAt: DateTime
 }
 
-type ServiceTokenType {
+type ProviderType {
   id: String!
-  keys: [EnvironmentKeyType!]!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
   name: String!
-  createdBy: OrganisationMemberType
+  expectedCredentials: [String!]!
+  optionalCredentials: [String!]!
+  authScheme: String
+}
+
+type ServiceType {
+  id: String
+  name: String
+  resourceType: String
+  provider: ProviderType
+}
+
+type ProviderCredentialsType {
+  id: String!
+  name: String!
+  provider: ProviderType
+  credentials: JSONString!
   createdAt: DateTime
   updatedAt: DateTime!
-  expiresAt: DateTime
+  syncCount: Int
+}
+
+"""
+Allows use of a JSON String for input / output from the GraphQL schema.
+
+Use of this type is *not recommended* as you lose the benefits of having a defined, static
+schema (one of the key benefits of GraphQL).
+"""
+scalar JSONString
+
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  options: JSONString!
+  authentication: ProviderCredentialsType
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
+  serviceInfo: ServiceType
+  history: [EnvironmentSyncEventType!]!
+}
+
+"""An enumeration."""
+enum ApiEnvironmentSyncStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """cancelled"""
+  CANCELLED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
+}
+
+type EnvironmentSyncEventType {
+  meta: JSONString
+  id: String!
+  envSync: EnvironmentSyncType!
+  status: ApiEnvironmentSyncEventStatusChoices!
+  createdAt: DateTime
+  completedAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiEnvironmentSyncEventStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """cancelled"""
+  CANCELLED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
+}
+
+type CloudFlarePagesType {
+  name: String
+  deploymentId: String
+  environments: [String]
+}
+
+type AWSSecretType {
+  name: String
+  arn: String
+}
+
+type GitHubRepoType {
+  name: String
+  owner: String
+  type: String
 }
 
 type Mutation {
@@ -316,11 +468,24 @@ type Mutation {
   createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!): CreateEnvironmentMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
+  initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
+  deleteEnvSync(syncId: ID): DeleteSync
+  triggerSync(syncId: ID): TriggerSync
+  toggleSyncActive(syncId: ID): ToggleSyncActive
+  updateSyncAuthentication(credentialId: ID, syncId: ID): UpdateSyncAuthentication
+  createProviderCredentials(credentials: JSONString, name: String, orgId: ID, provider: String): CreateProviderCredentials
+  updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
+  deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
+  createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
+  createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, path: String, secretName: String): CreateAWSSecretsManagerSync
+  createGhActionsSync(credentialId: ID, envId: ID, owner: String, path: String, repoName: String): CreateGitHubActionsSync
+  createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
   deleteServiceToken(tokenId: ID!): DeleteServiceTokenMutation
-  createSecretFolder(envId: ID!, id: ID!, name: String!, parentFolderId: ID): CreateSecretFolderMutation
+  createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
+  deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
   createSecret(secretData: SecretInput): CreateSecretMutation
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
@@ -328,6 +493,7 @@ type Mutation {
   readSecret(id: ID!): ReadSecretMutation
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
+  createLockbox(input: LockboxInput): CreateLockboxMutation
 }
 
 type CreateOrganisationMutation {
@@ -367,7 +533,7 @@ type RotateAppKeysMutation {
 }
 
 type DeleteAppMutation {
-  app: AppType
+  ok: Boolean
 }
 
 type AddAppMemberMutation {
@@ -411,6 +577,54 @@ type CreateEnvironmentTokenMutation {
   environmentToken: EnvironmentTokenType
 }
 
+type InitEnvSync {
+  app: AppType
+}
+
+type DeleteSync {
+  ok: Boolean
+}
+
+type TriggerSync {
+  sync: EnvironmentSyncType
+}
+
+type ToggleSyncActive {
+  ok: Boolean
+}
+
+type UpdateSyncAuthentication {
+  sync: EnvironmentSyncType
+}
+
+type CreateProviderCredentials {
+  credential: ProviderCredentialsType
+}
+
+type UpdateProviderCredentials {
+  credential: ProviderCredentialsType
+}
+
+type DeleteProviderCredentials {
+  ok: Boolean
+}
+
+type CreateCloudflarePagesSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateAWSSecretsManagerSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateGitHubActionsSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateVaultSync {
+  sync: EnvironmentSyncType
+}
+
 type CreateUserTokenMutation {
   ok: Boolean
   userToken: UserTokenType
@@ -432,6 +646,10 @@ type CreateSecretFolderMutation {
   folder: SecretFolderType
 }
 
+type DeleteSecretFolderMutation {
+  ok: Boolean
+}
+
 type CreateSecretTagMutation {
   tag: SecretTagType
 }
@@ -442,7 +660,7 @@ type CreateSecretMutation {
 
 input SecretInput {
   envId: ID
-  folderId: ID
+  path: String
   key: String!
   keyDigest: String!
   value: String!
@@ -474,4 +692,23 @@ input PersonalSecretInput {
 
 type DeletePersonalSecretMutation {
   ok: Boolean
+}
+
+type CreateLockboxMutation {
+  lockbox: LockboxType
+}
+
+type LockboxType {
+  id: String!
+  data: JSONString!
+  views: Int!
+  createdAt: DateTime
+  expiresAt: DateTime
+  allowedViews: Int
+}
+
+input LockboxInput {
+  data: JSONString
+  allowedViews: Int
+  expiry: BigInt
 }

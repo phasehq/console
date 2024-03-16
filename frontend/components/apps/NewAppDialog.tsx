@@ -1,9 +1,7 @@
-import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
-import { copyToClipBoard } from '@/utils/clipboard'
+import { cryptoUtils } from '@/utils/auth'
 import { Dialog, Switch, Transition } from '@headlessui/react'
-import { useSession } from 'next-auth/react'
-import { Fragment, ReactNode, useContext, useEffect, useState } from 'react'
-import { FaCopy, FaExclamationTriangle, FaEye, FaEyeSlash, FaPlus, FaTimes } from 'react-icons/fa'
+import { Fragment, useContext, useEffect, useState } from 'react'
+import { FaPlus, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -33,6 +31,9 @@ import {
   getUserKxPrivateKey,
   getUserKxPublicKey,
 } from '@/utils/crypto'
+import { MAX_INPUT_STRING_LENGTH } from '@/constants'
+import { Alert } from '../common/Alert'
+import { isCloudHosted } from '@/utils/appConfig'
 
 const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
@@ -41,25 +42,22 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   const { organisation, appCount } = props
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')
-  const [pw, setPw] = useState<string>('')
-  const [showPw, setShowPw] = useState<boolean>(false)
-  const [appId, setAppId] = useState<string>('')
+
   const [createStarters, setCreateStarters] = useState<boolean>(appCount === 0)
-  const [appSecret, setAppSecret] = useState<string>('')
+
   const [appCreating, setAppCreating] = useState<boolean>(false)
 
-  const { data: session } = useSession()
-
-  const [createApp] = useMutation(CreateApplication)
+  const [createApp, { error }] = useMutation(CreateApplication)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
   const [createSecret] = useMutation(CreateNewSecret)
-  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
 
+  const [getApps] = useLazyQuery(GetApps)
+  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
-  const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
+  const [createSuccess, setCreateSuccess] = useState(false)
 
-  const { keyring, setKeyring } = useContext(KeyringContext)
+  const { keyring } = useContext(KeyringContext)
 
   useEffect(() => {
     if (organisation) {
@@ -71,43 +69,24 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
     }
   }, [getOrgAdmins, organisation])
 
-  const complete = () => appId && appSecret
-
   const reset = () => {
     setName('')
-    setPw('')
-    setAppId('')
-    setAppSecret('')
+
+    setTimeout(() => {
+      setCreateSuccess(false)
+    }, 2000)
   }
 
   const closeModal = () => {
     if (!appCreating) {
       reset()
-      setIsOpen(false)
     }
+
+    setIsOpen(false)
   }
 
   const openModal = () => {
     setIsOpen(true)
-  }
-
-  const validateKeyring = async (password: string) => {
-    return new Promise<OrganisationKeyring>(async (resolve, reject) => {
-      if (keyring) resolve(keyring)
-      else {
-        try {
-          const decryptedKeyring = await cryptoUtils.getKeyring(
-            session?.user?.email!,
-            organisation!.id,
-            password
-          )
-          setKeyring(decryptedKeyring)
-          resolve(decryptedKeyring)
-        } catch (error) {
-          reject(error)
-        }
-      }
-    })
   }
 
   /**
@@ -120,11 +99,9 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
    * @throws {Error} If the specified environment is invalid or if an error occurs during processing.
    */
   async function processSecrets(env: EnvironmentType, secrets: Array<Partial<SecretType>>) {
-    const keyring = await validateKeyring(pw)
-
     const userKxKeys = {
-      publicKey: await getUserKxPublicKey(keyring.publicKey),
-      privateKey: await getUserKxPrivateKey(keyring.privateKey),
+      publicKey: await getUserKxPublicKey(keyring!.publicKey),
+      privateKey: await getUserKxPrivateKey(keyring!.privateKey),
     }
 
     const envSalt = await decryptAsymmetric(
@@ -148,7 +125,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
             key: encryptedKey,
             keyDigest,
             value: encryptedValue,
-            folderId: null,
+            path: '/',
             comment: encryptedComment,
             tags: [],
           } as SecretInput,
@@ -331,8 +308,10 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
         const id = crypto.randomUUID()
 
         try {
-          const keyring = await validateKeyring(pw)
-          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(appSeed, keyring.symmetricKey)
+          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(
+            appSeed,
+            keyring!.symmetricKey
+          )
           const appKeys = await cryptoUtils.appKeyring(appSeed)
           const appKeyShares = await splitSecret(appKeys.privateKey)
 
@@ -349,15 +328,6 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
               identityKey: appKeys.publicKey,
               appVersion: APP_VERSION,
             } as MutationCreateAppArgs,
-            refetchQueries: [
-              {
-                query: GetApps,
-                variables: {
-                  organisationId: organisation.id,
-                  appId: '',
-                },
-              },
-            ],
           })
 
           const newAppId = data.createApp.app.id
@@ -368,12 +338,17 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
             await createExampleSecrets(newAppId)
           }
 
-          setAppSecret(`pss:v${APP_VERSION}:${appToken}:${appKeyShares[0]}:${wrapKey}`)
-          setAppId(`phApp:v${APP_VERSION}:${appKeys.publicKey}`)
+          await getApps({
+            variables: { organisationId: organisation.id },
+            fetchPolicy: 'network-only',
+          })
+
           setAppCreating(false)
+          setCreateSuccess(true)
           resolve(true)
           closeModal()
         } catch (error) {
+          console.error(error)
           setAppCreating(false)
           reject(error)
         }
@@ -455,117 +430,97 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      {(allowNewApp() || complete()) && 'Create an App'}
-                      {!allowNewApp() && !complete() && planDisplay()?.dialogTitle}
+                      {allowNewApp() && 'Create an App'}
+                      {!allowNewApp() && !createSuccess && planDisplay()?.dialogTitle}
                     </h3>
                     <Button variant="text" onClick={closeModal}>
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                     </Button>
                   </Dialog.Title>
-                  {!complete() && allowNewApp() && (
-                    <form onSubmit={handleSubmit}>
-                      <div className="mt-2 space-y-6 group">
-                        <p className="text-sm text-gray-500">
-                          Create a new App by entering an App name below. Your App will be
-                          initialized with 3 new environments.
-                        </p>
-                        <div className="flex flex-col justify-center">
-                          <label
-                            className="block text-gray-700 text-sm font-bold mb-2"
-                            htmlFor="appname"
-                          >
-                            App name
-                          </label>
-                          <input
-                            id="appname"
-                            className="text-lg"
-                            required
-                            maxLength={64}
-                            value={name}
-                            placeholder="MyApp"
-                            onChange={(e) => setName(e.target.value)}
-                          />
-                        </div>
-
-                        {!keyring && (
+                  {allowNewApp() &&
+                    (createSuccess ? (
+                      <div>
+                        <div className="font-semibold text-lg">App Created!</div>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSubmit}>
+                        <div className="mt-2 space-y-6 group">
+                          <p className="text-sm text-gray-500">
+                            Create a new App by entering an App name below. Your App will be
+                            initialized with 3 new environments.
+                          </p>
+                          {error && (
+                            <Alert variant="danger" icon={true}>
+                              {error.message}
+                            </Alert>
+                          )}
                           <div className="flex flex-col justify-center">
                             <label
                               className="block text-gray-700 text-sm font-bold mb-2"
-                              htmlFor="password"
+                              htmlFor="appname"
                             >
-                              Sudo password
+                              App name
                             </label>
-                            <div className="relative">
-                              <input
-                                id="password"
-                                value={pw}
-                                onChange={(e) => setPw(e.target.value)}
-                                type={showPw ? 'text' : 'password'}
-                                minLength={16}
-                                required
-                                className="w-full ph-no-capture"
-                              />
-                              <button
-                                className="absolute inset-y-0 right-4"
-                                type="button"
-                                onClick={() => setShowPw(!showPw)}
-                                tabIndex={-1}
-                              >
-                                {showPw ? <FaEyeSlash /> : <FaEye />}
-                              </button>
-                            </div>
+                            <input
+                              id="appname"
+                              className="text-lg"
+                              required
+                              maxLength={MAX_INPUT_STRING_LENGTH}
+                              value={name}
+                              placeholder="MyApp"
+                              onChange={(e) => setName(e.target.value)}
+                            />
                           </div>
-                        )}
 
-                        <div className="flex items-center gap-2">
-                          <label
-                            className="block text-neutral-500 text-sm font-bold mb-2"
-                            htmlFor="create-starters"
-                          >
-                            Create example secrets
-                          </label>
-                          <Switch
-                            id="create-starters"
-                            checked={createStarters}
-                            onChange={() => setCreateStarters(!createStarters)}
-                            className={`${
-                              createStarters
-                                ? 'bg-emerald-400/10 ring-emerald-400/20'
-                                : 'bg-neutral-500/40 ring-neutral-500/30'
-                            } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
-                          >
-                            <span className="sr-only">Initialize with example secrets</span>
-                            <span
+                          <div className="flex items-center gap-2">
+                            <label
+                              className="block text-neutral-500 text-sm font-bold mb-2"
+                              htmlFor="create-starters"
+                            >
+                              Create example secrets
+                            </label>
+                            <Switch
+                              id="create-starters"
+                              checked={createStarters}
+                              onChange={() => setCreateStarters(!createStarters)}
                               className={`${
                                 createStarters
-                                  ? 'translate-x-6 bg-emerald-400'
-                                  : 'translate-x-1 bg-black'
-                              } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
-                            ></span>
-                          </Switch>
+                                  ? 'bg-emerald-400/10 ring-emerald-400/20'
+                                  : 'bg-neutral-500/40 ring-neutral-500/30'
+                              } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+                            >
+                              <span className="sr-only">Initialize with example secrets</span>
+                              <span
+                                className={`${
+                                  createStarters
+                                    ? 'translate-x-6 bg-emerald-400'
+                                    : 'translate-x-1 bg-black'
+                                } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+                              ></span>
+                            </Switch>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="mt-8 flex items-center w-full justify-between">
-                        <Button
-                          variant="secondary"
-                          type="button"
-                          onClick={closeModal}
-                          disabled={appCreating}
-                        >
-                          Cancel
-                        </Button>
-                        <Button type="submit" variant="primary" isLoading={appCreating}>
-                          Create
-                        </Button>
-                      </div>
-                    </form>
-                  )}
+                        <div className="mt-8 flex items-center w-full justify-between">
+                          <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={closeModal}
+                            disabled={appCreating}
+                          >
+                            Cancel
+                          </Button>
+                          <Button type="submit" variant="primary" isLoading={appCreating}>
+                            Create
+                          </Button>
+                        </div>
+                      </form>
+                    ))}
 
-                  {!complete() && !allowNewApp() && (
+                  {!allowNewApp() && !createSuccess && (
                     <div className="space-y-4 py-4">
                       <p className="text-zinc-400">{planDisplay()?.description}</p>
-                      {IS_CLOUD_HOSTED ? (
+                      {isCloudHosted() ? (
                         <UpgradeRequestForm onSuccess={closeModal} />
                       ) : (
                         <div>

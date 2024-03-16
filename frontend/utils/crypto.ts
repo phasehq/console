@@ -1,8 +1,7 @@
-import _sodium, { KeyPair } from 'libsodium-wrappers-sumo'
-
+import _sodium, { KeyPair, StringOutputFormat } from 'libsodium-wrappers-sumo'
 import { cryptoUtils } from '@/utils/auth'
 
-const VERSION = 1
+export const VERSION = 1
 
 /**
  * Returns an random key exchange keypair
@@ -13,6 +12,19 @@ export const randomKeyPair = async () => {
   await _sodium.ready
   const sodium = _sodium
   const keypair = await sodium.crypto_kx_keypair()
+
+  return keypair
+}
+
+/**
+ * Returns an random key exchange keypair encoded in the specified formatx
+ *
+ * @returns {KeyPair}
+ */
+export const randomFormattedKeyPair = async (format: StringOutputFormat) => {
+  await _sodium.ready
+  const sodium = _sodium
+  const keypair = await sodium.crypto_kx_keypair(format)
 
   return keypair
 }

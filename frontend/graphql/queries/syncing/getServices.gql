@@ -1,0 +1,9 @@
+query GetServiceList {
+  services {
+    id
+    name
+    provider {
+      id
+    }
+  }
+}

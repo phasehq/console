@@ -242,7 +242,6 @@ export default function Tokens({ params }: { params: { team: string; app: string
   return (
     <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
       <section className="max-w-screen-xl">
-        {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
         {keyring !== null && (
           <div className="flex gap-8 mt-6 divide-x divide-neutral-500/20 items-start">
             <div className="space-y-4 border-l border-neutral-500/40 h-min">
@@ -269,7 +268,10 @@ export default function Tokens({ params }: { params: { team: string; app: string
                       : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
                   )}
                 >
-                  KMS
+                  KMS{' '}
+                  <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
+                    Legacy
+                  </span>
                 </div>
               )}
             </div>

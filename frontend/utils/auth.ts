@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import _sodium from 'libsodium-wrappers-sumo'
-import { getLocalKeyring } from './localStorage'
+import { OrganisationType } from '@/apollo/graphql'
 
 export type OrganisationKeyring = {
   symmetricKey: string
@@ -61,7 +61,7 @@ export namespace cryptoUtils {
    * @param {string} input - The input string to hash
    * @returns {Promise<Uint8Array>} - 16 byte salt
    */
-  const saltFromString = async (input: string) => {
+  export const saltFromString = async (input: string) => {
     await _sodium.ready
     const sodium = _sodium
 
@@ -420,10 +420,13 @@ export namespace cryptoUtils {
     return sodium.to_string(sodium.from_base64(b64string, sodium.base64_variants.ORIGINAL))
   }
 
-  export const getKeyring = async (email: string, organisationId: string, password: string) => {
+  export const getKeyring = async (
+    email: string,
+    organisation: OrganisationType,
+    password: string
+  ) => {
     return new Promise<OrganisationKeyring>(async (resolve, reject) => {
-      const encryptedKeyring = getLocalKeyring(email, organisationId)!.keyring
-      if (!encryptedKeyring) reject('Error fetching local encrypted keys from browser')
+      const encryptedKeyring = organisation.keyring!
 
       try {
         const deviceKey = await deviceVaultKey(password, email)

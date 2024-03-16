@@ -10,7 +10,7 @@ import posthog from 'posthog-js'
 interface OrganisationContextValue {
   activeOrganisation: OrganisationType | null
   organisations: OrganisationType[] | null
-  setActiveOrganisation: (organisation: OrganisationType) => void
+  setActiveOrganisation: (organisation: OrganisationType | null) => void
   loading: boolean
 }
 
@@ -56,9 +56,10 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
 
   useEffect(() => {
     if (organisation === null && orgsData) {
-      setOrganisation(orgsData.organisations[0])
+      if (orgsData.organisations.length === 1) setOrganisation(orgsData.organisations[0])
 
       orgsData.organisations.forEach((org: OrganisationType) => {
+        // This exists to grandfather legacy accounts that relied exclusively on localstorage for encrypted keyrings to the new spec
         // Update wrapped secrets on the backend if they are blank
         if (org.keyring === '' || org.recovery === '') {
           const localKeyring = getLocalKeyring(session?.user?.email!, org.id)

@@ -5,21 +5,16 @@ import { useLazyQuery } from '@apollo/client'
 import {
   ApiSecretEventEventTypeChoices,
   EnvironmentKeyType,
-  KmsLogType,
   SecretEventType,
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { FaChevronRight, FaExternalLinkAlt, FaKey } from 'react-icons/fa'
-import { SiNodedotjs, SiPython } from 'react-icons/si'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
-import getUnicodeFlagIcon from 'country-flag-icons/unicode'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
-import { humanFileSize } from '@/utils/dataUnits'
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
-import Spinner from '@/components/common/Spinner'
 import { Avatar } from '../common/Avatar'
 import { EnvKeyring, envKeyring } from '@/utils/environments'
 import { KeyringContext } from '@/contexts/keyringContext'
@@ -268,7 +263,7 @@ export default function SecretLogs(props: { app: string }) {
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 text-sm">
-                      <FaKey /> Service token
+                      <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
                     </div>
                   )}
                 </div>
@@ -285,6 +280,7 @@ export default function SecretLogs(props: { app: string }) {
               </td>
               <td className="whitespace-nowrap px-6 py-4 font-mono">{log.environment.envType}</td>
               <td className="whitespace-nowrap px-6 py-4 font-mono ph-no-capture">
+                {decryptedEvent?.path !== '/' && `${decryptedEvent?.path}/`}
                 {decryptedEvent?.key}
               </td>
               <td className="whitespace-nowrap px-6 py-4 font-medium capitalize">
@@ -308,29 +304,52 @@ export default function SecretLogs(props: { app: string }) {
                     open ? 'border-b border-l-2 border-l-emerald-500 border-r shadow-xl' : ''
                   )}
                 >
-                  <div className="text-sm font-mono border-b border-dashed border-neutral-500/20">
-                    <span className="text-neutral-500">Event ID: </span>
-                    <span className="font-semibold">{log.id}</span>
-                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-4 text-sm">
+                    <LogField label="Environment">
+                      <div className="flex items-center gap-2 ph-no-capture">
+                        {decryptedEvent?.environment.name}
+                      </div>
+                    </LogField>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full gap-4 text-sm">
+                    <LogField label="Path">
+                      <div className="flex items-center gap-2 ph-no-capture">
+                        {decryptedEvent?.path}
+                      </div>
+                    </LogField>
+
                     <LogField label="Key">
                       <div className="flex items-center gap-2 ph-no-capture">
                         {decryptedEvent?.key}
                       </div>
                     </LogField>
 
+                    <LogField label="Created by">
+                      {' '}
+                      {log.user ? (
+                        <div className="flex items-center gap-1 text-sm">
+                          <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
+                          {log.user.fullName || log.user.email}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-sm">
+                          <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
+                        </div>
+                      )}
+                    </LogField>
+
                     <LogField label="IP address"> {log.ipAddress}</LogField>
 
                     <LogField label="User agent"> {log.userAgent}</LogField>
 
+                    <LogField label="Event ID">{log.id}</LogField>
+
                     <LogField label="Timestamp">{verboseTimeStamp()}</LogField>
 
-                    <div className="flex justify-end col-span-2">
+                    <div className="flex justify-end">
                       <Button variant="outline">
                         <Link
                           className="flex items-center gap-2"
-                          href={`${appPath}/environments/${log.environment.id}?secret=${log.secret.id}`}
+                          href={`${appPath}/environments/${log.environment.id}${log.secret.path}?secret=${log.secret.id}`}
                         >
                           View this secret
                           <FaExternalLinkAlt />
@@ -379,7 +398,6 @@ export default function SecretLogs(props: { app: string }) {
 
   return (
     <>
-      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       <div className="w-full text-black dark:text-white flex flex-col">
         <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
           <span className="text-neutral-500 font-light text-lg">

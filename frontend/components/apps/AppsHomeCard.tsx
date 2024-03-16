@@ -12,7 +12,6 @@ export default function AppsHomeCard(props: { organisationId: string }) {
   const { data, loading } = useQuery(GetApps, {
     variables: {
       organisationId,
-      appId: '',
     },
   })
 

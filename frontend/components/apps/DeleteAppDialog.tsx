@@ -50,7 +50,6 @@ export default function DeleteAppDialog(props: {
                 query: GetApps,
                 variables: {
                   organisationId,
-                  appId: '',
                 },
               },
             ],

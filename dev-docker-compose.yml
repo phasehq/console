@@ -63,6 +63,32 @@ services:
     networks:
       - phase-net-dev
 
+  redis:
+    container_name: phase-redis-dev
+    image: redis:alpine3.19
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - phase-net-dev
+
+  rqworker:
+    container_name: phase-rqworker-dev
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - redis
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    command: python manage.py rqworker default #overrides CMD in the dockerfile
+    volumes:
+      - ./backend/:/app/
+    env_file: .env.dev
+    networks:
+      - phase-net-dev
+
+
 volumes:
   phase-postgres-data-dev:
     driver: local

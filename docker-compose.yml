@@ -40,7 +40,24 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
+      - redis
     image: phasehq/backend:latest
+    env_file: .env
+    environment:
+      ALLOWED_HOSTS: "${HOST},backend"
+      ALLOWED_ORIGINS: "${HTTP_PROTOCOL}${HOST}"
+      SESSION_COOKIE_DOMAIN: "${HOST}"
+    networks:
+      - phase-net
+
+  worker:
+    container_name: phase-worker
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    image: phasehq/backend:latest
+    command: python manage.py rqworker default
     env_file: .env
     environment:
       ALLOWED_HOSTS: "${HOST},backend"
@@ -60,8 +77,16 @@ services:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_HOST_AUTH_METHOD: "trust"
+
     volumes:
       - phase-postgres-data:/var/lib/postgresql/data
+    networks:
+      - phase-net
+
+  redis:
+    container_name: phase-redis
+    image: redis:alpine3.19
+    restart: always
     networks:
       - phase-net
 

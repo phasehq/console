@@ -10,12 +10,15 @@ import {
   FaExchangeAlt,
   FaHome,
   FaKey,
+  FaPlus,
   FaUsersCog,
+  FaProjectDiagram,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Fragment, useContext } from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
+import { Button } from '../common/Button'
 
 export type SidebarLinkT = {
   name: string
@@ -51,19 +54,21 @@ const Sidebar = () => {
   const showOrgsMenu = organisations === null ? false : organisations?.length > 1
 
   const OrgsMenu = () => {
-    const router = useRouter()
     const switchOrg = (org: OrganisationType) => {
-      router.push(`/${org!.name}`)
+      setActiveOrganisation(org)
     }
+
     return (
-      <Menu as="div" className="relative inline-block text-left">
+      <Menu as="div" className="relative inline-block text-left ">
         {({ open }) => (
           <>
             <Menu.Button
               as="div"
-              className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between"
+              className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between  w-full "
             >
+              <span className="truncate">
               {activeOrganisation?.name}
+              </span>
               <FaChevronDown
                 className={clsx('transition ease', open ? 'rotate-180' : 'rotate-0')}
               />
@@ -78,24 +83,35 @@ const Sidebar = () => {
               leaveTo="transform opacity-0 scale-95"
             >
               <Menu.Items className="absolute z-10 -right-2 top-12 mt-2 w-56 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                <div className="px-1 py-1">
-                  {organisations?.map((org: OrganisationType) => (
-                    <Menu.Item key={org.id}>
-                      {({ active }) => (
-                        <button
-                          onClick={() => switchOrg(org)}
-                          className={`${
-                            active
-                              ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
-                              : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
-                          } group flex w-full gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium`}
-                        >
-                          {org.name}
-                          <FaExchangeAlt />
-                        </button>
-                      )}
-                    </Menu.Item>
-                  ))}
+                {showOrgsMenu ? (
+                  <div className="px-1 py-1">
+                    {organisations?.map((org: OrganisationType) => (
+                      <Menu.Item key={org.id}>
+                        {({ active }) => (
+                          <button
+                            onClick={() => switchOrg(org)}
+                            className={`${
+                              active
+                                ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
+                                : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
+                            } group flex  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium w-[95%]`}
+                          >
+                            <span className="truncate w-[80%] text-left">
+                            {org.name}
+                            </span>
+                            <FaExchangeAlt />
+                          </button>
+                        )}
+                      </Menu.Item>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="py-3 px-1 flex justify-center">
+                  <Link href="/signup">
+                    <Button variant="secondary">
+                      <FaPlus /> Create New Organisation
+                    </Button>
+                  </Link>
                 </div>
               </Menu.Items>
             </Transition>
@@ -125,6 +141,12 @@ const Sidebar = () => {
       active: usePathname() === `/${team}/members`,
     },
     {
+      name: 'Integrations',
+      href: `/${team}/integrations`,
+      icon: <FaProjectDiagram size="20" />,
+      active: usePathname() === `/${team}/integrations`,
+    },
+    {
       name: 'Personal access tokens',
       href: `/${team}/tokens`,
       icon: <FaKey size="20" />,
@@ -139,17 +161,12 @@ const Sidebar = () => {
   ]
 
   return (
-    <div className="h-screen flex flex-col pt-[64px]">
-      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100 dark:bg-zinc-900 text-black dark:text-white">
+    <div className="h-screen flex flex-col pt-[64px] w-[300px]">
+      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/30 dark:bg-neutral-900/30 text-black dark:text-white">
         <div className="gap-4 p-4 grid grid-cols-1">
-          {showOrgsMenu ? (
-            <OrgsMenu />
-          ) : (
-            <div className="p-2 text-neutral-500 font-semibold uppercase tracking-wider">
-              {activeOrganisation?.name}
-            </div>
-          )}
-          {links.slice(0, 4).map((link) => (
+          <OrgsMenu />
+
+          {links.slice(0, 5).map((link) => (
             <SidebarLink
               key={link.name}
               name={link.name}
@@ -160,15 +177,13 @@ const Sidebar = () => {
           ))}
         </div>
         <div className="p-4">
-          {
-            <SidebarLink
-              key={links[4].name}
-              name={links[4].name}
-              href={links[4].href}
-              icon={links[4].icon}
-              active={links[4].active}
-            />
-          }
+          <SidebarLink
+            key={links[5].name}
+            name={links[5].name}
+            href={links[5].href}
+            icon={links[5].icon}
+            active={links[5].active}
+          />
         </div>
       </nav>
     </div>
