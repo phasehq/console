@@ -453,8 +453,25 @@ const InviteDialog = (props: { organisationId: string }) => {
 }
 
 export default function Members({ params }: { params: { team: string } }) {
-  const [getMembers, { data: membersData }] = useLazyQuery(GetOrganisationMembers)
-  const [getInvites, { data: invitesData }] = useLazyQuery(GetInvites)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const { data: membersData } = useQuery(GetOrganisationMembers, {
+    variables: {
+      organisationId: organisation!.id,
+      role: null,
+    },
+    pollInterval: 5000,
+    skip: !organisation,
+  })
+
+  const { data: invitesData } = useQuery(GetInvites, {
+    variables: {
+      orgId: organisation!.id,
+    },
+    pollInterval: 5000,
+    skip: !organisation,
+  })
+
   const [deleteInvite] = useMutation(DeleteOrgInvite)
 
   const sortedInvites: OrganisationMemberInviteType[] =
@@ -465,29 +482,7 @@ export default function Members({ params }: { params: { team: string } }) {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       }) || []
 
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
-
-  const { data: session } = useSession()
-
-  useEffect(() => {
-    if (organisation) {
-      getMembers({
-        variables: {
-          organisationId: organisation.id,
-          role: null,
-        },
-        pollInterval: 5000,
-      })
-      getInvites({
-        variables: {
-          orgId: organisation.id,
-        },
-        pollInterval: 5000,
-      })
-    }
-  }, [getInvites, getMembers, organisation])
 
   const DeleteInviteConfirmDialog = (props: { inviteId: string }) => {
     const { inviteId } = props

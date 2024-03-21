@@ -10,7 +10,7 @@ import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.g
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { useLazyQuery, useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationPlanChoices,
@@ -53,21 +53,17 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
   const [getApps] = useLazyQuery(GetApps)
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
-  const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
+
+  const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
+    variables: {
+      organisationId: organisation!.id,
+    },
+    skip: !organisation,
+  })
 
   const [createSuccess, setCreateSuccess] = useState(false)
 
   const { keyring } = useContext(KeyringContext)
-
-  useEffect(() => {
-    if (organisation) {
-      getOrgAdmins({
-        variables: {
-          organisationId: organisation.id,
-        },
-      })
-    }
-  }, [getOrgAdmins, organisation])
 
   const reset = () => {
     setName('')

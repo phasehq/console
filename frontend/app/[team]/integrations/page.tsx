@@ -1,11 +1,10 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { Fragment, useContext, useEffect, useState } from 'react'
-import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
+import { Fragment, useContext, useState } from 'react'
 import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
-import { useLazyQuery, useQuery } from '@apollo/client'
+import { useQuery } from '@apollo/client'
 import {
   AppType,
   EnvironmentSyncType,
@@ -15,7 +14,6 @@ import {
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
 import { SyncCard } from '@/components/syncing/SyncCard'
 import { ProviderCredentialCard } from '@/components/syncing/ProviderCredentialCard'
-import { GetApps } from '@/graphql/queries/getApps.gql'
 import { Button } from '@/components/common/Button'
 import { Menu, Transition } from '@headlessui/react'
 import { FaArrowRight, FaCubes, FaPlus } from 'react-icons/fa'
@@ -40,28 +38,21 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
   const [provider, setProvider] = useState<ProviderType | null>(null)
 
-  const [getApps, { data: appsData }] = useLazyQuery(GetApps)
-  const [getSavedCredentials, { data: credentialsData }] = useLazyQuery(GetSavedCredentials)
-  const [getOrgSyncs, { data: syncsData }] = useLazyQuery(GetOrganisationSyncs)
+  const { data } = useQuery(GetOrganisationSyncs, {
+    variables: { orgId: organisation!.id },
+    pollInterval: 10000,
+    skip: !organisation,
+  })
 
-  useEffect(() => {
-    if (organisation) {
-      getSavedCredentials({ variables: { orgId: organisation.id }, pollInterval: 10000 })
-      getOrgSyncs({ variables: { orgId: organisation.id }, pollInterval: 10000 })
-      getApps({ variables: { organisationId: organisation.id } })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisation])
-
-  const apps = appsData?.apps ?? []
+  const apps = data?.apps ?? []
 
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
-  const noCredentials = credentialsData?.savedCredentials.length === 0
+  const noCredentials = data?.savedCredentials.length === 0
 
-  const noSyncs = syncsData?.syncs.length === 0
+  const noSyncs = data?.syncs.length === 0
 
-  const noApps = appsData?.apps.length === 0
+  const noApps = data?.apps.length === 0
 
   const NewSyncMenu = () => {
     return (
@@ -163,7 +154,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
             </div>
           </div>
         ) : (
-          syncsData?.syncs.map((sync: EnvironmentSyncType) => (
+          data?.syncs.map((sync: EnvironmentSyncType) => (
             <SyncCard key={sync.id} sync={sync} showAppName={true} showManageButton={true} />
           ))
         )}
@@ -222,8 +213,8 @@ export default function Integrations({ params }: { params: { team: string } }) {
           )}
         </div>
 
-        {credentialsData?.savedCredentials.length > 0 &&
-          credentialsData?.savedCredentials.map((credential: ProviderCredentialsType) => (
+        {data?.savedCredentials.length > 0 &&
+          data?.savedCredentials.map((credential: ProviderCredentialsType) => (
             <ProviderCredentialCard key={credential.id} credential={credential} />
           ))}
       </div>
