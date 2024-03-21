@@ -1,8 +1,7 @@
-import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
+import { cryptoUtils } from '@/utils/auth'
 import { Dialog, Switch, Transition } from '@headlessui/react'
-import { useSession } from 'next-auth/react'
 import { Fragment, useContext, useEffect, useState } from 'react'
-import { FaEye, FaEyeSlash, FaPlus, FaTimes } from 'react-icons/fa'
+import { FaPlus, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -33,6 +32,8 @@ import {
   getUserKxPublicKey,
 } from '@/utils/crypto'
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
+import { Alert } from '../common/Alert'
+import { isCloudHosted } from '@/utils/appConfig'
 
 const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
@@ -46,7 +47,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
   const [appCreating, setAppCreating] = useState<boolean>(false)
 
-  const [createApp] = useMutation(CreateApplication)
+  const [createApp, { error }] = useMutation(CreateApplication)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
   const [createSecret] = useMutation(CreateNewSecret)
 
@@ -55,8 +56,6 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
 
   const [createSuccess, setCreateSuccess] = useState(false)
-
-  const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
 
   const { keyring } = useContext(KeyringContext)
 
@@ -450,6 +449,11 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                             Create a new App by entering an App name below. Your App will be
                             initialized with 3 new environments.
                           </p>
+                          {error && (
+                            <Alert variant="danger" icon={true}>
+                              {error.message}
+                            </Alert>
+                          )}
                           <div className="flex flex-col justify-center">
                             <label
                               className="block text-gray-700 text-sm font-bold mb-2"
@@ -516,7 +520,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                   {!allowNewApp() && !createSuccess && (
                     <div className="space-y-4 py-4">
                       <p className="text-zinc-400">{planDisplay()?.description}</p>
-                      {IS_CLOUD_HOSTED ? (
+                      {isCloudHosted() ? (
                         <UpgradeRequestForm onSuccess={closeModal} />
                       ) : (
                         <div>

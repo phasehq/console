@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Button } from './Button'
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
+import { isCloudHosted } from '@/utils/appConfig'
 
 type Status = {
   indicator: 'none' | 'minor' | 'major' | 'critical' | 'error'
@@ -13,20 +14,25 @@ type Status = {
 const STATUS_PAGE_BASE_URL = 'https://phase.statuspage.io'
 
 export const StatusIndicator = () => {
-
   const [status, setStatus] = useState<Status | null>(null)
   const [isLoading, setLoading] = useState<boolean>(false)
 
+  // const [isCloudHosted, setIsCloudHosted] = useState(false)
+
+  // useEffect(() => {
+
+  //   if (appHost === 'cloud') setIsCloudHosted(true)
+  // }, [])
+
   useEffect(() => {
     const getStatus = async () => {
-
       setLoading(true)
       try {
-        await fetch(`${STATUS_PAGE_BASE_URL}/api/v2/status.json`).then(res => {
+        await fetch(`${STATUS_PAGE_BASE_URL}/api/v2/status.json`).then((res) => {
           setLoading(false)
-          if (!res.ok) throw ('Fetch error')
+          if (!res.ok) throw 'Fetch error'
           else {
-            res.json().then(json => {
+            res.json().then((json) => {
               setStatus(json.status)
             })
           }
@@ -36,12 +42,12 @@ export const StatusIndicator = () => {
         setLoading(false)
         setStatus({
           indicator: 'error',
-          description: 'Error fetching status'
+          description: 'Error fetching status',
         })
       }
     }
 
-    getStatus()
+    if (isCloudHosted()) getStatus()
   }, [])
 
   const statusColor = () => {
@@ -65,15 +71,13 @@ export const StatusIndicator = () => {
     return color
   }
 
+  if (!isCloudHosted()) return <></>
+
   return (
     <Link href={STATUS_PAGE_BASE_URL} target="_blank">
       <Button variant="secondary">
         <span
-          className={clsx(
-            'h-2 w-2 mr-1 rounded-full',
-            statusColor(),
-            isLoading && 'animate-pulse'
-          )}
+          className={clsx('h-2 w-2 mr-1 rounded-full', statusColor(), isLoading && 'animate-pulse')}
         ></span>
         {status?.description || 'Loading'}
       </Button>

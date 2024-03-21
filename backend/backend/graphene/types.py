@@ -11,6 +11,7 @@ from api.models import (
     EnvironmentSync,
     EnvironmentSyncEvent,
     EnvironmentToken,
+    Lockbox,
     Organisation,
     App,
     OrganisationMember,
@@ -526,3 +527,18 @@ class TimeRange(Enum):
 class LogsResponseType(ObjectType):
     kms = graphene.List(KMSLogType)
     secrets = graphene.List(SecretEventType)
+
+
+class OrganisationPlanType(ObjectType):
+    name = graphene.String()
+    max_users = graphene.Int()
+    max_apps = graphene.Int()
+    max_envs_per_app = graphene.Int()
+    user_count = graphene.Int()
+    app_count = graphene.Int()
+
+
+class LockboxType(DjangoObjectType):
+    class Meta:
+        model = Lockbox
+        fields = "__all__"

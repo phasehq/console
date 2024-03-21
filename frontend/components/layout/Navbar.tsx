@@ -18,8 +18,6 @@ export const NavBar = (props: { team: string }) => {
   const [getApps, { data: appsData }] = useLazyQuery(GetApps)
   const [getAppEnvs, { data: appEnvsData }] = useLazyQuery(GetAppEnvironments)
 
-  const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
-
   useEffect(() => {
     if (organisation) {
       const fetchData = async () => {
@@ -92,7 +90,7 @@ export const NavBar = (props: { team: string }) => {
         {activeEnv && <span className="text-black dark:text-white">{activeEnv.name}</span>}
       </div>
       <div className="flex gap-4 items-center justify-end">
-        {IS_CLOUD_HOSTED && <StatusIndicator />}
+        <StatusIndicator />
 
         <Link href="https://docs.phase.dev" target="_blank">
           <Button variant="secondary">Docs</Button>

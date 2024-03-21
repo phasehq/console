@@ -1,16 +1,14 @@
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
-from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from api.views import (
+    LockboxView,
     PrivateGraphQLView,
     logout_view,
     health_check,
     kms,
     SecretsView,
-    user_token_kms,
-    service_token_kms,
     secrets_tokens,
     github_callback,
 )
@@ -27,6 +25,7 @@ urlpatterns = [
     path("secrets/", SecretsView.as_view()),
     path("secrets/tokens/", secrets_tokens),
     path("oauth/github/callback", github_callback),
+    path("lockbox/<box_id>", LockboxView.as_view()),
 ]
 
 if not CLOUD_HOSTED:

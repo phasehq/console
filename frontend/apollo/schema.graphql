@@ -1,5 +1,6 @@
 type Query {
   organisations: [OrganisationType]
+  organisationPlan(organisationId: ID): OrganisationPlanType
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
   organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
@@ -61,6 +62,15 @@ enum ApiOrganisationPlanChoices {
 
   """Enterprise"""
   EN
+}
+
+type OrganisationPlanType {
+  name: String
+  maxUsers: Int
+  maxApps: Int
+  maxEnvsPerApp: Int
+  userCount: Int
+  appCount: Int
 }
 
 type OrganisationMemberType {
@@ -483,6 +493,7 @@ type Mutation {
   readSecret(id: ID!): ReadSecretMutation
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
+  createLockbox(input: LockboxInput): CreateLockboxMutation
 }
 
 type CreateOrganisationMutation {
@@ -681,4 +692,23 @@ input PersonalSecretInput {
 
 type DeletePersonalSecretMutation {
   ok: Boolean
+}
+
+type CreateLockboxMutation {
+  lockbox: LockboxType
+}
+
+type LockboxType {
+  id: String!
+  data: JSONString!
+  views: Int!
+  createdAt: DateTime
+  expiresAt: DateTime
+  allowedViews: Int
+}
+
+input LockboxInput {
+  data: JSONString
+  allowedViews: Int
+  expiry: BigInt
 }

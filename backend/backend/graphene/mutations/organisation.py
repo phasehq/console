@@ -81,6 +81,9 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, org_id, email, apps, role):
+
+        org = Organisation.objects.get(id=org_id)
+
         if user_is_org_member(info.context.user, org_id):
             user_already_exists = OrganisationMember.objects.filter(
                 organisation_id=org_id, user__email=email, deleted_at=None
@@ -107,7 +110,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
             app_scope = App.objects.filter(id__in=apps)
 
             invite = OrganisationMemberInvite.objects.create(
-                organisation_id=org_id,
+                organisation=org,
                 invited_by=invited_by,
                 role=role.lower(),
                 invitee_email=email,

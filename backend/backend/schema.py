@@ -2,6 +2,7 @@ from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.vault.main import VaultMountType
+from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
@@ -15,6 +16,7 @@ from .graphene.queries.syncing import (
     resolve_env_syncs,
     resolve_test_vault_creds,
 )
+from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.mutations.environment import (
     CreateEnvironmentKeyMutation,
     CreateEnvironmentMutation,
@@ -81,6 +83,7 @@ from .graphene.types import (
     LogsResponseType,
     OrganisationMemberInviteType,
     OrganisationMemberType,
+    OrganisationPlanType,
     OrganisationType,
     ProviderCredentialsType,
     ProviderType,
@@ -123,6 +126,9 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
+    organisation_plan = graphene.Field(
+        OrganisationPlanType, organisation_id=graphene.ID()
+    )
     organisation_members = graphene.List(
         OrganisationMemberType,
         organisation_id=graphene.ID(),
@@ -252,6 +258,8 @@ class Query(graphene.ObjectType):
         )
 
         return [membership.organisation for membership in memberships]
+
+    resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
         if not user_is_org_member(info.context.user.userId, organisation_id):
@@ -471,9 +479,13 @@ class Query(graphene.ObjectType):
             end = datetime.now().timestamp() * 1000
 
         if CLOUD_HOSTED:
-            kms_logs = get_app_logs(
-                f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25
-            )
+            try:
+                kms_logs = get_app_logs(
+                    f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25
+                )
+            except:
+                print("Error fetching KMS logs")
+                kms_logs = []
 
         else:
             kms_logs = list(
@@ -686,6 +698,9 @@ class Mutation(graphene.ObjectType):
 
     create_override = CreatePersonalSecretMutation.Field()
     remove_override = DeletePersonalSecretMutation.Field()
+
+    # Lockbox
+    create_lockbox = CreateLockboxMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
