@@ -56,7 +56,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
   const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
     variables: {
-      organisationId: organisation!.id,
+      organisationId: organisation?.id,
     },
     skip: !organisation,
   })

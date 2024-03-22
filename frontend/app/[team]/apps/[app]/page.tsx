@@ -113,7 +113,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   })
   const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
     variables: {
-      organisationId: organisation!.id,
+      organisationId: organisation?.id,
     },
     skip: !organisation,
   })

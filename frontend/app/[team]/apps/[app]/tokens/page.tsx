@@ -25,7 +25,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
 
   const { data } = useQuery(GetAppDetail, {
     variables: {
-      organisationId: organisation!.id,
+      organisationId: organisation?.id,
       appId: params.app,
     },
     skip: !organisation,

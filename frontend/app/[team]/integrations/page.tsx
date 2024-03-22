@@ -39,7 +39,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
   const [provider, setProvider] = useState<ProviderType | null>(null)
 
   const { data } = useQuery(GetOrganisationSyncs, {
-    variables: { orgId: organisation!.id },
+    variables: { orgId: organisation?.id },
     pollInterval: 10000,
     skip: !organisation,
   })

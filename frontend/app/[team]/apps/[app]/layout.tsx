@@ -23,7 +23,7 @@ export default function AppLayout({
 
   const { data, loading } = useQuery(GetAppDetail, {
     variables: {
-      organisationId: organisation!.id,
+      organisationId: organisation!?.id,
       appId: params.app,
     },
     skip: !organisation,

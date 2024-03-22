@@ -13,7 +13,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
 
   const { data } = useQuery(GetAppDetail, {
     variables: {
-      organisationId: organisation!.id,
+      organisationId: organisation?.id,
       appId: params.app,
     },
     skip: !organisation,

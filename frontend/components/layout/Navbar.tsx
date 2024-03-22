@@ -17,7 +17,7 @@ export const NavBar = (props: { team: string }) => {
 
   const { data: appsData } = useQuery(GetApps, {
     variables: {
-      organisationId: organisation!.id,
+      organisationId: organisation?.id,
     },
     skip: !organisation,
   })

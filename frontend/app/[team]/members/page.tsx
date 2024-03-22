@@ -11,7 +11,7 @@ import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useState } from 'react'
 import {
   OrganisationMemberInviteType,
   OrganisationMemberType,
@@ -37,13 +37,11 @@ import clsx from 'clsx'
 import { cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
-import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { userIsAdmin } from '@/utils/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
-import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { Alert } from '@/components/common/Alert'
 
 const handleCopy = (val: string) => {
@@ -457,7 +455,7 @@ export default function Members({ params }: { params: { team: string } }) {
 
   const { data: membersData } = useQuery(GetOrganisationMembers, {
     variables: {
-      organisationId: organisation!.id,
+      organisationId: organisation?.id,
       role: null,
     },
     pollInterval: 5000,
@@ -466,7 +464,7 @@ export default function Members({ params }: { params: { team: string } }) {
 
   const { data: invitesData } = useQuery(GetInvites, {
     variables: {
-      orgId: organisation!.id,
+      orgId: organisation?.id,
     },
     pollInterval: 5000,
     skip: !organisation,
@@ -506,7 +504,7 @@ export default function Members({ params }: { params: { team: string } }) {
           {
             query: GetInvites,
             variables: {
-              orgId: organisation!.id,
+              orgId: organisation?.id,
             },
           },
         ],
