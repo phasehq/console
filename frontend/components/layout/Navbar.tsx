@@ -1,5 +1,5 @@
 import UserMenu from '../UserMenu'
-import { useLazyQuery } from '@apollo/client'
+import { useLazyQuery, useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { usePathname } from 'next/navigation'
@@ -15,22 +15,13 @@ import { LogoMark } from '../common/LogoMark'
 export const NavBar = (props: { team: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [getApps, { data: appsData }] = useLazyQuery(GetApps)
+  const { data: appsData } = useQuery(GetApps, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation,
+  })
   const [getAppEnvs, { data: appEnvsData }] = useLazyQuery(GetAppEnvironments)
-
-  useEffect(() => {
-    if (organisation) {
-      const fetchData = async () => {
-        getApps({
-          variables: {
-            organisationId: organisation.id,
-          },
-        })
-      }
-
-      fetchData()
-    }
-  }, [getApps, organisation])
 
   const apps = appsData?.apps as AppType[]
 

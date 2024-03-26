@@ -2,7 +2,7 @@
 
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { RotateAppKey } from '@/graphql/mutations/rotateAppKeys.gql'
-import { useLazyQuery, useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -21,26 +21,21 @@ import { SecretTokens } from '@/components/apps/tokens/SecretTokens'
 import { organisationContext } from '@/contexts/organisationContext'
 
 export default function Tokens({ params }: { params: { team: string; app: string } }) {
-  const [getApp, { data }] = useLazyQuery(GetAppDetail)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const { data } = useQuery(GetAppDetail, {
+    variables: {
+      organisationId: organisation?.id,
+      appId: params.app,
+    },
+    skip: !organisation,
+  })
 
   const app = data?.apps[0] as AppType
 
   const [activePanel, setActivePanel] = useState<'secrets' | 'kms'>('secrets')
 
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
   const { keyring } = useContext(KeyringContext)
-
-  useEffect(() => {
-    if (organisation) {
-      getApp({
-        variables: {
-          organisationId: organisation.id,
-          appId: params.app,
-        },
-      })
-    }
-  }, [getApp, organisation, params.app])
 
   const handleCopy = (val: string) => {
     copyToClipBoard(val)

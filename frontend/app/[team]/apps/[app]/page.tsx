@@ -104,16 +104,23 @@ const Environments = (props: { environments: EnvironmentType[] }) => {
 }
 
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
   const { data } = useQuery(GetAppEnvironments, {
     variables: {
       appId: params.app,
     },
   })
-
+  const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation,
+  })
   const pathname = usePathname()
 
   const [getEnvSecrets] = useLazyQuery(GetEnvSecretsKV)
-  const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
+
   const [appSecrets, setAppSecrets] = useState<AppSecret[]>([])
   const [appFolders, setAppFolders] = useState<AppFolder[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
@@ -122,7 +129,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const [loading, setLoading] = useState(true)
 
   const { keyring } = useContext(KeyringContext)
-  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
@@ -141,16 +147,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           const searchRegex = new RegExp(searchQuery, 'i')
           return searchRegex.test(folder.name)
         })
-
-  useEffect(() => {
-    if (organisation) {
-      getOrgAdmins({
-        variables: {
-          organisationId: organisation.id,
-        },
-      })
-    }
-  }, [getOrgAdmins, organisation, params.app])
 
   useEffect(() => {
     const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {

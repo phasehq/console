@@ -1,10 +1,9 @@
 'use client'
 
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
-import { useLazyQuery, useQuery } from '@apollo/client'
+import { useQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { useContext, useEffect } from 'react'
+import { useContext } from 'react'
 import DeleteAppDialog from '@/components/apps/DeleteAppDialog'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaCube } from 'react-icons/fa'
@@ -12,18 +11,13 @@ import { FaCube } from 'react-icons/fa'
 export default function AppSettings({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [getApp, { data, loading }] = useLazyQuery(GetAppDetail)
-
-  useEffect(() => {
-    if (organisation) {
-      getApp({
-        variables: {
-          organisationId: organisation.id,
-          appId: params.app,
-        },
-      })
-    }
-  }, [getApp, organisation, params.app])
+  const { data } = useQuery(GetAppDetail, {
+    variables: {
+      organisationId: organisation?.id,
+      appId: params.app,
+    },
+    skip: !organisation,
+  })
 
   const app = data?.apps[0] as AppType
 

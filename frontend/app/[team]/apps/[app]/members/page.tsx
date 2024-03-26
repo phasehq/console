@@ -49,18 +49,13 @@ export default function Members({ params }: { params: { team: string; app: strin
   const { data: session } = useSession()
 
   const AddMemberDialog = () => {
-    const [getMembers, { data: orgMembersData }] = useLazyQuery(GetOrganisationMembers)
-
-    useEffect(() => {
-      if (organisation) {
-        getMembers({
-          variables: {
-            organisationId: organisation.id,
-            role: null,
-          },
-        })
-      }
-    }, [getMembers])
+    const { data: orgMembersData } = useQuery(GetOrganisationMembers, {
+      variables: {
+        organisationId: organisation?.id,
+        role: null,
+        skip: !organisation,
+      },
+    })
 
     const memberOptions =
       orgMembersData?.organisationMembers.filter(
