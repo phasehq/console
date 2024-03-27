@@ -146,11 +146,7 @@ export default function SecretRow(props: {
           </div>
         )}
         <input
-          className={clsx(
-            INPUT_BASE_STYLE,
-            'w-full focus:outline-none p-2',
-            isBoolean && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
-          )}
+          className={clsx(INPUT_BASE_STYLE, 'w-full focus:outline-none p-2')}
           value={secret.value}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
