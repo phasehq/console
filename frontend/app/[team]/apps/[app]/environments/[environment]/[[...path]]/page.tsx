@@ -1,19 +1,16 @@
 'use client'
 
-import {
-  ApiEnvironmentSyncStatusChoices,
-  EnvironmentSyncType,
-  EnvironmentType,
-  SecretInput,
-  SecretType,
-} from '@/apollo/graphql'
+import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
+import { GetFolders } from '@/graphql/queries/secrets/getFolders.gql'
 import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
 import { UpdateSecret } from '@/graphql/mutations/environments/editSecret.gql'
 import { DeleteSecretOp } from '@/graphql/mutations/environments/deleteSecret.gql'
+import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
 import {
   getUserKxPublicKey,
   getUserKxPrivateKey,
@@ -26,28 +23,31 @@ import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import {
-  FaArrowRight,
+  FaCheckCircle,
   FaChevronDown,
   FaDownload,
   FaExchangeAlt,
+  FaFolderPlus,
+  FaHome,
   FaPlus,
   FaSearch,
-  FaSync,
+  FaTimes,
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
-import SecretRow from '@/components/environments/SecretRow'
+import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Menu, Popover, Transition } from '@headlessui/react'
+import { Dialog, Menu, Transition } from '@headlessui/react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Alert } from '@/components/common/Alert'
-import { SyncStatusIndicator } from '@/components/syncing/SyncStatusIndicator'
-import { SyncCard } from '@/components/syncing/SyncCard'
-import { StatusIndicator } from '@/components/common/StatusIndicator'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
+import { Input } from '@/components/common/Input'
+import { SplitButton } from '@/components/common/SplitButton'
+import { SecretFolderRow } from '@/components/environments/folders/SecretFolderRow'
+import { MdKeyboardReturn } from 'react-icons/md'
 
 type EnvKeyring = {
   privateKey: string
@@ -58,7 +58,7 @@ type EnvKeyring = {
 export default function Environment({
   params,
 }: {
-  params: { team: string; app: string; environment: string }
+  params: { team: string; app: string; environment: string; path?: string[] }
 }) {
   const { keyring } = useContext(KeyringContext)
   const pathname = usePathname()
@@ -72,8 +72,11 @@ export default function Environment({
   const [updatedSecrets, updateSecrets] = useState<SecretType[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isLoading, setIsloading] = useState(false)
+  const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const secretPath = params.path ? `/${params.path.join('/')}` : '/'
 
   useEffect(() => {
     // 2. Scroll into view when secretToHighlight changes
@@ -110,9 +113,12 @@ export default function Environment({
     variables: {
       appId: params.app,
       envId: params.environment,
+      path: secretPath,
     },
     pollInterval: unsavedChanges ? 0 : 5000,
   })
+
+  const folders: SecretFolderType[] = data?.folders ?? []
 
   const savingAndFetching = isLoading || loading
 
@@ -120,10 +126,11 @@ export default function Environment({
   const [updateSecret] = useMutation(UpdateSecret)
   const [deleteSecret] = useMutation(DeleteSecretOp)
 
+  const [createFolder] = useMutation(CreateNewSecretFolder)
+  const [deleteFolder] = useMutation(DeleteFolder)
+
   const envPath = (env: EnvironmentType) => {
-    const pathSegments = pathname!.split('/')
-    pathSegments[pathSegments.length - 1] = env.id
-    return pathSegments?.join('/')
+    return `/${params.team}/apps/${params.app}/environments/${env.id}`
   }
 
   const environment = data?.appEnvironments[0] as EnvironmentType
@@ -147,6 +154,7 @@ export default function Environment({
       value: '',
       tags: [],
       comment: '',
+      path: '/',
     } as SecretType
     start
       ? updateSecrets([newSecret, ...updatedSecrets])
@@ -167,10 +175,10 @@ export default function Environment({
         variables: {
           newSecret: {
             envId: params.environment,
+            path: secretPath,
             key: encryptedKey,
             keyDigest,
             value: encryptedValue,
-            folderId: null,
             comment: encryptedComment,
             tags: tagIds,
           } as SecretInput,
@@ -181,6 +189,7 @@ export default function Environment({
             variables: {
               appId: params.app,
               envId: params.environment,
+              path: secretPath,
             },
           },
         ],
@@ -193,7 +202,7 @@ export default function Environment({
             key: encryptedKey,
             keyDigest,
             value: encryptedValue,
-            folderId: null,
+            path: secretPath,
             comment: encryptedComment,
             tags: tagIds,
           } as SecretInput,
@@ -204,6 +213,7 @@ export default function Environment({
             variables: {
               appId: params.app,
               envId: params.environment,
+              path: secretPath,
             },
           },
         ],
@@ -225,12 +235,31 @@ export default function Environment({
             variables: {
               appId: params.app,
               envId: params.environment,
+              path: secretPath,
             },
           },
         ],
       })
     }
     toast.success('Secret deleted.')
+  }
+
+  const handleDeleteFolder = async (id: string) => {
+    await deleteFolder({
+      variables: {
+        folderId: id,
+      },
+      refetchQueries: [
+        {
+          query: GetFolders,
+          variables: {
+            envId: params.environment,
+            path: secretPath,
+          },
+        },
+      ],
+    })
+    toast.success('Folder deleted.')
   }
 
   useEffect(() => {
@@ -424,6 +453,14 @@ export default function Environment({
     }
   })
 
+  const filteredFolders =
+    searchQuery === ''
+      ? folders
+      : folders.filter((folder) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(folder.name)
+        })
+
   const filteredSecrets =
     searchQuery === ''
       ? updatedSecrets
@@ -456,98 +493,203 @@ export default function Environment({
     URL.revokeObjectURL(url)
   }
 
-  // useEffect(() => {
-  //   const warningText = 'You have unsaved changes - are you sure you wish to leave this page?'
-  //   const handleWindowClose = (e: BeforeUnloadEvent) => {
-  //     if (!unsavedChanges) return
-  //     e.preventDefault()
-  //     return (e.returnValue = warningText)
-  //   }
-  //   const handleBrowseAway = () => {
-  //     if (!unsavedChanges) return
-  //     if (window.confirm(warningText)) return
-  //     router.events.emit('routeChangeError')
-  //     throw 'routeChange aborted.'
-  //   }
-  //   window.addEventListener('beforeunload', handleWindowClose)
-  //   router.events.on('routeChangeStart', handleBrowseAway)
-  //   return () => {
-  //     window.removeEventListener('beforeunload', handleWindowClose)
-  //     router.events.off('routeChangeStart', handleBrowseAway)
-  //   }
-  // }, [unsavedChanges])
+  const NewFolderMenu = () => {
+    const [name, setName] = useState<string>('')
 
-  // const EnvSyncStatus = () => {
-  //   const syncStatus = () => {
-  //     if (
-  //       data.envSyncs.some(
-  //         (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.Failed
-  //       )
-  //     )
-  //       return ApiEnvironmentSyncStatusChoices.Failed
-  //     else if (
-  //       data.envSyncs.some(
-  //         (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.InProgress
-  //       )
-  //     )
-  //       return ApiEnvironmentSyncStatusChoices.InProgress
-  //     else return ApiEnvironmentSyncStatusChoices.Completed
-  //   }
+    // Regular expression to match only alphanumeric characters
+    const regex = /^[a-zA-Z0-9]*$/
 
-  //   if (data?.envSyncs.length > 0) {
-  //     return (
-  //       <Menu as="div" className="relative inline-block text-left">
-  //         {({ open }) => (
-  //           <>
-  //             <Menu.Button
-  //               as="div"
-  //               className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between"
-  //             >
-  //               <SyncStatusIndicator status={syncStatus()} />
-  //             </Menu.Button>
-  //             <Transition
-  //               as={Fragment}
-  //               enter="transition ease-out duration-100"
-  //               enterFrom="transform opacity-0 scale-95"
-  //               enterTo="transform opacity-100 scale-100"
-  //               leave="transition ease-in duration-75"
-  //               leaveFrom="transform opacity-100 scale-100"
-  //               leaveTo="transform opacity-0 scale-95"
-  //             >
-  //               <Menu.Items className="absolute z-20 -right-2 top-12 w-[512px] md:w-[768px] origin-top-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur-md shadow-2xl focus:outline-none">
-  //                 <div className="p-4">
-  //                   <div className="space-y-2">
-  //                     <div className="flex items-center justify-between">
-  //                       <div className="text-black dark:text-white font-medium text-lg flex items-center gap-2">
-  //                         <FaSync />
-  //                         Syncs
-  //                       </div>
-  //                       <Link href={`/${params.team}/apps/${params.app}/syncing`}>
-  //                         <Button variant="secondary">
-  //                           Explore
-  //                           <FaArrowRight />
-  //                         </Button>
-  //                       </Link>
-  //                     </div>
-  //                     {data.envSyncs.map((sync: EnvironmentSyncType) => (
-  //                       <SyncCard key={sync.id} sync={sync} />
-  //                     ))}
-  //                   </div>
-  //                 </div>
-  //               </Menu.Items>
-  //             </Transition>
-  //           </>
-  //         )}
-  //       </Menu>
-  //     )
-  //   } else return <></>
-  // }
+    const closeModal = () => {
+      setFolderMenuIsOpen(false)
+    }
+
+    const openModal = () => {
+      setFolderMenuIsOpen(true)
+    }
+
+    const handleClose = () => {
+      setName('')
+      closeModal()
+    }
+
+    const handleUpdateName = (newName: string) => {
+      // Regular expression to match only alphanumeric characters
+      const regex = /^[a-zA-Z0-9]*$/
+
+      // Check if the new value matches the regular expression
+      if (regex.test(newName) || newName === '') {
+        // Update the state if the value is alphanumeric or empty (to allow clearing the input)
+        setName(newName)
+      }
+    }
+
+    const handleCreateFolder = async (e: { preventDefault: () => void }) => {
+      e.preventDefault()
+
+      const { data } = await createFolder({
+        variables: {
+          envId: params.environment,
+          name,
+          path: secretPath,
+        },
+        refetchQueries: [
+          {
+            query: GetFolders,
+            variables: {
+              envId: params.environment,
+              path: secretPath,
+            },
+          },
+        ],
+      })
+      if (data) {
+        toast.success('Created new Folder', { autoClose: 2000 })
+        handleClose()
+      }
+    }
+    return (
+      <>
+        <Transition appear show={folderMenuIsOpen} as={Fragment}>
+          <Dialog as="div" className="relative z-10" onClose={handleClose}>
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0"
+              enterTo="opacity-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
+            </Transition.Child>
+
+            <div className="fixed inset-0 overflow-y-auto">
+              <div className="flex min-h-full items-center justify-center p-4 text-center">
+                <Transition.Child
+                  as={Fragment}
+                  enter="ease-out duration-300"
+                  enterFrom="opacity-0 scale-95"
+                  enterTo="opacity-100 scale-100"
+                  leave="ease-in duration-200"
+                  leaveFrom="opacity-100 scale-100"
+                  leaveTo="opacity-0 scale-95"
+                >
+                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                    <Dialog.Title as="div" className="flex w-full justify-between items-start">
+                      <div>
+                        <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                          Create a Folder
+                        </h3>
+                        <p className="text-neutral-500">
+                          A new folder will be created at{' '}
+                          <code className="border border-neutral-500/20 rounded-full px-1 py-0.5 font-semibold">
+                            {secretPath === '/' ? '' : secretPath}/
+                            <span className="text-emerald-500">{name}</span>
+                          </code>
+                        </p>
+                      </div>
+
+                      <Button variant="text" onClick={handleClose}>
+                        <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
+                      </Button>
+                    </Dialog.Title>
+
+                    <div className="space-y-2 py-4">
+                      <form
+                        className="flex items-end justify-between gap-4"
+                        onSubmit={handleCreateFolder}
+                      >
+                        <Input
+                          value={name}
+                          setValue={handleUpdateName}
+                          label="Folder name"
+                          required
+                          maxLength={32}
+                        />
+
+                        <Button type="submit" variant="primary" disabled={name.length === 0}>
+                          Create
+                        </Button>
+                      </form>
+                    </div>
+                  </Dialog.Panel>
+                </Transition.Child>
+              </div>
+            </div>
+          </Dialog>
+        </Transition>
+      </>
+    )
+  }
+
+  const FolderBreadcrumbLinks = (props: { path?: string[] }) => {
+    const { path } = props
+
+    // Assuming params are accessible or passed to this component
+    const basePath = `/${params.team}/apps/${params.app}/environments/${params.environment}`
+
+    if (!path || path.length === 0) {
+      // Return a link to the base path if path is empty or undefined
+      return (
+        <div className="flex flex-wrap">
+          <Link href={basePath} className="p-2 flex items-center gap-2 font-light">
+            <span className="text-neutral-500">/</span>
+          </Link>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex flex-wrap items-center">
+        {/* Link to the base path */}
+        <Link
+          href={basePath}
+          className="p-2 flex items-center gap-2 font-light text-neutral-500 group"
+        >
+          <FaHome className="group-hover:text-white" />/
+        </Link>
+        {/* Map over path segments */}
+        {path.map((segment, index) => {
+          // Construct the href for each segment
+          const href = `${basePath}/${path.slice(0, index + 1).join('/')}`
+
+          return (
+            <div
+              key={index} // Using index as key; consider a more stable key if possible
+              className={clsx(
+                'flex items-center gap-1',
+                index === path.length - 1 ? 'font-semibold' : 'font-light'
+              )}
+            >
+              <Link href={href}>
+                <span className="px-1 py-0.5 text-black dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-md">
+                  {segment}
+                </span>
+              </Link>
+              {index < path.length - 1 && <span className="text-neutral-500 p-1">/</span>}
+            </div>
+          )
+        })}
+        {
+          <div className="px-4">
+            <Link
+              href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
+              title="Go up one level"
+            >
+              <Button variant="secondary">
+                <MdKeyboardReturn className="shrink-0" />
+              </Button>
+            </Link>
+          </div>
+        }
+      </div>
+    )
+  }
 
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white">
-      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null && !loading && (
-        <div className="flex flex-col p-4 gap-8">
+        <div className="flex flex-col py-4 gap-4">
           <div className="flex items-center gap-8">
             {envLinks.length > 1 ? (
               <Menu as="div" className="relative group">
@@ -555,7 +697,7 @@ export default function Environment({
                   <>
                     <Menu.Button as={Fragment}>
                       <div className="cursor-pointer flex items-center gap-2">
-                        <h3 className="font-semibold text-2xl">{environment.name}</h3>
+                        <h3 className="font-semibold text-xl">{environment.name}</h3>
                         <FaChevronDown
                           className={clsx(
                             'transition transform ease',
@@ -603,6 +745,9 @@ export default function Environment({
             ) : (
               <h3 className="font-semibold text-2xl">{environment.name}</h3>
             )}
+            <div className="flex items-center gap-2">
+              <FolderBreadcrumbLinks path={params.path} />
+            </div>
             {unsavedChanges && (
               <Alert variant="warning" icon={true} size="sm">
                 You have undeployed changes to this environment.
@@ -650,30 +795,61 @@ export default function Environment({
                 disabled={!unsavedChanges || savingAndFetching}
                 onClick={handleSaveChanges}
               >
-                <span className="text-lg">{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
+                <div className="flex items-center gap-2">
+                  {!unsavedChanges && <FaCheckCircle className="text-emerald-500" />}
+                  <span className="text-lg">{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
+                </div>
               </Button>
             </div>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
             <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
-              <div className="px-9 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+              <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                 key
               </div>
-              <div className="pl-3 pr-14 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
+              <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
                 value
-                <Button variant="primary" onClick={() => handleAddSecret(true)}>
-                  <div className="flex items-center gap-2">
-                    <FaPlus /> Create new secret
-                  </div>
-                </Button>
+                <div className="flex items-center gap-4">
+                  <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
+                    <div className="flex items-center gap-2">
+                      <FaDownload /> Export .env
+                    </div>
+                  </Button>
+                  <SplitButton
+                    variant="primary"
+                    onClick={() => handleAddSecret(true)}
+                    menuContent={
+                      <div className="w-max">
+                        <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
+                          <div className="flex items-center gap-2">
+                            <FaFolderPlus /> New Folder
+                          </div>
+                        </Button>
+                      </div>
+                    }
+                  >
+                    <FaPlus /> New Secret
+                  </SplitButton>
+                  <NewFolderMenu />
+                </div>
               </div>
             </div>
+
+            {organisation &&
+              filteredFolders.map((folder: SecretFolderType) => (
+                <SecretFolderRow
+                  key={folder.id}
+                  folder={folder}
+                  handleDelete={handleDeleteFolder}
+                />
+              ))}
+
             {organisation &&
               filteredSecrets.map((secret, index: number) => (
                 <div
                   ref={secretToHighlight === secret.id ? highlightedRef : null}
                   className={clsx(
-                    'flex items-center gap-2 p-1 rounded-md',
+                    'flex items-center gap-2 py-1 px-3 rounded-md',
                     secretToHighlight === secret.id &&
                       'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/10'
                   )}
@@ -692,10 +868,10 @@ export default function Environment({
                 </div>
               ))}
 
-            <div className="col-span-2 flex mt-4 gap-4 items-center">
+            {/* <div className="col-span-2 flex p-4 gap-4 items-center">
               <Button variant="primary" onClick={() => handleAddSecret(false)}>
                 <div className="flex items-center gap-2">
-                  <FaPlus /> Create new secret
+                  <FaPlus /> New secret
                 </div>
               </Button>
               <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
@@ -703,7 +879,7 @@ export default function Environment({
                   <FaDownload /> Export .env
                 </div>
               </Button>
-            </div>
+            </div> */}
           </div>
         </div>
       )}

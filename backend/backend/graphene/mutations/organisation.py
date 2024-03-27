@@ -1,4 +1,4 @@
-from api.emails import send_inite_email, send_user_joined_email
+from api.emails import send_invite_email, send_user_joined_email
 from api.utils.permissions import user_is_admin, user_is_org_member
 import graphene
 from graphql import GraphQLError
@@ -81,6 +81,9 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, org_id, email, apps, role):
+
+        org = Organisation.objects.get(id=org_id)
+
         if user_is_org_member(info.context.user, org_id):
             user_already_exists = OrganisationMember.objects.filter(
                 organisation_id=org_id, user__email=email, deleted_at=None
@@ -107,7 +110,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
             app_scope = App.objects.filter(id__in=apps)
 
             invite = OrganisationMemberInvite.objects.create(
-                organisation_id=org_id,
+                organisation=org,
                 invited_by=invited_by,
                 role=role.lower(),
                 invitee_email=email,
@@ -117,7 +120,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
             invite.apps.set(app_scope)
 
             try:
-                send_inite_email(invite)
+                send_invite_email(invite)
             except Exception as e:
                 print(f"Error sending invite email: {e}")
 

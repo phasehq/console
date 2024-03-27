@@ -8,7 +8,12 @@ import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
 import { createNewEnv, decryptEnvSecretKVs, unwrapEnvSecretsForUser } from '@/utils/environments'
-import { ApiEnvironmentEnvTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
+import {
+  ApiEnvironmentEnvTypeChoices,
+  EnvironmentType,
+  SecretFolderType,
+  SecretType,
+} from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
@@ -19,6 +24,7 @@ import {
   FaCircle,
   FaCopy,
   FaExternalLinkAlt,
+  FaFolder,
   FaRegEye,
   FaRegEyeSlash,
   FaSearch,
@@ -34,10 +40,17 @@ import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { userIsAdmin } from '@/utils/permissions'
 import Spinner from '@/components/common/Spinner'
+import { Card } from '@/components/common/Card'
+import { BsListColumnsReverse } from 'react-icons/bs'
 
 type EnvSecrets = {
   env: EnvironmentType
   secrets: SecretType[]
+}
+
+type EnvFolders = {
+  env: EnvironmentType
+  folders: SecretFolderType[]
 }
 
 type AppSecret = {
@@ -48,25 +61,74 @@ type AppSecret = {
   }>
 }
 
+type AppFolder = {
+  name: string
+  envs: Array<{
+    env: Partial<EnvironmentType>
+    folder: SecretFolderType | null
+  }>
+}
+
+const Environments = (props: { environments: EnvironmentType[] }) => {
+  const { environments } = props
+
+  const pathname = usePathname()
+
+  return (
+    <div className="grid grid-cols-4 gap-4 py-4">
+      {environments.map((env: EnvironmentType) => (
+        <Link key={env.id} href={`${pathname}/environments/${env.id}`}>
+          {' '}
+          <Card>
+            <div className="flex gap-4">
+              <div className="pt-1.5">
+                <BsListColumnsReverse className="text-black dark:text-white text-2xl" />
+              </div>
+              <div className="space-y-6">
+                <div>
+                  <div className="font-semibold text-lg">{env.name}</div>
+                  <div className="text-neutral-500">
+                    {env.secretCount} secrets across {env.folderCount} folders
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-500">
+                  Explore <FaArrowRight />
+                </div>
+              </div>
+            </div>
+          </Card>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
   const { data } = useQuery(GetAppEnvironments, {
     variables: {
       appId: params.app,
     },
   })
-
+  const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation,
+  })
   const pathname = usePathname()
 
   const [getEnvSecrets] = useLazyQuery(GetEnvSecretsKV)
-  const [getOrgAdmins, { data: orgAdminsData }] = useLazyQuery(GetOrganisationAdminsAndSelf)
+
   const [appSecrets, setAppSecrets] = useState<AppSecret[]>([])
+  const [appFolders, setAppFolders] = useState<AppFolder[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
 
   const [loading, setLoading] = useState(true)
 
   const { keyring } = useContext(KeyringContext)
-  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
@@ -78,19 +140,18 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           return searchRegex.test(secret.key)
         })
 
-  useEffect(() => {
-    if (organisation) {
-      getOrgAdmins({
-        variables: {
-          organisationId: organisation.id,
-        },
-      })
-    }
-  }, [getOrgAdmins, organisation, params.app])
+  const filteredFolders =
+    searchQuery === ''
+      ? appFolders
+      : appFolders.filter((folder) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(folder.name)
+        })
 
   useEffect(() => {
     const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {
       const envSecrets = [] as EnvSecrets[]
+      const envFolders = [] as EnvFolders[]
 
       for (const env of appEnvironments) {
         const { data } = await getEnvSecrets({
@@ -113,11 +174,17 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         })
 
         envSecrets.push({ env, secrets: decryptedSecrets })
+        envFolders.push({ env, folders: data.folders })
       }
 
       // Create a list of unique secret keys
       const secretKeys = Array.from(
         new Set(envSecrets.flatMap((envCard) => envCard.secrets.map((secret) => secret.key)))
+      )
+
+      // Create a list of unique folder names
+      const folderNames = Array.from(
+        new Set(envFolders.flatMap((envCard) => envCard.folders.map((folder) => folder.name)))
       )
 
       // Transform envCards into an array of AppSecret objects
@@ -129,7 +196,17 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         return { key, envs }
       })
 
+      // Transform envFolders into an array of AppFolder objects
+      const appFolders = folderNames.map((name) => {
+        const envs = envFolders.map((envCard) => ({
+          env: envCard.env,
+          folder: envCard.folders.find((folder) => folder.name === name) || null,
+        }))
+        return { name, envs }
+      })
+
       setAppSecrets(appSecrets)
+      setAppFolders(appFolders)
       setLoading(false)
     }
 
@@ -266,6 +343,40 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     )
   }
 
+  const EnvFolder = (props: {
+    envFolder: {
+      env: Partial<EnvironmentType>
+      folder: SecretFolderType | null
+    }
+  }) => {
+    const { envFolder } = props
+
+    return (
+      <div className="py-2 px-4">
+        {envFolder.folder === null ? (
+          <span className="text-red-500 font-mono">missing</span>
+        ) : (
+          <Link
+            className="flex items-center gap-2 w-min group font-medium text-sm tracking-wider"
+            href={`${pathname}/environments/${envFolder.env.id}${
+              envFolder.folder ? `/${envFolder.folder.name}` : ``
+            }`}
+            title={
+              envFolder.folder
+                ? `View this folder in ${envFolder.env.envType}`
+                : `Manage ${envFolder.env.envType}`
+            }
+          >
+            <div className="flex items-center gap-4">
+              <span className="text-gray-500">{envFolder.env.envType}</span>{' '}
+              <span className="text-emerald-500">/{envFolder.folder.name}</span>
+            </div>
+          </Link>
+        )}
+      </div>
+    )
+  }
+
   const AppSecretRow = (props: { appSecret: AppSecret }) => {
     const { appSecret } = props
 
@@ -316,7 +427,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 />
               </td>
               {appSecret.envs.map((env) => (
-                <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
+                <td key={env.env.id} className="px-6 py-3 whitespace-nowrap group">
                   <div className="flex items-center justify-center" title={tooltipText(env)}>
                     {env.secret !== null ? (
                       env.secret.value.length === 0 ? (
@@ -374,9 +485,95 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     )
   }
 
+  const AppFolderRow = (props: { appFolder: AppFolder }) => {
+    const { appFolder } = props
+
+    // Assuming folder presence doesn't vary by environment in the same way as secrets,
+    // adjust logic according to your requirements for folders
+    const tooltipText = (env: {
+      env: Partial<EnvironmentType>
+      folder: SecretFolderType | null
+    }) => {
+      if (env.folder === null) return `This folder is missing in ${env.env.envType}`
+      else return 'This folder is present'
+    }
+
+    return (
+      <Disclosure>
+        {({ open }) => (
+          <>
+            <Disclosure.Button
+              as="tr"
+              className={clsx(
+                'group divide-x divide-neutral-500/40 border-x transition ease duration-100 cursor-pointer',
+                open
+                  ? 'bg-zinc-100 dark:bg-zinc-800 !border-l-emerald-500 !border-r-neutral-500/40'
+                  : ' hover:bg-zinc-100 dark:hover:bg-zinc-800 border-neutral-500/40'
+              )}
+            >
+              <td
+                className={clsx(
+                  'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 ph-no-capture',
+                  open ? 'font-bold' : 'font-medium'
+                )}
+              >
+                <FaFolder className="text-emerald-500" />
+                {appFolder.name}
+                <FaChevronRight
+                  className={clsx(
+                    'transform transition ease font-light',
+                    open ? 'opacity-100 rotate-90' : 'opacity-0 group-hover:opacity-100 rotate-0'
+                  )}
+                />
+              </td>
+              {appFolder.envs.map((env) => (
+                <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
+                  <div className="flex items-center justify-center" title={tooltipText(env)}>
+                    {env.folder !== null ? (
+                      <FaCheckCircle className="text-emerald-500 shrink-0" />
+                    ) : (
+                      <FaTimesCircle className="text-red-500 shrink-0" />
+                    )}
+                  </div>
+                </td>
+              ))}
+            </Disclosure.Button>
+            <Transition
+              as="tr"
+              enter="transition duration-100 ease-out"
+              enterFrom="transform scale-95 opacity-0"
+              enterTo="transform scale-100 opacity-100"
+              leave="transition duration-75 ease-out"
+              leaveFrom="transform scale-100 opacity-100"
+              leaveTo="transform scale-95 opacity-0"
+              className={clsx(
+                'border-x',
+                open
+                  ? ' !border-l-emerald-500 !border-r-neutral-500/40 shadow-xl '
+                  : 'border-neutral-500/40'
+              )}
+            >
+              <td
+                colSpan={appFolder.envs.length + 1}
+                className={clsx('p-2 space-y-6 bg-zinc-100 dark:bg-zinc-800')}
+              >
+                <Disclosure.Panel>
+                  <div className="grid gap-2 divide-y divide-neutral-500/20">
+                    {appFolder.envs.map((envFolder) => (
+                      <EnvFolder key={envFolder.env.id} envFolder={envFolder} />
+                    ))}
+                  </div>
+                </Disclosure.Panel>
+              </td>
+            </Transition>
+          </>
+        )}
+      </Disclosure>
+    )
+  }
+
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid gap-16 relative">
-      {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
       {keyring !== null &&
         (setupRequired ? (
           <div className="flex flex-col gap-4 w-full items-center p-16">
@@ -392,17 +589,31 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             )}
           </div>
         ) : (
-          <section className="space-y-8 p-4">
+          <section className="space-y-8 py-4">
             <div className="space-y-2">
               <div className="space-y-1">
-                <h1 className="h3 font-semibold text-2xl">Secrets</h1>
+                <h1 className="h3 font-semibold text-2xl">Environments</h1>
                 <p className="text-neutral-500">
-                  An overview of secrets across all environments in this App.
+                  You have access to {data?.appEnvironments.length} Environments in this App.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
+            {data?.appEnvironments && <Environments environments={data.appEnvironments} />}
+
+            <hr className="border-neutral-500/40" />
+
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <h1 className="h3 font-semibold text-2xl">Secrets</h1>
+                <p className="text-neutral-500">
+                  An overview of Secrets across all Environments in this App. Expand a row in the
+                  table below to compare values across Environments.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center w-full justify-between border-b border-neutral-500/20 pb-4">
               <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
                 <div className="">
                   <FaSearch className="text-neutral-500" />
@@ -440,7 +651,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               </div>
             </div>
 
-            {appSecrets.length > 0 ? (
+            {appSecrets.length > 0 || appFolders.length > 0 ? (
               <table className="table-auto w-full border border-neutral-500/40">
                 <thead id="table-head" className="sticky top-0 bg-zinc-300 dark:bg-zinc-800 z-10">
                   <tr className="divide-x divide-neutral-500/40">
@@ -450,7 +661,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                     {data?.appEnvironments.map((env: EnvironmentType) => (
                       <th
                         key={env.id}
-                        className="group text-center text-sm font-semibold uppercase tracking-widest py-3"
+                        className="group text-center text-sm font-semibold uppercase tracking-widest py-3 w-60"
                       >
                         <Link href={`${pathname}/environments/${env.id}`}>
                           <Button variant="outline">
@@ -467,6 +678,10 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-500/40">
+                  {filteredFolders.map((appFolder) => (
+                    <AppFolderRow key={appFolder.name} appFolder={appFolder} />
+                  ))}
+
                   {filteredSecrets.map((appSecret, index) => (
                     <AppSecretRow key={`${appSecret.key}${index}`} appSecret={appSecret} />
                   ))}
@@ -481,7 +696,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 <div className="font-semibold text-black dark:text-white text-2xl">No Secrets</div>
                 <div className="text-neutral-500">
                   There are no secrets in this app yet. Click on an environment below to start
-                  adding secrets.{' '}
+                  adding secrets.
                 </div>
                 <div className="flex items-center gap-4 mt-8">
                   {data?.appEnvironments.map((env: EnvironmentType) => (

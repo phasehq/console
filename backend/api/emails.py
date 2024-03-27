@@ -32,7 +32,7 @@ def send_email(subject, recipient_list, template_name, context):
     send_mail(
         subject,
         "",  # plain text content can be empty as we're sending HTML
-        default_from_email,
+        f"Phase <{default_from_email}>",
         recipient_list,
         html_message=email_html_message,
     )
@@ -60,7 +60,7 @@ def send_login_email(request, email, provider):
     )
 
 
-def send_inite_email(invite):
+def send_invite_email(invite):
     organisation = invite.organisation.name
 
     invited_by_name = get_org_member_name(invite.invited_by)

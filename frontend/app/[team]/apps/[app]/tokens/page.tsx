@@ -2,7 +2,7 @@
 
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { RotateAppKey } from '@/graphql/mutations/rotateAppKeys.gql'
-import { useLazyQuery, useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -21,26 +21,21 @@ import { SecretTokens } from '@/components/apps/tokens/SecretTokens'
 import { organisationContext } from '@/contexts/organisationContext'
 
 export default function Tokens({ params }: { params: { team: string; app: string } }) {
-  const [getApp, { data }] = useLazyQuery(GetAppDetail)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const { data } = useQuery(GetAppDetail, {
+    variables: {
+      organisationId: organisation?.id,
+      appId: params.app,
+    },
+    skip: !organisation,
+  })
 
   const app = data?.apps[0] as AppType
 
   const [activePanel, setActivePanel] = useState<'secrets' | 'kms'>('secrets')
 
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
   const { keyring } = useContext(KeyringContext)
-
-  useEffect(() => {
-    if (organisation) {
-      getApp({
-        variables: {
-          organisationId: organisation.id,
-          appId: params.app,
-        },
-      })
-    }
-  }, [getApp, organisation, params.app])
 
   const handleCopy = (val: string) => {
     copyToClipBoard(val)
@@ -242,7 +237,6 @@ export default function Tokens({ params }: { params: { team: string; app: string
   return (
     <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
       <section className="max-w-screen-xl">
-        {organisation && <UnlockKeyringDialog organisationId={organisation.id} />}
         {keyring !== null && (
           <div className="flex gap-8 mt-6 divide-x divide-neutral-500/20 items-start">
             <div className="space-y-4 border-l border-neutral-500/40 h-min">
@@ -269,7 +263,10 @@ export default function Tokens({ params }: { params: { team: string; app: string
                       : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
                   )}
                 >
-                  KMS
+                  KMS{' '}
+                  <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
+                    Legacy
+                  </span>
                 </div>
               )}
             </div>

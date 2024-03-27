@@ -11,7 +11,7 @@ import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useState } from 'react'
 import {
   OrganisationMemberInviteType,
   OrganisationMemberType,
@@ -37,13 +37,12 @@ import clsx from 'clsx'
 import { cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
-import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { userIsAdmin } from '@/utils/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
-import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import { Alert } from '@/components/common/Alert'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -230,7 +229,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
     variables: { organisationId },
   })
-  const [createInvite] = useMutation(InviteMember)
+  const [createInvite, { error }] = useMutation(InviteMember)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
@@ -368,6 +367,11 @@ const InviteDialog = (props: { organisationId: string }) => {
                       <div>
                         {!inviteLink && (
                           <form className="space-y-6 p-4" onSubmit={handleInvite}>
+                            {error && (
+                              <Alert variant="danger" icon={true}>
+                                {error.message}
+                              </Alert>
+                            )}
                             <div className="space-y-4">
                               <div className="space-y-2 w-full">
                                 <label
@@ -447,8 +451,25 @@ const InviteDialog = (props: { organisationId: string }) => {
 }
 
 export default function Members({ params }: { params: { team: string } }) {
-  const [getMembers, { data: membersData }] = useLazyQuery(GetOrganisationMembers)
-  const [getInvites, { data: invitesData }] = useLazyQuery(GetInvites)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const { data: membersData } = useQuery(GetOrganisationMembers, {
+    variables: {
+      organisationId: organisation?.id,
+      role: null,
+    },
+    pollInterval: 5000,
+    skip: !organisation,
+  })
+
+  const { data: invitesData } = useQuery(GetInvites, {
+    variables: {
+      orgId: organisation?.id,
+    },
+    pollInterval: 5000,
+    skip: !organisation,
+  })
+
   const [deleteInvite] = useMutation(DeleteOrgInvite)
 
   const sortedInvites: OrganisationMemberInviteType[] =
@@ -459,29 +480,7 @@ export default function Members({ params }: { params: { team: string } }) {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       }) || []
 
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
-
-  const { data: session } = useSession()
-
-  useEffect(() => {
-    if (organisation) {
-      getMembers({
-        variables: {
-          organisationId: organisation.id,
-          role: null,
-        },
-        pollInterval: 5000,
-      })
-      getInvites({
-        variables: {
-          orgId: organisation.id,
-        },
-        pollInterval: 5000,
-      })
-    }
-  }, [getInvites, getMembers, organisation])
 
   const DeleteInviteConfirmDialog = (props: { inviteId: string }) => {
     const { inviteId } = props
@@ -505,7 +504,7 @@ export default function Members({ params }: { params: { team: string } }) {
           {
             query: GetInvites,
             variables: {
-              orgId: organisation!.id,
+              orgId: organisation?.id,
             },
           },
         ],
@@ -794,9 +793,6 @@ export default function Members({ params }: { params: { team: string } }) {
           </table>
         </div>
       </div>
-      {activeUserIsAdmin && organisation && (
-        <UnlockKeyringDialog organisationId={organisation.id} />
-      )}
     </section>
   )
 }

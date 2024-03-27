@@ -1,9 +1,10 @@
 # ---- Base Node ----
-FROM node:alpine AS base
-# set working directory
+FROM node:lts-alpine3.19@sha256:2f46fd49c767554c089a5eb219115313b72748d8f62f5eccb58ef52bc36db4ad AS base
+
+# Set working directory
 WORKDIR /app
 
-# install system dependencies
+# Install system dependencies
 RUN apk add curl bash
 
 # Add a new user "app" and change ownership of the /app directory
@@ -12,18 +13,19 @@ RUN addgroup app && adduser -S -G app app && chown -R app:app /app
 # Switch to the new user "app"
 USER app
 
-# copy project file
+# Copy project file
 COPY --chown=app:app package.json yarn.lock ./
 
 # ---- Dependencies ----
 FROM base AS dependencies
 
-# install node packages
-RUN yarn install --frozen-lockfile --no-cache && yarn cache clean
-# copy production node_modules aside
+# Set NODE_ENV to production
+ENV NODE_ENV production
+
+# Install node packages
+RUN yarn install --production --frozen-lockfile --no-cache && yarn cache clean
+# Copy production node_modules aside
 RUN cp -R node_modules /tmp/node_modules
-# install ALL node_modules, including 'devDependencies'
-RUN yarn install --frozen-lockfile
 
 # ---- Build ----
 FROM dependencies AS build
@@ -40,14 +42,14 @@ RUN yarn build
 
 # ---- Release ----
 FROM base AS release
-# copy production node_modules
+# Copy production node_modules
 COPY --from=dependencies /tmp/node_modules ./node_modules
-# copy app sources
+# Copy app sources
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
-# copy scripts directory
+# Copy scripts directory
 COPY --chown=app:app scripts ./scripts
-# copy next config
+# Copy next config
 COPY --chown=app:app next.config.js ./
 
 # Switch back to root to change permissions and then back to app user
@@ -55,6 +57,6 @@ USER root
 RUN chmod 555 ./scripts/*
 USER app
 
-# expose port and define CMD
+# Expose port and define CMD
 EXPOSE 3000
 CMD ["/app/scripts/start.sh"]

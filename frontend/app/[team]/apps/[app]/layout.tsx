@@ -4,7 +4,7 @@ import { Fragment, useContext, useEffect, useState } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { useLazyQuery } from '@apollo/client'
+import { useQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
@@ -20,7 +20,14 @@ export default function AppLayout({
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const path = usePathname()
   const [tabIndex, setTabIndex] = useState(0)
-  const [getApp, { data, loading }] = useLazyQuery(GetAppDetail)
+
+  const { data, loading } = useQuery(GetAppDetail, {
+    variables: {
+      organisationId: organisation!?.id,
+      appId: params.app,
+    },
+    skip: !organisation,
+  })
   const app = data?.apps[0] as AppType
 
   const [tabs, setTabs] = useState([
@@ -48,13 +55,6 @@ export default function AppLayout({
 
   useEffect(() => {
     if (organisation) {
-      getApp({
-        variables: {
-          organisationId: organisation.id,
-          appId: params.app,
-        },
-      })
-
       if (organisation.role!.toLowerCase() !== 'dev') {
         setTabs((prevTabs) =>
           prevTabs.some((tab) => tab.name === 'Settings')

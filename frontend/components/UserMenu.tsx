@@ -1,9 +1,8 @@
 'use client'
 
 import { Menu, Transition } from '@headlessui/react'
-import { Fragment, SVGProps, useEffect, useRef, useState } from 'react'
-import { ChevronDownIcon } from '@heroicons/react/20/solid'
-import { useSession, signIn, signOut } from 'next-auth/react'
+import { Fragment } from 'react'
+import { useSession } from 'next-auth/react'
 import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
@@ -13,6 +12,8 @@ export default function UserMenu() {
   const { data: session } = useSession()
 
   const firstName = session?.user?.name?.split(' ')[0]
+
+  if (!session) return <></>
 
   return (
     <div className="">

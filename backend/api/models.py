@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.conf import settings
 from api.services import Providers, ServiceConfig
 from api.tasks import trigger_sync_tasks
+from ee.quotas import can_add_app, can_add_environment, can_add_user
 
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
@@ -92,6 +93,14 @@ class Organisation(models.Model):
         return self.name
 
 
+class AppManager(models.Manager):
+    def create(self, *args, **kwargs):
+        organisation = kwargs.get("organisation")
+        if not can_add_app(organisation):
+            raise ValueError("Cannot add more apps to this organisation's plan.")
+        return super().create(*args, **kwargs)
+
+
 class App(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
@@ -105,6 +114,8 @@ class App(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
+
+    objects = AppManager()
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)  # Call the "real" save() method.
@@ -156,6 +167,14 @@ class OrganisationMember(models.Model):
         self.save()
 
 
+class OrganisationMemberInviteManager(models.Manager):
+    def create(self, *args, **kwargs):
+        organisation = kwargs.get("organisation")
+        if not can_add_user(organisation):
+            raise ValueError("Cannot add more users to this organisation's plan.")
+        return super().create(*args, **kwargs)
+
+
 class OrganisationMemberInvite(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     organisation = models.ForeignKey(
@@ -173,6 +192,16 @@ class OrganisationMemberInvite(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     expires_at = models.DateTimeField()
+
+    objects = OrganisationMemberInviteManager()
+
+
+class EnvironmentManager(models.Manager):
+    def create(self, *args, **kwargs):
+        app = kwargs.get("app")
+        if not can_add_environment(app):
+            raise ValueError("Cannot add more environments to this app.")
+        return super().create(*args, **kwargs)
 
 
 class Environment(models.Model):
@@ -201,6 +230,8 @@ class Environment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
+
+    objects = EnvironmentManager()
 
     def save(self, *args, **kwargs):
         # Call the "real" save() method to save the Secret
@@ -278,6 +309,7 @@ class EnvironmentSync(models.Model):
     ]
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    path = models.TextField(default="/")
     service = models.CharField(
         max_length=50, choices=ServiceConfig.get_service_choices()
     )
@@ -360,11 +392,15 @@ class UserToken(models.Model):
 class SecretFolder(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    parent = models.ForeignKey("self", on_delete=models.CASCADE)
+    path = models.TextField(default="/")
+    folder = models.ForeignKey("self", on_delete=models.CASCADE, null=True)
     name = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        unique_together = (("environment", "folder", "name", "path"),)
 
 
 class SecretTag(models.Model):
@@ -381,6 +417,7 @@ class Secret(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    path = models.TextField(default="/")
     key = models.TextField()
     key_digest = models.TextField()
     value = models.TextField()
@@ -418,8 +455,12 @@ class SecretEvent(models.Model):
     secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    path = models.TextField(default="/")
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    service_token = models.ForeignKey(
+        ServiceToken, on_delete=models.SET_NULL, blank=True, null=True
     )
     key = models.TextField()
     key_digest = models.TextField()
@@ -446,3 +487,12 @@ class PersonalSecret(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+
+class Lockbox(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    data = models.JSONField()
+    views = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    expires_at = models.DateTimeField(null=True)
+    allowed_views = models.IntegerField(null=True)

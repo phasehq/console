@@ -7,7 +7,7 @@ export const CliInstallCommands = () => {
   const platformScripts = [
     {
       name: 'MacOS',
-      rawScript: 'brew install phase/cli/phase',
+      rawScript: 'brew install phasehq/cli/phase',
       styledScript: (
         <pre>
           <span className="text-emerald-800 dark:text-emerald-300">brew</span> install
@@ -18,7 +18,7 @@ export const CliInstallCommands = () => {
     {
       name: 'Windows',
       rawScript:
-        'scoop bucket add phasehq https://github.com/phasehq/scoop-cli.git; scoop install phase',
+        'scoop bucket add phasehq https://github.com/phasehq/scoop-cli.git && scoop install phase',
       styledScript: (
         <div className="space-y-1">
           <pre>
@@ -87,7 +87,7 @@ export const CliInstallCommands = () => {
       rawScript: 'docker run phasehq/cli',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">docker</span> run phase/cli
+          <span className="text-emerald-800 dark:text-emerald-300">docker</span> run phasehq/cli
         </pre>
       ),
     },
@@ -117,7 +117,9 @@ export const CliInstallCommands = () => {
           <Tab.Panel as={Fragment} key={platform.name}>
             <div className="group relative overflow-x-auto rounded-b-lg border-x border-b border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-4 text-left text-sm text-zinc-900 dark:text-zinc-100">
               <code>{platform.styledScript}</code>
-              <CopyButton code={platform.rawScript} />
+              <div className="absolute right-4 top-3.5 ">
+                <CopyButton value={platform.rawScript} />
+              </div>
             </div>
           </Tab.Panel>
         ))}

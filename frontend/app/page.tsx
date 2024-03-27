@@ -4,61 +4,39 @@ import { useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
 import Loading from './loading'
 import { OrganisationType } from '@/apollo/graphql'
-import { getLocalKeyrings } from '@/utils/localStorage'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
-import { useSession } from 'next-auth/react'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 
 export default function Home() {
   const router = useRouter()
-  const { data: session } = useSession()
 
-  const { organisations, activeOrganisation, setActiveOrganisation, loading } =
-    useContext(organisationContext)
+  const { organisations, setActiveOrganisation, loading } = useContext(organisationContext)
 
   const [showOrgCards, setShowOrgCards] = useState<boolean>(false)
 
   const handleRouteToOrg = (org: OrganisationType) => {
-    const localOrgs = getLocalKeyrings()
-
-    if (
-      localOrgs?.find(
-        (localOrg) => localOrg.org.id === org!.id && localOrg.email === session?.user?.email
-      )
-    ) {
-      router.push(`/${org!.name}`)
-    } else {
-      router.push(`${org!.name}/newdevice`)
-    }
+    router.push(`/${org!.name}`)
   }
 
   useEffect(() => {
     if (!loading && organisations !== null) {
-      const localOrgs = getLocalKeyrings()
-
-      // if there is no org setup on the server, send to onboarding page
+      // if there is no org membership, send to onboarding
       if (organisations.length === 0) router.push('/signup')
+      // if there is a single org membership, send to org home
       else if (organisations.length === 1) {
         const organisation = organisations[0]
         setActiveOrganisation(organisation)
-        // if local keyring exists on device for active organisation
-        if (
-          localOrgs?.find(
-            (localOrg) =>
-              localOrg.org.id === organisation!.id && localOrg.email === session?.user?.email
-          )
-        ) {
-          router.push(`/${organisation!.name}`)
-        }
-        // if no keyring on device, send to new device login page
-        else {
-          router.push(`${organisation!.name}/newdevice`)
-        }
-      } else {
+        router.push(`/${organisation!.name}`)
+      }
+
+      // if there are multiple memberships, show orgs
+      else {
+        setActiveOrganisation(null)
         setShowOrgCards(true)
       }
     }
@@ -71,6 +49,8 @@ export default function Home() {
       {showOrgCards && (
         <>
           <HeroPattern />
+
+          <OnboardingNavbar />
 
           <div className="mx-auto my-auto space-y-6 divide-y divide-neutral-500/40 rounded-md bg-zinc-100 dark:bg-zinc-800 text-center">
             <div className="space-y-0 p-4">

@@ -27,7 +27,7 @@ import { userIsAdmin } from '@/utils/permissions'
 
 export default function Syncing({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  const { keyring, setKeyring } = useContext(KeyringContext)
+  const { keyring } = useContext(KeyringContext)
 
   const searchParams = useSearchParams()
 
@@ -37,25 +37,6 @@ export default function Syncing({ params }: { params: { team: string; app: strin
     variables: { appId: params.app },
     pollInterval: 10000,
   })
-
-  const [getCloudflarePages] = useLazyQuery(GetCfPages)
-
-  const { data: session } = useSession()
-
-  const validateKeyring = async (password: string) => {
-    return new Promise<OrganisationKeyring>(async (resolve) => {
-      if (keyring) resolve(keyring)
-      else {
-        const decryptedKeyring = await cryptoUtils.getKeyring(
-          session?.user?.email!,
-          organisation!.id,
-          password
-        )
-        setKeyring(decryptedKeyring)
-        resolve(decryptedKeyring)
-      }
-    })
-  }
 
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
@@ -71,9 +52,6 @@ export default function Syncing({ params }: { params: { team: string; app: strin
 
     const [isOpen, setIsOpen] = useState<boolean>(false)
 
-    const [password, setPassword] = useState<string>('')
-    const [showPw, setShowPw] = useState<boolean>(false)
-
     const closeModal = () => {
       setIsOpen(false)
     }
@@ -84,8 +62,6 @@ export default function Syncing({ params }: { params: { team: string; app: strin
 
     const handleEnableSyncing = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
-
-      const keyring = await validateKeyring(password)
 
       const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
@@ -190,37 +166,6 @@ export default function Syncing({ params }: { params: { team: string; app: strin
                         Enabling syncing for this App will allow the server to access secrets in all
                         environments.
                       </Alert>
-
-                      {!keyring && (
-                        <div className="space-y-2 w-full">
-                          <label
-                            className="block text-gray-700 text-sm font-bold mb-2"
-                            htmlFor="password"
-                          >
-                            Sudo password
-                          </label>
-                          <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
-                            <input
-                              id="password"
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              type={showPw ? 'text' : 'password'}
-                              minLength={16}
-                              required
-                              autoFocus
-                              className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
-                            />
-                            <button
-                              className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
-                              type="button"
-                              onClick={() => setShowPw(!showPw)}
-                              tabIndex={-1}
-                            >
-                              {showPw ? <FaEyeSlash /> : <FaEye />}
-                            </button>
-                          </div>
-                        </div>
-                      )}
 
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>

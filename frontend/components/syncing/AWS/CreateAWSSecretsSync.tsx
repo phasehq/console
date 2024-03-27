@@ -61,6 +61,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
   const [awsSecret, setCfProject] = useState<AwsSecretType | null>(null)
 
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
+  const [path, setPath] = useState('/')
 
   const [credentialsValid, setCredentialsValid] = useState(false)
 
@@ -108,6 +109,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
       await createAwsSecretSync({
         variables: {
           envId: phaseEnv?.id,
+          path,
           credentialId: credential.id,
           secretName: createNewSecret ? newAwsSecretName : awsSecret!.name,
           kmsId: kmsKeyId || null,
@@ -151,7 +153,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
 
         {credentialsValid && (
           <div className="space-y-6">
-            <div>
+            <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
                   <label className="block text-gray-700 text-sm font-bold mb-2">
@@ -177,6 +179,8 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
                   ))}
                 </div>
               </RadioGroup>
+
+              <Input value={path} setValue={setPath} label="Path" />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-8">

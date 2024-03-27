@@ -1,5 +1,5 @@
 import UserMenu from '../UserMenu'
-import { useLazyQuery } from '@apollo/client'
+import { useLazyQuery, useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { usePathname } from 'next/navigation'
@@ -15,24 +15,13 @@ import { LogoMark } from '../common/LogoMark'
 export const NavBar = (props: { team: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [getApps, { data: appsData }] = useLazyQuery(GetApps)
+  const { data: appsData } = useQuery(GetApps, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation,
+  })
   const [getAppEnvs, { data: appEnvsData }] = useLazyQuery(GetAppEnvironments)
-
-  const IS_CLOUD_HOSTED = process.env.APP_HOST || process.env.NEXT_PUBLIC_APP_HOST
-
-  useEffect(() => {
-    if (organisation) {
-      const fetchData = async () => {
-        getApps({
-          variables: {
-            organisationId: organisation.id,
-          },
-        })
-      }
-
-      fetchData()
-    }
-  }, [getApps, organisation])
 
   const apps = appsData?.apps as AppType[]
 
@@ -54,7 +43,7 @@ export const NavBar = (props: { team: string }) => {
   const activeEnv = activeApp ? envs.find((env) => env.id === envId) : undefined
 
   return (
-    <header className="px-8 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 flex gap-4 items-center justify-between text-neutral-500 font-medium bg-neutral-100/30 dark:bg-neutral-900/30 backdrop-blur-md">
+    <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 flex gap-4 items-center justify-between text-neutral-500 font-medium bg-neutral-100/30 dark:bg-neutral-900/30 backdrop-blur-md">
       <div className="flex items-center gap-2">
         <Link href="/">
           <LogoMark className="w-10 fill-black dark:fill-white" />
@@ -92,7 +81,7 @@ export const NavBar = (props: { team: string }) => {
         {activeEnv && <span className="text-black dark:text-white">{activeEnv.name}</span>}
       </div>
       <div className="flex gap-4 items-center justify-end">
-        {IS_CLOUD_HOSTED && <StatusIndicator />}
+        <StatusIndicator />
 
         <Link href="https://docs.phase.dev" target="_blank">
           <Button variant="secondary">Docs</Button>

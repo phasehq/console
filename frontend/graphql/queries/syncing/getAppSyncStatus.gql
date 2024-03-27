@@ -11,6 +11,7 @@ query GetAppSyncStatus($appId: ID!) {
         name
       }
     }
+    path
     serviceInfo {
       id
       name

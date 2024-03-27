@@ -10,6 +10,7 @@ query GetOrganisationSyncs($orgId: ID!) {
         name
       }
     }
+    path
     serviceInfo {
       id
       name
@@ -34,5 +35,25 @@ query GetOrganisationSyncs($orgId: ID!) {
       completedAt
       meta
     }
+  }
+  savedCredentials(orgId: $orgId) {
+    id
+    name
+    credentials
+    createdAt
+    provider {
+      id
+      name
+      expectedCredentials
+      optionalCredentials
+    }
+    syncCount
+  }
+  apps(organisationId: $orgId, appId: null) {
+    id
+    name
+    identityKey
+    createdAt
+    syncEnabled
   }
 }

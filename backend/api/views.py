@@ -1,7 +1,7 @@
 from datetime import datetime
 import json
 from api.serializers import (
-    EnvironmentKeySerializer,
+    LockboxSerializer,
     SecretSerializer,
     ServiceTokenSerializer,
     UserTokenSerializer,
@@ -9,6 +9,8 @@ from api.serializers import (
 from api.emails import send_login_email
 from api.utils.permissions import user_can_access_environment
 from api.utils.syncing.auth import store_oauth_token
+from api.utils.secrets import create_environment_folder_structure, normalize_path_string
+from api.utils.audit_logging import log_secret_event
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from graphene_django.views import GraphQLView
@@ -19,9 +21,9 @@ from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
 from api.utils.rest import (
     get_client_ip,
-    get_env_from_service_token,
     get_org_member_from_user_token,
     get_resolver_request_meta,
+    get_service_token,
     get_token_type,
     token_is_expired_or_deleted,
 )
@@ -29,8 +31,7 @@ from logs.models import KMSDBLog
 from .models import (
     App,
     Environment,
-    EnvironmentKey,
-    EnvironmentToken,
+    Lockbox,
     Secret,
     SecretEvent,
     SecretTag,
@@ -56,6 +57,11 @@ from django.utils import timezone
 import base64
 from django.shortcuts import redirect
 import os
+from django.db.models import Q
+from djangorestframework_camel_case.parser import CamelCaseJSONParser
+from djangorestframework_camel_case.render import (
+    CamelCaseJSONRenderer,
+)
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -362,6 +368,7 @@ class SecretsView(APIView):
         token_type = get_token_type(auth_token)
 
         env_id = request.headers["environment"]
+
         env = Environment.objects.get(id=env_id)
 
         ip_address, user_agent = get_resolver_request_meta(request)
@@ -369,15 +376,16 @@ class SecretsView(APIView):
         if token_type == "User":
             try:
                 org_member = get_org_member_from_user_token(auth_token)
+                service_token = None
 
                 if not user_can_access_environment(org_member.user.userId, env_id):
                     return HttpResponse(status=403)
             except Exception as ex:
-                print("EX:", ex)
                 return HttpResponse(status=404)
 
         else:
             org_member = None
+            service_token = get_service_token(auth_token)
 
         if not env.id:
             return HttpResponse(status=404)
@@ -391,22 +399,25 @@ class SecretsView(APIView):
         except:
             pass
 
+        try:
+            path = request.headers["path"]
+            if path:
+                path = normalize_path_string(path)
+                secrets_filter["path"] = path
+        except:
+            pass
+
         secrets = Secret.objects.filter(**secrets_filter)
 
         for secret in secrets:
-            read_event = SecretEvent.objects.create(
-                secret=secret,
-                environment=secret.environment,
-                user=org_member,
-                key=secret.key,
-                key_digest=secret.key_digest,
-                value=secret.value,
-                comment=secret.comment,
-                event_type=SecretEvent.READ,
-                ip_address=ip_address,
-                user_agent=user_agent,
+            log_secret_event(
+                secret,
+                SecretEvent.READ,
+                org_member,
+                service_token,
+                ip_address,
+                user_agent,
             )
-            read_event.tags.set(secret.tags.all())
 
         serializer = SecretSerializer(
             secrets, many=True, context={"org_member": org_member}
@@ -428,6 +439,7 @@ class SecretsView(APIView):
         if token_type == "User":
             try:
                 user = get_org_member_from_user_token(auth_token)
+                service_token = None
 
                 if not user_can_access_environment(user.user.userId, env_id):
                     return HttpResponse(status=403)
@@ -435,6 +447,7 @@ class SecretsView(APIView):
                 return HttpResponse(status=404)
         else:
             user = None
+            service_token = get_service_token(auth_token)
 
         if not env:
             return HttpResponse(status=404)
@@ -446,12 +459,23 @@ class SecretsView(APIView):
         for secret in request_body["secrets"]:
             tags = SecretTag.objects.filter(id__in=secret["tags"])
 
+            try:
+                path = normalize_path_string(secret["path"])
+            except:
+                path = "/"
+
+            folder = None
+
+            if path != "/":
+                folder = create_environment_folder_structure(path, env_id)
+
             secret_data = {
                 "environment": env,
+                "path": path,
+                "folder": folder,
                 "key": secret["key"],
                 "key_digest": secret["keyDigest"],
                 "value": secret["value"],
-                "folder_id": secret["folderId"],
                 "version": 1,
                 "comment": secret["comment"],
             }
@@ -459,19 +483,14 @@ class SecretsView(APIView):
             secret_obj = Secret.objects.create(**secret_data)
             secret_obj.tags.set(tags)
 
-            event = SecretEvent.objects.create(
-                **{
-                    **secret_data,
-                    **{
-                        "user": user,
-                        "secret": secret_obj,
-                        "event_type": SecretEvent.CREATE,
-                        "ip_address": ip_address,
-                        "user_agent": user_agent,
-                    },
-                }
+            log_secret_event(
+                secret_obj,
+                SecretEvent.CREATE,
+                user,
+                service_token,
+                ip_address,
+                user_agent,
             )
-            event.tags.set(tags)
 
         return Response(status=status.HTTP_200_OK)
 
@@ -489,6 +508,7 @@ class SecretsView(APIView):
         if token_type == "User":
             try:
                 user = get_org_member_from_user_token(auth_token)
+                service_token = None
 
                 if not user_can_access_environment(user.user.userId, env_id):
                     return HttpResponse(status=403)
@@ -497,6 +517,7 @@ class SecretsView(APIView):
 
         else:
             user = None
+            service_token = get_service_token(auth_token)
 
         request_body = json.loads(request.body)
 
@@ -512,10 +533,21 @@ class SecretsView(APIView):
                 "key": secret["key"],
                 "key_digest": secret["keyDigest"],
                 "value": secret["value"],
-                "folder_id": secret["folderId"],
                 "version": secret_obj.version + 1,
                 "comment": secret["comment"],
             }
+
+            try:
+                folder = None
+                path = normalize_path_string(secret["path"])
+
+                if path != "/":
+                    folder = create_environment_folder_structure(path, env_id)
+
+                secret_data["path"] = path
+                secret_data["folder"] = folder
+            except:
+                pass
 
             for key, value in secret_data.items():
                 setattr(secret_obj, key, value)
@@ -524,19 +556,14 @@ class SecretsView(APIView):
             secret_obj.tags.set(tags)
             secret_obj.save()
 
-            event = SecretEvent.objects.create(
-                **{
-                    **secret_data,
-                    **{
-                        "user": user,
-                        "secret": secret_obj,
-                        "event_type": SecretEvent.UPDATE,
-                        "ip_address": ip_address,
-                        "user_agent": user_agent,
-                    },
-                }
+            log_secret_event(
+                secret_obj,
+                SecretEvent.UPDATE,
+                user,
+                service_token,
+                ip_address,
+                user_agent,
             )
-            event.tags.set(tags)
 
         return Response(status=status.HTTP_200_OK)
 
@@ -553,6 +580,7 @@ class SecretsView(APIView):
         if token_type == "User":
             try:
                 user = get_org_member_from_user_token(auth_token)
+                service_token = None
 
                 if not user_can_access_environment(user.user.userId, env_id):
                     return HttpResponse(status=403)
@@ -561,6 +589,7 @@ class SecretsView(APIView):
 
         else:
             user = None
+            service_token = get_service_token(auth_token)
 
         request_body = json.loads(request.body)
 
@@ -582,15 +611,49 @@ class SecretsView(APIView):
             secret.deleted_at = timezone.now()
             secret.save()
 
-            most_recent_event_copy = (
-                SecretEvent.objects.filter(secret=secret).order_by("version").last()
+            log_secret_event(
+                secret, SecretEvent.DELETE, user, service_token, ip_address, user_agent
             )
 
-            # setting the pk to None and then saving it creates a copy of the instance with updated fields
-            most_recent_event_copy.id = None
-            most_recent_event_copy.event_type = SecretEvent.DELETE
-            most_recent_event_copy.ip_address = ip_address
-            most_recent_event_copy.user_agent = user_agent
-            most_recent_event_copy.save()
-
         return Response(status=status.HTTP_200_OK)
+
+
+class LockboxView(APIView):
+    permission_classes = [
+        AllowAny,
+    ]
+    parser_classes = [
+        CamelCaseJSONParser,
+    ]
+    renderer_classes = [
+        CamelCaseJSONRenderer,
+    ]
+
+    @csrf_exempt
+    def dispatch(self, request, *args, **kwargs):
+        return super(LockboxView, self).dispatch(request, *args, **kwargs)
+
+    def get(self, request, box_id):
+        try:
+            box = Lockbox.objects.get(
+                Q(id=box_id)
+                & (Q(expires_at__gte=timezone.now()) | Q(expires_at__isnull=True))
+            )
+            if box.allowed_views is None or box.views < box.allowed_views:
+                serializer = LockboxSerializer(box)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            else:
+                return HttpResponse(status=status.HTTP_403_FORBIDDEN)
+
+        except Lockbox.DoesNotExist:
+            return HttpResponse(status=status.HTTP_404_NOT_FOUND)
+
+    def put(self, request, box_id):
+        try:
+            box = Lockbox.objects.get(id=box_id)
+            box.views += 1
+            box.save()
+            return HttpResponse(status=status.HTTP_200_OK)
+
+        except Lockbox.DoesNotExist:
+            return HttpResponse(status=status.HTTP_404_NOT_FOUND)

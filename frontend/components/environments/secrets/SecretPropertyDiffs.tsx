@@ -1,8 +1,8 @@
 import { SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
 import { areTagsAreSame } from '@/utils/tags'
-import { Tag } from './SecretRow'
 import { FaRedoAlt, FaUndoAlt } from 'react-icons/fa'
-import { Button } from '../common/Button'
+import { Button } from '../../common/Button'
+import { Tag } from '../Tag'
 
 export const SecretPropertyDiffs = (props: {
   secret: SecretType
@@ -35,7 +35,7 @@ export const SecretPropertyDiffs = (props: {
   return (
     <>
       {historyItem!.key !== previousItem.key && (
-        <div className="pl-3 font-mono">
+        <div className="pl-3 font-mono break-all ">
           <span className="text-neutral-500 mr-2">KEY:</span>
           <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture">
             {previousItem.key}
@@ -47,7 +47,7 @@ export const SecretPropertyDiffs = (props: {
       )}
 
       {historyItem!.value !== previousItem.value && (
-        <div className="pl-3 font-mono space-y-1">
+        <div className="pl-3 font-mono space-y-1 break-all">
           <div className="flex items-center gap-2">
             <span className="text-neutral-500 mr-2">VALUE:</span>
           </div>
@@ -71,7 +71,7 @@ export const SecretPropertyDiffs = (props: {
       )}
 
       {historyItem!.comment !== previousItem.comment && (
-        <div className="pl-3 font-mono">
+        <div className="pl-3 font-mono break-all">
           <span className="text-neutral-500 mr-2">COMMENT:</span>
           <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture">
             {previousItem.comment}
@@ -83,7 +83,7 @@ export const SecretPropertyDiffs = (props: {
       )}
 
       {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
-        <div className="pl-3 font-mono">
+        <div className="pl-3 font-mono break-all">
           <span className="text-neutral-500 mr-2">TAGS:</span>
           <div className="bg-red-200 dark:bg-red-950 text-red-500 flex w-min gap-2 rounded-full">
             {getRemovedTags().map((tag) => (

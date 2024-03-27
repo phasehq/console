@@ -12,7 +12,7 @@ cffi==1.15.1
 charset-normalizer==3.0.1
 click==8.1.7
 constantly==15.1.0
-cryptography==41.0.4
+cryptography==42.0.4
 defusedxml==0.7.1
 dj-rest-auth==3.0.0
 Django==4.2.7
@@ -21,6 +21,7 @@ django-cors-headers==3.14.0
 django-filter==23.1
 django-rq==2.9.0
 djangorestframework==3.14.0
+djangorestframework-camel-case==1.4.2
 graphene==3.2.1
 graphene-django==3.0.0
 graphql-core==3.2.3
@@ -41,7 +42,7 @@ pycparser==2.21
 PyJWT==2.6.0
 PyNaCl==1.5.0
 pynamodb==5.5.1
-pyOpenSSL==23.2.0
+pyOpenSSL==24.0.0
 python-dateutil==2.8.2
 python3-openid==3.2.0
 pytz==2022.7.1
