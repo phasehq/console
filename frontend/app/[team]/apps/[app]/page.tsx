@@ -110,6 +110,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     variables: {
       appId: params.app,
     },
+    fetchPolicy: 'cache-and-network',
   })
   const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
     variables: {
