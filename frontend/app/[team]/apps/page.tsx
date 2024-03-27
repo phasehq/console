@@ -16,8 +16,8 @@ export default function AppsHome({ params }: { params: { team: string } }) {
   const { data, loading } = useQuery(GetApps, {
     variables: {
       organisationId: organisation?.id,
-      skip: !organisation,
     },
+    skip: !organisation,
   })
 
   const apps = data?.apps as AppType[]
