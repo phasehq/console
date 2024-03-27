@@ -14,6 +14,8 @@ import { HistoryDialog } from './HistoryDialog'
 import { OverrideDialog } from './OverrideDialog'
 import { TagsDialog } from './TagsDialog'
 import { ShareSecretDialog } from './ShareSecretDialog'
+import { toggleBooleanKeepingCase } from '@/utils/secrets'
+import { Switch } from '@headlessui/react'
 
 export default function SecretRow(props: {
   orgId: string
@@ -26,11 +28,20 @@ export default function SecretRow(props: {
 }) {
   const { orgId, secret, cannonicalSecret, secretNames, handlePropertyChange, handleDelete } = props
 
+  const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
+
+  const booleanValue = secret.value.toLowerCase() === 'true'
+
   const [isRevealed, setIsRevealed] = useState<boolean>(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
 
   const [readSecret] = useMutation(LogSecretRead)
+
+  // Reveal boolean values on mount for boolean secrets
+  useEffect(() => {
+    if (isBoolean) setIsRevealed(true)
+  }, [isBoolean])
 
   // Reveal newly created secrets by default
   useEffect(() => {
@@ -45,6 +56,11 @@ export default function SecretRow(props: {
   const handleRevealSecret = async () => {
     setIsRevealed(true)
     if (cannonicalSecret !== undefined) await readSecret({ variables: { id: secret.id } })
+  }
+
+  const handleToggleBoolean = () => {
+    const toggledValue = toggleBooleanKeepingCase(secret.value)
+    handlePropertyChange(secret.id, 'value', toggledValue)
   }
 
   const handleHideSecret = () => setIsRevealed(false)
@@ -109,6 +125,27 @@ export default function SecretRow(props: {
         </div>
       </div>
       <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-transparent group-hover:bg-zinc-100 dark:group-hover:bg-zinc-700 transition ease p-px">
+        {isBoolean && (
+          <div className="flex items-center px-2">
+            <Switch
+              title="Toggle value"
+              checked={booleanValue}
+              onChange={handleToggleBoolean}
+              className={`${
+                booleanValue
+                  ? 'bg-emerald-400/10 ring-emerald-400/20'
+                  : 'bg-neutral-500/40 ring-neutral-500/30'
+              } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+            >
+              <span className="sr-only">Toggle</span>
+              <span
+                className={`${
+                  booleanValue ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500'
+                } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+              ></span>
+            </Switch>
+          </div>
+        )}
         <input
           className={clsx(INPUT_BASE_STYLE, 'w-full focus:outline-none p-2')}
           value={secret.value}
@@ -118,15 +155,17 @@ export default function SecretRow(props: {
 
         <div className="flex gap-1 items-center group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10">
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-            <Button
-              variant="outline"
-              tabIndex={-1}
-              onClick={toggleReveal}
-              title={isRevealed ? 'Mask value' : 'Reveal value'}
-            >
-              <span className="2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
-              <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
-            </Button>
+            {!isBoolean && (
+              <Button
+                variant="outline"
+                tabIndex={-1}
+                onClick={toggleReveal}
+                title={isRevealed ? 'Mask value' : 'Reveal value'}
+              >
+                <span className="2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+                <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
+              </Button>
+            )}
           </div>
 
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
