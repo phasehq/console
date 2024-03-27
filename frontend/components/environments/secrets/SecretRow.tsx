@@ -128,6 +128,7 @@ export default function SecretRow(props: {
         {isBoolean && (
           <div className="flex items-center px-2">
             <Switch
+              title="Toggle value"
               checked={booleanValue}
               onChange={handleToggleBoolean}
               className={`${
