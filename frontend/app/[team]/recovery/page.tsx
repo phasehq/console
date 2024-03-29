@@ -115,7 +115,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
           pending: 'Recovering your account...',
           success: 'Recovery complete!',
         })
-        .then(() => router.push('/'))
+        .then(() => router.push(`/${org!.name}`))
     }
   }
 

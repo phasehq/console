@@ -178,10 +178,14 @@ const Onboard = () => {
     const isFormValid = validateCurrentStep()
     if (step !== steps.length - 1 && isFormValid) setStep(step + 1)
     if (step === steps.length - 1 && isFormValid) {
-      toast.promise(handleAccountInit, {
-        pending: 'Setting up your account',
-        success: 'Account setup complete!',
-      })
+      toast
+        .promise(handleAccountInit, {
+          pending: 'Setting up your account',
+          success: 'Account setup complete!',
+        })
+        .then(() => {
+          router.push(`/${teamName}`)
+        })
     }
   }
 

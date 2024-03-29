@@ -19,6 +19,7 @@ import { useSession } from 'next-auth/react'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { LogoMark } from '@/components/common/LogoMark'
 import { setDevicePassword } from '@/utils/localStorage'
+import { useRouter } from 'next/navigation'
 
 const bip39 = require('bip39')
 
@@ -44,6 +45,8 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const [acceptInvite] = useMutation(AcceptOrganisationInvite)
 
   const { data: session } = useSession()
+
+  const router = useRouter()
 
   const invite: OrganisationMemberInviteType = data?.validateInvite
 
@@ -166,10 +169,14 @@ export default function Invite({ params }: { params: { invite: string } }) {
     const isFormValid = validateCurrentStep()
     if (step !== steps.length - 1 && isFormValid) setStep(step + 1)
     if (step === steps.length - 1 && isFormValid) {
-      toast.promise(handleAccountInit, {
-        pending: 'Setting up your account',
-        success: 'Account setup complete!',
-      })
+      toast
+        .promise(handleAccountInit, {
+          pending: 'Setting up your account',
+          success: 'Account setup complete!',
+        })
+        .then(() => {
+          router.push(`/${invite.organisation.name}`)
+        })
     }
   }
 
