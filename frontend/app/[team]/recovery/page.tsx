@@ -17,12 +17,14 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { Avatar } from '@/components/common/Avatar'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { setDevicePassword } from '@/utils/localStorage'
 
 export default function Recovery({ params }: { params: { team: string } }) {
   const { data: session } = useSession()
   const [inputs, setInputs] = useState<Array<string>>([])
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
+  const [savePassword, setSavePassword] = useState(true)
 
   const [step, setStep] = useState<number>(0)
 
@@ -86,6 +88,10 @@ export default function Recovery({ params }: { params: { team: string } }) {
             wrappedRecovery: encryptedMnemonic,
           },
         })
+
+        if (savePassword) {
+          setDevicePassword(org?.memberId!, pw)
+        }
 
         resolve({
           publicKey: accountKeyRing.publicKey,
@@ -177,7 +183,16 @@ export default function Recovery({ params }: { params: { team: string } }) {
               />
             )}
 
-            {step === 1 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
+            {step === 1 && (
+              <AccountPassword
+                pw={pw}
+                setPw={setPw}
+                pw2={pw2}
+                setPw2={setPw2}
+                savePassword={savePassword}
+                setSavePassword={setSavePassword}
+              />
+            )}
 
             <div className="flex justify-between w-full">
               <div>
