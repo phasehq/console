@@ -88,6 +88,7 @@ const Sidebar = () => {
                         {({ active }) => (
                           <button
                             onClick={() => switchOrg(org)}
+                            title={`Switch to ${org.name}`}
                             className={`${
                               active
                                 ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
