@@ -3,7 +3,7 @@ mutation CreateOrg($id: ID!, $name: String!, $identityKey: String!, $wrappedKeyr
     organisation {
       id
       name
-      createdAt
+      memberId
     }
   }
 }

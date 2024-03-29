@@ -15,6 +15,7 @@ import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
+import { setDevicePassword } from '@/utils/localStorage'
 
 const bip39 = require('bip39')
 
@@ -23,6 +24,7 @@ const Onboard = () => {
   const [teamName, setTeamName] = useState<string>('')
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
+  const [savePassword, setSavePassword] = useState(true)
   const [mnemonic, setMnemonic] = useState('')
   const [orgId, setOrgId] = useState('')
   const [inputs, setInputs] = useState<Array<string>>([])
@@ -157,6 +159,9 @@ const Onboard = () => {
         })
         const { data } = result
         const newOrg = data.createOrganisation.organisation
+        if (savePassword) {
+          setDevicePassword(newOrg.memberId, pw)
+        }
       } catch (e) {
         setIsLoading(false)
         reject()
@@ -173,10 +178,14 @@ const Onboard = () => {
     const isFormValid = validateCurrentStep()
     if (step !== steps.length - 1 && isFormValid) setStep(step + 1)
     if (step === steps.length - 1 && isFormValid) {
-      toast.promise(handleAccountInit, {
-        pending: 'Setting up your account',
-        success: 'Account setup complete!',
-      })
+      toast
+        .promise(handleAccountInit, {
+          pending: 'Setting up your account',
+          success: 'Account setup complete!',
+        })
+        .then(() => {
+          router.push(`/${teamName}`)
+        })
     }
   }
 
@@ -240,7 +249,16 @@ const Onboard = () => {
             </div>
 
             {step === 0 && <TeamName name={teamName} setName={setTeamName} />}
-            {step === 1 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
+            {step === 1 && (
+              <AccountPassword
+                pw={pw}
+                setPw={setPw}
+                pw2={pw2}
+                setPw2={setPw2}
+                savePassword={savePassword}
+                setSavePassword={setSavePassword}
+              />
+            )}
             {step === 2 && (
               <AccountRecovery
                 mnemonic={mnemonic}
