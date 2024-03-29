@@ -1,17 +1,20 @@
-import { useEffect, useState } from 'react'
+import { Dispatch, SetStateAction, useEffect, useState } from 'react'
 import { ZXCVBNResult } from 'zxcvbn'
-import { FaCheck, FaEye, FaEyeSlash, FaInfo } from 'react-icons/fa'
+import { FaCheck, FaEye, FaEyeSlash, FaInfo, FaShieldAlt } from 'react-icons/fa'
 import clsx from 'clsx'
+import { ToggleSwitch } from '../common/ToggleSwitch'
 
 interface AccountPasswordProps {
   pw: string
   pw2: string
+  savePassword: boolean
   setPw: Function
   setPw2: Function
+  setSavePassword: Function
 }
 
 export const AccountPassword = (props: AccountPasswordProps) => {
-  const { pw, setPw, pw2, setPw2 } = props
+  const { pw, setPw, pw2, setPw2, savePassword, setSavePassword } = props
   const [showPw, setShowPw] = useState<boolean>(false)
   const [showPw2, setShowPw2] = useState<boolean>(false)
   const [pwStrength, setPwStrength] = useState<ZXCVBNResult>({} as ZXCVBNResult)
@@ -60,7 +63,7 @@ export const AccountPassword = (props: AccountPasswordProps) => {
   const passwordIsStrong = pwStrength?.feedback?.suggestions?.length == 0 || false
 
   return (
-    <div className="flex flex-col gap-4 max-w-md mx-auto">
+    <div className="space-y-4 max-w-md mx-auto">
       <div className="space-y-1">
         <label className="block text-gray-700 text-sm font-bold" htmlFor="password">
           Password
@@ -111,19 +114,29 @@ export const AccountPassword = (props: AccountPasswordProps) => {
         </div>
       </div>
 
-      <div className={clsx('my-6 h-1 w-full bg-neutral-300 dark:bg-neutral-600 text-sm')}>
-        <div
-          className={clsx('h-1 w-full ml-0 transition-all ease float-left', pwStrengthColor())}
-          style={{
-            transform: `scaleX(${pwStrengthPercent()})`,
-            transformOrigin: '0%',
-          }}
-        ></div>
-
+      <div>
+        <div className={clsx('h-1 w-full bg-neutral-300 dark:bg-neutral-600 text-sm')}>
+          <div
+            className={clsx('h-1 w-full ml-0 transition-all ease float-left', pwStrengthColor())}
+            style={{
+              transform: `scaleX(${pwStrengthPercent()})`,
+              transformOrigin: '0%',
+            }}
+          ></div>
+        </div>
         <div className="flex w-full items-center gap-4 p-3 bg-zinc-200 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-black/50 dark:text-white/50">
           {passwordIsStrong ? <FaCheck /> : <FaInfo />}
           {passwordIsStrong ? 'Strong password' : pwStrength?.feedback?.suggestions}
         </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 py-2">
+        <div className="flex items-center gap-2">
+          {' '}
+          <FaShieldAlt className="text-emerald-500" />
+          <span className="text-neutral-500 text-sm">Remember password on this device </span>
+        </div>
+        <ToggleSwitch value={savePassword} onToggle={() => setSavePassword(!savePassword)} />
       </div>
     </div>
   )

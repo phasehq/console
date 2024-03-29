@@ -78,9 +78,9 @@ export const Stepper = (props: StepperProps) => {
         <div className="text-3xl text-black dark:text-white font-bold text-center">
           {props.steps[props.activeStep].title}
         </div>
-        <p className="text-black/30 dark:text-white/40 text-center text-lg">
+        <div className="text-black/30 dark:text-white/40 text-center text-lg">
           {props.steps[props.activeStep].description}
-        </p>
+        </div>
       </div>
     </div>
   )

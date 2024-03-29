@@ -18,6 +18,7 @@ import { OrganisationMemberInviteType } from '@/apollo/graphql'
 import { useSession } from 'next-auth/react'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { LogoMark } from '@/components/common/LogoMark'
+import { setDevicePassword } from '@/utils/localStorage'
 
 const bip39 = require('bip39')
 
@@ -53,6 +54,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const [success, setSuccess] = useState<boolean>(false)
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
+  const [savePassword, setSavePassword] = useState(true)
   const [mnemonic, setMnemonic] = useState('')
   const [isloading, setIsLoading] = useState<boolean>(false)
 
@@ -130,9 +132,14 @@ export default function Invite({ params }: { params: { invite: string } }) {
         },
       })
 
+      const memberId = data.createOrganisationMember.orgMember.id
+
       setIsLoading(false)
-      if (data.createOrganisationMember.orgMember.id) {
+      if (memberId) {
         setSuccess(true)
+        if (savePassword) {
+          setDevicePassword(memberId, pw)
+        }
         resolve(true)
       } else {
         reject()
@@ -274,7 +281,16 @@ export default function Invite({ params }: { params: { invite: string } }) {
                   <Stepper steps={steps} activeStep={step} />
                 </div>
 
-                {step === 0 && <AccountPassword pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
+                {step === 0 && (
+                  <AccountPassword
+                    pw={pw}
+                    setPw={setPw}
+                    pw2={pw2}
+                    setPw2={setPw2}
+                    savePassword={savePassword}
+                    setSavePassword={setSavePassword}
+                  />
+                )}
 
                 {step === 1 && (
                   <AccountRecovery
