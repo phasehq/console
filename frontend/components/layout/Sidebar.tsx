@@ -34,7 +34,7 @@ const SidebarLink = (props: SidebarLinkT) => {
     <Link href={href} title={name}>
       <div
         className={clsx(
-          'flex items-center gap-2 hover:text-emerald-500 text-sm font-medium rounded-md p-2 w-56',
+          'flex items-center gap-2 hover:text-emerald-500 text-sm font-medium rounded-md p-2 w-full',
           active && 'bg-neutral-300 dark:bg-neutral-800'
         )}
       >
@@ -64,11 +64,9 @@ const Sidebar = () => {
           <>
             <Menu.Button
               as="div"
-              className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between  w-full "
+              className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between w-full"
             >
-              <span className="truncate">
-              {activeOrganisation?.name}
-              </span>
+              <span className="truncate">{activeOrganisation?.name}</span>
               <FaChevronDown
                 className={clsx('transition ease', open ? 'rotate-180' : 'rotate-0')}
               />
@@ -94,11 +92,9 @@ const Sidebar = () => {
                               active
                                 ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
                                 : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
-                            } group flex  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium w-[95%]`}
+                            } group flex w-full  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium`}
                           >
-                            <span className="truncate w-[80%] text-left">
-                            {org.name}
-                            </span>
+                            <span className="truncate w-[80%] text-left">{org.name}</span>
                             <FaExchangeAlt />
                           </button>
                         )}
@@ -161,9 +157,9 @@ const Sidebar = () => {
   ]
 
   return (
-    <div className="h-screen flex flex-col pt-[64px] w-[300px]">
+    <div className="h-screen flex flex-col pt-[64px] w-72">
       <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/30 dark:bg-neutral-900/30 text-black dark:text-white">
-        <div className="gap-4 p-4 grid grid-cols-1">
+        <div className="gap-4 p-4 grid grid-cols-1 w-full">
           <OrgsMenu />
 
           {links.slice(0, 5).map((link) => (
