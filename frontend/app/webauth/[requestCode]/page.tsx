@@ -21,7 +21,7 @@ import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
-import { FaChevronRight, FaExclamationTriangle, FaCheckCircle } from 'react-icons/fa'
+import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaShieldAlt } from 'react-icons/fa'
 import { MdContentCopy } from 'react-icons/md'
 import { SiGithub, SiGnometerminal, SiSlack } from 'react-icons/si'
 import { toast } from 'react-toastify'
@@ -209,6 +209,9 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   <span className="text-neutral-500">
                     <RoleLabel role={organisation.role!} />
                   </span>
+                  {deviceIsTrusted && (
+                    <FaShieldAlt className="text-emerald-500" title="Trusted device" />
+                  )}
                 </div>
                 <FaChevronRight
                   className={clsx(
