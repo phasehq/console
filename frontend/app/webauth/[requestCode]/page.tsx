@@ -3,6 +3,7 @@
 import { OrganisationType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { HeroPattern } from '@/components/common/HeroPattern'
+import { Input } from '@/components/common/Input'
 import Spinner from '@/components/common/Spinner'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { RoleLabel } from '@/components/users/RoleLabel'
@@ -12,6 +13,7 @@ import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { getUserKxPublicKey, getUserKxPrivateKey, encryptAsymmetric } from '@/utils/crypto'
 import { generateUserToken } from '@/utils/environments'
+import { getDevicePassword } from '@/utils/localStorage'
 import { useMutation } from '@apollo/client'
 import { Disclosure, Transition } from '@headlessui/react'
 import axios from 'axios'
@@ -19,13 +21,7 @@ import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
-import {
-  FaEyeSlash,
-  FaEye,
-  FaChevronRight,
-  FaExclamationTriangle,
-  FaCheckCircle,
-} from 'react-icons/fa'
+import { FaChevronRight, FaExclamationTriangle, FaCheckCircle } from 'react-icons/fa'
 import { MdContentCopy } from 'react-icons/md'
 import { SiGithub, SiGnometerminal, SiSlack } from 'react-icons/si'
 import { toast } from 'react-toastify'
@@ -173,12 +169,21 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
     const { organisation, defaultOpen } = props
 
     const [password, setPassword] = useState<string>('')
-    const [showPw, setShowPw] = useState<boolean>(false)
+    const [deviceIsTrusted, setDeviceIsTrusted] = useState(false)
 
     const handleSubmit = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
       await authenticate(organisation, password)
     }
+
+    useEffect(() => {
+      const devicePassword = getDevicePassword(organisation.memberId!)
+
+      if (devicePassword) {
+        setPassword(devicePassword)
+        setDeviceIsTrusted(true)
+      }
+    }, [organisation])
 
     return (
       <Disclosure
@@ -228,36 +233,22 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   className="flex items-end gap-4 justify-between p-4 bg-zinc-200 dark:bg-zinc-800"
                 >
                   <div className="space-y-4 w-full ">
-                    <label
-                      className="block text-gray-700 text-sm font-bold mb-2"
-                      htmlFor="password"
-                    >
-                      Sudo password
-                    </label>
-                    <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
-                      <input
-                        id="password"
+                    <div className="flex justify-between w-full">
+                      <Input
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        type={showPw ? 'text' : 'password'}
-                        minLength={16}
-                        required
+                        setValue={setPassword}
+                        label="Sudo password"
+                        disabled={deviceIsTrusted}
+                        secret={true}
                         autoFocus
-                        className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
                       />
-                      <button
-                        className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
-                        type="button"
-                        onClick={() => setShowPw(!showPw)}
-                        tabIndex={-1}
-                      >
-                        {showPw ? <FaEyeSlash /> : <FaEye />}
-                      </button>
                     </div>
                   </div>
-                  <Button variant="primary" type="submit">
-                    Login
-                  </Button>
+                  <div className="py-1">
+                    <Button variant="primary" type="submit">
+                      Login
+                    </Button>
+                  </div>
                 </form>
               </Disclosure.Panel>
             </Transition>
