@@ -9,7 +9,11 @@ from api.serializers import (
 from api.emails import send_login_email
 from api.utils.permissions import user_can_access_environment
 from api.utils.syncing.auth import store_oauth_token
-from api.utils.secrets import create_environment_folder_structure, normalize_path_string
+from api.utils.secrets import (
+    check_for_duplicates,
+    create_environment_folder_structure,
+    normalize_path_string,
+)
 from api.utils.audit_logging import log_secret_event
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -456,6 +460,9 @@ class SecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
+        if check_for_duplicates(request_body["secrets"]):
+            return JsonResponse({"error": "Duplicate secret found"}, status=409)
+
         for secret in request_body["secrets"]:
             tags = SecretTag.objects.filter(id__in=secret["tags"])
 
@@ -522,6 +529,9 @@ class SecretsView(APIView):
         request_body = json.loads(request.body)
 
         ip_address, user_agent = get_resolver_request_meta(request)
+
+        if check_for_duplicates(request_body["secrets"]):
+            return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
         for secret in request_body["secrets"]:
             secret_obj = Secret.objects.get(id=secret["id"])
