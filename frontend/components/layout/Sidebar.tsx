@@ -173,7 +173,7 @@ const Sidebar = () => {
             />
           ))}
         </div>
-        <div className="p-4">
+        <div className="p-4 w-full">
           <SidebarLink
             key={links[5].name}
             name={links[5].name}
