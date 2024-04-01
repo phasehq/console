@@ -78,7 +78,7 @@ def normalize_path_string(path):
     return path
 
 
-def check_for_duplicates(secrets):
+def check_for_duplicates(secrets, environment):
     """
     Checks if a list of secrets contains any duplicates internally or in the target env + path.
 
@@ -102,7 +102,10 @@ def check_for_duplicates(secrets):
 
         # Check if the secret already exists in the database
         if Secret.objects.filter(
-            environment="env", path=path, key_digest=secret["keyDigest"]
+            environment=environment,
+            path=path,
+            key_digest=secret["keyDigest"],
+            deleted_at=None,
         ).exists():
             return True  # Found a duplicate in the database
 

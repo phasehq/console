@@ -460,7 +460,9 @@ class SecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        if check_for_duplicates(request_body["secrets"]):
+        if check_for_duplicates(
+            request_body["secrets"], request.headers["environment"]
+        ):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
         for secret in request_body["secrets"]:
@@ -530,7 +532,9 @@ class SecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        if check_for_duplicates(request_body["secrets"]):
+        if check_for_duplicates(
+            request_body["secrets"], request.headers["environment"]
+        ):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
         for secret in request_body["secrets"]:
