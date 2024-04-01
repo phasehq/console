@@ -3,6 +3,7 @@
 import { cryptoUtils } from '@/utils/auth'
 import VerifyInvite from '@/graphql/queries/organisation/validateOrganisationInvite.gql'
 import AcceptOrganisationInvite from '@/graphql/mutations/organisation/acceptInvite.gql'
+import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import { useLazyQuery, useMutation } from '@apollo/client'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { Button } from '@/components/common/Button'
@@ -133,6 +134,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
           wrappedRecovery: encryptedMnemonic,
           inviteId: invite.id,
         },
+        refetchQueries: [{ query: GetOrganisations }],
       })
 
       const memberId = data.createOrganisationMember.orgMember.id
