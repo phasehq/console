@@ -14,6 +14,7 @@ import { toast } from 'react-toastify'
 import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
+import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { setDevicePassword } from '@/utils/localStorage'
 
@@ -156,6 +157,7 @@ const Onboard = () => {
             wrappedKeyring: encryptedKeyring,
             wrappedRecovery: encryptedMnemonic,
           },
+          refetchQueries: [{ query: GetOrganisations }],
         })
         const { data } = result
         const newOrg = data.createOrganisation.organisation
