@@ -10,24 +10,25 @@ from api.emails import send_login_email
 from api.utils.permissions import user_can_access_environment
 from api.utils.syncing.auth import store_oauth_token
 from api.utils.secrets import (
-    check_for_duplicates,
+    check_for_duplicates_blind,
     create_environment_folder_structure,
     normalize_path_string,
 )
 from api.utils.audit_logging import log_secret_event
+from api.auth import PhaseTokenAuthentication
+from api.utils.syncing.secrets import compute_key_digest, get_environment_keys
+from api.utils.crypto import encrypt_asymmetric
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from graphene_django.views import GraphQLView
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
 from api.utils.rest import (
     get_client_ip,
-    get_org_member_from_user_token,
     get_resolver_request_meta,
-    get_service_token,
     get_token_type,
     token_is_expired_or_deleted,
 )
@@ -39,6 +40,7 @@ from .models import (
     Secret,
     SecretEvent,
     SecretTag,
+    ServerEnvironmentKey,
     ServiceToken,
     UserToken,
 )
@@ -354,45 +356,22 @@ class PrivateGraphQLView(LoginRequiredMixin, GraphQLView):
     pass
 
 
-class SecretsView(APIView):
-    permission_classes = [
-        AllowAny,
-    ]
+class E2EESecretsView(APIView):
+    authentication_classes = [PhaseTokenAuthentication]
+    permission_classes = [IsAuthenticated]
 
     @csrf_exempt
     def dispatch(self, request, *args):
-        return super(SecretsView, self).dispatch(request, *args)
+        return super(E2EESecretsView, self).dispatch(request, *args)
 
     def get(self, request):
-        auth_token = request.headers["authorization"]
-
-        if token_is_expired_or_deleted(auth_token):
-            return HttpResponse(status=403)
-
-        token_type = get_token_type(auth_token)
 
         env_id = request.headers["environment"]
-
         env = Environment.objects.get(id=env_id)
-
-        ip_address, user_agent = get_resolver_request_meta(request)
-
-        if token_type == "User":
-            try:
-                org_member = get_org_member_from_user_token(auth_token)
-                service_token = None
-
-                if not user_can_access_environment(org_member.user.userId, env_id):
-                    return HttpResponse(status=403)
-            except Exception as ex:
-                return HttpResponse(status=404)
-
-        else:
-            org_member = None
-            service_token = get_service_token(auth_token)
-
         if not env.id:
             return HttpResponse(status=404)
+
+        ip_address, user_agent = get_resolver_request_meta(request)
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
@@ -417,42 +396,22 @@ class SecretsView(APIView):
             log_secret_event(
                 secret,
                 SecretEvent.READ,
-                org_member,
-                service_token,
+                request.auth["org_member"],
+                request.auth["service_token"],
                 ip_address,
                 user_agent,
             )
 
         serializer = SecretSerializer(
-            secrets, many=True, context={"org_member": org_member}
+            secrets, many=True, context={"org_member": request.auth["org_member"]}
         )
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        auth_token = request.headers["authorization"]
-
-        if token_is_expired_or_deleted(auth_token):
-            return HttpResponse(status=403)
-
-        token_type = get_token_type(auth_token)
 
         env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
-
-        if token_type == "User":
-            try:
-                user = get_org_member_from_user_token(auth_token)
-                service_token = None
-
-                if not user_can_access_environment(user.user.userId, env_id):
-                    return HttpResponse(status=403)
-            except:
-                return HttpResponse(status=404)
-        else:
-            user = None
-            service_token = get_service_token(auth_token)
-
         if not env:
             return HttpResponse(status=404)
 
@@ -460,7 +419,7 @@ class SecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        if check_for_duplicates(
+        if check_for_duplicates_blind(
             request_body["secrets"], request.headers["environment"]
         ):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
@@ -495,8 +454,8 @@ class SecretsView(APIView):
             log_secret_event(
                 secret_obj,
                 SecretEvent.CREATE,
-                user,
-                service_token,
+                request.auth["org_member"],
+                request.auth["service_token"],
                 ip_address,
                 user_agent,
             )
@@ -504,35 +463,17 @@ class SecretsView(APIView):
         return Response(status=status.HTTP_200_OK)
 
     def put(self, request):
-        auth_token = request.headers["authorization"]
-
-        if token_is_expired_or_deleted(auth_token):
-            return HttpResponse(status=403)
-
-        token_type = get_token_type(auth_token)
 
         env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
-
-        if token_type == "User":
-            try:
-                user = get_org_member_from_user_token(auth_token)
-                service_token = None
-
-                if not user_can_access_environment(user.user.userId, env_id):
-                    return HttpResponse(status=403)
-            except:
-                return HttpResponse(status=404)
-
-        else:
-            user = None
-            service_token = get_service_token(auth_token)
+        if not env:
+            return HttpResponse(status=404)
 
         request_body = json.loads(request.body)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        if check_for_duplicates(
+        if check_for_duplicates_blind(
             request_body["secrets"], request.headers["environment"]
         ):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
@@ -573,8 +514,8 @@ class SecretsView(APIView):
             log_secret_event(
                 secret_obj,
                 SecretEvent.UPDATE,
-                user,
-                service_token,
+                request.auth["org_member"],
+                request.auth["service_token"],
                 ip_address,
                 user_agent,
             )
@@ -582,28 +523,6 @@ class SecretsView(APIView):
         return Response(status=status.HTTP_200_OK)
 
     def delete(self, request):
-        auth_token = request.headers["authorization"]
-
-        if token_is_expired_or_deleted(auth_token):
-            return HttpResponse(status=403)
-
-        token_type = get_token_type(auth_token)
-
-        env_id = request.headers["environment"]
-
-        if token_type == "User":
-            try:
-                user = get_org_member_from_user_token(auth_token)
-                service_token = None
-
-                if not user_can_access_environment(user.user.userId, env_id):
-                    return HttpResponse(status=403)
-            except:
-                return HttpResponse(status=404)
-
-        else:
-            user = None
-            service_token = get_service_token(auth_token)
 
         request_body = json.loads(request.body)
 
@@ -615,8 +534,10 @@ class SecretsView(APIView):
             if not Secret.objects.filter(id=secret.id).exists():
                 return HttpResponse(status=404)
 
-            if user is not None and not user_can_access_environment(
-                user.user.userId, secret.environment.id
+            if request.auth[
+                "org_member"
+            ] is not None and not user_can_access_environment(
+                request.auth["org_member"].user.userId, secret.environment.id
             ):
                 return HttpResponse(status=403)
 
@@ -626,7 +547,226 @@ class SecretsView(APIView):
             secret.save()
 
             log_secret_event(
-                secret, SecretEvent.DELETE, user, service_token, ip_address, user_agent
+                secret,
+                SecretEvent.DELETE,
+                request.auth["org_member"],
+                request.auth["service_token"],
+                ip_address,
+                user_agent,
+            )
+
+        return Response(status=status.HTTP_200_OK)
+
+
+class PublicSecretsView(APIView):
+    authentication_classes = [PhaseTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @csrf_exempt
+    def dispatch(self, request, *args):
+        return super(PublicSecretsView, self).dispatch(request, *args)
+
+    def get(self, request):
+        env = request.auth["environment"]
+
+        # Check if SSE is enabled for this environment
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            return HttpResponse(status=404)
+
+        ip_address, user_agent = get_resolver_request_meta(request)
+
+        secrets_filter = {"environment": env, "deleted_at": None}
+
+        try:
+            key_digest = request.headers["keydigest"]
+            if key_digest:
+                secrets_filter["key_digest"] = key_digest
+        except:
+            pass
+
+        try:
+            path = request.GET.get("path")
+            if path:
+                path = normalize_path_string(path)
+                secrets_filter["path"] = path
+        except:
+            pass
+
+        secrets = Secret.objects.filter(**secrets_filter)
+
+        for secret in secrets:
+            log_secret_event(
+                secret,
+                SecretEvent.READ,
+                request.auth["org_member"],
+                request.auth["service_token"],
+                ip_address,
+                user_agent,
+            )
+
+        serializer = SecretSerializer(
+            secrets,
+            many=True,
+            context={"org_member": request.auth["org_member"], "sse": True},
+        )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+
+        env = request.auth["environment"]
+
+        request_body = json.loads(request.body)
+
+        secrets = request_body["secrets"]
+
+        ip_address, user_agent = get_resolver_request_meta(request)
+
+        env_pubkey, _ = get_environment_keys(env.id)
+
+        for secret in secrets:
+            secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
+            secret["key"] = encrypt_asymmetric(secret["key"].upper(), env_pubkey)
+            secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
+            secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
+
+        if check_for_duplicates_blind(secrets, env):
+            return JsonResponse({"error": "Duplicate secret found"}, status=409)
+
+        for secret in secrets:
+            tags = SecretTag.objects.filter(id__in=secret["tags"])
+
+            try:
+                path = normalize_path_string(secret["path"])
+            except:
+                path = "/"
+
+            folder = None
+
+            if path != "/":
+                folder = create_environment_folder_structure(path, env.id)
+
+            secret_data = {
+                "environment": env,
+                "path": path,
+                "folder": folder,
+                "key": secret["key"],
+                "key_digest": secret["keyDigest"],
+                "value": secret["value"],
+                "version": 1,
+                "comment": secret["comment"],
+            }
+
+            secret_obj = Secret.objects.create(**secret_data)
+            secret_obj.tags.set(tags)
+
+            log_secret_event(
+                secret_obj,
+                SecretEvent.CREATE,
+                request.auth["org_member"],
+                request.auth["service_token"],
+                ip_address,
+                user_agent,
+            )
+
+        return Response(status=status.HTTP_200_OK)
+
+    def put(self, request):
+
+        env = request.auth["environment"]
+
+        request_body = json.loads(request.body)
+
+        secrets = request_body["secrets"]
+
+        ip_address, user_agent = get_resolver_request_meta(request)
+
+        env_pubkey, _ = get_environment_keys(env.id)
+
+        for secret in secrets:
+            secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
+            secret["key"] = encrypt_asymmetric(secret["key"].upper(), env_pubkey)
+            secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
+            secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
+
+        if check_for_duplicates_blind(secrets, env):
+            return JsonResponse({"error": "Duplicate secret found"}, status=409)
+
+        for secret in secrets:
+            secret_obj = Secret.objects.get(id=secret["id"])
+
+            tags = SecretTag.objects.filter(id__in=secret["tags"])
+
+            secret_data = {
+                "environment": env,
+                "key": secret["key"],
+                "key_digest": secret["keyDigest"],
+                "value": secret["value"],
+                "version": secret_obj.version + 1,
+                "comment": secret["comment"],
+            }
+
+            try:
+                folder = None
+                path = normalize_path_string(secret["path"])
+
+                if path != "/":
+                    folder = create_environment_folder_structure(path, env.id)
+
+                secret_data["path"] = path
+                secret_data["folder"] = folder
+            except:
+                pass
+
+            for key, value in secret_data.items():
+                setattr(secret_obj, key, value)
+
+            secret_obj.updated_at = timezone.now()
+            secret_obj.tags.set(tags)
+            secret_obj.save()
+
+            log_secret_event(
+                secret_obj,
+                SecretEvent.UPDATE,
+                request.auth["org_member"],
+                request.auth["service_token"],
+                ip_address,
+                user_agent,
+            )
+
+        return Response(status=status.HTTP_200_OK)
+
+    def delete(self, request):
+
+        request_body = json.loads(request.body)
+
+        ip_address, user_agent = get_resolver_request_meta(request)
+
+        secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"])
+
+        for secret in secrets_to_delete:
+            if not Secret.objects.filter(id=secret.id).exists():
+                return HttpResponse(status=404)
+
+            if request.auth[
+                "org_member"
+            ] is not None and not user_can_access_environment(
+                request.auth["org_member"].user.userId, secret.environment.id
+            ):
+                return HttpResponse(status=403)
+
+        for secret in secrets_to_delete:
+            secret.updated_at = timezone.now()
+            secret.deleted_at = timezone.now()
+            secret.save()
+
+            log_secret_event(
+                secret,
+                SecretEvent.DELETE,
+                request.auth["org_member"],
+                request.auth["service_token"],
+                ip_address,
+                user_agent,
             )
 
         return Response(status=status.HTTP_200_OK)
