@@ -1,6 +1,7 @@
 from django.db import transaction
 
 from api.models import Environment, SecretFolder, Secret
+from api.utils.syncing.secrets import compute_key_digest
 
 
 def create_environment_folder_structure(complete_path, environment_id):
@@ -78,12 +79,13 @@ def normalize_path_string(path):
     return path
 
 
-def check_for_duplicates(secrets, environment):
+def check_for_duplicates_blind(secrets, environment):
     """
-    Checks if a list of secrets contains any duplicates internally or in the target env + path.
+    Checks if a list of secrets contains any duplicates internally or in the target env + path by checking each secret's key_digest
 
     Args:
-        secrets (List[Dict]): The list of secrets to check for duplicates.
+        secrets (List[Dict]): The list of encrypted secrets to check for duplicates.
+        environment (Environment): The environment where the secrets are being stored.
 
     Returns:
         bool: True if a duplicate is found, False otherwise.
@@ -101,12 +103,17 @@ def check_for_duplicates(secrets, environment):
             return True  # Found a duplicate within the list
 
         # Check if the secret already exists in the database
-        if Secret.objects.filter(
-            environment=environment,
-            path=path,
-            key_digest=secret["keyDigest"],
-            deleted_at=None,
-        ).exists():
+        if (
+            Secret.objects.filter(
+                environment=environment,
+                path=path,
+                key_digest=secret["keyDigest"],
+                deleted_at=None,
+            )
+            .exclude(id=secret["id"])
+            .exists()
+        ):
+
             return True  # Found a duplicate in the database
 
         # Add the processed secret to the set
