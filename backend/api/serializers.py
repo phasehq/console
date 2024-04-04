@@ -1,3 +1,5 @@
+from api.utils.crypto import decrypt_asymmetric, env_keypair, get_server_keypair
+from api.utils.syncing.secrets import get_environment_keys, get_environment_secrets
 from rest_framework import serializers
 from .models import (
     CustomUser,
@@ -6,6 +8,7 @@ from .models import (
     Lockbox,
     Organisation,
     Secret,
+    ServerEnvironmentKey,
     ServiceToken,
     UserToken,
     PersonalSecret,
@@ -55,6 +58,9 @@ class PersonalSecretSerializer(serializers.ModelSerializer):
 
 
 class SecretSerializer(serializers.ModelSerializer):
+    key = serializers.SerializerMethodField()
+    value = serializers.SerializerMethodField()
+    comment = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
 
@@ -62,14 +68,37 @@ class SecretSerializer(serializers.ModelSerializer):
         model = Secret
         fields = "__all__"
 
+    def get_key(self, obj):
+        if self.context.get("sse"):
+            env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+
+            key = decrypt_asymmetric(obj.key, env_privkey, env_pubkey)
+
+            return key
+        return obj.key
+
+    def get_value(self, obj):
+        if self.context.get("sse"):
+            _, v = get_environment_secrets(obj.environment, obj.path, obj)
+            return v
+        return obj.value
+
+    def get_comment(self, obj):
+        if self.context.get("sse"):
+            env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+
+            if obj.comment:
+                comment = decrypt_asymmetric(obj.comment, env_privkey, env_pubkey)
+                return comment
+            return ""
+        return obj.comment
+
     def get_tags(self, obj):
         return [tag.name for tag in obj.tags.all()]
 
     def get_override(self, obj):
-        # Assuming 'request' is passed to the context of the serializer.
         org_member = self.context.get("org_member")
         if org_member:
-
             try:
                 personal_secret = PersonalSecret.objects.get(
                     secret=obj, user=org_member
