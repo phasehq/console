@@ -11,18 +11,14 @@ from api.utils.secrets import decrypt_secret_value
 def get_environment_secrets(environment, path):
     """
     Decrypts and resolves key, value pairs in the given environment, at the given path.
-    If target_secret is provided, only that secret's (key,value) tuple is returned.
-    Otherwise, a list of (key, value) tuples is returned.
+    A list of (key, value) tuples is returned.
 
     Args:
-        environment: The environment instance.
-        path: The path string
-        target_secret (optional): Specific secret instance to return
+        environment (Environment): The environment instance.
+        path (str): The path string
 
     Returns:
-        key, value (tuple): A tuple containing the target secret key and value.
-        OR
-        [(key, value)]: A list of tuples containing all secrets' keys and values
+        List[Tuple[str, str]]: A list of tuples containing all secrets' keys and values
     """
 
     Secret = apps.get_model("api", "Secret")
@@ -33,10 +29,13 @@ def get_environment_secrets(environment, path):
 
     server_env_key = ServerEnvironmentKey.objects.get(environment_id=environment.id)
 
+    # Decrypt environment seed
     env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
 
+    # Compute environment keypair
     env_pubkey, env_privkey = env_keypair(env_seed)
 
+    # Get Secrets from DB
     secrets = Secret.objects.filter(
         environment=environment,
         path=path,
@@ -45,12 +44,7 @@ def get_environment_secrets(environment, path):
 
     kv_pairs = []
 
-    secrets = Secret.objects.filter(
-        environment=environment,
-        path=path,
-        deleted_at=None,
-    )
-
+    # Decrypt key and value for each secret
     for secret in secrets:
         key = decrypt_asymmetric(secret.key, env_privkey, env_pubkey)
         value = decrypt_secret_value(secret)

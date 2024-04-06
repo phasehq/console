@@ -34,6 +34,16 @@ def get_environment_keys(environment_id):
 
 
 def compute_key_digest(key, environment_id):
+    """
+    Computes a blake2b hash of the given key using a salt from the specified environment.
+
+    Args:
+        key (str): The secret key to be hashed.
+        environment_id (str): The ID of the environment, required to make sure the correct salt is used when hashing.
+
+    Returns:
+        key_digest (sstr): The blake2b-hashed output as a hex-encoded string.
+    """
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
 
     server_env_key = ServerEnvironmentKey.objects.get(environment_id=environment_id)
@@ -171,7 +181,15 @@ def check_for_duplicates_blind(secrets, environment):
 
 
 def decompose_path_and_key(composed_key):
-    # Determine the path and key name from the rest of the reference.
+    """
+    Splits the given composed key string into its path and key name components.
+
+    Args:
+        composed_key (str): The input composed key string to be decomposed.
+
+    Returns:
+        tuple: A tuple containing two strings, where the first string is the path component and the second string is the key name component.
+    """
     last_slash_index = composed_key.rfind("/")
     if last_slash_index != -1:
         path = composed_key[:last_slash_index]
@@ -187,20 +205,17 @@ def decrypt_secret_value(secret):
     """
     Decrypts the given secret's value and resolves all references.
 
-
     Args:
         secret (Secret): The secret instance to decrypt.
 
-
     Returns:
-        key, value (tuple): A tuple containing the target secret key and value.
-        OR
-        [(key, value)]: A list of tuples containing all secrets' keys and values
+        value (str): Decrypted secret value, with all local and cross env references replace inline.
     """
     Secret = apps.get_model("api", "Secret")
     Environment = apps.get_model("api", "Environment")
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
 
+    # Regex patterns to detect refernces
     cross_env_pattern = re.compile(r"\$\{(.+?)\.(.+?)\}")
     local_ref_pattern = re.compile(r"\$\{([^.]+?)\}")
 
@@ -212,14 +227,17 @@ def decrypt_secret_value(secret):
 
     app = server_env_key.environment.app
 
+    # Decrypt environment seed and salt
     env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
-
     env_salt = decrypt_asymmetric(server_env_key.wrapped_salt, sk.hex(), pk.hex())
 
+    # Compute environment keypair
     env_pubkey, env_privkey = env_keypair(env_seed)
 
+    # Decrypt secret value
     value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
 
+    # Resolve cross-env references
     cross_env_matches = re.findall(cross_env_pattern, value)
 
     for ref_env, ref_key in cross_env_matches:
@@ -264,7 +282,7 @@ def decrypt_secret_value(secret):
             )
             pass
 
-    # Handle local references
+    # Resolve local references
     local_ref_matches = re.findall(local_ref_pattern, value)
 
     for ref_key in local_ref_matches:
