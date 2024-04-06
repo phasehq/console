@@ -13,10 +13,11 @@ from api.utils.secrets import (
     check_for_duplicates_blind,
     create_environment_folder_structure,
     normalize_path_string,
+    compute_key_digest,
+    get_environment_keys,
 )
 from api.utils.audit_logging import log_secret_event
 from api.auth import PhaseTokenAuthentication
-from api.utils.syncing.secrets import compute_key_digest, get_environment_keys
 from api.utils.crypto import encrypt_asymmetric
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth.mixins import LoginRequiredMixin

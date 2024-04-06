@@ -1,5 +1,6 @@
-from api.utils.crypto import decrypt_asymmetric, env_keypair, get_server_keypair
-from api.utils.syncing.secrets import get_environment_keys, get_environment_secrets
+from api.utils.crypto import decrypt_asymmetric
+
+from api.utils.secrets import decrypt_secret_value, get_environment_keys
 from rest_framework import serializers
 from .models import (
     CustomUser,
@@ -71,22 +72,19 @@ class SecretSerializer(serializers.ModelSerializer):
     def get_key(self, obj):
         if self.context.get("sse"):
             env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
-
             key = decrypt_asymmetric(obj.key, env_privkey, env_pubkey)
-
             return key
         return obj.key
 
     def get_value(self, obj):
         if self.context.get("sse"):
-            _, v = get_environment_secrets(obj.environment, obj.path, obj)
-            return v
+            value = decrypt_secret_value(obj)
+            return value
         return obj.value
 
     def get_comment(self, obj):
         if self.context.get("sse"):
             env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
-
             if obj.comment:
                 comment = decrypt_asymmetric(obj.comment, env_privkey, env_pubkey)
                 return comment
