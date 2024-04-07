@@ -6,7 +6,7 @@ import { TrustedDeviceManager } from '@/components/settings/account/TrustedDevic
 import { ViewRecoveryDialog } from '@/components/settings/account/ViewRecoveryDialog'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
-import { PlanInfo } from '@/ee/components/settings/organisation/PlanInfo'
+import { PlanInfo } from '@/components/settings/organisation/PlanInfo'
 import { userIsAdmin } from '@/utils/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
