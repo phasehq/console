@@ -2,7 +2,7 @@ from django.apps import apps
 from django.utils import timezone
 
 PLAN_CONFIG = {
-    "FR": {"name": "Free", "max_users": 5, "max_apps": 3, "max_envs_per_app": 3},
+    "FR": {"name": "Free", "max_users": None, "max_apps": None, "max_envs_per_app": 3},
     "PR": {
         "name": "Pro",
         "max_users": None,
