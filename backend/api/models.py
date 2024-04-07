@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.conf import settings
 from api.services import Providers, ServiceConfig
 from api.tasks import trigger_sync_tasks
-from ee.quotas import can_add_app, can_add_environment, can_add_user
+from backend.quotas import can_add_app, can_add_environment, can_add_user
 
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
