@@ -1,21 +1,44 @@
 from django.apps import apps
 from django.utils import timezone
+from django.conf import settings
 
-PLAN_CONFIG = {
-    "FR": {"name": "Free", "max_users": None, "max_apps": None, "max_envs_per_app": 3},
-    "PR": {
-        "name": "Pro",
-        "max_users": None,
-        "max_apps": None,
-        "max_envs_per_app": 10,
-    },
-    "EN": {
-        "name": "Enterprise",
-        "max_users": None,
-        "max_apps": None,
-        "max_envs_per_app": None,
-    },
-}
+# Determine if the application is cloud-hosted based on the APP_HOST setting
+CLOUD_HOSTED = settings.APP_HOST == "cloud"
+
+# Adjust the PLAN_CONFIG based on whether the application is cloud-hosted
+if CLOUD_HOSTED:
+    PLAN_CONFIG = {
+        "FR": {"name": "Free", "max_users": 5, "max_apps": 3, "max_envs_per_app": 3},
+        "PR": {
+            "name": "Pro",
+            "max_users": None,
+            "max_apps": None,
+            "max_envs_per_app": 10,
+        },
+        "EN": {
+            "name": "Enterprise",
+            "max_users": None,
+            "max_apps": None,
+            "max_envs_per_app": None,
+        },
+    }
+else:
+    # If self-hosted remove all user and app limits
+    PLAN_CONFIG = {
+        "FR": {"name": "Free", "max_users": None, "max_apps": None, "max_envs_per_app": 3},
+        "PR": {
+            "name": "Pro",
+            "max_users": None,
+            "max_apps": None,
+            "max_envs_per_app": 10,
+        },
+        "EN": {
+            "name": "Enterprise",
+            "max_users": None,
+            "max_apps": None,
+            "max_envs_per_app": None,
+        },
+    }
 
 
 def can_add_app(organisation):
