@@ -21,8 +21,8 @@ const plansInfo = {
     name: 'Free',
     description: 'Try Phase without any commitments.',
     featureSummary: [
-      '5 Users',
-      '3 Apps',
+      isCloudHosted() ? '5 Users' : 'Unlimited Users',
+      isCloudHosted() ? '3 Apps' : 'Unlimited Apps',
       '3 Environments',
       'End-to-end Encryption',
       'Google/GitHub/Gitlab SSO',
