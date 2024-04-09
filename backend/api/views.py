@@ -625,6 +625,7 @@ class PublicSecretsView(APIView):
         env_pubkey, _ = get_environment_keys(env.id)
 
         for secret in secrets:
+            secret.pop("id", None)
             secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
             secret["key"] = encrypt_asymmetric(secret["key"].upper(), env_pubkey)
             secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
