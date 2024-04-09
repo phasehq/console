@@ -578,13 +578,11 @@ class PublicSecretsView(APIView):
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
-        # Filter by key digest (optional)
-        try:
-            key_digest = request.headers["keydigest"]
-            if key_digest:
-                secrets_filter["key_digest"] = key_digest
-        except:
-            pass
+        # Filter by key
+        key = request.GET.get("key")
+        if key:
+            key_digest = compute_key_digest(key, env.id)
+            secrets_filter["key_digest"] = key_digest
 
         # Filter by path
         path = request.GET.get("path")
