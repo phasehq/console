@@ -11,7 +11,7 @@ import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import {
   OrganisationMemberInviteType,
   OrganisationMemberType,
@@ -229,7 +229,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
     variables: { organisationId },
   })
-  const [createInvite, { error }] = useMutation(InviteMember)
+  const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
@@ -237,10 +237,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const [apps, setApps] = useState<Partial<AppType>[]>([])
 
   const [inviteLink, setInviteLink] = useState<string>('')
-
-  const roleOptions = Object.keys(ApiOrganisationMemberRoleChoices).filter(
-    (option) => option !== 'Owner'
-  )
+  const [errorMessage, setErrorMessage] = useState<string>('')
 
   const isLoading = appsLoading
 
@@ -248,6 +245,7 @@ const InviteDialog = (props: { organisationId: string }) => {
     setEmail('')
     setApps([])
     setInviteLink('')
+    setErrorMessage('')
   }
 
   const closeModal = () => {
@@ -262,6 +260,10 @@ const InviteDialog = (props: { organisationId: string }) => {
   const handleClose = () => {
     closeModal()
   }
+
+  useEffect(() => {
+    if (error) setErrorMessage(error.message)
+  }, [error])
 
   const handleInvite = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
@@ -280,6 +282,7 @@ const InviteDialog = (props: { organisationId: string }) => {
           },
         },
       ],
+      fetchPolicy: 'network-only',
     })
 
     setInviteLink(cryptoUtils.getInviteLink(data?.inviteOrganisationMember.invite.id))
@@ -367,9 +370,9 @@ const InviteDialog = (props: { organisationId: string }) => {
                       <div>
                         {!inviteLink && (
                           <form className="space-y-6 p-4" onSubmit={handleInvite}>
-                            {error && (
+                            {errorMessage && (
                               <Alert variant="danger" icon={true}>
-                                {error.message}
+                                {errorMessage}
                               </Alert>
                             )}
                             <div className="space-y-4">
@@ -408,7 +411,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                               <Button variant="secondary" type="button" onClick={closeModal}>
                                 Cancel
                               </Button>
-                              <Button variant="primary" type="submit">
+                              <Button variant="primary" type="submit" isLoading={mutationLoading}>
                                 Invite
                               </Button>
                             </div>
