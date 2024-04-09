@@ -578,6 +578,7 @@ class PublicSecretsView(APIView):
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
+        # Filter by key digest (optional)
         try:
             key_digest = request.headers["keydigest"]
             if key_digest:
@@ -585,13 +586,11 @@ class PublicSecretsView(APIView):
         except:
             pass
 
-        try:
-            path = request.GET.get("path")
-            if path:
-                path = normalize_path_string(path)
-                secrets_filter["path"] = path
-        except:
-            pass
+        # Filter by path
+        path = request.GET.get("path")
+        if path:
+            path = normalize_path_string(path)
+            secrets_filter["path"] = path
 
         secrets = Secret.objects.filter(**secrets_filter)
 
@@ -635,7 +634,10 @@ class PublicSecretsView(APIView):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
         for secret in secrets:
-            tags = SecretTag.objects.filter(id__in=secret["tags"])
+            tags = SecretTag.objects.filter(
+                name__in=secret["tags"],
+                organisation=request.auth["environment"].app.organisation,
+            )
 
             try:
                 path = normalize_path_string(secret["path"])
@@ -696,7 +698,10 @@ class PublicSecretsView(APIView):
         for secret in secrets:
             secret_obj = Secret.objects.get(id=secret["id"])
 
-            tags = SecretTag.objects.filter(id__in=secret["tags"])
+            tags = SecretTag.objects.filter(
+                name__in=secret["tags"],
+                organisation=request.auth["environment"].app.organisation,
+            )
 
             secret_data = {
                 "environment": env,
