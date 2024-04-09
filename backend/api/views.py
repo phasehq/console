@@ -635,10 +635,6 @@ class PublicSecretsView(APIView):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
         for secret in secrets:
-            tags = SecretTag.objects.filter(
-                name__in=secret["tags"],
-                organisation=request.auth["environment"].app.organisation,
-            )
 
             try:
                 path = normalize_path_string(secret["path"])
@@ -662,7 +658,14 @@ class PublicSecretsView(APIView):
             }
 
             secret_obj = Secret.objects.create(**secret_data)
-            secret_obj.tags.set(tags)
+
+            # Optionally set tags
+            if "tags" in secret:
+                tags = SecretTag.objects.filter(
+                    name__in=secret["tags"],
+                    organisation=request.auth["environment"].app.organisation,
+                )
+                secret_obj.tags.set(tags)
 
             log_secret_event(
                 secret_obj,
@@ -699,11 +702,6 @@ class PublicSecretsView(APIView):
         for secret in secrets:
             secret_obj = Secret.objects.get(id=secret["id"])
 
-            tags = SecretTag.objects.filter(
-                name__in=secret["tags"],
-                organisation=request.auth["environment"].app.organisation,
-            )
-
             secret_data = {
                 "environment": env,
                 "key": secret["key"],
@@ -728,8 +726,16 @@ class PublicSecretsView(APIView):
             for key, value in secret_data.items():
                 setattr(secret_obj, key, value)
 
+            # Optionally reset tags
+            if "tags" in secret:
+                tags = SecretTag.objects.filter(
+                    name__in=secret["tags"],
+                    organisation=request.auth["environment"].app.organisation,
+                )
+                secret_obj.tags.set(tags)
+
             secret_obj.updated_at = timezone.now()
-            secret_obj.tags.set(tags)
+
             secret_obj.save()
 
             log_secret_event(
