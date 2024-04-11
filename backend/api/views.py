@@ -562,6 +562,9 @@ class E2EESecretsView(APIView):
 class PublicSecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated]
+    renderer_classes = [
+        CamelCaseJSONRenderer,
+    ]
 
     @csrf_exempt
     def dispatch(self, request, *args):
