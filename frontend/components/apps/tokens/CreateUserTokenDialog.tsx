@@ -1,3 +1,5 @@
+'use client'
+
 import { Button } from '@/components/common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { getUserKxPublicKey, getUserKxPrivateKey } from '@/utils/crypto'
@@ -15,7 +17,7 @@ import { Alert } from '@/components/common/Alert'
 import CopyButton from '@/components/common/CopyButton'
 import { CliCommand } from '@/components/dashboard/CliCommand'
 import Link from 'next/link'
-import { apiHost } from '@/utils/appConfig'
+import { getApiHost } from '@/utils/appConfig'
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
@@ -243,7 +245,7 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                                 </div>
                                 <CliCommand
                                   prefix="curl"
-                                  command={`--request GET --url '${apiHost}/secrets?app_id=\${appId}&env=development' --header 'Authorization: ${apiUserToken}'`}
+                                  command={`--request GET --url '${getApiHost()}/secrets?app_id=\${appId}&env=development' --header 'Authorization: ${apiUserToken}'`}
                                 />
                               </div>
                             </div>

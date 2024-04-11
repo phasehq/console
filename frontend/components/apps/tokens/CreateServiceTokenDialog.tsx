@@ -1,3 +1,5 @@
+'use client'
+
 import { EnvironmentType } from '@/apollo/graphql'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
@@ -24,7 +26,7 @@ import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments
 import { CreateNewServiceToken } from '@/graphql/mutations/environments/createServiceToken.gql'
 import Link from 'next/link'
 import { ExpiryOptionT, humanReadableExpiry, tokenExpiryOptions } from '@/utils/tokens'
-import { apiHost } from '@/utils/appConfig'
+import { getApiHost } from '@/utils/appConfig'
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
@@ -335,7 +337,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                                 </div>
                                 <CliCommand
                                   prefix="curl"
-                                  command={`--request GET --url '${apiHost}/secrets?app_id=${appId}&env=development' --header 'Authorization: ${apiServiceToken}'`}
+                                  command={`--request GET --url '${getApiHost()}/secrets?app_id=${appId}&env=development' --header 'Authorization: ${apiServiceToken}'`}
                                 />
                               </div>
                             </div>
