@@ -53,9 +53,19 @@ class OrganisationSerializer(serializers.ModelSerializer):
 
 
 class PersonalSecretSerializer(serializers.ModelSerializer):
+    value = serializers.SerializerMethodField()
+
     class Meta:
         model = PersonalSecret
-        fields = "__all__"
+        exclude = ["secret", "user", "deleted_at"]
+
+    def get_value(self, obj):
+        if self.context.get("sse"):
+            secret_obj = obj.secret
+            secret_obj.value = obj.value
+            value = decrypt_secret_value(secret_obj)
+            return value
+        return obj.value
 
 
 class SecretSerializer(serializers.ModelSerializer):
@@ -67,7 +77,7 @@ class SecretSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Secret
-        fields = "__all__"
+        exclude = ["deleted_at"]
 
     def get_key(self, obj):
         if self.context.get("sse"):
@@ -101,7 +111,9 @@ class SecretSerializer(serializers.ModelSerializer):
                 personal_secret = PersonalSecret.objects.get(
                     secret=obj, user=org_member
                 )
-                return PersonalSecretSerializer(personal_secret).data
+                return PersonalSecretSerializer(
+                    personal_secret, context={"sse": True}
+                ).data
             except PersonalSecret.DoesNotExist:
                 return None
         return None
