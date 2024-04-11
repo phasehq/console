@@ -161,8 +161,13 @@ class UserTokenSerializer(serializers.ModelSerializer):
                 app_data = {
                     "id": key.environment.app.id,
                     "name": key.environment.app.name,
-                    "encryption": "E2E",  # Adding encryption to each app
+                    "encryption": "E2E",
                 }
+
+                if ServerEnvironmentKey.objects.filter(
+                    environment=key.environment
+                ).exists():
+                    app_data["encryption"] = "SSE"
 
                 if index == -1:
                     app_data["environment_keys"] = [serializer.data]
