@@ -27,18 +27,20 @@ export default function Syncing({ params }: { params: { team: string; app: strin
 
   return (
     <div className="w-full space-y-8 pt-8 text-black dark:text-white">
-      {data?.syncEnabled === false && (
-        <div className="flex flex-col gap-4 h-96 items-center justify-center">
+      {data?.sseEnabled === false && (
+        <div className="flex flex-col gap-4 h-96 max-w-screen-md mx-auto items-center justify-center">
           <div className="space-y-1 text-center">
-            <div className="text-black dark:text-white text-3xl font-semibold">Enable syncing</div>
-            <div className="text-neutral-500 text-lg">
-              Syncing is not yet enabled for this app. Click the button below to enable syncing.
-            </div>
+            <div className="text-black dark:text-white text-3xl font-semibold">Enable SSE</div>
+            <p className="text-neutral-500 text-lg">
+              Server-side encryption (SSE) is not yet enabled for this app. SSE is required to allow
+              automatic syncing of secrets.
+            </p>
+            <p className="text-neutral-500 text-lg">Click the button below to enable SSE</p>
           </div>
           <EnableSSEDialog appId={params.app} />
         </div>
       )}
-      {data?.syncEnabled === true && (
+      {data?.sseEnabled === true && (
         <>
           {data.syncs && data.syncs.length > 0 && (
             <div className="flex flex-col gap-4 border-b border-neutral-500/40 pb-8">
