@@ -223,7 +223,9 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                           </div>
                           <ul className="text-neutral-500 text-sm list-inside list-disc">
                             {envScope.map((env) => (
-                              <li key={env.id}>{env.name}</li>
+                              <li className="font-semibold" key={env.id}>
+                                {env.name}
+                              </li>
                             ))}
                           </ul>
                         </div>
