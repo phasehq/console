@@ -12,17 +12,22 @@ from rest_framework import authentication, exceptions
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
 
+        token_types = ["User", "Service"]
+
         auth_token = request.headers.get("Authorization")
 
         if not auth_token:
             return None  # No authentication attempted
 
+        token_type = get_token_type(auth_token)
+
+        if token_type not in token_types:
+            raise exceptions.AuthenticationFailed("Invalid token")
+
         auth = {"token": auth_token, "org_member": None, "service_token": None}
 
         if token_is_expired_or_deleted(auth_token):
             raise exceptions.AuthenticationFailed("Token expired or deleted")
-
-        token_type = get_token_type(auth_token)
 
         env_id = request.headers.get("environment")
 
