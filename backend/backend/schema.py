@@ -9,7 +9,7 @@ from .graphene.queries.syncing import (
     resolve_server_public_key,
     resolve_providers,
     resolve_services,
-    resolve_sync_enabled,
+    resolve_sse_enabled,
     resolve_saved_credentials,
     resolve_cloudflare_pages_projects,
     resolve_syncs,
@@ -194,7 +194,7 @@ class Query(graphene.ObjectType):
 
     server_public_key = graphene.String()
 
-    sync_enabled = graphene.Boolean(app_id=graphene.ID())
+    sse_enabled = graphene.Boolean(app_id=graphene.ID())
 
     providers = graphene.List(ProviderType)
 
@@ -232,7 +232,7 @@ class Query(graphene.ObjectType):
 
     resolve_server_public_key = resolve_server_public_key
 
-    resolve_sync_enabled = resolve_sync_enabled
+    resolve_sse_enabled = resolve_sse_enabled
 
     resolve_providers = resolve_providers
 

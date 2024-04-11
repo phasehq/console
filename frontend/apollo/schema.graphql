@@ -21,7 +21,7 @@ type Query {
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
   serverPublicKey: String
-  syncEnabled(appId: ID): Boolean
+  sseEnabled(appId: ID): Boolean
   providers: [ProviderType]
   services: [ServiceType]
   savedCredentials(orgId: ID): [ProviderCredentialsType]
@@ -121,7 +121,7 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
-  syncEnabled: Boolean
+  sseEnabled: Boolean
 }
 
 """An enumeration."""

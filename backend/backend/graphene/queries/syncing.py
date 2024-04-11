@@ -28,7 +28,7 @@ def resolve_server_public_key(root, info):
     return pk.hex()
 
 
-def resolve_sync_enabled(root, info, app_id):
+def resolve_sse_enabled(root, info, app_id):
     if not user_can_access_app(info.context.user.userId, app_id):
         raise GraphQLError("You don't have access to this app")
 

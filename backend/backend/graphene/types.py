@@ -145,7 +145,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
 
 
 class AppType(DjangoObjectType):
-    sync_enabled = graphene.Boolean()
+    sse_enabled = graphene.Boolean()
 
     class Meta:
         model = App
@@ -160,7 +160,7 @@ class AppType(DjangoObjectType):
             "app_version",
         )
 
-    def resolve_sync_enabled(self, info):
+    def resolve_sse_enabled(self, info):
         app_envs = Environment.objects.filter(app=self).values_list("id")
         return ServerEnvironmentKey.objects.filter(environment_id__in=app_envs).exists()
 

@@ -7,5 +7,6 @@ query GetAppDetail($organisationId: ID!, $appId: ID!) {
     appToken
     appSeed
     appVersion
+    sseEnabled
   }
 }

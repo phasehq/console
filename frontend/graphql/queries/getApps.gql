@@ -4,6 +4,6 @@ query GetApps($organisationId: ID!, $appId: ID) {
     name
     identityKey
     createdAt
-    syncEnabled
+    sseEnabled
   }
 }
