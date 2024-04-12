@@ -74,8 +74,8 @@ export default function UserTokens({ params }: { params: { team: string } }) {
       <>
         <div className="flex items-center justify-center">
           <Button variant="danger" onClick={openModal} title="Delete Token">
-            <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-              <FaTrashAlt />
+            <div className="text-white dark:text-red-500 flex items-center gap-1">
+              <FaTrashAlt /> Revoke
             </div>
           </Button>
         </div>
@@ -154,7 +154,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
       <div className="flex items-center w-full justify-between p-2 group bg-neutral-100 dark:bg-neutral-800 rounded-lg ring-1 ring-inset ring-neutral-500/20">
         <div className="grid grid-cols-3 gap-8 w-full">
           <div className="flex items-center gap-4">
-            <FaUserShield className="text-emerald-500 text-lg" />
+            <FaUserShield className="text-neutral-500 text-2xl" />
             <div className="space-y-0">
               <div className="text-lg font-medium">{token.name}</div>
               <div className="flex items-center gap-8 text-sm text-neutral-500">

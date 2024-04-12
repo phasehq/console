@@ -1,7 +1,5 @@
 import { RevokeServiceToken } from '@/graphql/mutations/environments/deleteServiceToken.gql'
-
 import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
-
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { EnvironmentType, ServiceTokenType, UserTokenType } from '@/apollo/graphql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
@@ -10,13 +8,12 @@ import { Button } from '@/components/common/Button'
 import { FaKey, FaTimes, FaTrashAlt } from 'react-icons/fa'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
-import { copyToClipBoard } from '@/utils/clipboard'
-import { toast } from 'react-toastify'
 import clsx from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userIsAdmin } from '@/utils/permissions'
 import { Avatar } from '@/components/common/Avatar'
 import { CreateServiceTokenDialog } from './CreateServiceTokenDialog'
+import { MdKey } from 'react-icons/md'
 
 export const SecretTokens = (props: { organisationId: string; appId: string }) => {
   const { organisationId, appId } = props
@@ -72,8 +69,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
       <>
         <div className="flex items-center justify-center">
           <Button variant="danger" onClick={openModal} title="Delete Token">
-            <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-              <FaTrashAlt />
+            <div className="text-white dark:text-red-500 flex items-center gap-1">
+              <FaTrashAlt /> Revoke
             </div>
           </Button>
         </div>
@@ -164,7 +161,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
     return (
       <div className="flex items-center w-full justify-between p-2 group bg-neutral-100 dark:bg-neutral-800 rounded-lg ring-1 ring-inset ring-neutral-500/20">
         <div className="flex items-center gap-4">
-          <FaKey className="text-emerald-500 text-lg" />
+          <MdKey className="text-neutral-500 text-3xl" />
           <div className="space-y-0">
             <div className="text-lg font-medium">{token.name}</div>
             <div className="flex items-center gap-8 text-sm text-neutral-500">
