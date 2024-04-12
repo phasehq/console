@@ -35,7 +35,8 @@ const SidebarLink = (props: SidebarLinkT) => {
       <div
         className={clsx(
           'flex items-center gap-2 hover:text-emerald-500 text-sm font-medium rounded-md p-2 w-full',
-          active && 'bg-neutral-300 dark:bg-neutral-800'
+          active &&
+            'bg-neutral-300 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-1 dark:ring-inset dark:ring-emerald-400/20'
         )}
       >
         <div>{icon}</div>
@@ -159,7 +160,7 @@ const Sidebar = () => {
 
   return (
     <div className="h-screen flex flex-col pt-[64px] w-72">
-      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/30 dark:bg-neutral-900/30 text-black dark:text-white">
+      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/70 dark:bg-neutral-800/20 text-black dark:text-white">
         <div className="gap-4 p-4 grid grid-cols-1 w-full">
           <OrgsMenu />
 
