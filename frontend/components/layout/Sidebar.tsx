@@ -34,9 +34,10 @@ const SidebarLink = (props: SidebarLinkT) => {
     <Link href={href} title={name}>
       <div
         className={clsx(
-          'flex items-center gap-2 hover:text-emerald-500 text-sm font-medium rounded-md p-2 w-full',
-          active &&
-            'bg-neutral-300 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-1 dark:ring-inset dark:ring-emerald-400/20'
+          'flex items-center gap-2  text-sm font-medium rounded-lg p-2 w-full',
+          active
+            ? 'bg-zinc-200 dark:bg-emerald-400/10 text-black dark:text-emerald-400 dark:ring-1 dark:ring-inset dark:ring-emerald-400/20'
+            : 'text-zinc-700 dark:text-zinc-200 hover:text-emerald-500 dark:hover:text-emerald-500'
         )}
       >
         <div>{icon}</div>
