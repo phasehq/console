@@ -1,8 +1,18 @@
 from django.apps import apps
 from django.utils import timezone
+from django.conf import settings
 
+# Determine if the application is cloud-hosted based on the APP_HOST setting
+CLOUD_HOSTED = settings.APP_HOST == "cloud"
+
+# Adjust the PLAN_CONFIG based on whether the application is cloud-hosted
 PLAN_CONFIG = {
-    "FR": {"name": "Free", "max_users": 5, "max_apps": 3, "max_envs_per_app": 3},
+    "FR": {
+        "name": "Free",
+        "max_users": 5 if CLOUD_HOSTED else None,
+        "max_apps": 3 if CLOUD_HOSTED else None,
+        "max_envs_per_app": 3,
+    },
     "PR": {
         "name": "Pro",
         "max_users": None,

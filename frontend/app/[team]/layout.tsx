@@ -58,7 +58,6 @@ export default function RootLayout({
         showNav && 'grid-cols-[max-content_1fr]'
       )}
     >
-      <HeroPattern />
       {activeOrganisation && <UnlockKeyringDialog organisation={activeOrganisation} />}
       {showNav && <NavBar team={params.team} />}
       {showNav && <Sidebar />}

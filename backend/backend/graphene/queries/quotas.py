@@ -1,6 +1,6 @@
 from api.utils.permissions import user_is_org_member
 from api.models import App, Organisation, OrganisationMember, OrganisationMemberInvite
-from ee.quotas import PLAN_CONFIG
+from backend.quotas import PLAN_CONFIG
 from django.utils import timezone
 
 

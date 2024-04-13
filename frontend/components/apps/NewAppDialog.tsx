@@ -363,12 +363,20 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   }
 
   const allowNewApp = () => {
-    if (organisation.plan === ApiOrganisationPlanChoices.Fr) {
-      return appCount < FREE_APP_LIMIT
-    } else if (organisation.plan === ApiOrganisationPlanChoices.Pr) {
-      return appCount < PRO_APP_LIMIT
-    } else if (organisation.plan === ApiOrganisationPlanChoices.En) return true
-  }
+    // Only apply application limits in Phase Cloud
+    if (isCloudHosted()) {
+      if (organisation.plan === ApiOrganisationPlanChoices.Fr) {
+        return appCount < FREE_APP_LIMIT;
+      } else if (organisation.plan === ApiOrganisationPlanChoices.Pr) {
+        return appCount < PRO_APP_LIMIT;
+      } else if (organisation.plan === ApiOrganisationPlanChoices.En) {
+        return true;
+      }
+    } else {
+      // No application limits on self-hosted
+      return true;
+    }
+  };
 
   const planDisplay = () => {
     if (organisation.plan === ApiOrganisationPlanChoices.Fr)
