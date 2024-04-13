@@ -24,7 +24,7 @@ urlpatterns = [
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     path("493c5048-99f9-4eac-ad0d-98c3740b491f/health", health_check),
     path("secrets/", E2EESecretsView.as_view()),
-    path("public/secrets/", PublicSecretsView.as_view()),
+    path("public/v1/secrets/", PublicSecretsView.as_view()),
     path("secrets/tokens/", secrets_tokens),
     path("oauth/github/callback", github_callback),
     path("lockbox/<box_id>", LockboxView.as_view()),
