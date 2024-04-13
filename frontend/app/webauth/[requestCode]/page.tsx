@@ -263,7 +263,6 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
   return (
     <div className="flex h-screen w-full px-4">
-      <HeroPattern />
       <OnboardingNavbar />
 
       {status == 'validating' && (
