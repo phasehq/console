@@ -575,7 +575,7 @@ class PublicSecretsView(APIView):
 
         # Check if SSE is enabled for this environment
         if not ServerEnvironmentKey.objects.filter(environment=env).exists():
-            return HttpResponse(status=404)
+            return Response({"error": "SSE is not enabled for this App"}, status=400)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -616,6 +616,10 @@ class PublicSecretsView(APIView):
     def post(self, request):
 
         env = request.auth["environment"]
+
+        # Check if SSE is enabled for this environment
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            return Response({"error": "SSE is not enabled for this App"}, status=400)
 
         request_body = json.loads(request.body)
 
@@ -688,6 +692,10 @@ class PublicSecretsView(APIView):
     def put(self, request):
 
         env = request.auth["environment"]
+
+        # Check if SSE is enabled for this environment
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            return Response({"error": "SSE is not enabled for this App"}, status=400)
 
         request_body = json.loads(request.body)
 
@@ -778,6 +786,12 @@ class PublicSecretsView(APIView):
         )
 
     def delete(self, request):
+
+        env = request.auth["environment"]
+
+        # Check if SSE is enabled for this environment
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            return Response({"error": "SSE is not enabled for this App"}, status=400)
 
         request_body = json.loads(request.body)
 
