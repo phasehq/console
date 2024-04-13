@@ -630,7 +630,11 @@ class PublicSecretsView(APIView):
             secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
             secret["key"] = encrypt_asymmetric(secret["key"].upper(), env_pubkey)
             secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
-            secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
+
+            if "comment" in secret:
+                secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
+            else:
+                secret["comment"] = ""
 
         if check_for_duplicates_blind(secrets, env):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
@@ -677,7 +681,9 @@ class PublicSecretsView(APIView):
                 user_agent,
             )
 
-        return Response(status=status.HTTP_200_OK)
+        return Response(
+            {"message": f"Created {len(secrets)} secrets"}, status=status.HTTP_200_OK
+        )
 
     def put(self, request):
 
@@ -692,16 +698,35 @@ class PublicSecretsView(APIView):
         env_pubkey, _ = get_environment_keys(env.id)
 
         for secret in secrets:
-            secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
-            secret["key"] = encrypt_asymmetric(secret["key"].upper(), env_pubkey)
-            secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
-            secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
+            # make sure all secrets have an id
+            if "id" not in secret:
+                return JsonResponse({"error": "Secret id not provided"}, status=400)
 
-        if check_for_duplicates_blind(secrets, env):
-            return JsonResponse({"error": "Duplicate secret found"}, status=409)
+            # if a secret key is being updated, encrypt the key, compute digest, and check for duplicates
+            if "key" in secret:
+                secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
+                secret["key"] = encrypt_asymmetric(secret["key"].upper(), env_pubkey)
+
+                if check_for_duplicates_blind(secrets, env):
+                    return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
         for secret in secrets:
+
             secret_obj = Secret.objects.get(id=secret["id"])
+
+            if "key" not in secret:
+                secret["key"] = secret_obj.key
+                secret["keyDigest"] = secret_obj.key_digest
+
+            if "value" in secret:
+                secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
+            else:
+                secret["value"] = secret_obj.value
+
+            if "comment" in secret:
+                secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
+            else:
+                secret["comment"] = secret_obj.comment
 
             secret_data = {
                 "environment": env,
@@ -748,7 +773,9 @@ class PublicSecretsView(APIView):
                 user_agent,
             )
 
-        return Response(status=status.HTTP_200_OK)
+        return Response(
+            {"message": f"Updated {len(secrets)} secrets"}, status=status.HTTP_200_OK
+        )
 
     def delete(self, request):
 
@@ -783,7 +810,10 @@ class PublicSecretsView(APIView):
                 user_agent,
             )
 
-        return Response(status=status.HTTP_200_OK)
+        return Response(
+            {"message": f"Deleted {len(secrets_to_delete)} secrets"},
+            status=status.HTTP_200_OK,
+        )
 
 
 class LockboxView(APIView):
