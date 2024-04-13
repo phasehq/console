@@ -158,7 +158,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
       })
 
       setCliServiceToken(pssService)
-      setApiServiceToken(`Bearer Service ${token}`)
+      setApiServiceToken(`Service ${token}`)
     }
   }
 

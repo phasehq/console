@@ -85,7 +85,7 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
       })
 
       setCliUserToken(pssUser)
-      setApiUserToken(`Bearer User ${mutationPayload.token}`)
+      setApiUserToken(`User ${mutationPayload.token}`)
     } else {
       console.log('keyring unavailable')
     }
