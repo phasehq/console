@@ -25,7 +25,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
   const { keyring } = useContext(KeyringContext)
 
   const { data } = useQuery(GetServerKey)
-  const [enableSyncing, { loading }] = useMutation(InitAppSyncing)
+  const [enableSse, { loading }] = useMutation(InitAppSyncing)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
@@ -44,7 +44,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
     setIsOpen(true)
   }
 
-  const handleEnableSyncing = async (e: { preventDefault: () => void }) => {
+  const handleEnableSse = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
     const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
@@ -85,7 +85,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
     const envKeyInputs = await Promise.all(envKeyPromises)
 
     toast.promise(
-      enableSyncing({
+      enableSse({
         variables: { appId, envKeys: envKeyInputs },
         refetchQueries: [
           {
@@ -99,8 +99,8 @@ export const EnableSSEDialog = (props: { appId: string }) => {
         ],
       }),
       {
-        pending: 'Enabling syncing...',
-        success: 'Syncing enabled for this App!',
+        pending: 'Enabling SSE...',
+        success: 'SSE enabled for this App!',
       }
     )
   }
@@ -149,7 +149,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
                     </Button>
                   </Dialog.Title>
 
-                  <form className="space-y-6 py-4" onSubmit={handleEnableSyncing}>
+                  <form className="space-y-6 py-4" onSubmit={handleEnableSse}>
                     <p className="text-neutral-500">
                       Server-side encryption must be enabled for this App if you want to:
                     </p>

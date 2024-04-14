@@ -11,6 +11,7 @@ import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaLock, FaServer } from 'react-icons/fa'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
+import { EncryptionModeIndicator } from '@/components/apps/EncryptionModeIndicator'
 
 export default function AppLayout({
   params,
@@ -93,17 +94,7 @@ export default function AppLayout({
         <div className="flex items-center gap-2 pb-8">
           <h1 className="text-3xl font-bold">{app.name}</h1>
 
-          {app.sseEnabled ? (
-            <div className="rounded-full px-2 text-xs font-semibold flex items-center gap-2 ring-1 ring-inset ring-sky-400/40 text-sky-500">
-              <FaServer />
-              SSE
-            </div>
-          ) : (
-            <div className="rounded-full px-2 text-xs font-semibold flex items-center gap-2 ring-1 ring-inset ring-emerald-400/40 text-emerald-500">
-              <FaArrowDownUpLock />
-              E2EE
-            </div>
-          )}
+          <EncryptionModeIndicator app={app} />
         </div>
       )}
 
