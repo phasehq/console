@@ -3,10 +3,9 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Menu, Transition } from '@headlessui/react'
 import Link from 'next/link'
 import { Fragment, useContext } from 'react'
-import { FaServer } from 'react-icons/fa'
+import { FaCog, FaServer } from 'react-icons/fa'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { Button } from '../common/Button'
-import { close } from 'fs'
 import clsx from 'clsx'
 
 export const EncryptionModeIndicator = (props: { app: AppType }) => {
@@ -43,29 +42,33 @@ export const EncryptionModeIndicator = (props: { app: AppType }) => {
             <Menu.Item>
               {({ close }) => (
                 <div className="space-y-2 text-sm">
-                  <div className="uppercase text-xs tracking-widest text-neutral-500">
-                    App encryption mode
+                  <div className="flex items-center justify-between">
+                    <div className="uppercase text-xs tracking-widest text-neutral-500">
+                      App encryption mode
+                    </div>
+                    {app.sseEnabled ? (
+                      <div className="rounded-full px-2 text-xs font-semibold flex items-center gap-2 ring-1 ring-inset ring-sky-400/40 text-sky-500 bg-sky-400/10">
+                        <div>SSE</div>
+                      </div>
+                    ) : (
+                      <div className="rounded-full px-2 text-xs font-semibold flex items-center gap-2 ring-1 ring-inset ring-emerald-400/40 text-emerald-500 bg-emerald-400/10">
+                        <div>E2EE</div>
+                      </div>
+                    )}
                   </div>
+
                   <div className="text-black dark:text-white">
                     This App is secured with{' '}
-                    <span className={clsx(app.sseEnabled ? 'text-sky-500' : ' text-emerald-500')}>
+                    <span className="font-medium">
                       {app.sseEnabled ? 'Server-side encryption' : 'End-to-end encryption'}
                     </span>
+                    .
                   </div>
-                  {app.sseEnabled ? (
-                    <div className="flex items-center px-2 py-1 gap-2 text-sky-500 font-medium bg-sky-400/10 ring-1 ring-inset ring-sky-400/20 rounded-lg">
-                      <FaServer />
-                      <div>SSE enabled</div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center px-2 py-1 gap-2 text-emerald-500 font-medium bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20 rounded-lg">
-                      <FaArrowDownUpLock />
-                      <div>E2EE enabled</div>
-                    </div>
-                  )}
+
                   <div className="flex justify-end">
                     <Link href={`/${organisation?.name}/apps/${app.id}/settings`} onClick={close}>
                       <Button variant="outline">
+                        <FaCog />
                         <span className="text-xs">Manage</span>
                       </Button>
                     </Link>
