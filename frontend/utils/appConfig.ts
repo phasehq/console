@@ -7,7 +7,5 @@ export const isCloudHosted = () => {
 export const getHostname = () => `${window.location.protocol}//${window.location.host}`
 
 export const getApiHost = () => {
-  return window.location.host === 'cloud.phase.dev'
-    ? 'https://api.phase.dev'
-    : `${getHostname()}/service/public`
+  return isCloudHosted() ? 'https://api.phase.dev' : `${getHostname()}/service/public`
 }

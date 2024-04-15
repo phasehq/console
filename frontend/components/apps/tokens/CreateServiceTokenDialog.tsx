@@ -330,7 +330,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                                     Example with <code>curl</code>
                                   </div>
                                   <Link
-                                    href="https://docs.phase.dev"
+                                    href="https://docs.phase.dev/public-api"
                                     target="_blank"
                                     rel="noreferrer"
                                   >
@@ -339,7 +339,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                                 </div>
                                 <CliCommand
                                   prefix="curl"
-                                  command={`--request GET --url '${getApiHost()}/secrets?app_id=${appId}&env=development' --header 'Authorization: ${apiServiceToken}'`}
+                                  command={`--request GET --url '${getApiHost()}/v1/secrets?app_id=${appId}&env=development' --header 'Authorization: ${apiServiceToken}'`}
                                 />
                               </div>
                             </div>
