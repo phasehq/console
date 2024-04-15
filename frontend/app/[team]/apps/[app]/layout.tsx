@@ -9,6 +9,9 @@ import { AppType } from '@/apollo/graphql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
+import { FaLock, FaServer } from 'react-icons/fa'
+import { FaArrowDownUpLock } from 'react-icons/fa6'
+import { EncryptionModeIndicator } from '@/components/apps/EncryptionModeIndicator'
 
 export default function AppLayout({
   params,
@@ -90,6 +93,8 @@ export default function AppLayout({
       {app && (
         <div className="flex items-center gap-2 pb-8">
           <h1 className="text-3xl font-bold">{app.name}</h1>
+
+          <EncryptionModeIndicator app={app} />
         </div>
       )}
 

@@ -1,3 +1,6 @@
+from api.utils.crypto import decrypt_asymmetric
+
+from api.utils.secrets import decrypt_secret_value, get_environment_keys
 from rest_framework import serializers
 from .models import (
     CustomUser,
@@ -6,6 +9,7 @@ from .models import (
     Lockbox,
     Organisation,
     Secret,
+    ServerEnvironmentKey,
     ServiceToken,
     UserToken,
     PersonalSecret,
@@ -49,32 +53,67 @@ class OrganisationSerializer(serializers.ModelSerializer):
 
 
 class PersonalSecretSerializer(serializers.ModelSerializer):
+    value = serializers.SerializerMethodField()
+
     class Meta:
         model = PersonalSecret
-        fields = "__all__"
+        exclude = ["secret", "user", "deleted_at"]
+
+    def get_value(self, obj):
+        if self.context.get("sse"):
+            secret_obj = obj.secret
+            secret_obj.value = obj.value
+            value = decrypt_secret_value(secret_obj)
+            return value
+        return obj.value
 
 
 class SecretSerializer(serializers.ModelSerializer):
+    key = serializers.SerializerMethodField()
+    value = serializers.SerializerMethodField()
+    comment = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
 
     class Meta:
         model = Secret
-        fields = "__all__"
+        exclude = ["deleted_at"]
+
+    def get_key(self, obj):
+        if self.context.get("sse"):
+            env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+            key = decrypt_asymmetric(obj.key, env_privkey, env_pubkey)
+            return key
+        return obj.key
+
+    def get_value(self, obj):
+        if self.context.get("sse"):
+            value = decrypt_secret_value(obj)
+            return value
+        return obj.value
+
+    def get_comment(self, obj):
+        if self.context.get("sse"):
+            env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+            if obj.comment:
+                comment = decrypt_asymmetric(obj.comment, env_privkey, env_pubkey)
+                return comment
+            return ""
+        return obj.comment
 
     def get_tags(self, obj):
         return [tag.name for tag in obj.tags.all()]
 
     def get_override(self, obj):
-        # Assuming 'request' is passed to the context of the serializer.
         org_member = self.context.get("org_member")
         if org_member:
-
             try:
                 personal_secret = PersonalSecret.objects.get(
                     secret=obj, user=org_member
                 )
-                return PersonalSecretSerializer(personal_secret).data
+                return PersonalSecretSerializer(
+                    personal_secret, context={"sse": True}
+                ).data
             except PersonalSecret.DoesNotExist:
                 return None
         return None
@@ -134,8 +173,13 @@ class UserTokenSerializer(serializers.ModelSerializer):
                 app_data = {
                     "id": key.environment.app.id,
                     "name": key.environment.app.name,
-                    "encryption": "E2E",  # Adding encryption to each app
+                    "encryption": "E2E",
                 }
+
+                if ServerEnvironmentKey.objects.filter(
+                    environment=key.environment
+                ).exists():
+                    app_data["encryption"] = "SSE"
 
                 if index == -1:
                     app_data["environment_keys"] = [serializer.data]

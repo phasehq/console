@@ -6,7 +6,11 @@ import { AppType } from '@/apollo/graphql'
 import { useContext } from 'react'
 import DeleteAppDialog from '@/components/apps/DeleteAppDialog'
 import { organisationContext } from '@/contexts/organisationContext'
-import { FaCube } from 'react-icons/fa'
+import { FaCheckCircle, FaCube, FaServer } from 'react-icons/fa'
+import CopyButton from '@/components/common/CopyButton'
+import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
+import Link from 'next/link'
+import { FaArrowDownUpLock } from 'react-icons/fa6'
 
 export default function AppSettings({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -43,11 +47,73 @@ export default function AppSettings({ params }: { params: { team: string; app: s
                 <div className="text-base ">Created</div>
                 <span>{readableDate}</span>
               </div>
-              <span className="text-neutral-500 text-sm">{app.id}</span>
+              <div className="flex items-center gap-4 group relative">
+                <span className="text-neutral-500 text-sm font-mono">{app.id}</span>
+                <CopyButton value={app.id} />
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {app && (
+        <div className="space-y-6 py-4">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-semibold text-black dark:text-white">Encryption</h2>
+            <p className="text-neutral-500">Manage the encryption mode used for this App</p>
+          </div>
+
+          {app.sseEnabled ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div>
+                  <div className="text-lg font-semibold text-black dark:text-white">
+                    Server-side encryption (SSE)
+                  </div>
+                  <div className="text-neutral-500">
+                    Server-side encryption is enabled for this App. This allows the server to access
+                    secrets for automatic syncing with third-party{' '}
+                    <Link
+                      className="text-emerald-500"
+                      href={`/${params.team}/apps/${params.app}/syncing`}
+                    >
+                      integrations
+                    </Link>{' '}
+                    and API access.
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center p-4 gap-2 text-sky-500 font-medium bg-sky-400/10 ring-1 ring-inset ring-sky-400/20 rounded-lg">
+                <FaServer className="text-xl" />
+                <div>Server-side encryption enabled</div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center p-4 gap-2 text-emerald-500 font-medium bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20 rounded-lg">
+                <FaArrowDownUpLock className="text-xl" />
+                <div>End-to-end encryption enabled</div>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <div className="text-lg font-semibold text-black dark:text-white">
+                    Server-side encryption (SSE)
+                  </div>
+                  <div className="text-neutral-500">
+                    Server-side encryption is required to allow automatic syncing of secrets, or
+                    accessing secrets over the API. Click the button below to enable SSE.
+                  </div>
+                </div>
+
+                <div className="flex justify-start">
+                  <EnableSSEDialog appId={params.app} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="space-y-6 py-4">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold text-black dark:text-white">Danger Zone</h2>

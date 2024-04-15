@@ -103,7 +103,9 @@ def generic_sync_task(
             .first()
         )
 
-        kv_pairs = get_environment_secrets(environment_sync)
+        kv_pairs = get_environment_secrets(
+            environment_sync.environment, environment_sync.path
+        )
         if environment_sync.authentication is None:
             sync_data = (
                 False,
@@ -171,7 +173,9 @@ def perform_cloudflare_pages_sync(environment_sync):
             .first()
         )
 
-        kv_pairs = get_environment_secrets(environment_sync)
+        kv_pairs = get_environment_secrets(
+            environment_sync.environment, environment_sync.path
+        )
 
         if environment_sync.authentication is None:
             sync_data = (
@@ -250,7 +254,9 @@ def perform_github_actions_sync(environment_sync):
             .first()
         )
 
-        kv_pairs = get_environment_secrets(environment_sync)
+        kv_pairs = get_environment_secrets(
+            environment_sync.environment, environment_sync.path
+        )
 
         if environment_sync.authentication is None:
             sync_data = (
@@ -329,7 +335,9 @@ def perform_aws_sm_sync(environment_sync):
             .first()
         )
 
-        kv_pairs = get_environment_secrets(environment_sync)
+        kv_pairs = get_environment_secrets(
+            environment_sync.environment, environment_sync.path
+        )
 
         if environment_sync.authentication is None:
             sync_data = (
@@ -410,7 +418,9 @@ def perform_vault_sync(environment_sync):
             .first()
         )
 
-        kv_pairs = get_environment_secrets(environment_sync)
+        kv_pairs = get_environment_secrets(
+            environment_sync.environment, environment_sync.path
+        )
 
         if environment_sync.authentication is None:
             sync_data = (

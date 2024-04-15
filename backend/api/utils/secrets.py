@@ -1,6 +1,60 @@
+import re
 from django.db import transaction
+from django.apps import apps
 
-from api.models import Environment, SecretFolder, Secret
+# from api.models import SecretFolder, Secret, ServerEnvironmentKey
+
+from api.utils.crypto import (
+    blake2b_digest,
+    decrypt_asymmetric,
+    env_keypair,
+    get_server_keypair,
+)
+
+
+def get_environment_keys(environment_id):
+    """
+    Returns a tuple of environment public and private keys.
+
+    Args:
+        environment_id (str): The ID of the environment to get the keys for.
+
+    Returns:
+        env_pubkey, env_privkey (tuple): A tuple containing the environment's public key and private key.
+    """
+    ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+
+    server_env_key = ServerEnvironmentKey.objects.get(environment_id=environment_id)
+
+    pk, sk = get_server_keypair()
+
+    env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
+
+    return env_keypair(env_seed)
+
+
+def compute_key_digest(key, environment_id):
+    """
+    Computes a blake2b hash of the given key using a salt from the specified environment.
+
+    Args:
+        key (str): The secret key to be hashed.
+        environment_id (str): The ID of the environment, required to make sure the correct salt is used when hashing.
+
+    Returns:
+        key_digest (sstr): The blake2b-hashed output as a hex-encoded string.
+    """
+    ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+
+    server_env_key = ServerEnvironmentKey.objects.get(environment_id=environment_id)
+
+    pk, sk = get_server_keypair()
+
+    salt = decrypt_asymmetric(server_env_key.wrapped_salt, sk.hex(), pk.hex())
+
+    key_digest = blake2b_digest(key.upper(), salt)
+
+    return key_digest
 
 
 def create_environment_folder_structure(complete_path, environment_id):
@@ -15,6 +69,9 @@ def create_environment_folder_structure(complete_path, environment_id):
     - SecretFolder: The last `SecretFolder` instance created or retrieved, representing the deepest
                     level in the provided path structure.
     """
+    Environment = apps.get_model("api", "Environment")
+    SecretFolder = apps.get_model("api", "SecretFolder")
+
     # Ensure the path_segments list does not include empty segments caused by leading or trailing slashes
     path_segments = [segment for segment in complete_path.split("/") if segment]
 
@@ -78,16 +135,19 @@ def normalize_path_string(path):
     return path
 
 
-def check_for_duplicates(secrets, environment):
+def check_for_duplicates_blind(secrets, environment):
     """
-    Checks if a list of secrets contains any duplicates internally or in the target env + path.
+    Checks if a list of secrets contains any duplicates internally or in the target env + path by checking each secret's key_digest
 
     Args:
-        secrets (List[Dict]): The list of secrets to check for duplicates.
+        secrets (List[Dict]): The list of encrypted secrets to check for duplicates.
+        environment (Environment): The environment where the secrets are being stored.
 
     Returns:
         bool: True if a duplicate is found, False otherwise.
     """
+    Secret = apps.get_model("api", "Secret")
+
     processed_secrets = set()  # Set to store processed secrets
 
     for secret in secrets:
@@ -101,15 +161,158 @@ def check_for_duplicates(secrets, environment):
             return True  # Found a duplicate within the list
 
         # Check if the secret already exists in the database
-        if Secret.objects.filter(
+        query_duplicates = Secret.objects.filter(
             environment=environment,
             path=path,
             key_digest=secret["keyDigest"],
             deleted_at=None,
-        ).exists():
+        )
+
+        if "id" in secret:
+            query_duplicates = query_duplicates.exclude(id=secret["id"])
+
+        if query_duplicates.exists():
             return True  # Found a duplicate in the database
 
         # Add the processed secret to the set
         processed_secrets.add((path, secret["keyDigest"]))
 
     return False  # No duplicates found
+
+
+def decompose_path_and_key(composed_key):
+    """
+    Splits the given composed key string into its path and key name components.
+
+    Args:
+        composed_key (str): The input composed key string to be decomposed.
+
+    Returns:
+        tuple: A tuple containing two strings, where the first string is the path component and the second string is the key name component.
+    """
+    last_slash_index = composed_key.rfind("/")
+    if last_slash_index != -1:
+        path = composed_key[:last_slash_index]
+        key_name = composed_key[last_slash_index + 1 :]
+    else:
+        path = "/"
+        key_name = composed_key
+
+    return normalize_path_string(path), key_name
+
+
+def decrypt_secret_value(secret):
+    """
+    Decrypts the given secret's value and resolves all references.
+
+    Args:
+        secret (Secret): The secret instance to decrypt.
+
+    Returns:
+        value (str): Decrypted secret value, with all local and cross env references replace inline.
+    """
+    Secret = apps.get_model("api", "Secret")
+    Environment = apps.get_model("api", "Environment")
+    ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+
+    # Regex patterns to detect refernces
+    cross_env_pattern = re.compile(r"\$\{(.+?)\.(.+?)\}")
+    local_ref_pattern = re.compile(r"\$\{([^.]+?)\}")
+
+    pk, sk = get_server_keypair()
+
+    server_env_key = ServerEnvironmentKey.objects.get(
+        environment_id=secret.environment.id
+    )
+
+    app = server_env_key.environment.app
+
+    # Decrypt environment seed and salt
+    env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
+    env_salt = decrypt_asymmetric(server_env_key.wrapped_salt, sk.hex(), pk.hex())
+
+    # Compute environment keypair
+    env_pubkey, env_privkey = env_keypair(env_seed)
+
+    # Decrypt secret value
+    value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
+
+    # Resolve cross-env references
+    cross_env_matches = re.findall(cross_env_pattern, value)
+
+    for ref_env, ref_key in cross_env_matches:
+
+        try:
+            path, key_name = decompose_path_and_key(ref_key)
+
+            referenced_environment = Environment.objects.get(
+                name__iexact=ref_env, app=app
+            )
+            referenced_environment_key = ServerEnvironmentKey.objects.get(
+                environment_id=referenced_environment.id
+            )
+            seed = decrypt_asymmetric(
+                referenced_environment_key.wrapped_seed, sk.hex(), pk.hex()
+            )
+            salt = decrypt_asymmetric(
+                referenced_environment_key.wrapped_salt, sk.hex(), pk.hex()
+            )
+
+            key_digest = blake2b_digest(key_name, salt)
+
+            referenced_env_pubkey, referenced_env_privkey = env_keypair(seed)
+
+            referenced_secret = Secret.objects.get(
+                environment=referenced_environment,
+                path=path,
+                key_digest=key_digest,
+                deleted_at=None,
+            )
+
+            referenced_secret_value = decrypt_asymmetric(
+                referenced_secret.value,
+                referenced_env_privkey,
+                referenced_env_pubkey,
+            )
+
+            value = value.replace(f"${{{ref_env}.{ref_key}}}", referenced_secret_value)
+        except:
+            print(
+                f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
+            )
+            pass
+
+    # Resolve local references
+    local_ref_matches = re.findall(local_ref_pattern, value)
+
+    for ref_key in local_ref_matches:
+
+        try:
+            path, key_name = decompose_path_and_key(ref_key)
+
+            key_digest = blake2b_digest(key_name, env_salt)
+
+            referenced_secret = Secret.objects.get(
+                environment=secret.environment,
+                path=path,
+                key_digest=key_digest,
+                deleted_at=None,
+            )
+
+            referenced_secret_value = decrypt_asymmetric(
+                referenced_secret.value,
+                env_privkey,
+                env_pubkey,
+            )
+
+            value = value.replace(
+                f"${{{ref_key}}}",
+                referenced_secret_value,
+            )
+        except:
+            print(
+                f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
+            )
+            pass
+
+    return value

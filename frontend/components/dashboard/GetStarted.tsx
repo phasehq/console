@@ -146,11 +146,11 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
   const membersProgress = memberAdded ? '100%' : memberInvited ? '50%' : '0%'
 
   const syncAuthAdded = data?.savedCredentials.length > 0
-  const syncEnabled: boolean = data?.apps.some((app: AppType) => app.syncEnabled)
+  const sseEnabled: boolean = data?.apps.some((app: AppType) => app.sseEnabled)
   const syncCreated = data?.syncs.length > 0
   const integrationProgress = syncCreated
     ? '100%'
-    : syncEnabled
+    : sseEnabled
       ? '66%'
       : syncAuthAdded
         ? '33%'
@@ -162,7 +162,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     memberInvited ||
     memberAdded ||
     syncAuthAdded ||
-    syncEnabled ||
+    sseEnabled ||
     syncCreated
 
   const DismissButton = () => {
@@ -441,10 +441,10 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     <div
                       className={clsx(
                         'flex items-center gap-2 text-sm',
-                        syncEnabled ? 'text-emerald-500' : 'text-neutral-500'
+                        sseEnabled ? 'text-emerald-500' : 'text-neutral-500'
                       )}
                     >
-                      {syncEnabled ? <FaCheckCircle /> : <FaRegCircle />}
+                      {sseEnabled ? <FaCheckCircle /> : <FaRegCircle />}
                       Enable syncing for an App
                     </div>
                     <div

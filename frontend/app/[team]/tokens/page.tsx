@@ -1,289 +1,22 @@
 'use client'
 
-import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { RevokeUserToken } from '@/graphql/mutations/users/deleteUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
-import { generateUserToken } from '@/utils/environments'
 import { ServiceTokenType, UserTokenType } from '@/apollo/graphql'
-import { getUserKxPublicKey, getUserKxPrivateKey } from '@/utils/crypto'
 import { useLazyQuery, useMutation } from '@apollo/client'
 import { useState, useEffect, useContext, Fragment } from 'react'
-import { KeyringContext } from '@/contexts/keyringContext'
 import { Button } from '@/components/common/Button'
-import {
-  FaCircle,
-  FaDotCircle,
-  FaExclamationTriangle,
-  FaKey,
-  FaPlus,
-  FaTimes,
-  FaTrashAlt,
-} from 'react-icons/fa'
-import { getUnixTimeStampinFuture, relativeTimeFromDates } from '@/utils/time'
-import { Dialog, RadioGroup, Transition } from '@headlessui/react'
-import { copyToClipBoard } from '@/utils/clipboard'
-import { MdContentCopy } from 'react-icons/md'
-import { toast } from 'react-toastify'
+import { FaKey, FaTimes, FaTrashAlt, FaUserSecret } from 'react-icons/fa'
+import { relativeTimeFromDates } from '@/utils/time'
+import { Dialog, Transition } from '@headlessui/react'
+
 import clsx from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
-import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import { CreateUserTokenDialog } from '@/components/apps/tokens/CreateUserTokenDialog'
+import { Avatar } from '@/components/common/Avatar'
+import { FaUserShield } from 'react-icons/fa6'
 
-interface ExpiryOptionT {
-  name: string
-  getExpiry: () => number | null
-}
-
-const handleCopy = (val: string) => {
-  copyToClipBoard(val)
-  toast.info('Copied', {
-    autoClose: 2000,
-  })
-}
-
-const tokenExpiryOptions: ExpiryOptionT[] = [
-  {
-    name: 'Never',
-    getExpiry: () => null,
-  },
-  {
-    name: '7 days',
-    getExpiry: () => getUnixTimeStampinFuture(7),
-  },
-  {
-    name: '30 days',
-    getExpiry: () => getUnixTimeStampinFuture(30),
-  },
-  {
-    name: '60 days',
-    getExpiry: () => getUnixTimeStampinFuture(60),
-  },
-  {
-    name: '90 days',
-    getExpiry: () => getUnixTimeStampinFuture(90),
-  },
-]
-
-const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
-  return a.getExpiry() === b.getExpiry()
-}
-
-const humanReadableExpiry = (expiryOption: ExpiryOptionT) =>
-  expiryOption.getExpiry() === null
-    ? 'This token will never expire.'
-    : `This token will expire on ${new Date(expiryOption.getExpiry()!).toLocaleDateString()}.`
-
-const CreateUserTokenDialog = (props: { organisationId: string }) => {
-  const { organisationId } = props
-
-  const { keyring } = useContext(KeyringContext)
-
-  const [isOpen, setIsOpen] = useState<boolean>(false)
-  const [name, setName] = useState<string>('')
-  const [expiry, setExpiry] = useState<ExpiryOptionT>(tokenExpiryOptions[0])
-
-  const [userToken, setUserToken] = useState<string>('')
-  const [createUserToken] = useMutation(CreateNewUserToken)
-
-  const reset = () => {
-    setName('')
-    setUserToken('')
-  }
-
-  const closeModal = () => {
-    reset()
-    setIsOpen(false)
-  }
-
-  const openModal = () => {
-    setIsOpen(true)
-  }
-
-  const handleCreateNewUserToken = async (event: { preventDefault: () => void }) => {
-    event.preventDefault()
-
-    if (name.length === 0) {
-      toast.error('You must enter a name for the token')
-      return false
-    }
-
-    if (keyring) {
-      const userKxKeys = {
-        publicKey: await getUserKxPublicKey(keyring.publicKey),
-        privateKey: await getUserKxPrivateKey(keyring.privateKey),
-      }
-
-      const { pssUser, mutationPayload } = await generateUserToken(
-        organisationId,
-        userKxKeys,
-        name,
-        expiry.getExpiry()
-      )
-
-      await createUserToken({
-        variables: mutationPayload,
-        refetchQueries: [
-          {
-            query: GetUserTokens,
-            variables: {
-              organisationId,
-            },
-          },
-        ],
-      })
-
-      setUserToken(pssUser)
-    } else {
-      console.log('keyring unavailable')
-    }
-  }
-
-  return (
-    <>
-      <div className="flex items-center">
-        <Button variant="primary" onClick={openModal} title="Delete secret">
-          <div className="flex items-center gap-1">
-            <FaPlus /> Create User Token
-          </div>
-        </Button>
-      </div>
-
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={() => {}}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Create a new User token
-                    </h3>
-
-                    <Button variant="text" onClick={closeModal}>
-                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                    </Button>
-                  </Dialog.Title>
-
-                  {userToken ? (
-                    <div className="py-4">
-                      <div className="bg-blue-200 dark:bg-blue-400/10 shadow-inner p-3 rounded-lg">
-                        <div className="w-full flex items-center justify-between pb-4">
-                          <span className="uppercase text-xs tracking-widest text-gray-500">
-                            user token
-                          </span>
-                          <div className="flex gap-4">
-                            {userToken && (
-                              <div className="rounded-lg bg-amber-800/30 text-amber-500 p-2 flex items-center gap-4">
-                                <FaExclamationTriangle />
-                                <div className="text-2xs">
-                                  {"Copy this value. You won't see it again!"}
-                                </div>
-                              </div>
-                            )}
-                            {userToken && (
-                              <Button variant="outline" onClick={() => handleCopy(userToken)}>
-                                <MdContentCopy /> Copy
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <code className="text-xs break-all text-blue-500 ph-no-capture">
-                          {userToken}
-                        </code>
-                      </div>
-                    </div>
-                  ) : (
-                    <form className="space-y-6 p-4" onSubmit={handleCreateNewUserToken}>
-                      <div className="space-y-2 w-full">
-                        <label
-                          className="block text-gray-700 text-sm font-bold mb-2"
-                          htmlFor="name"
-                        >
-                          Token name
-                        </label>
-                        <input
-                          required
-                          id="name"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                        />
-                      </div>
-
-                      <div>
-                        <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
-                          <RadioGroup.Label as={Fragment}>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">
-                              Expiry
-                            </label>
-                          </RadioGroup.Label>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {tokenExpiryOptions.map((option) => (
-                              <RadioGroup.Option key={option.name} value={option} as={Fragment}>
-                                {({ active, checked }) => (
-                                  <div
-                                    className={clsx(
-                                      'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full',
-                                      active && 'border-zinc-700',
-                                      checked && 'bg-zinc-700'
-                                    )}
-                                  >
-                                    {checked ? (
-                                      <FaDotCircle className="text-emerald-500" />
-                                    ) : (
-                                      <FaCircle />
-                                    )}
-                                    {option.name}
-                                  </div>
-                                )}
-                              </RadioGroup.Option>
-                            ))}
-                          </div>
-                        </RadioGroup>
-                        <span className="text-sm text-neutral-500">
-                          {humanReadableExpiry(expiry)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <Button variant="secondary" type="button" onClick={closeModal}>
-                          Cancel
-                        </Button>
-                        <Button variant="primary" type="submit">
-                          Create
-                        </Button>
-                      </div>
-                    </form>
-                  )}
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
-    </>
-  )
-}
-
-export default function Tokens({ params }: { params: { team: string } }) {
+export default function UserTokens({ params }: { params: { team: string } }) {
   const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
 
   const [deleteUserToken] = useMutation(RevokeUserToken)
@@ -341,8 +74,8 @@ export default function Tokens({ params }: { params: { team: string } }) {
       <>
         <div className="flex items-center justify-center">
           <Button variant="danger" onClick={openModal} title="Delete Token">
-            <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-              <FaTrashAlt />
+            <div className="text-white dark:text-red-500 flex items-center gap-1">
+              <FaTrashAlt /> Revoke
             </div>
           </Button>
         </div>
@@ -418,72 +151,71 @@ export default function Tokens({ params }: { params: { team: string } }) {
     const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
 
     return (
-      <tr className="group">
-        <td className="flex items-center gap-4 p-2">
-          <FaKey className="text-teal-500/50 text-lg" />
-          <div className="space-y-0">
-            <div className="text-lg font-medium">{token.name}</div>
-            <div className="flex items-center gap-8 text-sm text-neutral-500">
-              <div className="flex items-center gap-2">
-                <div>Created {relativeTimeFromDates(new Date(token.createdAt))}</div>
+      <div className="flex items-center w-full justify-between p-2 group bg-neutral-100 dark:bg-neutral-800 rounded-lg ring-1 ring-inset ring-neutral-500/20">
+        <div className="grid grid-cols-3 gap-8 w-full">
+          <div className="flex items-center gap-4">
+            <FaUserShield className="text-neutral-500 text-2xl" />
+            <div className="space-y-0">
+              <div className="text-lg font-medium">{token.name}</div>
+              <div className="flex items-center gap-8 text-sm text-neutral-500">
+                <div className={clsx(isExpired && 'text-red-500')}>
+                  {isExpired ? 'Expired' : 'Expires'}{' '}
+                  {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
+                </div>
               </div>
             </div>
           </div>
-        </td>
+          <div className="text-neutral-500 text-sm flex items-center">
+            Created {relativeTimeFromDates(new Date(token.createdAt))}
+          </div>
+        </div>
 
-        <td className={clsx('p-2', isExpired && 'text-red-500')}>
-          {isExpired ? 'Expired' : 'Expires'}{' '}
-          {token.expiresAt ? relativeTimeFromDates(new Date(token.expiresAt)) : 'never'}
-        </td>
-
-        <td className="opacity-0 group-hover:opacity-100 transition-opacity ease p-2 justify-end flex">
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
           <DeleteConfirmDialog token={token} onDelete={deleteHandler} />
-        </td>
-      </tr>
+        </div>
+      </div>
     )
   }
 
   return (
-    <section className="h-screen overflow-y-auto">
-      <div className="w-full space-y-8 p-8 text-black dark:text-white">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold">User tokens</h1>
-          <p className="text-neutral-500">
-            Tokens used to authenticate with the CLI from personal devices. Used for development and
-            manual configuration.
-          </p>
-        </div>
-        <div className="space-y-6 pb-6 divide-y-2 divide-neutral-500/40">
-          <div className="space-y-4">
-            <div className="flex justify-end py-4">
-              <CreateUserTokenDialog organisationId={organisationId!} />
+    <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
+      <section className="h-screen overflow-y-auto max-w-screen-xl">
+        <div className="w-full space-y-8 p-8 text-black dark:text-white">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-semibold">Personal Access Tokens</h1>
+            <p className="text-neutral-500">
+              Tokens used to authenticate your user account with the CLI, SDKs or API from personal
+              devices. Used for development and manual configuration.
+            </p>
+          </div>
+          <div className="space-y-6 pb-6 divide-y-2 divide-neutral-500/40">
+            <div className="space-y-4">
+              <div className="flex justify-end py-4 border-b border-neutral-500/40">
+                <CreateUserTokenDialog organisationId={organisationId!} />
+              </div>
+              {userTokens.length > 0 ? (
+                <div className="space-y-4">
+                  {userTokens.map((userToken: UserTokenType) => (
+                    <CreatedToken
+                      key={userToken.id}
+                      token={userToken}
+                      deleteHandler={handleDeleteUserToken}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="p-40 flex flex-col items-center justify-center border border-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+                  <div className="text-black dark:text-white font-semibold text-2xl">No tokens</div>
+                  <div className="text-neutral-500 text-lg">
+                    You haven&apos;t created any Personal Accesss Tokens yet. Create one to get
+                    started.
+                  </div>
+                </div>
+              )}
             </div>
-            <table className="table-auto min-w-full divide-y divide-zinc-500/40">
-              <thead>
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    token
-                  </th>
-
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    expiry
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-500/40">
-                {userTokens.map((userToken: UserTokenType) => (
-                  <CreatedToken
-                    key={userToken.id}
-                    token={userToken}
-                    deleteHandler={handleDeleteUserToken}
-                  />
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   )
 }

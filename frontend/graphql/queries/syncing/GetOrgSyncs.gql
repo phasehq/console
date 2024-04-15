@@ -54,6 +54,6 @@ query GetOrganisationSyncs($orgId: ID!) {
     name
     identityKey
     createdAt
-    syncEnabled
+    sseEnabled
   }
 }

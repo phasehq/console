@@ -1,5 +1,5 @@
 query GetAppSyncStatus($appId: ID!) {
-  syncEnabled(appId: $appId)
+  sseEnabled(appId: $appId)
   syncs(appId: $appId) {
     id
     environment {
