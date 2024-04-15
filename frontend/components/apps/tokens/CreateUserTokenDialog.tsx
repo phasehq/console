@@ -236,7 +236,7 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                                     Example with <code>curl</code>
                                   </div>
                                   <Link
-                                    href="https://docs.phase.dev"
+                                    href="https://docs.phase.dev/public-api"
                                     target="_blank"
                                     rel="noreferrer"
                                   >
@@ -245,7 +245,7 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                                 </div>
                                 <CliCommand
                                   prefix="curl"
-                                  command={`--request GET --url '${getApiHost()}/secrets?app_id=\${appId}&env=development' --header 'Authorization: ${apiUserToken}'`}
+                                  command={`--request GET --url '${getApiHost()}/v1/secrets?app_id=\${appId}&env=development' --header 'Authorization: ${apiUserToken}'`}
                                 />
                               </div>
                             </div>
