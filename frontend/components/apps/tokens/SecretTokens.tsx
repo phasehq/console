@@ -216,19 +216,28 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           </p>
         </div>
 
-        <div className="flex justify-end py-4">
+        <div className="flex justify-end py-4 border-b border-neutral-500/40">
           <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
         </div>
 
-        <div className="space-y-4">
-          {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
-            <CreatedToken
-              key={serviceToken.id}
-              token={serviceToken}
-              deleteHandler={handleDeleteServiceToken}
-            />
-          ))}
-        </div>
+        {serviceTokensData?.serviceTokens.length > 0 ? (
+          <div className="space-y-4">
+            {serviceTokensData?.serviceTokens.map((serviceToken: ServiceTokenType) => (
+              <CreatedToken
+                key={serviceToken.id}
+                token={serviceToken}
+                deleteHandler={handleDeleteServiceToken}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="p-40 flex flex-col items-center justify-center border border-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+            <div className="text-black dark:text-white font-semibold text-2xl">No tokens</div>
+            <div className="text-neutral-500 text-lg">
+              You haven&apos;t created any Service Tokens yet. Create one to get started.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -182,7 +182,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
       <section className="h-screen overflow-y-auto max-w-screen-xl">
         <div className="w-full space-y-8 p-8 text-black dark:text-white">
           <div className="space-y-1">
-            <h1 className="text-3xl font-semibold">User tokens</h1>
+            <h1 className="text-3xl font-semibold">Personal Access Tokens</h1>
             <p className="text-neutral-500">
               Tokens used to authenticate your user account with the CLI, SDKs or API from personal
               devices. Used for development and manual configuration.
@@ -190,18 +190,28 @@ export default function UserTokens({ params }: { params: { team: string } }) {
           </div>
           <div className="space-y-6 pb-6 divide-y-2 divide-neutral-500/40">
             <div className="space-y-4">
-              <div className="flex justify-end py-4">
+              <div className="flex justify-end py-4 border-b border-neutral-500/40">
                 <CreateUserTokenDialog organisationId={organisationId!} />
               </div>
-              <div className="space-y-4">
-                {userTokens.map((userToken: UserTokenType) => (
-                  <CreatedToken
-                    key={userToken.id}
-                    token={userToken}
-                    deleteHandler={handleDeleteUserToken}
-                  />
-                ))}
-              </div>
+              {userTokens.length > 0 ? (
+                <div className="space-y-4">
+                  {userTokens.map((userToken: UserTokenType) => (
+                    <CreatedToken
+                      key={userToken.id}
+                      token={userToken}
+                      deleteHandler={handleDeleteUserToken}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="p-40 flex flex-col items-center justify-center border border-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+                  <div className="text-black dark:text-white font-semibold text-2xl">No tokens</div>
+                  <div className="text-neutral-500 text-lg">
+                    You haven&apos;t created any Personal Accesss Tokens yet. Create one to get
+                    started.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
