@@ -2,7 +2,6 @@ import { EnvironmentType } from '@/apollo/graphql'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/environments'
 import { useMutation, useLazyQuery, useQuery } from '@apollo/client'
 import { Dialog, Transition } from '@headlessui/react'
-import clsx from 'clsx'
 import { useState, Fragment, useContext } from 'react'
 import { FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
@@ -151,7 +150,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
 
                   <form className="space-y-6 py-4" onSubmit={handleEnableSse}>
                     <p className="text-neutral-500">
-                      Server-side encryption must be enabled for this App if you want to:
+                      Enable server-side encryption (SSE) for this App if you want to:
                     </p>
                     <ul className="text-neutral-500 list-disc list-inside">
                       <li>Set up automatic syncing of secrets via third-party integrations</li>
