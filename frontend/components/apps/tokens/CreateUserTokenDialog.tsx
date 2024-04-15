@@ -94,9 +94,9 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
   return (
     <>
       <div className="flex items-center">
-        <Button variant="primary" onClick={openModal} title="Delete secret">
+        <Button variant="primary" onClick={openModal} title="Create token">
           <div className="flex items-center gap-1">
-            <FaPlus /> Create User Token
+            <FaPlus /> Create token
           </div>
         </Button>
       </div>
