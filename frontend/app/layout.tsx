@@ -1,7 +1,7 @@
 import '@/app/globals.css'
 import Providers from './providers'
 
-import { Inter } from '@next/font/google'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.min.css'
 import '@/utils/logoAnimation.css'
@@ -12,6 +12,13 @@ const inter = Inter({
   weight: 'variable',
   subsets: ['latin'],
   display: 'swap',
+  variable: '--font-inter',
+})
+
+const jetbrains_mono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-jetbrains-mono',
 })
 
 // TODO: Set metadata for specific page routes
@@ -35,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <Providers>
         <body
-          className={`${inter.className} w-full bg-neutral-200 dark:bg-neutral-900 min-h-screen antialiased`}
+          className={`${inter.variable} ${jetbrains_mono.variable} font-sans w-full bg-neutral-200 dark:bg-neutral-900 min-h-screen antialiased`}
         >
           <NextTopLoader color="#10B981" showSpinner={false} height={1} />
           <ToastContainer
