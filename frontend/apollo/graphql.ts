@@ -1121,6 +1121,7 @@ export type SecretType = {
   __typename?: 'SecretType';
   comment: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
+  environment: EnvironmentType;
   folder?: Maybe<SecretFolderType>;
   history?: Maybe<Array<Maybe<SecretEventType>>>;
   id: Scalars['String']['output'];
