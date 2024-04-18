@@ -155,6 +155,7 @@ export default function Environment({
       tags: [],
       comment: '',
       path: '/',
+      environment,
     } as SecretType
     start
       ? updateSecrets([newSecret, ...updatedSecrets])
