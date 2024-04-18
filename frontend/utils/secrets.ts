@@ -1,3 +1,5 @@
+import { SecretType } from '@/apollo/graphql'
+
 /**
  * Returns the negative of a supplied boolean value as a string in either lowercase, UPPERCASE or Title Case
  * true <-> false
@@ -43,4 +45,8 @@ export const toggleBooleanKeepingCase = (value: string): string => {
       // If the case pattern is unknown, return the new value as is
       return newValue
   }
+}
+
+export const getSecretPermalink = (secret: SecretType, orgName: string) => {
+  return `/${orgName}/apps/${secret.environment.app.id}/environments/${secret.environment.id}${secret.path}?secret=${secret.id}`
 }
