@@ -200,9 +200,11 @@ export default function SecretRow(props: {
             />
           </div>
 
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-            <ShareSecretDialog secret={secret} />
-          </div>
+          {cannonicalSecret && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+              <ShareSecretDialog secret={secret} />
+            </div>
+          )}
         </div>
       </div>
       <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-center">
