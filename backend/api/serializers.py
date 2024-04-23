@@ -112,7 +112,7 @@ class SecretSerializer(serializers.ModelSerializer):
                     secret=obj, user=org_member
                 )
                 return PersonalSecretSerializer(
-                    personal_secret, context={"sse": True}
+                    personal_secret, context={"sse": self.context.get("sse")}
                 ).data
             except PersonalSecret.DoesNotExist:
                 return None
