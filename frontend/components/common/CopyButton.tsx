@@ -4,9 +4,10 @@ import { FaCopy } from 'react-icons/fa'
 
 type CopyButtonProps = {
   value: string
+  defaultHidden?: boolean
 }
 
-const CopyButton: React.FC<CopyButtonProps> = ({ value }) => {
+const CopyButton: React.FC<CopyButtonProps> = ({ value, defaultHidden }) => {
   const [copyCount, setCopyCount] = useState(0)
   const copied = copyCount > 0
 
@@ -23,7 +24,8 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value }) => {
     <button
       type="button"
       className={clsx(
-        ' overflow-hidden rounded-full py-1 pl-2 pr-3 text-2xs font-medium opacity-0 backdrop-blur transition focus:opacity-100 group-hover:opacity-100',
+        ' overflow-hidden rounded-full py-1 pl-2 pr-3 text-2xs font-medium backdrop-blur transition focus:opacity-100 group-hover:opacity-100',
+        defaultHidden === false ? 'opacity-100' : 'opacity-0',
         copied
           ? 'bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20'
           : 'bg-zinc-800 dark:hover:bg-zinc-700'

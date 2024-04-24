@@ -450,6 +450,7 @@ class SecretType(DjangoObjectType):
             "updated_at",
             "history",
             "override",
+            "environment",
         )
         # interfaces = (relay.Node, )
 

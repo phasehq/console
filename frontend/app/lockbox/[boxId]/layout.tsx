@@ -4,8 +4,7 @@ import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 
 export const metadata: Metadata = {
   title: 'Phase Lockbox',
-  description:
-    "You've recieved a secret via Phase Lockbox, secured with zero-trust encryption.",
+  description: "You've recieved a secret via Phase Lockbox, secured with Zero-Trust encryption.",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
