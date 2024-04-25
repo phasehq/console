@@ -96,26 +96,40 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               const userAgent = _req.headers['user-agent']
               const ip = _req.headers['x-forwarded-for']
 
-              const response = await axios.post<AccessTokenResponse>(
+              let forwardedForHeader = ''
+              if (Array.isArray(ip)) {
+                // If ip is an array, take the first IP address
+                forwardedForHeader = ip[0]
+              } else if (typeof ip === 'string') {
+                // If ip is a string, use it directly
+                forwardedForHeader = ip
+              }
+
+              const response = await fetch(
                 UrlUtils.makeUrl(
                   process.env.BACKEND_API_BASE!,
                   'social',
                   'login',
                   account.provider
                 ),
-                loginPayload,
                 {
-                  withCredentials: true,
+                  method: 'POST',
+                  body: JSON.stringify(loginPayload),
                   headers: {
-                    'User-agent': userAgent,
-                    'X-forwarded-for': ip,
+                    'User-agent': userAgent || '',
+                    'X-forwarded-for': forwardedForHeader,
+                    'Content-Type': 'application/json',
                   },
+                  credentials: 'include', // to include cookies and authentication data
                 }
               )
 
-              Object.entries(response.headers).forEach(([k, v]) => {
+              const headers = Object.fromEntries(response.headers.entries())
+
+              Object.entries(headers).forEach(([k, v]) => {
                 res.setHeader(k, v)
               })
+
               token.user = profile
 
               return token
