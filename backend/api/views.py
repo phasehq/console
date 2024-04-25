@@ -250,7 +250,7 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
 class GoogleLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = CustomGoogleOAuth2Adapter
-    callback_url = settings.OAUTH_REDIRECT_URI
+    callback_url = f"{settings.OAUTH_REDIRECT_URI}/api/auth/callback/google"
     client_class = OAuth2Client
 
 
