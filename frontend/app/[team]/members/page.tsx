@@ -320,7 +320,7 @@ const InviteDialog = (props: { organisationId: string }) => {
 
                   <div className="space-y-4 divide-y divide-neutral-500/40">
                     <p className="text-neutral-500">
-                      Invite a user to join your Organisation on Phase.
+                      Invite a user to your Organisation.
                     </p>
                     <div>
                       {!inviteLink && (
@@ -332,10 +332,14 @@ const InviteDialog = (props: { organisationId: string }) => {
                           )}
 
                           <p className="text-neutral-500">
-                            Enter the email address of the user you want to invite below. An invite
-                            link will be sent by email to this user. They will be able to join your
-                            organisation by clicking the link in their email.
+                            Enter the email address of the user you want to invite below. An invitation link will be sent to this email address.
                           </p>
+
+                          <Alert variant="info" icon={true}>
+                            <p>
+                              You will need to manually provision access to <strong>  applications </strong> and  <strong> environments </strong> after the member has joined the organization.
+                            </p>
+                          </Alert>
                           <div className="w-full">
                             <Input
                               value={email}
