@@ -23,16 +23,7 @@ import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, Transition } from '@headlessui/react'
-import {
-  FaCheckSquare,
-  FaChevronDown,
-  FaCopy,
-  FaPlus,
-  FaSquare,
-  FaTimes,
-  FaTrashAlt,
-  FaUserAlt,
-} from 'react-icons/fa'
+import { FaChevronDown, FaCopy, FaPlus, FaTimes, FaTrashAlt, FaUserAlt } from 'react-icons/fa'
 import clsx from 'clsx'
 import { cryptoUtils } from '@/utils/auth'
 import { copyToClipBoard } from '@/utils/clipboard'
