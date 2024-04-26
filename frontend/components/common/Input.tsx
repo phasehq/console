@@ -26,7 +26,7 @@ export const Input = (props: InputProps) => {
       <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
         <input
           {...props}
-          type={showValue || !secret ? 'text' : 'password'}
+          type={showValue || !secret ? props.type || 'text' : 'password'}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           className={clsx(
