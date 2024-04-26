@@ -43,6 +43,8 @@ import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
 import { Alert } from '@/components/common/Alert'
+import { Input } from '@/components/common/Input'
+import CopyButton from '@/components/common/CopyButton'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -226,24 +228,17 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
 const InviteDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
 
-  const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
-    variables: { organisationId },
-  })
   const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const [email, setEmail] = useState<string>('')
-  const [apps, setApps] = useState<Partial<AppType>[]>([])
 
   const [inviteLink, setInviteLink] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string>('')
 
-  const isLoading = appsLoading
-
   const reset = () => {
     setEmail('')
-    setApps([])
     setInviteLink('')
     setErrorMessage('')
   }
@@ -271,7 +266,7 @@ const InviteDialog = (props: { organisationId: string }) => {
       variables: {
         email,
         orgId: organisationId,
-        apps: apps.map((app) => app.id),
+        apps: [],
         role: 'dev',
       },
       refetchQueries: [
@@ -286,39 +281,6 @@ const InviteDialog = (props: { organisationId: string }) => {
     })
 
     setInviteLink(cryptoUtils.getInviteLink(data?.inviteOrganisationMember.invite.id))
-  }
-
-  const AppSelector = (props: { app: AppType }) => {
-    const { id: appId, name: appName } = props.app
-
-    const isSelected = apps.map((app) => app.name).includes(appName)
-
-    const handleAppClick = () => {
-      if (isSelected) {
-        setApps(apps.filter((app) => app.name !== appName))
-      } else setApps([...apps, ...[{ id: appId, name: appName }]])
-    }
-
-    return (
-      <div
-        className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors ease"
-        onClick={handleAppClick}
-      >
-        {isSelected ? (
-          <FaCheckSquare className="text-emerald-500" />
-        ) : (
-          <FaSquare className="text-zinc-300 dark:text-zinc-700" />
-        )}
-        <div
-          className={clsx(
-            isSelected ? 'opacity-100 font-medium' : 'opacity-70',
-            'transition-opacity ease text-black dark:text-white'
-          )}
-        >
-          <span>{appName}</span>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -354,7 +316,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-screen-lg transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-screen-sm transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       Invite a new member
@@ -365,84 +327,77 @@ const InviteDialog = (props: { organisationId: string }) => {
                     </Button>
                   </Dialog.Title>
 
-                  {!isLoading && (
-                    <div className="space-y-4 divide-y divide-neutral-500/40">
-                      <div>
-                        {!inviteLink && (
-                          <form className="space-y-6 p-4" onSubmit={handleInvite}>
-                            {errorMessage && (
-                              <Alert variant="danger" icon={true}>
-                                {errorMessage}
-                              </Alert>
-                            )}
-                            <div className="space-y-4">
-                              <div className="space-y-2 w-full">
-                                <label
-                                  className="block text-gray-700 text-sm font-bold mb-2"
-                                  htmlFor="name"
-                                >
-                                  User email
-                                </label>
-                                <input
-                                  required
-                                  autoFocus
-                                  id="name"
-                                  type="email"
-                                  value={email}
-                                  onChange={(e) => setEmail(e.target.value)}
-                                  className="w-3/4"
-                                />
-                              </div>
-                            </div>
+                  <div className="space-y-4 divide-y divide-neutral-500/40">
+                    <p className="text-neutral-500">
+                      Invite a user to join your Organisation on Phase.
+                    </p>
+                    <div>
+                      {!inviteLink && (
+                        <form className="space-y-8 py-4" onSubmit={handleInvite}>
+                          {errorMessage && (
+                            <Alert variant="danger" icon={true}>
+                              {errorMessage}
+                            </Alert>
+                          )}
 
-                            <div className="space-y-2">
-                              <label className="block text-gray-700 text-sm font-bold mb-2">
-                                App access (optional)
-                              </label>
+                          <p className="text-neutral-500">
+                            Enter the email address of the user you want to invite below. An invite
+                            link will be sent by email to this user. They will be able to join your
+                            organisation by clicking the link in their email.
+                          </p>
+                          <div className="w-full">
+                            <Input
+                              value={email}
+                              setValue={(value) => setEmail(value)}
+                              label="User email"
+                              type="email"
+                              required
+                              autoFocus
+                            />
+                          </div>
 
-                              <div className="flex flex-wrap gap-4">
-                                {appsData.apps.map((appOption: AppType) => (
-                                  <AppSelector key={appOption.id} app={appOption} />
-                                ))}
-                              </div>
-                            </div>
+                          <div className="col-span-2 flex items-center gap-4 justify-end">
+                            <Button variant="secondary" type="button" onClick={closeModal}>
+                              Cancel
+                            </Button>
+                            <Button variant="primary" type="submit" isLoading={mutationLoading}>
+                              Invite
+                            </Button>
+                          </div>
+                        </form>
+                      )}
+                      {inviteLink && (
+                        <div className="py-8 space-y-6">
+                          <div className="text-center max-w-lg mx-auto">
+                            <h3 className="font-semibold text-xl text-black dark:text-white">
+                              Invite sent!
+                            </h3>
+                            <p className="text-neutral-500">
+                              An invite link has been sent by email to{' '}
+                              <span className="font-medium text-black dark:text-white">
+                                {email}
+                              </span>
+                              . You can also share the link below to invite this user to your
+                              organisation. This invite will expire in 72 hours.
+                            </p>
+                          </div>
 
-                            <div className="col-span-2 flex items-center gap-4 justify-end">
-                              <Button variant="secondary" type="button" onClick={closeModal}>
-                                Cancel
-                              </Button>
-                              <Button variant="primary" type="submit" isLoading={mutationLoading}>
-                                Invite
-                              </Button>
-                            </div>
-                          </form>
-                        )}
-                        {inviteLink && (
-                          <div className="py-4 space-y-6">
-                            <div className="text-center max-w-lg mx-auto">
-                              <h3 className="font-semibold text-xl text-black dark:text-white">
-                                Invite sent
-                              </h3>
-                              <p className="text-neutral-500">
-                                An invite link has been sent by email to{' '}
-                                <span className="font-medium">{email}</span>. You can also share the
-                                link below to invite this user to your organisation. This invite
-                                will expire in 72 hours.
-                              </p>
-                            </div>
-                            <div className="p-6 flex items-center justify-between rounded-md bg-zinc-200 dark:bg-zinc-800">
-                              <div className="text-emerald-500 font-mono font-semibold">
-                                {inviteLink}
-                              </div>
-                              <Button variant="outline" onClick={() => handleCopy(inviteLink)}>
-                                Copy <FaCopy />
-                              </Button>
+                          <div className="group relative overflow-x-hidden rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-emerald-800 dark:text-emerald-300">
+                            <pre className="ph-no-capture text-sm">{inviteLink}</pre>
+                            <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent to-zinc-300 dark:to-zinc-800"></div>
+                            <div className="absolute right-1 top-2.5 ">
+                              <CopyButton value={inviteLink} defaultHidden={false} />
                             </div>
                           </div>
-                        )}
-                      </div>
+
+                          <Alert variant="info" icon={true} size="sm">
+                            You can add users to specific Apps and Environments once they accept
+                            this invite and join your Organisation.
+                          </Alert>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </Dialog.Panel>
               </Transition.Child>
             </div>
