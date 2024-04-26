@@ -99,21 +99,21 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
       publicKey: await getUserKxPublicKey(keyring!.publicKey),
       privateKey: await getUserKxPrivateKey(keyring!.privateKey),
     }
-
+  
     const envSalt = await decryptAsymmetric(
       env.wrappedSalt,
       userKxKeys.privateKey,
       userKxKeys.publicKey
     )
-
+  
     const promises = secrets.map(async (secret) => {
       const { key, value, comment } = secret
-
+  
       const encryptedKey = await encryptAsymmetric(key!, env.identityKey)
       const encryptedValue = await encryptAsymmetric(value!, env.identityKey)
       const keyDigest = await digest(key!, envSalt)
       const encryptedComment = await encryptAsymmetric(comment!, env.identityKey)
-
+  
       await createSecret({
         variables: {
           newSecret: {
@@ -128,10 +128,10 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
         },
       })
     })
-
+  
     return Promise.all(promises)
   }
-
+  
   /**
    * Handles the creation of example secrets for a given app. Defines the set of example secrets, fetches all envs for this app and handles creation of each set of secrets with the respective envs
    *
@@ -143,63 +143,63 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
       {
         key: 'AWS_ACCESS_KEY_ID',
         value: 'AKIAIX4ONRSG6ODEFVJA',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'AWS_SECRET_ACCESS_KEY',
         value: 'aCRAMarEbFC3Q5c24pi7AVMIt6TaCfHeFZ4KCf/a',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'JWT_SECRET',
         value:
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjMzNjIwMTcxLCJleHAiOjIyMDg5ODUyMDB9.pHnckabbMbwTHAJOkb5Z7G7B4chY6GllJf6K2m96z3A',
-        comment: 'This is an example secret.',
+          comment: '',
       },
       {
         key: 'STRIPE_SECRET_KEY',
         value: 'sk_test_EeHnL644i6zo4Iyq4v1KdV9H',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'DJANGO_SECRET_KEY',
         value: 'wwf*2#86t64!fgh6yav$aoeuo@u2o@fy&*gg76q!&%6x_wbduad',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'DJANGO_DEBUG',
         value: 'True',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'POSTGRES_CONNECTION_STRING',
         value: 'postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}',
-        comment: 'This is an example secret.',
+        comment: 'AWS RDS pgsql - us-west-1',
       },
       {
         key: 'DB_USER',
         value: 'postgres',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'DB_HOST',
         value: 'mc-laren-prod-db.c9ufzjtplsaq.us-west-1.rds.amazonaws.com',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'DB_NAME',
         value: 'XP1_LM',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'DB_PASSWORD',
         value: '6c37810ec6e74ec3228416d2844564fceb99ebd94b29f4334c244db011630b0e',
-        comment: 'This is an example secret.',
+        comment: '',
       },
       {
         key: 'DB_PORT',
         value: '5432',
-        comment: 'This is an example secret.',
+        comment: '',
       },
     ]
 
@@ -207,7 +207,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
       {
         key: 'DJANGO_DEBUG',
         value: 'False',
-        comment: 'This is an example secret.',
+        comment: '',
       },
     ]
 
@@ -215,12 +215,12 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
       {
         key: 'STRIPE_SECRET_KEY',
         value: 'sk_live_epISNGSkdeXov2frTey7RHAi',
-        comment: 'This is an example secret.',
+        comment: 'Stripe prod key - Stripe Atlas',
       },
       {
         key: 'DJANGO_DEBUG',
         value: 'False',
-        comment: 'This is an example secret.',
+        comment: '',
       },
     ]
 
