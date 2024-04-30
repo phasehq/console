@@ -55,6 +55,7 @@ export default function Members({ params }: { params: { team: string; app: strin
         role: null,
         skip: !organisation,
       },
+      skip: !organisation,
     })
 
     const memberOptions =
