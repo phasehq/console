@@ -62,11 +62,11 @@ const nextConfig = {
     return process.env.NODE_ENV === 'development'
       ? []
       : [
-          {
-            // Apply security headers to all routes.
-            source: '/:path*',
-            headers: securityHeaders,
-          },
+          // {
+          //   // Apply security headers to all routes.
+          //   source: '/:path*',
+          //   headers: securityHeaders,
+          // },
         ]
   },
   experimental: {

@@ -55,7 +55,7 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", []).split(",")
 
 SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 
-SESSION_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = True
 
 SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN")
 
