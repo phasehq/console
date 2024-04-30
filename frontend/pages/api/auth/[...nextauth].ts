@@ -114,7 +114,8 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               )
 
               // Add set-cookie header to response
-              res.setHeader('set-cookie', response.headers['set-cookie'])
+              if (response.headers['set-cookie'])
+                res.setHeader('set-cookie', response.headers['set-cookie'])
 
               // Add OAuth profile data to token
               token.user = profile
