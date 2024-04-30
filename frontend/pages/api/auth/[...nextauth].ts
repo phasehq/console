@@ -126,9 +126,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
 
               const headers = Object.fromEntries(response.headers.entries())
 
-              Object.entries(headers).forEach(([k, v]) => {
-                res.setHeader(k, v)
-              })
+              res.setHeader('set-cookie', headers['set-cookie'])
 
               const { email } = user
               token.user = { email }
