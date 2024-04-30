@@ -124,15 +124,14 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
                 }
               )
 
-              console.log(response)
-
               const headers = Object.fromEntries(response.headers.entries())
 
               Object.entries(headers).forEach(([k, v]) => {
                 res.setHeader(k, v)
               })
 
-              token.user = profile
+              const { email } = user
+              token.user = { email }
 
               return token
             } catch (error) {
