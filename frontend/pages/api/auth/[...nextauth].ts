@@ -124,6 +124,8 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
                 }
               )
 
+              console.log(response)
+
               const headers = Object.fromEntries(response.headers.entries())
 
               Object.entries(headers).forEach(([k, v]) => {
