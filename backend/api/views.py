@@ -643,6 +643,8 @@ class PublicSecretsView(APIView):
         if check_for_duplicates_blind(secrets, env):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
+        created_secrets = []
+
         for secret in secrets:
 
             try:
@@ -685,9 +687,15 @@ class PublicSecretsView(APIView):
                 user_agent,
             )
 
-        return Response(
-            {"message": f"Created {len(secrets)} secrets"}, status=status.HTTP_200_OK
+            created_secrets.append(secret_obj)
+
+        serializer = SecretSerializer(
+            created_secrets,
+            many=True,
+            context={"org_member": request.auth["org_member"], "sse": True},
         )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def put(self, request):
 
@@ -717,6 +725,8 @@ class PublicSecretsView(APIView):
 
                 if check_for_duplicates_blind(secrets, env):
                     return JsonResponse({"error": "Duplicate secret found"}, status=409)
+
+        updated_secrets = []
 
         for secret in secrets:
 
@@ -781,9 +791,15 @@ class PublicSecretsView(APIView):
                 user_agent,
             )
 
-        return Response(
-            {"message": f"Updated {len(secrets)} secrets"}, status=status.HTTP_200_OK
+            updated_secrets.append(secret_obj)
+
+        serializer = SecretSerializer(
+            updated_secrets,
+            many=True,
+            context={"org_member": request.auth["org_member"], "sse": True},
         )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def delete(self, request):
 
