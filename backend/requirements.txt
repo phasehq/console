@@ -29,7 +29,7 @@ graphql-relay==3.2.0
 gunicorn==22.0.0
 hvac==2.1.0
 hyperlink==21.0.0
-idna==3.4
+idna==3.7
 incremental==22.10.0
 jmespath==1.0.1
 oauthlib==3.2.2
