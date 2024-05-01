@@ -2,17 +2,11 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
-from api.views import (
-    LockboxView,
-    PrivateGraphQLView,
-    logout_view,
-    health_check,
-    kms,
-    E2EESecretsView,
-    PublicSecretsView,
-    secrets_tokens,
-    github_callback,
-)
+from api.views.lockbox import LockboxView
+from api.views.graphql import PrivateGraphQLView
+from api.views.secrets import E2EESecretsView, PublicSecretsView
+from api.views.auth import logout_view, health_check, github_callback, secrets_tokens
+from api.views.kms import kms
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 

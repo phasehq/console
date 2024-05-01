@@ -191,6 +191,7 @@ type SecretEventType {
 
 type SecretType {
   id: String!
+  environment: EnvironmentType!
   folder: SecretFolderType
   path: String!
   key: String!
@@ -202,17 +203,6 @@ type SecretType {
   updatedAt: DateTime!
   history: [SecretEventType]
   override: PersonalSecretType
-}
-
-type SecretFolderType {
-  id: String!
-  environment: EnvironmentType!
-  path: String!
-  name: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  folderCount: Int
-  secretCount: Int
 }
 
 type EnvironmentType {
@@ -239,6 +229,17 @@ enum ApiEnvironmentEnvTypeChoices {
 
   """Production"""
   PROD
+}
+
+type SecretFolderType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  name: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  folderCount: Int
+  secretCount: Int
 }
 
 type SecretTagType {
