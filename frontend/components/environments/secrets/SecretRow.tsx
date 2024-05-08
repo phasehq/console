@@ -25,8 +25,17 @@ export default function SecretRow(props: {
   secretNames: Array<Partial<SecretType>>
   handlePropertyChange: Function
   handleDelete: Function
+  globallyRevealed: boolean
 }) {
-  const { orgId, secret, cannonicalSecret, secretNames, handlePropertyChange, handleDelete } = props
+  const {
+    orgId,
+    secret,
+    cannonicalSecret,
+    secretNames,
+    handlePropertyChange,
+    handleDelete,
+    globallyRevealed,
+  } = props
 
   const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
 
@@ -52,6 +61,11 @@ export default function SecretRow(props: {
       }
     }
   }, [cannonicalSecret])
+
+  // Handle global reveal
+  useEffect(() => {
+    setIsRevealed(globallyRevealed)
+  }, [globallyRevealed])
 
   const handleRevealSecret = async () => {
     setIsRevealed(true)
