@@ -25,8 +25,17 @@ export default function SecretRow(props: {
   secretNames: Array<Partial<SecretType>>
   handlePropertyChange: Function
   handleDelete: Function
+  globallyRevealed: boolean
 }) {
-  const { orgId, secret, cannonicalSecret, secretNames, handlePropertyChange, handleDelete } = props
+  const {
+    orgId,
+    secret,
+    cannonicalSecret,
+    secretNames,
+    handlePropertyChange,
+    handleDelete,
+    globallyRevealed,
+  } = props
 
   const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
 
@@ -37,6 +46,13 @@ export default function SecretRow(props: {
   const keyInputRef = useRef<HTMLInputElement>(null)
 
   const [readSecret] = useMutation(LogSecretRead)
+
+  const handleRevealSecret = async () => {
+    setIsRevealed(true)
+    if (cannonicalSecret !== undefined) await readSecret({ variables: { id: secret.id } })
+  }
+
+  const handleHideSecret = () => setIsRevealed(false)
 
   // Reveal boolean values on mount for boolean secrets
   useEffect(() => {
@@ -53,17 +69,16 @@ export default function SecretRow(props: {
     }
   }, [cannonicalSecret])
 
-  const handleRevealSecret = async () => {
-    setIsRevealed(true)
-    if (cannonicalSecret !== undefined) await readSecret({ variables: { id: secret.id } })
-  }
+  // Handle global reveal
+  useEffect(() => {
+    if (!isBoolean) globallyRevealed ? handleRevealSecret() : handleHideSecret()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globallyRevealed, isBoolean])
 
   const handleToggleBoolean = () => {
     const toggledValue = toggleBooleanKeepingCase(secret.value)
     handlePropertyChange(secret.id, 'value', toggledValue)
   }
-
-  const handleHideSecret = () => setIsRevealed(false)
 
   const toggleReveal = () => {
     isRevealed ? handleHideSecret() : handleRevealSecret()

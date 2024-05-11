@@ -1,7 +1,6 @@
 'use client'
 
 import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
-import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { GetFolders } from '@/graphql/queries/secrets/getFolders.gql'
@@ -34,13 +33,15 @@ import {
   FaTimes,
   FaTimesCircle,
   FaUndo,
+  FaEye,
+  FaEyeSlash,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Dialog, Menu, Transition } from '@headlessui/react'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Alert } from '@/components/common/Alert'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
@@ -61,7 +62,7 @@ export default function Environment({
   params: { team: string; app: string; environment: string; path?: string[] }
 }) {
   const { keyring } = useContext(KeyringContext)
-  const pathname = usePathname()
+
   const searchParams = useSearchParams()
 
   const secretToHighlight = searchParams?.get('secret')
@@ -73,6 +74,7 @@ export default function Environment({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isLoading, setIsloading] = useState(false)
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
+  const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -811,6 +813,12 @@ export default function Environment({
               <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
                 value
                 <div className="flex items-center gap-4">
+                  <Button variant="outline" onClick={() => setGloballyRevealed(!globallyRevealed)}>
+                    <div className="flex items-center gap-2">
+                      {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
+                      {globallyRevealed ? 'Mask all' : 'Reveal all'}
+                    </div>
+                  </Button>
                   <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
                     <div className="flex items-center gap-2">
                       <FaDownload /> Export .env
@@ -865,6 +873,7 @@ export default function Environment({
                     secretNames={secretNames}
                     handlePropertyChange={handleUpdateSecretProperty}
                     handleDelete={handleDeleteSecret}
+                    globallyRevealed={globallyRevealed}
                   />
                 </div>
               ))}
