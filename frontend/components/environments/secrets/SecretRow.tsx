@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FaEyeSlash, FaEye } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 
-import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
+import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import clsx from 'clsx'
 import { useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
@@ -45,11 +45,11 @@ export default function SecretRow(props: {
 
   const keyInputRef = useRef<HTMLInputElement>(null)
 
-  const [readSecret] = useMutation(LogSecretRead)
+  const [readSecret] = useMutation(LogSecretReads)
 
   const handleRevealSecret = async () => {
     setIsRevealed(true)
-    if (cannonicalSecret !== undefined) await readSecret({ variables: { id: secret.id } })
+    if (cannonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
   }
 
   const handleHideSecret = () => setIsRevealed(false)
@@ -71,7 +71,7 @@ export default function SecretRow(props: {
 
   // Handle global reveal
   useEffect(() => {
-    if (!isBoolean) globallyRevealed ? handleRevealSecret() : handleHideSecret()
+    if (!isBoolean || globallyRevealed) setIsRevealed(globallyRevealed)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globallyRevealed, isBoolean])
 

@@ -4,7 +4,7 @@ import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments
 import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
-import { LogSecretRead } from '@/graphql/mutations/environments/readSecret.gql'
+import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
 import { createNewEnv, decryptEnvSecretKVs, unwrapEnvSecretsForUser } from '@/utils/environments'
@@ -268,13 +268,13 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   }) => {
     const { envSecret, sameAsProd } = props
 
-    const [readSecret] = useMutation(LogSecretRead)
+    const [readSecret] = useMutation(LogSecretReads)
 
     const [showValue, setShowValue] = useState<boolean>(false)
 
     const handleRevealSecret = async () => {
       setShowValue(true)
-      await readSecret({ variables: { id: envSecret.secret!.id } })
+      await readSecret({ variables: { ids: [envSecret.secret!.id] } })
     }
 
     const handleHideSecret = () => setShowValue(false)
@@ -286,7 +286,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     const handleCopy = async (val: string) => {
       copyToClipBoard(val)
       toast.info('Copied', { autoClose: 2000 })
-      await readSecret({ variables: { id: envSecret.secret!.id } })
+      await readSecret({ variables: { ids: [envSecret.secret!.id] } })
     }
 
     return (
