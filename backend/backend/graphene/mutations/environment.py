@@ -630,28 +630,29 @@ class DeleteSecretMutation(graphene.Mutation):
 
 class ReadSecretMutation(graphene.Mutation):
     class Arguments:
-        id = graphene.ID(required=True)
+        ids = graphene.List(graphene.ID)
 
     ok = graphene.Boolean()
 
     @classmethod
-    def mutate(cls, root, info, id):
-        secret = Secret.objects.get(id=id)
-        env = secret.environment
-        org = env.app.organisation
-        if not user_is_org_member(info.context.user.userId, org.id):
-            raise GraphQLError("You don't have permission to perform this action")
-        else:
-            ip_address, user_agent = get_resolver_request_meta(info.context)
+    def mutate(cls, root, info, ids):
+        for id in ids:
+            secret = Secret.objects.get(id=id)
+            env = secret.environment
+            org = env.app.organisation
+            if not user_is_org_member(info.context.user.userId, org.id):
+                raise GraphQLError("You don't have permission to perform this action")
+            else:
+                ip_address, user_agent = get_resolver_request_meta(info.context)
 
-            org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=org, deleted_at=None
-            )
+                org_member = OrganisationMember.objects.get(
+                    user=info.context.user, organisation=org, deleted_at=None
+                )
 
-            log_secret_event(
-                secret, SecretEvent.READ, org_member, None, ip_address, user_agent
-            )
-            return ReadSecretMutation(ok=True)
+                log_secret_event(
+                    secret, SecretEvent.READ, org_member, None, ip_address, user_agent
+                )
+        return ReadSecretMutation(ok=True)
 
 
 class CreatePersonalSecretMutation(graphene.Mutation):

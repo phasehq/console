@@ -491,7 +491,7 @@ type Mutation {
   createSecret(secretData: SecretInput): CreateSecretMutation
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
   deleteSecret(id: ID!): DeleteSecretMutation
-  readSecret(id: ID!): ReadSecretMutation
+  readSecret(ids: [ID]): ReadSecretMutation
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation

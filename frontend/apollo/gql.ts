@@ -32,7 +32,7 @@ const documents = {
     "mutation RevokeServiceToken($tokenId: ID!) {\n  deleteServiceToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeServiceTokenDocument,
     "mutation UpdateSecret($id: ID!, $secretData: SecretInput!) {\n  editSecret(id: $id, secretData: $secretData) {\n    secret {\n      id\n      updatedAt\n    }\n  }\n}": types.UpdateSecretDocument,
     "mutation InitAppEnvironments($devEnv: EnvironmentInput!, $stagingEnv: EnvironmentInput!, $prodEnv: EnvironmentInput!, $devAdminKeys: [EnvironmentKeyInput], $stagAdminKeys: [EnvironmentKeyInput], $prodAdminKeys: [EnvironmentKeyInput]) {\n  devEnvironment: createEnvironment(\n    environmentData: $devEnv\n    adminKeys: $devAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  stagingEnvironment: createEnvironment(\n    environmentData: $stagingEnv\n    adminKeys: $stagAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  prodEnvironment: createEnvironment(\n    environmentData: $prodEnv\n    adminKeys: $prodAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.InitAppEnvironmentsDocument,
-    "mutation LogSecretRead($id: ID!) {\n  readSecret(id: $id) {\n    ok\n  }\n}": types.LogSecretReadDocument,
+    "mutation LogSecretReads($ids: [ID]!) {\n  readSecret(ids: $ids) {\n    ok\n  }\n}": types.LogSecretReadsDocument,
     "mutation RemovePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}": types.RemovePersonalSecretDocument,
     "mutation CreateSharedSecret($input: LockboxInput!) {\n  createLockbox(input: $input) {\n    lockbox {\n      id\n      allowedViews\n      expiresAt\n    }\n  }\n}": types.CreateSharedSecretDocument,
     "mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {\n  createOrganisationMember(\n    orgId: $orgId\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n    inviteId: $inviteId\n  ) {\n    orgMember {\n      id\n      email\n      createdAt\n      role\n    }\n  }\n}": types.AcceptOrganisationInviteDocument,
@@ -183,7 +183,7 @@ export function graphql(source: "mutation InitAppEnvironments($devEnv: Environme
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation LogSecretRead($id: ID!) {\n  readSecret(id: $id) {\n    ok\n  }\n}"): (typeof documents)["mutation LogSecretRead($id: ID!) {\n  readSecret(id: $id) {\n    ok\n  }\n}"];
+export function graphql(source: "mutation LogSecretReads($ids: [ID]!) {\n  readSecret(ids: $ids) {\n    ok\n  }\n}"): (typeof documents)["mutation LogSecretReads($ids: [ID]!) {\n  readSecret(ids: $ids) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
