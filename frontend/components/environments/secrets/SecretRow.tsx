@@ -54,13 +54,6 @@ export default function SecretRow(props: {
 
   const handleHideSecret = () => setIsRevealed(false)
 
-  const handleRevealSecret = async () => {
-    setIsRevealed(true)
-    if (cannonicalSecret !== undefined) await readSecret({ variables: { id: secret.id } })
-  }
-
-  const handleHideSecret = () => setIsRevealed(false)
-
   // Reveal boolean values on mount for boolean secrets
   useEffect(() => {
     if (isBoolean) setIsRevealed(true)
