@@ -10,6 +10,7 @@ import { DeleteSecretOp } from '@/graphql/mutations/environments/deleteSecret.gq
 import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
+import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import {
   getUserKxPublicKey,
   getUserKxPrivateKey,
@@ -78,7 +79,22 @@ export default function Environment({
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const [readSecrets] = useMutation(LogSecretReads)
+
   const secretPath = params.path ? `/${params.path.join('/')}` : '/'
+
+  const logGlobalReveals = async () => {
+    await readSecrets({ variables: { ids: secrets.map((secret) => secret.id) } })
+  }
+
+  const toggleGlobalReveal = () => {
+    if (!globallyRevealed) {
+      setGloballyRevealed(true)
+      logGlobalReveals()
+    } else {
+      setGloballyRevealed(false)
+    }
+  }
 
   useEffect(() => {
     // 2. Scroll into view when secretToHighlight changes
@@ -813,7 +829,7 @@ export default function Environment({
               <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
                 value
                 <div className="flex items-center gap-4">
-                  <Button variant="outline" onClick={() => setGloballyRevealed(!globallyRevealed)}>
+                  <Button variant="outline" onClick={toggleGlobalReveal}>
                     <div className="flex items-center gap-2">
                       {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
                       {globallyRevealed ? 'Mask all' : 'Reveal all'}
