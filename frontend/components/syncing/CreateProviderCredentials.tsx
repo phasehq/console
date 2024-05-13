@@ -97,6 +97,8 @@ export const CreateProviderCredentials = (props: {
       return 'https://docs.phase.dev/integrations/platforms/aws-secrets-manager'
     else if (provider.id === 'hashicorp_vault')
       return 'https://docs.phase.dev/integrations/platforms/hashicorp-vault'
+    else if (provider.id === 'hashicorp_nomad')
+      return 'https://docs.phase.dev/integrations/platforms/hashicorp-nomad'
     else return 'https://docs.phase.dev/integrations'
   }
 
