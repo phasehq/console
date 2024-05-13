@@ -15,6 +15,7 @@ from .graphene.queries.syncing import (
     resolve_syncs,
     resolve_env_syncs,
     resolve_test_vault_creds,
+    resolve_test_nomad_creds,
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.mutations.environment import (
@@ -40,6 +41,7 @@ from .graphene.mutations.syncing import (
     CreateAWSSecretsManagerSync,
     CreateCloudflarePagesSync,
     CreateGitHubActionsSync,
+    CreateNomadSync,
     CreateProviderCredentials,
     CreateVaultSync,
     DeleteProviderCredentials,
@@ -228,6 +230,8 @@ class Query(graphene.ObjectType):
 
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
+    test_nomad_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
+
     # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
@@ -251,6 +255,8 @@ class Query(graphene.ObjectType):
     resolve_github_repos = resolve_gh_repos
 
     resolve_test_vault_creds = resolve_test_vault_creds
+
+    resolve_test_nomad_creds = resolve_test_nomad_creds
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -679,6 +685,9 @@ class Mutation(graphene.ObjectType):
 
     # Vault
     create_vault_sync = CreateVaultSync.Field()
+
+    # Nomad
+    create_nomad_sync = CreateNomadSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
