@@ -97,6 +97,13 @@ class ServiceConfig:
         "resource_type": "path",
     }
 
+    HASHICORP_NOMAD = {
+        "id": "hashicorp_nomad",
+        "name": "Hashicorp Nomad",
+        "provider": Providers.HASHICORP_NOMAD,
+        "resource_type": "path",
+    }
+
     @classmethod
     def get_service_choices(cls):
         return [
