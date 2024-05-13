@@ -7,6 +7,7 @@ from api.utils.syncing.github.actions import (
     sync_github_secrets,
 )
 from api.utils.syncing.vault.main import sync_vault_secrets
+from api.utils.syncing.nomad.main import sync_nomad_secrets
 from .utils.syncing.cloudflare.pages import (
     get_cf_pages_credentials,
     sync_cloudflare_secrets,
@@ -59,6 +60,15 @@ def trigger_sync_tasks(env_sync):
         env_sync.save()
 
         job = perform_vault_sync.delay(env_sync)
+        job_id = job.get_id()
+
+        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+
+    elif env_sync.service == ServiceConfig.HASHICORP_NOMAD["id"]:
+        env_sync.status = EnvironmentSync.IN_PROGRESS
+        env_sync.save()
+
+        job = perform_nomad_sync.delay(env_sync)
         job_id = job.get_id()
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
@@ -435,6 +445,84 @@ def perform_vault_sync(environment_sync):
             kv_pairs,
             environment_sync.authentication.id,
             project_info.get("engine"),
+            project_info.get("path"),
+        )
+
+        if success:
+            sync_event.status = EnvironmentSync.COMPLETED
+            sync_event.completed_at = timezone.now()
+            sync_event.meta = sync_data
+            sync_event.save()
+
+            environment_sync.last_sync = timezone.now()
+            environment_sync.status = EnvironmentSync.COMPLETED
+            environment_sync.save()
+
+        else:
+            sync_event.status = EnvironmentSync.FAILED
+            sync_event.completed_at = timezone.now()
+            sync_event.meta = sync_data
+            sync_event.save()
+
+            environment_sync.last_sync = timezone.now()
+            environment_sync.status = EnvironmentSync.FAILED
+            environment_sync.save()
+
+    except JobTimeoutException:
+        # Handle timeout exception
+        sync_event.status = EnvironmentSync.TIMED_OUT
+        sync_event.completed_at = timezone.now()
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.TIMED_OUT
+        environment_sync.save()
+        raise  # Re-raise the JobTimeoutException
+
+    except Exception as ex:
+        print(f"EXCEPTION {ex}")
+        sync_event.status = EnvironmentSync.FAILED
+        sync_event.completed_at = timezone.now()
+
+        try:
+            sync_event.meta = sync_data
+        except:
+            pass
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.FAILED
+        environment_sync.save()
+
+
+@job("default", timeout=3600)
+def perform_nomad_sync(environment_sync):
+    try:
+        EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+        EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
+        )
+
+        kv_pairs = get_environment_secrets(
+            environment_sync.environment, environment_sync.path
+        )
+
+        if environment_sync.authentication is None:
+            sync_data = (
+                False,
+                {"message": "No authentication credentials for this sync"},
+            )
+            raise Exception("No authentication credentials for this sync")
+
+        project_info = environment_sync.options
+
+        success, sync_data = sync_nomad_secrets(
+            kv_pairs,
+            environment_sync.authentication.id,
             project_info.get("path"),
         )
 
