@@ -35,6 +35,17 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    HASHICORP_NOMAD = {
+        "id": "hashicorp_nomad",
+        "name": "Hashicorp Nomad",
+        "expected_credentials": [
+            "nomad_addr",
+            "nomad_token",
+        ],
+        "optional_credentials": ["nomad_namespace"],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
