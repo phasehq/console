@@ -115,6 +115,21 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
           />
         ))}
 
+      {credential.provider?.optionalCredentials
+        .filter((credential) => credential !== 'region')
+        .map((credential: string) => (
+          <Input
+            key={credential}
+            value={credentials[credential]}
+            setValue={(value) => handleCredentialChange(credential, value)}
+            label={credential.replace(/_/g, ' ').toUpperCase()}
+            required
+            secret={true}
+            readOnly={!allowEdit}
+            disabled={!allowEdit}
+          />
+        ))}
+
       {credential.provider?.id === 'aws' && (
         <AWSRegionPicker onChange={(region) => handleCredentialChange('region', region)} />
       )}
