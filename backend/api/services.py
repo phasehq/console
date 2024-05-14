@@ -42,7 +42,7 @@ class Providers:
             "nomad_addr",
             "nomad_token",
         ],
-        "optional_credentials": ["nomad_namespace"],
+        "optional_credentials": [],
         "auth_scheme": "token",
     }
 

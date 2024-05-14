@@ -3,16 +3,13 @@ import requests
 import re
 
 
-def list_nomad_variables(credential_id):
-    """List all variables in a given namespace."""
+def get_nomad_token_info(credential_id):
+    """Get info for a given nomad token."""
 
     credentials = get_credentials(credential_id)
 
     NOMAD_ADDR = credentials["nomad_addr"]
     NOMAD_TOKEN = credentials["nomad_token"]
-    NOMAD_NAMESPACE = credentials.get("nomad_namespace", "default")
-    if not NOMAD_NAMESPACE:
-        NOMAD_NAMESPACE = "default"
 
     session = requests.Session()
     session.headers.update(
@@ -22,23 +19,22 @@ def list_nomad_variables(credential_id):
         }
     )
 
-    url = f"{NOMAD_ADDR}/v1/vars?namespace={NOMAD_NAMESPACE}"
+    url = f"{NOMAD_ADDR}/v1/acl/token/self"
     response = session.get(url)
     response.raise_for_status()
     return response.json()
 
 
 def test_nomad_creds(credential_id):
-    """Test Nomad credentials by attempting a list operation."""
-
+    """Test Nomad credentials by attempting to get token info."""
     try:
-        list_nomad_variables(credential_id)
+        get_nomad_token_info(credential_id)
         return True
     except requests.HTTPError as e:
         return False
 
 
-def sync_nomad_secrets(secrets, credential_id, path):
+def sync_nomad_secrets(secrets, credential_id, path, namespace="default"):
     results = {}
 
     if not secrets or len(secrets) == 0:
@@ -62,9 +58,6 @@ def sync_nomad_secrets(secrets, credential_id, path):
 
         NOMAD_ADDR = credentials["nomad_addr"]
         NOMAD_TOKEN = credentials["nomad_token"]
-        NOMAD_NAMESPACE = credentials.get("nomad_namespace", "default")
-        if not NOMAD_NAMESPACE:
-            NOMAD_NAMESPACE = "default"
 
         session = requests.Session()
         session.headers.update(
@@ -74,11 +67,11 @@ def sync_nomad_secrets(secrets, credential_id, path):
             }
         )
 
-        url = f"{NOMAD_ADDR}/v1/var/{safe_path}?namespace={NOMAD_NAMESPACE}"
+        url = f"{NOMAD_ADDR}/v1/var/{safe_path}?namespace={namespace}"
 
         # All secrets are included under the 'Items' field in the payload
         payload = {
-            "Namespace": NOMAD_NAMESPACE,
+            "Namespace": namespace,
             "Path": safe_path,
             "Items": secrets_dict,
         }
@@ -89,7 +82,7 @@ def sync_nomad_secrets(secrets, credential_id, path):
 
         success = True
         results["message"] = (
-            f"All secrets successfully synced to Nomad at path: {safe_path} in namespace: {NOMAD_NAMESPACE}."
+            f"All secrets successfully synced to Nomad at path: {safe_path} in namespace: {namespace}."
         )
 
     except Exception as e:

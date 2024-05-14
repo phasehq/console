@@ -323,11 +323,14 @@ class CreateNomadSync(graphene.Mutation):
         path = graphene.String()
         credential_id = graphene.ID()
         nomad_path = graphene.String()
+        nomad_namespace = graphene.String()
 
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(cls, root, info, env_id, path, credential_id, nomad_path):
+    def mutate(
+        cls, root, info, env_id, path, credential_id, nomad_path, nomad_namespace
+    ):
         service_id = "hashicorp_nomad"
         service_config = ServiceConfig.get_service_config(service_id)
 
@@ -339,7 +342,7 @@ class CreateNomadSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
-        sync_options = {"path": nomad_path}
+        sync_options = {"path": nomad_path, "namespace": nomad_namespace}
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None

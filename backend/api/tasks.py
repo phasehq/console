@@ -524,6 +524,7 @@ def perform_nomad_sync(environment_sync):
             kv_pairs,
             environment_sync.authentication.id,
             project_info.get("path"),
+            project_info.get("namespace"),
         )
 
         if success:
