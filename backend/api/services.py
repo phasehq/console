@@ -40,7 +40,7 @@ class Providers:
         "name": "Hashicorp Nomad",
         "expected_credentials": [
             "nomad_addr",
-            "nomad_token",
+            "nomad_token_secret",
         ],
         "optional_credentials": [],
         "auth_scheme": "token",
