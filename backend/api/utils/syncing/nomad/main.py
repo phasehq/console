@@ -9,7 +9,7 @@ def get_nomad_token_info(credential_id):
     credentials = get_credentials(credential_id)
 
     NOMAD_ADDR = credentials["nomad_addr"]
-    NOMAD_TOKEN = credentials["nomad_token"]
+    NOMAD_TOKEN = credentials["nomad_token_secret"]
 
     session = requests.Session()
     session.headers.update(
@@ -57,7 +57,7 @@ def sync_nomad_secrets(secrets, credential_id, path, namespace="default"):
         credentials = get_credentials(credential_id)
 
         NOMAD_ADDR = credentials["nomad_addr"]
-        NOMAD_TOKEN = credentials["nomad_token"]
+        NOMAD_TOKEN = credentials["nomad_token_secret"]
 
         session = requests.Session()
         session.headers.update(
