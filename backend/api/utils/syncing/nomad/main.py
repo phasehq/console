@@ -38,7 +38,7 @@ def sync_nomad_secrets(secrets, credential_id, path, namespace="default"):
     results = {}
 
     if not secrets or len(secrets) == 0:
-        results["error"] = "Error: No secrets to sync. The secrets.json file is empty."
+        results["error"] = "Error: No secrets to sync."
         return False, results
 
     try:
