@@ -45,7 +45,7 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
   const [nomadPath, setNomadPath] = useState<string>('')
   const [pathIsCustom, setPathIsCustom] = useState(false)
 
-  const [credentialsValid, setCredentialsValid] = useState(true)
+  const [credentialsValid, setCredentialsValid] = useState(false)
 
   useEffect(() => {
     if (appEnvsData?.appEnvironments.length > 0) {
