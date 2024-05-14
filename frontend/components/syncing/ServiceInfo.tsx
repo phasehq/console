@@ -36,7 +36,12 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     )
   } else if (sync.serviceInfo?.id?.includes('hashicorp_nomad')) {
     const path = JSON.parse(sync.options)['path']
+    const namespace = JSON.parse(sync.options)['namespace']
 
-    return <div className="flex gap-2 text-xs text-neutral-500">{path}</div>
+    return (
+      <div className="flex gap-2 text-xs text-neutral-500">
+        {path}@{namespace || 'default'}
+      </div>
+    )
   } else return <>{sync.serviceInfo?.id}</>
 }
