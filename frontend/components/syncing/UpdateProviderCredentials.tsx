@@ -75,7 +75,7 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
     !/(?:addr|host)/i.test(credential.toLowerCase())
 
   return (
-    <div className="space-y-4 w-full py-4">
+    <div className="space-y-4 w-full pt-4">
       <div className="text-black dark:text-white font-semibold text-xl flex justify-between">
         <div className="flex items-center gap-2">
           {' '}
