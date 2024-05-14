@@ -99,12 +99,12 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
 
                   <UpdateProviderCredentials credential={credential} />
 
-                  <div className="flex justify-end">
+                  {/* <div className="flex justify-end">
                     <DeleteProviderCredentialDialog
                       credential={credential}
                       orgId={organisation!.id}
                     />
-                  </div>
+                  </div> */}
                 </Dialog.Panel>
               </Transition.Child>
             </div>
