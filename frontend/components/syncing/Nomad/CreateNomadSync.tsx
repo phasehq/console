@@ -31,7 +31,7 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
     variables: { orgId: organisation!.id },
   })
 
-  const [testCreds] = useLazyQuery(TestNomadAuth)
+  const [testCreds, { loading: credentialTestPending }] = useLazyQuery(TestNomadAuth)
 
   const [createNomadSync, { data: syncData, loading: creating }] = useMutation(CreateNewNomadSync)
 
@@ -40,11 +40,12 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
 
   const [path, setPath] = useState('/')
+  const [namespace, setNamespace] = useState('default')
 
   const [nomadPath, setNomadPath] = useState<string>('')
   const [pathIsCustom, setPathIsCustom] = useState(false)
 
-  const [credentialsValid, setCredentialsValid] = useState(false)
+  const [credentialsValid, setCredentialsValid] = useState(true)
 
   useEffect(() => {
     if (appEnvsData?.appEnvironments.length > 0) {
@@ -176,6 +177,7 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
                 label="Nomad Variable path"
                 required
               />
+              <Input value={namespace} setValue={setNamespace} label="Nomad Namespace" />
             </div>
           </div>
         )}
@@ -187,7 +189,11 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
               </Button>
             )}
           </div>
-          <Button isLoading={false} variant="primary" type="submit">
+          <Button
+            variant="primary"
+            type="submit"
+            isLoading={!credentialsValid && credentialTestPending}
+          >
             {credentialsValid ? 'Create' : 'Next'}
           </Button>
         </div>
