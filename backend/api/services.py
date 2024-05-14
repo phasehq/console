@@ -35,6 +35,17 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    HASHICORP_NOMAD = {
+        "id": "hashicorp_nomad",
+        "name": "Hashicorp Nomad",
+        "expected_credentials": [
+            "nomad_addr",
+            "nomad_token_secret",
+        ],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
@@ -83,6 +94,13 @@ class ServiceConfig:
         "id": "hashicorp_vault",
         "name": "Hashicorp Vault",
         "provider": Providers.HASHICORP_VAULT,
+        "resource_type": "path",
+    }
+
+    HASHICORP_NOMAD = {
+        "id": "hashicorp_nomad",
+        "name": "Hashicorp Nomad",
+        "provider": Providers.HASHICORP_NOMAD,
         "resource_type": "path",
     }
 

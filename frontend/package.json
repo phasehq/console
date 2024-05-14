@@ -40,7 +40,7 @@
     "posthog-js": "^1.104.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-icons": "^5.0.1",
+    "react-icons": "^5.2.1",
     "react-toastify": "^10.0.4",
     "reaviz": "^15.6.1",
     "sass": "^1.70.0",

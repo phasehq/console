@@ -302,7 +302,7 @@ class CreateVaultSync(graphene.Mutation):
 
         for es in existing_syncs:
             if es.options == sync_options:
-                raise GraphQLError("A sync already exists for this GitHub repo!")
+                raise GraphQLError("A sync already exists for this Vault path!")
 
         sync = EnvironmentSync.objects.create(
             environment=env,
@@ -315,6 +315,54 @@ class CreateVaultSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateVaultSync(sync=sync)
+
+
+class CreateNomadSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        nomad_path = graphene.String()
+        nomad_namespace = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls, root, info, env_id, path, credential_id, nomad_path, nomad_namespace
+    ):
+        service_id = "hashicorp_nomad"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {"path": nomad_path, "namespace": nomad_namespace}
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError("A sync already exists for this Nomad path!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateNomadSync(sync=sync)
 
 
 class DeleteSync(graphene.Mutation):
