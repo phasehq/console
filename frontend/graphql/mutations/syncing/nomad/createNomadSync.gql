@@ -1,0 +1,19 @@
+mutation CreateNewNomadSync($envId: ID!, $path: String!, $nomadPath: String!, $nomadNamespace: String!, $credentialId: ID!) {
+  createNomadSync(envId: $envId, path: $path, nomadPath: $nomadPath, nomadNamespace: $nomadNamespace, credentialId: $credentialId) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}

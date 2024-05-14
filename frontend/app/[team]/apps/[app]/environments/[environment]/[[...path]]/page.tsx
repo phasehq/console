@@ -706,7 +706,7 @@ export default function Environment({
   }
 
   return (
-    <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white">
+    <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
         <div className="flex flex-col py-4 gap-4">
           <div className="flex items-center gap-8">
@@ -893,19 +893,6 @@ export default function Environment({
                   />
                 </div>
               ))}
-
-            {/* <div className="col-span-2 flex p-4 gap-4 items-center">
-              <Button variant="primary" onClick={() => handleAddSecret(false)}>
-                <div className="flex items-center gap-2">
-                  <FaPlus /> New secret
-                </div>
-              </Button>
-              <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
-                <div className="flex items-center gap-2">
-                  <FaDownload /> Export .env
-                </div>
-              </Button>
-            </div> */}
           </div>
         </div>
       )}

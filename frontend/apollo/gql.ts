@@ -48,6 +48,7 @@ const documents = {
     "mutation DeleteSync($syncId: ID!) {\n  deleteEnvSync(syncId: $syncId) {\n    ok\n  }\n}": types.DeleteSyncDocument,
     "mutation CreateNewGhActionsSync($envId: ID!, $path: String!, $repoName: String!, $owner: String!, $credentialId: ID!) {\n  createGhActionsSync(\n    envId: $envId\n    path: $path\n    repoName: $repoName\n    owner: $owner\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}": types.CreateNewGhActionsSyncDocument,
     "mutation InitAppSyncing($appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  initEnvSync(appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n      sseEnabled\n    }\n  }\n}": types.InitAppSyncingDocument,
+    "mutation CreateNewNomadSync($envId: ID!, $path: String!, $nomadPath: String!, $nomadNamespace: String!, $credentialId: ID!) {\n  createNomadSync(\n    envId: $envId\n    path: $path\n    nomadPath: $nomadPath\n    nomadNamespace: $nomadNamespace\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}": types.CreateNewNomadSyncDocument,
     "mutation SaveNewProviderCreds($orgId: ID!, $provider: String!, $name: String!, $credentials: JSONString!) {\n  createProviderCredentials(\n    orgId: $orgId\n    provider: $provider\n    name: $name\n    credentials: $credentials\n  ) {\n    credential {\n      id\n    }\n  }\n}": types.SaveNewProviderCredsDocument,
     "mutation ToggleSync($syncId: ID!) {\n  toggleSyncActive(syncId: $syncId) {\n    ok\n  }\n}": types.ToggleSyncDocument,
     "mutation TriggerEnvSync($syncId: ID!) {\n  triggerSync(syncId: $syncId) {\n    sync {\n      status\n    }\n  }\n}": types.TriggerEnvSyncDocument,
@@ -86,6 +87,7 @@ const documents = {
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
     "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": types.GetServiceListDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
+    "query TestNomadAuth($credentialId: ID!) {\n  testNomadCreds(credentialId: $credentialId)\n}": types.TestNomadAuthDocument,
     "query TestVaultAuth($credentialId: ID!) {\n  testVaultCreds(credentialId: $credentialId)\n}": types.TestVaultAuthDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
 };
@@ -247,6 +249,10 @@ export function graphql(source: "mutation InitAppSyncing($appId: ID!, $envKeys: 
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation CreateNewNomadSync($envId: ID!, $path: String!, $nomadPath: String!, $nomadNamespace: String!, $credentialId: ID!) {\n  createNomadSync(\n    envId: $envId\n    path: $path\n    nomadPath: $nomadPath\n    nomadNamespace: $nomadNamespace\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}"): (typeof documents)["mutation CreateNewNomadSync($envId: ID!, $path: String!, $nomadPath: String!, $nomadNamespace: String!, $credentialId: ID!) {\n  createNomadSync(\n    envId: $envId\n    path: $path\n    nomadPath: $nomadPath\n    nomadNamespace: $nomadNamespace\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation SaveNewProviderCreds($orgId: ID!, $provider: String!, $name: String!, $credentials: JSONString!) {\n  createProviderCredentials(\n    orgId: $orgId\n    provider: $provider\n    name: $name\n    credentials: $credentials\n  ) {\n    credential {\n      id\n    }\n  }\n}"): (typeof documents)["mutation SaveNewProviderCreds($orgId: ID!, $provider: String!, $name: String!, $credentials: JSONString!) {\n  createProviderCredentials(\n    orgId: $orgId\n    provider: $provider\n    name: $name\n    credentials: $credentials\n  ) {\n    credential {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -396,6 +402,10 @@ export function graphql(source: "query GetServiceList {\n  services {\n    id\n 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}"): (typeof documents)["query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query TestNomadAuth($credentialId: ID!) {\n  testNomadCreds(credentialId: $credentialId)\n}"): (typeof documents)["query TestNomadAuth($credentialId: ID!) {\n  testNomadCreds(credentialId: $credentialId)\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

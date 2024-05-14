@@ -7,6 +7,7 @@ import React from 'react'
 import { CreateAWSSecretsSync } from './AWS/CreateAWSSecretsSync'
 import { CreateGhActionsSync } from './GitHub/CreateGhActionsSync'
 import { CreateVaultSync } from './Vault/CreateVaultSync'
+import { CreateNomadSync } from './Nomad/CreateNomadSync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -34,6 +35,8 @@ export const CreateSyncDialog = (props: {
         return <CreateGhActionsSync appId={props.appId} closeModal={closeModal} />
       case 'hashicorp_vault':
         return <CreateVaultSync appId={props.appId} closeModal={closeModal} />
+      case 'hashicorp_nomad':
+        return <CreateNomadSync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null
