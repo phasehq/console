@@ -40,9 +40,10 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
 
   const [path, setPath] = useState('/')
-  const [namespace, setNamespace] = useState('default')
 
   const [nomadPath, setNomadPath] = useState<string>('')
+  const [nomadNamespace, setNomadNamespace] = useState('default')
+
   const [pathIsCustom, setPathIsCustom] = useState(false)
 
   const [credentialsValid, setCredentialsValid] = useState(false)
@@ -89,7 +90,8 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
         variables: {
           envId: phaseEnv?.id,
           path,
-          nomadPath: nomadPath,
+          nomadPath,
+          nomadNamespace,
           credentialId: credential.id,
         },
         refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
@@ -177,7 +179,7 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
                 label="Nomad Variable path"
                 required
               />
-              <Input value={namespace} setValue={setNamespace} label="Nomad Namespace" />
+              <Input value={nomadNamespace} setValue={setNomadNamespace} label="Nomad Namespace" />
             </div>
           </div>
         )}
