@@ -58,16 +58,15 @@ export const TeamName = (props: TeamNameProps) => {
 
   return (
     <div className="flex flex-col justify-center max-w-md mx-auto">
-      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="teamname">
-        Team name
+      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="orgname">
+        Organisation name
       </label>
       <input
-        id="teamname"
+        id="orgname"
         className="text-lg"
         required
         maxLength={MAX_INPUT_STRING_LENGTH}
         value={props.name}
-        placeholder="MyTeam"
         onChange={(e) => props.setName(e.target.value.replace(/[^a-z0-9]/gi, ''))}
       />
     </div>
