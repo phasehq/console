@@ -11,10 +11,11 @@ import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
-import { useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
+import CheckOrganisationNameAvailability from '@/graphql/queries/organisation/checkOrgNameAvailable.gql'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { setDevicePassword } from '@/utils/localStorage'
 
@@ -32,6 +33,7 @@ const Onboard = () => {
   const [step, setStep] = useState<number>(0)
 
   const [createOrganisation, { data, loading, error }] = useMutation(CreateOrg)
+  const [checkOrganisationNameAvailability] = useLazyQuery(CheckOrganisationNameAvailability)
   const [isloading, setIsLoading] = useState<boolean>(false)
   const [recoveryDownloaded, setRecoveryDownloaded] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
@@ -44,12 +46,12 @@ const Onboard = () => {
   const steps: Step[] = [
     {
       index: 0,
-      name: 'Team Name',
+      name: 'Organisation Name',
       icon: <MdGroups />,
-      title: 'Choose a name for your team',
+      title: 'Choose a name for your organisation',
       description: (
         <div className="space-y-1">
-          Your team name can be alphanumeric.
+          Your organisation name can be alphanumeric.
           <code>
             <pre>[a-zA-Z0-9]</pre>
           </code>
@@ -74,12 +76,19 @@ const Onboard = () => {
     },
   ]
 
-  const validateCurrentStep = () => {
+  const validateCurrentStep = async () => {
     if (step === 0) {
       if (!teamName) {
-        errorToast('Please enter a team name')
-        //return false
+        errorToast('Please enter an organisation name')
+        return false
+      } else {
+        const { data } = await checkOrganisationNameAvailability({ variables: { name: teamName } })
+        if (!data.organisationNameAvailable) {
+          errorToast('This organisation name is taken!')
+          return false
+        }
       }
+      return true
     } else if (step === 1) {
       if (pw !== pw2) {
         errorToast("Passwords don't match")
@@ -177,7 +186,7 @@ const Onboard = () => {
   const incrementStep = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
 
-    const isFormValid = validateCurrentStep()
+    const isFormValid = await validateCurrentStep()
     if (step !== steps.length - 1 && isFormValid) setStep(step + 1)
     if (step === steps.length - 1 && isFormValid) {
       toast

@@ -128,6 +128,9 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
+
+    organisation_name_available = graphene.Boolean(name=graphene.String())
+
     organisation_plan = graphene.Field(
         OrganisationPlanType, organisation_id=graphene.ID()
     )
@@ -266,6 +269,9 @@ class Query(graphene.ObjectType):
         return [membership.organisation for membership in memberships]
 
     resolve_organisation_plan = resolve_organisation_plan
+
+    def resolve_organisation_name_available(root, info, name):
+        return not Organisation.objects.filter(name__iexact=name).exists()
 
     def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
         if not user_is_org_member(info.context.user.userId, organisation_id):

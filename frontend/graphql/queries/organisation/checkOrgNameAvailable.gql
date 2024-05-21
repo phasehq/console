@@ -1,0 +1,3 @@
+query CheckOrganisationNameAvailability($name: String!) {
+  organisationNameAvailable(name: $name)
+}
