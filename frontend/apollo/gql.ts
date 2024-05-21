@@ -64,6 +64,7 @@ const documents = {
     "query GetApps($organisationId: ID!, $appId: ID) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n    sseEnabled\n  }\n}": types.GetAppsDocument,
     "query GetDashboard($organisationId: ID!) {\n  apps(organisationId: $organisationId) {\n    id\n    sseEnabled\n  }\n  userTokens(organisationId: $organisationId) {\n    id\n  }\n  organisationInvites(orgId: $organisationId) {\n    id\n  }\n  organisationMembers(organisationId: $organisationId, role: null) {\n    id\n  }\n  savedCredentials(orgId: $organisationId) {\n    id\n  }\n  syncs(orgId: $organisationId) {\n    id\n  }\n}": types.GetDashboardDocument,
     "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n    role\n    memberId\n    keyring\n    recovery\n  }\n}": types.GetOrganisationsDocument,
+    "query CheckOrganisationNameAvailability($name: String!) {\n  organisationNameAvailable(name: $name)\n}": types.CheckOrganisationNameAvailabilityDocument,
     "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n  }\n}": types.GetInvitesDocument,
     "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role\n    identityKey\n    self\n  }\n}": types.GetOrganisationAdminsAndSelfDocument,
     "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    self\n  }\n}": types.GetOrganisationMembersDocument,
@@ -310,6 +311,10 @@ export function graphql(source: "query GetDashboard($organisationId: ID!) {\n  a
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n    role\n    memberId\n    keyring\n    recovery\n  }\n}"): (typeof documents)["query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n    role\n    memberId\n    keyring\n    recovery\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query CheckOrganisationNameAvailability($name: String!) {\n  organisationNameAvailable(name: $name)\n}"): (typeof documents)["query CheckOrganisationNameAvailability($name: String!) {\n  organisationNameAvailable(name: $name)\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -1,5 +1,6 @@
 type Query {
   organisations: [OrganisationType]
+  organisationNameAvailable(name: String): Boolean
   organisationPlan(organisationId: ID): OrganisationPlanType
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
   organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
