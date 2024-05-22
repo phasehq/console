@@ -1,0 +1,19 @@
+mutation CreateNewGitlabCiSync($envId: ID!, $path: String!, $credentialId: ID! $resourcePath: String!, $isGroup: Boolean!, $isMasked: Boolean!, $isProtected: Boolean! ) {
+  createGitlabCiSync(envId: $envId, path: $path, credentialId: $credentialId, resourcePath: $resourcePath, isGroup: $isGroup, masked: $isMasked, protected: $isProtected) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}

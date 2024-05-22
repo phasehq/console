@@ -2,10 +2,13 @@ from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.vault.main import VaultMountType
+from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
+    resolve_gitlab_projects,
+    resolve_gitlab_groups,
     resolve_server_public_key,
     resolve_providers,
     resolve_services,
@@ -41,6 +44,7 @@ from .graphene.mutations.syncing import (
     CreateAWSSecretsManagerSync,
     CreateCloudflarePagesSync,
     CreateGitHubActionsSync,
+    CreateGitLabCISync,
     CreateNomadSync,
     CreateProviderCredentials,
     CreateVaultSync,
@@ -231,6 +235,9 @@ class Query(graphene.ObjectType):
         credential_id=graphene.ID(),
     )
 
+    gitlab_projects = graphene.List(GitLabProjectType, credential_id=graphene.ID())
+    gitlab_groups = graphene.List(GitLabGroupType, credential_id=graphene.ID())
+
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_nomad_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -256,6 +263,9 @@ class Query(graphene.ObjectType):
     resolve_aws_secrets = resolve_aws_secret_manager_secrets
 
     resolve_github_repos = resolve_gh_repos
+
+    resolve_gitlab_projects = resolve_gitlab_projects
+    resolve_gitlab_groups = resolve_gitlab_groups
 
     resolve_test_vault_creds = resolve_test_vault_creds
 
@@ -694,6 +704,9 @@ class Mutation(graphene.ObjectType):
 
     # Nomad
     create_nomad_sync = CreateNomadSync.Field()
+
+    # GitLab
+    create_gitlab_ci_sync = CreateGitLabCISync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

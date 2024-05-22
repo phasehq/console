@@ -99,6 +99,10 @@ export const CreateProviderCredentials = (props: {
       return 'https://docs.phase.dev/integrations/platforms/hashicorp-vault'
     else if (provider.id === 'hashicorp_nomad')
       return 'https://docs.phase.dev/integrations/platforms/hashicorp-nomad'
+    else if (provider.id === 'github')
+      return 'https://docs.phase.dev/integrations/platforms/github-actions'
+    else if (provider.id === 'gitlab')
+      return 'https://docs.phase.dev/integrations/platforms/gitlab-ci'
     else return 'https://docs.phase.dev/integrations'
   }
 
