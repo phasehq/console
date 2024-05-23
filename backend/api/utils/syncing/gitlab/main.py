@@ -1,6 +1,3 @@
-import argparse
-import os
-import json
 import requests
 import re
 import urllib.parse
@@ -52,13 +49,6 @@ class GitLabGroupType(graphene.ObjectType):
     lfs_enabled = graphene.Boolean()
     default_branch = graphene.String()
     default_branch_protection = graphene.Int()
-    # default_branch_protection_defaults = graphene.Field(
-    #     lambda: {
-    #         "allowed_to_push": [graphene.Field(graphene.ObjectType)],
-    #         "allow_force_push": graphene.Boolean(),
-    #         "allowed_to_merge": [graphene.Field(graphene.ObjectType)],
-    #     }
-    # )
     avatar_url = graphene.String()
     web_url = graphene.String()
     request_access_enabled = graphene.Boolean()
@@ -68,7 +58,6 @@ class GitLabGroupType(graphene.ObjectType):
     file_template_project_id = graphene.ID()
     parent_id = graphene.ID()
     created_at = graphene.DateTime()
-    # ip_restriction_ranges = graphene.Field(lambda: [graphene.String()])
 
 
 def get_gitlab_credentials(credential_id):
@@ -81,7 +70,7 @@ def get_gitlab_credentials(credential_id):
     return host, token
 
 
-def check_auth(credential_id):
+def validate_auth(credential_id):
     """
     Check if the GitLab token is valid and operational.
     This function makes a request to the GitLab API to fetch the user's details.
@@ -102,6 +91,11 @@ def list_gitlab_projects(credential_id):
     This function paginates through the GitLab API to fetch all projects accessible to the user.
     It checks for project access levels to determine if the user can CRUD CI/CD variables.
     """
+
+    if not validate_auth(credential_id):
+        raise Exception(
+            "Could not authenticate with GitLab. Please check that your credentials are valid"
+        )
 
     GITLAB_HOST, GITLAB_TOKEN = get_gitlab_credentials(credential_id)
 
@@ -133,6 +127,11 @@ def list_gitlab_groups(credential_id):
     This function paginates through the GitLab API to fetch all groups accessible to the user.
     It filters access levels to groups that the user can CRUD CI/CD variables.
     """
+
+    if not validate_auth(credential_id):
+        raise Exception(
+            "Could not authenticate with GitLab. Please check that your credentials are valid"
+        )
 
     GITLAB_HOST, GITLAB_TOKEN = get_gitlab_credentials(credential_id)
 
