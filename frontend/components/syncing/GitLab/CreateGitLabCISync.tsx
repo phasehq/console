@@ -74,12 +74,6 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
 
   const [credentialsValid, setCredentialsValid] = useState(false)
 
-  useEffect(() => {
-    if (credentialsData && credentialsData.savedCredentials.length > 0) {
-      setCredential(credentialsData.savedCredentials[0])
-    }
-  }, [credentialsData])
-
   // Preselect the first available env
   useEffect(() => {
     if (appEnvsData?.appEnvironments.length > 0) {
@@ -99,6 +93,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
         variables: {
           credentialId: credential.id,
         },
+        fetchPolicy: 'network-only',
       })
       if (gitlabData) {
         setProjects(gitlabData?.gitlabProjects || [])
