@@ -141,7 +141,7 @@ def sync_github_secrets(secrets, access_token, repo, owner):
         public_key_value = public_key["key"]
 
         # Convert secrets list of tuples to a dictionary
-        local_secrets = dict(secrets)
+        local_secrets = {k: v for k, v, _ in secrets}
 
         # Fetch all existing secrets
         existing_secrets = get_all_secrets(repo, owner, headers)

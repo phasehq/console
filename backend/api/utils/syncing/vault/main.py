@@ -70,7 +70,7 @@ def sync_vault_secrets(secrets, credential_id, engine, path):
             existing_keys = set()
             pass
 
-        secrets_dict = dict(secrets)
+        secrets_dict = {k: v for k, v, _ in secrets}
 
         for key, value in secrets_dict.items():
             secret_path = f"data/{path.lstrip('/')}/{key}"
