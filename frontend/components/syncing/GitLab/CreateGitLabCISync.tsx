@@ -12,7 +12,7 @@ import {
   GitLabProjectType,
   ProviderCredentialsType,
 } from '@/apollo/graphql'
-import { Combobox, RadioGroup, Tab, Transition } from '@headlessui/react'
+import { Combobox, Popover, RadioGroup, Tab, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
   FaAngleDoubleDown,
@@ -20,8 +20,9 @@ import {
   FaChevronDown,
   FaCircle,
   FaDotCircle,
-  FaExclamationCircle,
+  FaExclamationTriangle,
   FaExternalLinkSquareAlt,
+  FaInfoCircle,
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 
@@ -224,7 +225,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                   selectedIndex={isGroup ? 1 : 0}
                   onChange={(index: number) => setIsGroup(index === 0 ? false : true)}
                 >
-                  <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+                  <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 text-zinc-900 dark:text-zinc-100">
                     <Tab as={Fragment}>
                       {({ selected }) => (
                         <div
@@ -421,12 +422,35 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                 <div className="flex items-center justify-between">
                   <div
                     className={clsx(
-                      'space-y-1 font-medium text-sm',
+                      'flex items-center gap-2 font-medium text-sm',
                       isProtected ? 'text-zinc-900 dark:text-zinc-100' : 'text-neutral-500'
                     )}
                   >
                     Protect variables
+                    <Popover className="relative">
+                      <Popover.Button>
+                        <FaInfoCircle />
+                      </Popover.Button>
+                      <Popover.Panel className="absolute top-0 left-6 w-96 rounded-lg shadow-xl dark:bg-zinc-900">
+                        <Alert variant="info" size="sm">
+                          <div className="text-2xs">
+                            Optional. If selected, the variable is only available in pipelines that
+                            run on protected branches or protected tags on GitLab.
+                            <Link
+                              href="https://docs.gitlab.com/ee/ci/variables/"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <div className="flex items-center gap-1 underline">
+                                GitLab Docs <FaExternalLinkSquareAlt />
+                              </div>
+                            </Link>
+                          </div>
+                        </Alert>
+                      </Popover.Panel>
+                    </Popover>
                   </div>
+
                   <ToggleSwitch value={isProtected} onToggle={() => setProtected(!isProtected)} />
                 </div>
 
@@ -434,32 +458,37 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                   <div className="flex items-center justify-between pt-3">
                     <div
                       className={clsx(
-                        'space-y-1 font-medium text-sm',
+                        'flex items-center gap-2 space-y-1 font-medium text-sm',
                         isMasked ? 'text-zinc-900 dark:text-zinc-100' : 'text-neutral-500'
                       )}
                     >
                       Mask variables
+                      <Popover className="relative">
+                        <Popover.Button>
+                          <FaExclamationTriangle />
+                        </Popover.Button>
+                        <Popover.Panel className="absolute top-0 left-6 w-96 rounded-lg shadow-xl">
+                          <Alert variant="warning" size="sm">
+                            <div className="text-2xs">
+                              Optional. Masked variables must meet certain criteria to be synced to
+                              GitLab. Make sure your variables and secrets meet these criteria, or
+                              your sync jobs will fail.{' '}
+                              <Link
+                                href="https://docs.gitlab.com/ee/ci/variables/#mask-a-cicd-variable"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <div className="flex items-center gap-1 underline">
+                                  GitLab Docs <FaExternalLinkSquareAlt />
+                                </div>
+                              </Link>
+                            </div>
+                          </Alert>
+                        </Popover.Panel>
+                      </Popover>
                     </div>
                     <ToggleSwitch value={isMasked} onToggle={() => setMasked(!isMasked)} />
                   </div>
-                  {isMasked && (
-                    <Alert variant="info" icon={true} size="sm">
-                      <div>
-                        Masked variables must meet certain criteria to be synced to GitLab. Make
-                        sure your variables and secrets meet the criteria, or your sync jobs will
-                        fail.{' '}
-                        <Link
-                          href="https://docs.gitlab.com/ee/ci/variables/#mask-a-cicd-variable"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <div className="flex items-center gap-1 underline">
-                            GitLab Docs <FaExternalLinkSquareAlt />
-                          </div>
-                        </Link>
-                      </div>
-                    </Alert>
-                  )}
                 </div>
               </div>
             </div>
