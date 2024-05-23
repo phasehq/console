@@ -470,9 +470,9 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                         <Popover.Panel className="absolute top-0 left-6 w-96 rounded-lg shadow-xl">
                           <Alert variant="warning" size="sm">
                             <div className="text-2xs">
-                              Optional. Masked variables must meet certain criteria to be synced to
-                              GitLab. Make sure your variables and secrets meet these criteria, or
-                              your sync jobs will fail.{' '}
+                              Optional. If selected, the variable&apos;s Value is masked in GitLab
+                              job logs. The variable will fail to sync if the value does not meet
+                              the masking requirements in GitLab.
                               <Link
                                 href="https://docs.gitlab.com/ee/ci/variables/#mask-a-cicd-variable"
                                 target="_blank"
