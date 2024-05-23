@@ -71,7 +71,7 @@ export default function SecretRow(props: {
 
   // Handle global reveal
   useEffect(() => {
-    if (!isBoolean || globallyRevealed) setIsRevealed(globallyRevealed)
+    if ((!isBoolean || globallyRevealed) && cannonicalSecret) setIsRevealed(globallyRevealed)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globallyRevealed, isBoolean])
 
