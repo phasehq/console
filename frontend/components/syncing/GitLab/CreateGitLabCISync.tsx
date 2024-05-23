@@ -101,8 +101,8 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
         },
       })
       if (gitlabData) {
-        setProjects(gitlabData?.gitlabProjects)
-        setGroups(gitlabData?.gitlabGroups)
+        setProjects(gitlabData?.gitlabProjects || [])
+        setGroups(gitlabData?.gitlabGroups || [])
         setCredentialsValid(true)
       }
     } else if (isGroup && !selectedGroup) {
