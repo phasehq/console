@@ -8,7 +8,7 @@ import UpdateProviderCreds from '@/graphql/mutations/syncing/updateProviderCreds
 import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { Input } from '@/components/common/Input'
-import { encryptProviderCredentials } from '@/utils/syncing/general'
+import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/general'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userIsAdmin } from '@/utils/permissions'
 import { ProviderIcon } from './ProviderIcon'
@@ -70,9 +70,6 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const allowEdit = activeUserIsAdmin
-
-  const isCredentialSecret = (credential: string) =>
-    !/(?:addr|host)/i.test(credential.toLowerCase())
 
   return (
     <div className="space-y-4 w-full pt-4">
