@@ -1,4 +1,5 @@
 import { EnvironmentSyncType } from '@/apollo/graphql'
+import { FaEyeSlash, FaLock } from 'react-icons/fa'
 
 export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
   const { sync } = props
@@ -41,6 +42,18 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     return (
       <div className="flex gap-2 text-xs text-neutral-500">
         {path}@{namespace || 'default'}
+      </div>
+    )
+  } else if (sync.serviceInfo?.id?.includes('gitlab_ci')) {
+    const path = JSON.parse(sync.options)['resource_path']
+    const isMasked = JSON.parse(sync.options)['masked']
+    const isProtected = JSON.parse(sync.options)['protected']
+
+    return (
+      <div className="flex gap-2 text-xs text-neutral-500 items-center">
+        {path}
+        {isMasked && <FaEyeSlash title="Masked" />}
+        {isProtected && <FaLock title="Protected" />}
       </div>
     )
   } else return <>{sync.serviceInfo?.id}</>

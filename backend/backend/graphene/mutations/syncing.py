@@ -365,6 +365,72 @@ class CreateNomadSync(graphene.Mutation):
         return CreateNomadSync(sync=sync)
 
 
+class CreateGitLabCISync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        resource_path = graphene.String()
+        is_group = graphene.Boolean()
+        masked = graphene.Boolean()
+        protected = graphene.Boolean()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        resource_path,
+        is_group,
+        masked,
+        protected,
+    ):
+        service_id = "gitlab_ci"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "resource_path": resource_path,
+            "is_group": is_group,
+            "masked": masked,
+            "protected": protected,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError(
+                    f"A sync already exists for this GitLab {'group' if is_group else 'project'}!"
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateGitLabCISync(sync=sync)
+
+
 class DeleteSync(graphene.Mutation):
     class Arguments:
         sync_id = graphene.ID()

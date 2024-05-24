@@ -8,6 +8,7 @@ import { CreateAWSSecretsSync } from './AWS/CreateAWSSecretsSync'
 import { CreateGhActionsSync } from './GitHub/CreateGhActionsSync'
 import { CreateVaultSync } from './Vault/CreateVaultSync'
 import { CreateNomadSync } from './Nomad/CreateNomadSync'
+import { CreateGitLabCISync } from './GitLab/CreateGitLabCISync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -33,6 +34,8 @@ export const CreateSyncDialog = (props: {
         return <CreateCloudflarePagesSync appId={props.appId} closeModal={closeModal} />
       case 'github_actions':
         return <CreateGhActionsSync appId={props.appId} closeModal={closeModal} />
+      case 'gitlab_ci':
+        return <CreateGitLabCISync appId={props.appId} closeModal={closeModal} />
       case 'hashicorp_vault':
         return <CreateVaultSync appId={props.appId} closeModal={closeModal} />
       case 'hashicorp_nomad':

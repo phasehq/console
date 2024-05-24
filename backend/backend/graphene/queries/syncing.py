@@ -20,6 +20,7 @@ from api.utils.syncing.aws.secrets_manager import list_aws_secrets
 from api.utils.syncing.github.actions import list_repos
 from api.utils.syncing.vault.main import test_vault_creds
 from api.utils.syncing.nomad.main import test_nomad_creds
+from api.utils.syncing.gitlab.main import list_gitlab_groups, list_gitlab_projects
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -126,6 +127,22 @@ def resolve_test_nomad_creds(root, info, credential_id):
         return valid
     except Exception as ex:
         raise GraphQLError(f"Error testing Nomad credentials: {str(ex)}")
+
+
+def resolve_gitlab_projects(root, info, credential_id):
+    try:
+        projects = list_gitlab_projects(credential_id)
+        return projects
+    except Exception as ex:
+        raise GraphQLError(f"Error listing GitLab projects: {str(ex)}")
+
+
+def resolve_gitlab_groups(root, info, credential_id):
+    try:
+        groups = list_gitlab_groups(credential_id)
+        return groups
+    except Exception as ex:
+        raise GraphQLError(f"Error listing GitLab groups: {str(ex)}")
 
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):

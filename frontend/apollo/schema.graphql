@@ -31,6 +31,8 @@ type Query {
   cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
   awsSecrets(credentialId: ID): [AWSSecretType]
   githubRepos(credentialId: ID): [GitHubRepoType]
+  gitlabProjects(credentialId: ID): [GitLabProjectType]
+  gitlabGroups(credentialId: ID): [GitLabGroupType]
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
 }
@@ -454,6 +456,60 @@ type GitHubRepoType {
   type: String
 }
 
+type GitLabProjectType {
+  id: Int
+  name: String
+  nameWithNamespace: String
+  path: String
+  pathWithNamespace: String
+  createdAt: DateTime
+  defaultBranch: String
+  tagList: [String]
+  topics: [String]
+  sshUrlToRepo: String
+  httpUrlToRepo: String
+  webUrl: String
+  avatarUrl: String
+  starCount: Int
+  lastActivityAt: DateTime
+  namespace: NamespaceType
+}
+
+type NamespaceType {
+  id: Int
+  name: String
+  path: String
+}
+
+type GitLabGroupType {
+  id: ID
+  name: String
+  path: String
+  description: String
+  visibility: String
+  shareWithGroupLock: Boolean
+  requireTwoFactorAuthentication: Boolean
+  twoFactorGracePeriod: Int
+  projectCreationLevel: String
+  autoDevopsEnabled: Boolean
+  subgroupCreationLevel: String
+  emailsDisabled: Boolean
+  emailsEnabled: Boolean
+  mentionsDisabled: Boolean
+  lfsEnabled: Boolean
+  defaultBranch: String
+  defaultBranchProtection: Int
+  avatarUrl: String
+  webUrl: String
+  requestAccessEnabled: Boolean
+  repositoryStorage: String
+  fullName: String
+  fullPath: String
+  fileTemplateProjectId: ID
+  parentId: ID
+  createdAt: DateTime
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
@@ -484,6 +540,7 @@ type Mutation {
   createGhActionsSync(credentialId: ID, envId: ID, owner: String, path: String, repoName: String): CreateGitHubActionsSync
   createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
+  createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourcePath: String): CreateGitLabCISync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -630,6 +687,10 @@ type CreateVaultSync {
 }
 
 type CreateNomadSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateGitLabCISync {
   sync: EnvironmentSyncType
 }
 
