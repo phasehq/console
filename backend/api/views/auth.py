@@ -181,15 +181,16 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
 
 class CustomGitLabOAuth2Adapter(OAuth2Adapter):
     provider_id = GitLabProvider.id
-    provider_default_url = "https://gitlab.com"
+    provider_url = os.getenv("GITLAB_AUTH_URL")
+    if not provider_url:
+        provider_url = "https://gitlab.com"
     provider_api_version = "v4"
 
     settings = app_settings.PROVIDERS.get(provider_id, {})
-    provider_base_url = settings.get("GITLAB_URL", provider_default_url)
 
-    access_token_url = "{0}/oauth/token".format(provider_base_url)
-    authorize_url = "{0}/oauth/authorize".format(provider_base_url)
-    profile_url = "{0}/api/{1}/user".format(provider_base_url, provider_api_version)
+    access_token_url = "{0}/oauth/token".format(provider_url)
+    authorize_url = "{0}/oauth/authorize".format(provider_url)
+    profile_url = "{0}/api/{1}/user".format(provider_url, provider_api_version)
 
     def complete_login(self, request, app, token, response):
         response = requests.get(self.profile_url, params={"access_token": token.token})

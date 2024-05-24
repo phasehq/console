@@ -38,6 +38,10 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
       GitlabProvider({
         clientId: process.env.GITLAB_CLIENT_ID,
         clientSecret: process.env.GITLAB_CLIENT_SECRET,
+        authorization: {
+          url: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/oauth/authorize`,
+          params: { scope: 'read_user' },
+        },
       })
     )
 
