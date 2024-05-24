@@ -181,10 +181,11 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
 
 class CustomGitLabOAuth2Adapter(OAuth2Adapter):
     provider_id = GitLabProvider.id
-    provider_url = os.getenv("GITLAB_AUTH_URL") or "https://gitlab.com"
     provider_api_version = "v4"
 
     settings = app_settings.PROVIDERS.get(provider_id, {})
+
+    provider_url = settings.get("APP", {}).get("settings", {}).get("gitlab_url")
 
     access_token_url = "{0}/oauth/token".format(provider_url)
     authorize_url = "{0}/oauth/authorize".format(provider_url)
