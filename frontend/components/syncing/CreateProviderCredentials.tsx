@@ -9,7 +9,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import { Input } from '../common/Input'
 import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
-import { encryptProviderCredentials } from '@/utils/syncing/general'
+import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/general'
 import { Card } from '../common/Card'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
@@ -99,6 +99,10 @@ export const CreateProviderCredentials = (props: {
       return 'https://docs.phase.dev/integrations/platforms/hashicorp-vault'
     else if (provider.id === 'hashicorp_nomad')
       return 'https://docs.phase.dev/integrations/platforms/hashicorp-nomad'
+    else if (provider.id === 'github')
+      return 'https://docs.phase.dev/integrations/platforms/github-actions'
+    else if (provider.id === 'gitlab')
+      return 'https://docs.phase.dev/integrations/platforms/gitlab-ci'
     else return 'https://docs.phase.dev/integrations'
   }
 
@@ -177,7 +181,7 @@ export const CreateProviderCredentials = (props: {
                 setValue={(value) => handleCredentialChange(credential, value)}
                 label={credential.replace(/_/g, ' ').toUpperCase()}
                 required
-                secret={true}
+                secret={isCredentialSecret(credential)}
               />
             ))}
 
@@ -190,7 +194,7 @@ export const CreateProviderCredentials = (props: {
                 value={credentials[credential]}
                 setValue={(value) => handleCredentialChange(credential, value)}
                 label={`${credential.replace(/_/g, ' ').toUpperCase()} (Optional)`}
-                secret={true}
+                secret={isCredentialSecret(credential)}
               />
             ))}
 

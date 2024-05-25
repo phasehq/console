@@ -23,6 +23,14 @@ class Providers:
         "auth_scheme": "oauth",
     }
 
+    GITLAB = {
+        "id": "gitlab",
+        "name": "GitLab",
+        "expected_credentials": ["gitlab_host", "gitlab_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     HASHICORP_VAULT = {
         "id": "hashicorp_vault",
         "name": "Hashicorp Vault",
@@ -87,6 +95,13 @@ class ServiceConfig:
         "id": "github_actions",
         "name": "GitHub Actions",
         "provider": Providers.GITHUB,
+        "resource_type": "repo",
+    }
+
+    GITLAB_CI = {
+        "id": "gitlab_ci",
+        "name": "GitLab CI",
+        "provider": Providers.GITLAB,
         "resource_type": "repo",
     }
 

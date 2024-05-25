@@ -57,7 +57,7 @@ def sync_aws_secrets(
     """
     try:
         # Convert list of tuples into a dictionary
-        secrets_dict = dict(secrets)
+        secrets_dict = {k: v for k, v, _ in secrets}
 
         # Initialize the AWS Secrets Manager client
         secrets_client = boto3.client(

@@ -42,7 +42,7 @@ def sync_nomad_secrets(secrets, credential_id, path, namespace="default"):
         return False, results
 
     try:
-        secrets_dict = dict(secrets)
+        secrets_dict = {k: v for k, v, _ in secrets}
 
         # Regex to validate the path
         path_regex = re.compile(r"^[a-zA-Z0-9-_~/]{1,128}$")

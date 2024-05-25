@@ -10,15 +10,15 @@ from api.utils.secrets import decrypt_secret_value
 
 def get_environment_secrets(environment, path):
     """
-    Decrypts and resolves key, value pairs in the given environment, at the given path.
-    A list of (key, value) tuples is returned.
+    Decrypts and resolves secrets in the given environment, at the given path.
+    A list of (key, value, comment) tuples is returned.
 
     Args:
         environment (Environment): The environment instance.
         path (str): The path string
 
     Returns:
-        List[Tuple[str, str]]: A list of tuples containing all secrets' keys and values
+        List[Tuple[str, str, str]]: A list of tuples containing all secrets' keys, values and comments
     """
 
     Secret = apps.get_model("api", "Secret")
@@ -48,7 +48,12 @@ def get_environment_secrets(environment, path):
     for secret in secrets:
         key = decrypt_asymmetric(secret.key, env_privkey, env_pubkey)
         value = decrypt_secret_value(secret)
+        comment = (
+            decrypt_asymmetric(secret.comment, env_privkey, env_pubkey)
+            if secret.comment
+            else ""
+        )
 
-        kv_pairs.append((key, value))
+        kv_pairs.append((key, value, comment))
 
     return kv_pairs

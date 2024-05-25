@@ -1,0 +1,17 @@
+query GetGitLabResources($credentialId: ID!) {
+  gitlabProjects(credentialId: $credentialId) {
+    id
+    name
+    namespace {
+      name
+    }
+    pathWithNamespace
+    webUrl
+  }
+  gitlabGroups(credentialId: $credentialId) {
+    id
+    name
+    path
+    webUrl
+  }
+}
