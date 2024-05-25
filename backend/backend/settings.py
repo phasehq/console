@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     "django_rq",
 ]
 
+
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "SCOPE": ["profile", "email"],
@@ -113,6 +114,9 @@ SOCIALACCOUNT_PROVIDERS = {
         "APP": {
             "client_id": os.getenv("GITLAB_CLIENT_ID"),
             "secret": os.getenv("GITLAB_CLIENT_SECRET"),
+            "settings": {
+                "gitlab_url": os.getenv("GITLAB_AUTH_URL") or "https://gitlab.com",
+            },
         },
     },
 }
