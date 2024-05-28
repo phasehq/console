@@ -21,6 +21,11 @@ export default function Settings({ params }: { params: { team: string } }) {
 
   const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
 
+  const tabList = () => [
+    ...(activeUserIsAdmin ? [{ name: 'Organisation' }] : []),
+    ...[{ name: 'Account' }, { name: 'App' }],
+  ]
+
   return (
     <section className="w-full max-w-screen-lg mx-auto py-4 text-black dark:text-white">
       <h1 className="text-3xl font-semibold">Settings</h1>
@@ -29,35 +34,22 @@ export default function Settings({ params }: { params: { team: string } }) {
         <Tab.Group>
           {activeUserIsAdmin && (
             <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
-              <Tab as={Fragment}>
-                {({ selected }) => (
-                  <div
-                    className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
-                      selected
-                        ? 'border-emerald-500 font-semibold'
-                        : ' border-transparent cursor-pointer'
-                    )}
-                  >
-                    Organisation
-                  </div>
-                )}
-              </Tab>
-
-              <Tab as={Fragment}>
-                {({ selected }) => (
-                  <div
-                    className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
-                      selected
-                        ? 'border-emerald-500 font-semibold'
-                        : ' border-transparent cursor-pointer'
-                    )}
-                  >
-                    Account
-                  </div>
-                )}
-              </Tab>
+              {tabList().map((tab) => (
+                <Tab key={tab.name} as={Fragment}>
+                  {({ selected }) => (
+                    <div
+                      className={clsx(
+                        'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                        selected
+                          ? 'border-emerald-500 font-semibold'
+                          : ' border-transparent cursor-pointer'
+                      )}
+                    >
+                      {tab.name}
+                    </div>
+                  )}
+                </Tab>
+              ))}
             </Tab.List>
           )}
           <Tab.Panels>
@@ -117,6 +109,27 @@ export default function Settings({ params }: { params: { team: string } }) {
                   )}
 
                   <div className="space-y-6 py-4 border-t border-neutral-500/20">
+                    <div className="space-y-1">
+                      <h2 className="text-2xl font-semibold">App</h2>
+                      <p className="text-neutral-500">
+                        Control the behavior and appearance of UI elements.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-8">
+                      <div className="font-semibold">Theme</div>
+                      <div className="flex items-center gap-2">
+                        <FaSun />
+                        <ModeToggle />
+                        <FaMoon />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Tab.Panel>
+
+              <Tab.Panel>
+                <div>
+                  <div className="space-y-6 py-4">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-semibold">App</h2>
                       <p className="text-neutral-500">
