@@ -26,7 +26,7 @@ export default function UserMenu() {
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button as="div">
           <Button variant="secondary">
-            <Avatar imagePath={session?.user?.image!} size="sm" />
+            <Avatar imagePath={session?.user?.image} size="sm" />
             <div className="flex flex-col">{firstName}</div>
           </Button>
         </Menu.Button>
@@ -55,10 +55,12 @@ export default function UserMenu() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 text-2xs">
-                    <RoleLabel role={activeOrganisation?.role!} />
-                    <span>at {activeOrganisation?.name}</span>
-                  </div>
+                  {activeOrganisation && (
+                    <div className="flex items-center gap-2 text-2xs">
+                      <RoleLabel role={activeOrganisation?.role!} />
+                      <span>at {activeOrganisation?.name}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </Menu.Item>
