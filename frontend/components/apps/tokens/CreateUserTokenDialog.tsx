@@ -9,14 +9,7 @@ import { useMutation } from '@apollo/client'
 import { Dialog, RadioGroup, Tab, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { useContext, useState, Fragment } from 'react'
-import {
-  FaPlus,
-  FaTimes,
-  FaCircle,
-  FaCheckCircle,
-  FaExternalLinkAlt,
-  FaExternalLinkSquareAlt,
-} from 'react-icons/fa'
+import { FaPlus, FaTimes, FaCircle, FaCheckCircle, FaExternalLinkSquareAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
