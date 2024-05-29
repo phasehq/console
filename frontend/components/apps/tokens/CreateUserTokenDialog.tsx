@@ -9,7 +9,14 @@ import { useMutation } from '@apollo/client'
 import { Dialog, RadioGroup, Tab, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { useContext, useState, Fragment } from 'react'
-import { FaPlus, FaTimes, FaCircle, FaCheckCircle } from 'react-icons/fa'
+import {
+  FaPlus,
+  FaTimes,
+  FaCircle,
+  FaCheckCircle,
+  FaExternalLinkAlt,
+  FaExternalLinkSquareAlt,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
@@ -157,6 +164,22 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                         Copy this token. You won&apos;t see it again!
                       </Alert>
 
+                      <Alert variant="info" size="sm">
+                        <div>
+                          You will need to enable server-side encryption (SSE) for any Apps that you
+                          want to manage secrets with via the Public API.
+                          <Link
+                            href="https://docs.phase.dev/console/apps#settings"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <div className="flex items-center gap-1 underline">
+                              Docs <FaExternalLinkSquareAlt />
+                            </div>
+                          </Link>
+                        </div>
+                      </Alert>
+
                       <Tab.Group>
                         <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
                           <Tab as={Fragment}>
@@ -245,7 +268,7 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                                 </div>
                                 <CliCommand
                                   prefix="curl"
-                                  command={`--request GET --url '${getApiHost()}/v1/secrets?app_id=\${appId}&env=development' --header 'Authorization: ${apiUserToken}'`}
+                                  command={`--request GET --url '${getApiHost()}/v1/secrets/?app_id=\${appId}&env=development' --header 'Authorization: Bearer ${apiUserToken}'`}
                                 />
                               </div>
                             </div>

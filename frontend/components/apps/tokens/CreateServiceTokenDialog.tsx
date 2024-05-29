@@ -27,6 +27,7 @@ import { CreateNewServiceToken } from '@/graphql/mutations/environments/createSe
 import Link from 'next/link'
 import { ExpiryOptionT, humanReadableExpiry, tokenExpiryOptions } from '@/utils/tokens'
 import { getApiHost } from '@/utils/appConfig'
+import { EnableSSEDialog } from '../EnableSSEDialog'
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
@@ -287,62 +288,80 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                             </div>
                           </Tab.Panel>
                           <Tab.Panel>
-                            <div className="space-y-6">
-                              <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
-                                <div className="w-full flex items-center justify-between pb-4">
-                                  <span className="uppercase text-xs tracking-widest text-gray-500">
-                                    API token
-                                  </span>
-                                  <div className="flex gap-4 items-center">
-                                    {apiServiceToken && (
-                                      <div className="">
-                                        <CopyButton value={apiServiceToken} />
-                                      </div>
-                                    )}
+                            {data.sseEnabled ? (
+                              <div className="space-y-6">
+                                <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
+                                  <div className="w-full flex items-center justify-between pb-4">
+                                    <span className="uppercase text-xs tracking-widest text-gray-500">
+                                      API token
+                                    </span>
+                                    <div className="flex gap-4 items-center">
+                                      {apiServiceToken && (
+                                        <div className="">
+                                          <CopyButton value={apiServiceToken} />
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
+                                  <code className="text-xs break-all text-emerald-500 ph-no-capture">
+                                    {apiServiceToken}
+                                  </code>
                                 </div>
-                                <code className="text-xs break-all text-emerald-500 ph-no-capture">
-                                  {apiServiceToken}
-                                </code>
-                              </div>
 
-                              <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
-                                <div className="w-full flex items-center justify-between pb-4">
-                                  <span className="uppercase text-xs tracking-widest text-gray-500">
-                                    app id
-                                  </span>
-                                  <div className="flex gap-4 items-center">
-                                    {apiServiceToken && (
-                                      <div className="">
-                                        <CopyButton value={appId} />
-                                      </div>
-                                    )}
+                                <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
+                                  <div className="w-full flex items-center justify-between pb-4">
+                                    <span className="uppercase text-xs tracking-widest text-gray-500">
+                                      app id
+                                    </span>
+                                    <div className="flex gap-4 items-center">
+                                      {apiServiceToken && (
+                                        <div className="">
+                                          <CopyButton value={appId} />
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
+                                  <code className="text-xs break-all text-neutral-500 ph-no-capture">
+                                    {appId}
+                                  </code>
                                 </div>
-                                <code className="text-xs break-all text-neutral-500 ph-no-capture">
-                                  {appId}
-                                </code>
-                              </div>
 
-                              <div className="pt-4 border-t border-neutral-500/20 space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <div className="text-neutral-500 text-sm">
-                                    Example with <code>curl</code>
+                                <div className="pt-4 border-t border-neutral-500/20 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-neutral-500 text-sm">
+                                      Example with <code>curl</code>
+                                    </div>
+                                    <Link
+                                      href="https://docs.phase.dev/public-api"
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <Button variant="secondary">View Docs</Button>
+                                    </Link>
                                   </div>
-                                  <Link
-                                    href="https://docs.phase.dev/public-api"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <Button variant="secondary">View Docs</Button>
-                                  </Link>
+                                  <CliCommand
+                                    prefix="curl"
+                                    command={`--request GET --url '${getApiHost()}/v1/secrets/?app_id=${appId}&env=development' --header 'Authorization: Bearer ${apiServiceToken}'`}
+                                  />
                                 </div>
-                                <CliCommand
-                                  prefix="curl"
-                                  command={`--request GET --url '${getApiHost()}/v1/secrets?app_id=${appId}&env=development' --header 'Authorization: ${apiServiceToken}'`}
-                                />
                               </div>
-                            </div>
+                            ) : (
+                              <div className="space-y-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg">
+                                <div className="text-center">
+                                  <div className="text-lg font-semibold text-black dark:text-white">
+                                    Server-side encryption (SSE)
+                                  </div>
+                                  <div className="text-neutral-500 text-base">
+                                    SSE is not enabled for this app. SSE is required to use this
+                                    token with the REST API.
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-center">
+                                  <EnableSSEDialog appId={appId} />
+                                </div>
+                              </div>
+                            )}
                           </Tab.Panel>
                         </Tab.Panels>
                       </Tab.Group>
