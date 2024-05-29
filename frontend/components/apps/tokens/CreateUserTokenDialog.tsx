@@ -157,22 +157,6 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                         Copy this token. You won&apos;t see it again!
                       </Alert>
 
-                      <Alert variant="info" size="sm">
-                        <div>
-                          You will need to enable server-side encryption (SSE) for any Apps that you
-                          want to manage secrets with via the Public API.
-                          <Link
-                            href="https://docs.phase.dev/console/apps#settings"
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <div className="flex items-center gap-1 underline">
-                              Docs <FaExternalLinkSquareAlt />
-                            </div>
-                          </Link>
-                        </div>
-                      </Alert>
-
                       <Tab.Group>
                         <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
                           <Tab as={Fragment}>
@@ -228,6 +212,22 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                           </Tab.Panel>
                           <Tab.Panel>
                             <div className="space-y-6">
+                              <Alert variant="info" size="sm">
+                                <div>
+                                  You will need to enable server-side encryption (SSE) for any Apps
+                                  that you want to manage secrets with via the Public API.
+                                  <Link
+                                    href="https://docs.phase.dev/console/apps#settings"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <div className="flex items-center gap-1 underline">
+                                      Docs <FaExternalLinkSquareAlt />
+                                    </div>
+                                  </Link>
+                                </div>
+                              </Alert>
+
                               <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
                                 <div className="w-full flex items-center justify-between pb-4">
                                   <span className="uppercase text-xs tracking-widest text-gray-500">
