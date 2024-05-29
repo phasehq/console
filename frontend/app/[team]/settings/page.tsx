@@ -107,23 +107,6 @@ export default function Settings({ params }: { params: { team: string } }) {
                       </div>
                     </div>
                   )}
-
-                  <div className="space-y-6 py-4 border-t border-neutral-500/20">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-semibold">App</h2>
-                      <p className="text-neutral-500">
-                        Control the behavior and appearance of UI elements.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-8">
-                      <div className="font-semibold">Theme</div>
-                      <div className="flex items-center gap-2">
-                        <FaSun />
-                        <ModeToggle />
-                        <FaMoon />
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </Tab.Panel>
 

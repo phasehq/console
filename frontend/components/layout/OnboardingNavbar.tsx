@@ -1,7 +1,5 @@
 import Link from 'next/link'
-import { ModeToggle } from '../common/ModeToggle'
 import UserMenu from '../UserMenu'
-import { FaSun, FaMoon } from 'react-icons/fa'
 import { LogoWordMark } from '../common/LogoWordMark'
 
 const OnboardingNavbar = () => {
@@ -14,11 +12,6 @@ const OnboardingNavbar = () => {
           </div>
         </Link>
         <div className="flex gap-4 items-center">
-          <div className="flex gap-2 items-center">
-            <FaSun className="text-neutral-500" />
-            <ModeToggle />
-            <FaMoon className="text-neutral-500" />
-          </div>
           <UserMenu />
         </div>
       </nav>
