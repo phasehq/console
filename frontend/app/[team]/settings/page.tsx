@@ -32,26 +32,25 @@ export default function Settings({ params }: { params: { team: string } }) {
 
       <div className="pt-8">
         <Tab.Group>
-          {activeUserIsAdmin && (
-            <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
-              {tabList().map((tab) => (
-                <Tab key={tab.name} as={Fragment}>
-                  {({ selected }) => (
-                    <div
-                      className={clsx(
-                        'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
-                        selected
-                          ? 'border-emerald-500 font-semibold'
-                          : ' border-transparent cursor-pointer'
-                      )}
-                    >
-                      {tab.name}
-                    </div>
-                  )}
-                </Tab>
-              ))}
-            </Tab.List>
-          )}
+          <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+            {tabList().map((tab) => (
+              <Tab key={tab.name} as={Fragment}>
+                {({ selected }) => (
+                  <div
+                    className={clsx(
+                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      selected
+                        ? 'border-emerald-500 font-semibold'
+                        : ' border-transparent cursor-pointer'
+                    )}
+                  >
+                    {tab.name}
+                  </div>
+                )}
+              </Tab>
+            ))}
+          </Tab.List>
+
           <Tab.Panels>
             <div className="max-h-[80vh] overflow-y-auto px-4">
               {activeUserIsAdmin && (
@@ -121,7 +120,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                     </div>
                     <div className="flex items-center gap-8">
                       <div className="font-semibold">Theme</div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-neutral-500">
                         <FaSun />
                         <ModeToggle />
                         <FaMoon />

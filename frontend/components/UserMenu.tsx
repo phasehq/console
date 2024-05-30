@@ -66,7 +66,7 @@ export default function UserMenu() {
             </Menu.Item>
 
             <Menu.Item>
-              <div className="flex items-center justify-between px-2 py-3">
+              <div className="flex items-center justify-between px-2 py-3 text-neutral-500">
                 <div className="text-2xs">Theme</div>
                 <div className="flex items-center gap-2">
                   <FaSun />
