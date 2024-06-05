@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import {
   FaChevronDown,
@@ -50,16 +50,11 @@ const SidebarLink = (props: SidebarLinkT) => {
 const Sidebar = () => {
   const team = usePathname()?.split('/')[1]
 
-  const { organisations, activeOrganisation, setActiveOrganisation } =
-    useContext(organisationContext)
+  const { organisations, activeOrganisation } = useContext(organisationContext)
 
   const showOrgsMenu = organisations === null ? false : organisations?.length > 1
 
   const OrgsMenu = () => {
-    const switchOrg = (org: OrganisationType) => {
-      setActiveOrganisation(org)
-    }
-
     return (
       <Menu as="div" className="relative inline-block text-left ">
         {({ open }) => (
@@ -88,18 +83,19 @@ const Sidebar = () => {
                     {organisations?.map((org: OrganisationType) => (
                       <Menu.Item key={org.id}>
                         {({ active }) => (
-                          <button
-                            onClick={() => switchOrg(org)}
-                            title={`Switch to ${org.name}`}
-                            className={`${
-                              active
-                                ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
-                                : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
-                            } group flex w-full  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium`}
-                          >
-                            <span className="truncate w-[80%] text-left">{org.name}</span>
-                            <FaExchangeAlt />
-                          </button>
+                          <Link href={`/${org.name}`}>
+                            <div
+                              title={`Switch to ${org.name}`}
+                              className={`${
+                                active
+                                  ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
+                                  : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
+                              } group flex w-full  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium`}
+                            >
+                              <span className="truncate w-[80%] text-left">{org.name}</span>
+                              <FaExchangeAlt />
+                            </div>
+                          </Link>
                         )}
                       </Menu.Item>
                     ))}
