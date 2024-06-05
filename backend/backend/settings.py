@@ -3,6 +3,8 @@ from pathlib import Path
 from datetime import timedelta
 import logging.config
 
+from ee.license.verifier import check_license
+
 # Clear prev config
 LOGGING_CONFIG = None
 
@@ -82,7 +84,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.github",
     "allauth.socialaccount.providers.gitlab",
-    "api",
+    "api.config.APIConfig",
     "logs",
     "graphene_django",
     "django_rq",
@@ -284,3 +286,5 @@ RQ_QUEUES = {
         "DB": 0,
     }
 }
+
+PHASE_LICENSE = check_license(os.getenv("PHASE_LICENSE_OFFLINE"))

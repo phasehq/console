@@ -93,6 +93,27 @@ class Organisation(models.Model):
         return self.name
 
 
+class ActivatedPhaseLicense(models.Model):
+    id = models.TextField(primary_key=True, editable=False)
+    customer_name = models.CharField(max_length=255)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
+    plan = models.CharField(
+        max_length=2,
+        choices=Organisation.PLAN_TIERS,
+        default=Organisation.ENTERPRISE_PLAN,
+    )
+    seats = models.IntegerField()
+    tokens = models.IntegerField()
+    metadata = models.JSONField()
+    environment = models.CharField(max_length=255)
+    license_type = models.CharField(max_length=255)
+    signature_date = models.DateField()
+    issuing_authority = models.CharField(max_length=255)
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    activated_at = models.DateTimeField(auto_now_add=True)
+
+
 class AppManager(models.Manager):
     def create(self, *args, **kwargs):
         organisation = kwargs.get("organisation")

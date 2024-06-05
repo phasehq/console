@@ -2,6 +2,7 @@ from django.apps import apps
 from django.utils import timezone
 from django.conf import settings
 
+
 # Determine if the application is cloud-hosted based on the APP_HOST setting
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -36,6 +37,9 @@ def can_add_app(organisation):
     current_app_count = App.objects.filter(
         organisation=organisation, is_deleted=False
     ).count()
+
+    if settings.PHASE_LICENSE:
+        return True
     plan_limits = PLAN_CONFIG[organisation.plan]
     if plan_limits["max_apps"] is None:
         return True
@@ -48,6 +52,8 @@ def can_add_user(organisation):
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     OrganisationMemberInvite = apps.get_model("api", "OrganisationMemberInvite")
 
+    plan_limits = PLAN_CONFIG[organisation.plan]
+
     current_user_count = (
         OrganisationMember.objects.filter(
             organisation=organisation, deleted_at=None
@@ -56,16 +62,25 @@ def can_add_user(organisation):
             organisation=organisation, valid=True, expires_at__gte=timezone.now()
         ).count()
     )
-    plan_limits = PLAN_CONFIG[organisation.plan]
-    if plan_limits["max_users"] is None:
+
+    if settings.PHASE_LICENSE:
+        user_limit = settings.PHASE_LICENSE.seats
+
+    else:
+        user_limit = plan_limits["max_users"]
+
+    if user_limit is None:
         return True
-    return current_user_count < plan_limits["max_users"]
+    return current_user_count < user_limit
 
 
 def can_add_environment(app):
     """Check if a new environment can be added to the app."""
 
     Environment = apps.get_model("api", "Environment")
+
+    if settings.PHASE_LICENSE:
+        return True
 
     current_env_count = Environment.objects.filter(app=app).count()
     plan_limits = PLAN_CONFIG[app.organisation.plan]

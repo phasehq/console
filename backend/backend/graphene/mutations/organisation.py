@@ -1,5 +1,6 @@
 from api.emails import send_invite_email, send_user_joined_email
 from api.utils.permissions import user_is_admin, user_is_org_member
+
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -16,6 +17,7 @@ from backend.graphene.types import (
 )
 from datetime import datetime, timedelta
 from django.utils import timezone
+from django.conf import settings
 
 
 class CreateOrganisationMutation(graphene.Mutation):
@@ -45,6 +47,11 @@ class CreateOrganisationMutation(graphene.Mutation):
             wrapped_keyring=wrapped_keyring,
             wrapped_recovery=wrapped_recovery,
         )
+
+        if settings.PHASE_LICENSE:
+            from ee.license.utils import activate_license
+
+            activate_license(settings.PHASE_LICENSE)
 
         return CreateOrganisationMutation(organisation=org)
 

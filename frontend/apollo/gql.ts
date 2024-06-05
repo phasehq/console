@@ -67,11 +67,13 @@ const documents = {
     "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n    role\n    memberId\n    keyring\n    recovery\n  }\n}": types.GetOrganisationsDocument,
     "query CheckOrganisationNameAvailability($name: String!) {\n  organisationNameAvailable(name: $name)\n}": types.CheckOrganisationNameAvailabilityDocument,
     "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n  }\n}": types.GetInvitesDocument,
+    "query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n  }\n}": types.GetLicenseDataDocument,
     "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role\n    identityKey\n    self\n  }\n}": types.GetOrganisationAdminsAndSelfDocument,
+    "query GetOrgLicense($organisationId: ID!) {\n  organisationLicense(organisationId: $organisationId) {\n    id\n    customerName\n    issuedAt\n    expiresAt\n    activatedAt\n    plan\n    seats\n    tokens\n  }\n}": types.GetOrgLicenseDocument,
     "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    self\n  }\n}": types.GetOrganisationMembersDocument,
     "query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    userCount\n    appCount\n  }\n}": types.GetOrganisationPlanDocument,
     "query VerifyInvite($inviteId: ID!) {\n  validateInvite(inviteId: $inviteId) {\n    id\n    organisation {\n      id\n      name\n    }\n    inviteeEmail\n    invitedBy {\n      email\n    }\n    apps {\n      id\n      name\n    }\n  }\n}": types.VerifyInviteDocument,
-    "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n}": types.GetAppEnvironmentsDocument,
+    "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n  sseEnabled(appId: $appId)\n}": types.GetAppEnvironmentsDocument,
     "query GetAppSecretsLogs($appId: ID!, $start: BigInt, $end: BigInt) {\n  logs(appId: $appId, start: $start, end: $end) {\n    secrets {\n      id\n      path\n      key\n      value\n      tags {\n        id\n        name\n        color\n      }\n      version\n      comment\n      timestamp\n      ipAddress\n      userAgent\n      user {\n        email\n        username\n        fullName\n        avatarUrl\n      }\n      serviceToken {\n        id\n        name\n      }\n      eventType\n      environment {\n        id\n        envType\n        name\n      }\n      secret {\n        id\n        path\n      }\n    }\n  }\n  secretsLogsCount(appId: $appId)\n  environmentKeys(appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    environment {\n      id\n    }\n  }\n}": types.GetAppSecretsLogsDocument,
     "query GetEnvironmentKey($envId: ID!, $appId: ID!) {\n  environmentKeys(environmentId: $envId, appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvironmentKeyDocument,
     "query GetEnvironmentTokens($envId: ID!) {\n  environmentTokens(environmentId: $envId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n  }\n}": types.GetEnvironmentTokensDocument,
@@ -89,7 +91,7 @@ const documents = {
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
     "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": types.GetServiceListDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
-    "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    path\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}": types.GetGitLabResourcesDocument,
+    "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}": types.GetGitLabResourcesDocument,
     "query TestNomadAuth($credentialId: ID!) {\n  testNomadCreds(credentialId: $credentialId)\n}": types.TestNomadAuthDocument,
     "query TestVaultAuth($credentialId: ID!) {\n  testVaultCreds(credentialId: $credentialId)\n}": types.TestVaultAuthDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
@@ -328,7 +330,15 @@ export function graphql(source: "query GetInvites($orgId: ID!) {\n  organisation
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n  }\n}"): (typeof documents)["query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role\n    identityKey\n    self\n  }\n}"): (typeof documents)["query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role\n    identityKey\n    self\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetOrgLicense($organisationId: ID!) {\n  organisationLicense(organisationId: $organisationId) {\n    id\n    customerName\n    issuedAt\n    expiresAt\n    activatedAt\n    plan\n    seats\n    tokens\n  }\n}"): (typeof documents)["query GetOrgLicense($organisationId: ID!) {\n  organisationLicense(organisationId: $organisationId) {\n    id\n    customerName\n    issuedAt\n    expiresAt\n    activatedAt\n    plan\n    seats\n    tokens\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -344,7 +354,7 @@ export function graphql(source: "query VerifyInvite($inviteId: ID!) {\n  validat
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n}"): (typeof documents)["query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n}"];
+export function graphql(source: "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n  sseEnabled(appId: $appId)\n}"): (typeof documents)["query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n  sseEnabled(appId: $appId)\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -416,7 +426,7 @@ export function graphql(source: "query GetGithubRepos($credentialId: ID!) {\n  g
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    path\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}"): (typeof documents)["query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    path\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}"];
+export function graphql(source: "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}"): (typeof documents)["query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

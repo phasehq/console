@@ -1,6 +1,8 @@
 type Query {
   organisations: [OrganisationType]
   organisationNameAvailable(name: String): Boolean
+  license: PhaseLicenseType
+  organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
   organisationPlan(organisationId: ID): OrganisationPlanType
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
   organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
@@ -67,6 +69,71 @@ enum ApiOrganisationPlanChoices {
   """Enterprise"""
   EN
 }
+
+type PhaseLicenseType {
+  id: String
+  customerName: String
+  organisationName: String
+  plan: PlanTier
+  seats: Int
+  tokens: Int
+  issuedAt: Date
+  expiresAt: Date
+  environment: String
+  licenseType: String
+  signatureDate: String
+  issuingAuthority: String
+  isActivated: Boolean
+}
+
+enum PlanTier {
+  PRO_PLAN
+  ENTERPRISE_PLAN
+}
+
+"""
+The `Date` scalar type represents a Date
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar Date
+
+type ActivatedPhaseLicenseType {
+  id: String!
+  customerName: String!
+  organisation: OrganisationType!
+  plan: ApiActivatedPhaseLicensePlanChoices!
+  seats: Int!
+  tokens: Int!
+  metadata: JSONString!
+  environment: String!
+  licenseType: String!
+  signatureDate: Date!
+  issuingAuthority: String!
+  issuedAt: DateTime!
+  expiresAt: DateTime!
+  activatedAt: DateTime!
+}
+
+"""An enumeration."""
+enum ApiActivatedPhaseLicensePlanChoices {
+  """Free"""
+  FR
+
+  """Pro"""
+  PR
+
+  """Enterprise"""
+  EN
+}
+
+"""
+Allows use of a JSON String for input / output from the GraphQL schema.
+
+Use of this type is *not recommended* as you lose the benefits of having a defined, static
+schema (one of the key benefits of GraphQL).
+"""
+scalar JSONString
 
 type OrganisationPlanType {
   name: String
@@ -371,14 +438,6 @@ type ProviderCredentialsType {
   updatedAt: DateTime!
   syncCount: Int
 }
-
-"""
-Allows use of a JSON String for input / output from the GraphQL schema.
-
-Use of this type is *not recommended* as you lose the benefits of having a defined, static
-schema (one of the key benefits of GraphQL).
-"""
-scalar JSONString
 
 type EnvironmentSyncType {
   id: String!

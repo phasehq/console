@@ -11,18 +11,21 @@ import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
-import { useLazyQuery, useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useRouter } from 'next/navigation'
+import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import CheckOrganisationNameAvailability from '@/graphql/queries/organisation/checkOrgNameAvailable.gql'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { setDevicePassword } from '@/utils/localStorage'
+import { License } from '@/components/settings/organisation/License'
 
 const bip39 = require('bip39')
 
 const Onboard = () => {
   const { data: session } = useSession()
+  const [teamNameLock, setTeamNameLock] = useState(false)
   const [teamName, setTeamName] = useState<string>('')
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
@@ -32,6 +35,7 @@ const Onboard = () => {
   const [inputs, setInputs] = useState<Array<string>>([])
   const [step, setStep] = useState<number>(0)
 
+  const { data: licenseData } = useQuery(GetLicenseData)
   const [createOrganisation, { data, loading, error }] = useMutation(CreateOrg)
   const [checkOrganisationNameAvailability] = useLazyQuery(CheckOrganisationNameAvailability)
   const [isloading, setIsLoading] = useState<boolean>(false)
@@ -42,6 +46,13 @@ const Onboard = () => {
   const errorToast = (message: string) => {
     toast.error(message)
   }
+
+  useEffect(() => {
+    if (licenseData?.license.organisationName) {
+      setTeamName(licenseData?.license.organisationName)
+      setTeamNameLock(true)
+    }
+  }, [licenseData])
 
   const steps: Step[] = [
     {
@@ -259,7 +270,11 @@ const Onboard = () => {
               <Stepper steps={steps} activeStep={step} />
             </div>
 
-            {step === 0 && <TeamName name={teamName} setName={setTeamName} />}
+            {licenseData?.license && <License license={licenseData.license} />}
+
+            {step === 0 && (
+              <TeamName name={teamName} setName={setTeamName} isLocked={teamNameLock} />
+            )}
             {step === 1 && (
               <AccountPassword
                 pw={pw}
