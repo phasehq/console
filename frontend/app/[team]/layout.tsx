@@ -1,7 +1,6 @@
 'use client'
 
 import '@/app/globals.css'
-import { HeroPattern } from '@/components/common/HeroPattern'
 import { NavBar } from '@/components/layout/Navbar'
 import Sidebar from '@/components/layout/Sidebar'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -41,11 +40,6 @@ export default function RootLayout({
       else router.push(`/`)
     }
   }, [organisations, params.team, router, loading, setActiveOrganisation])
-
-  useEffect(() => {
-    if (activeOrganisation && params.team !== activeOrganisation.name)
-      router.push(`/${activeOrganisation.name}`)
-  }, [activeOrganisation, params.team, router])
 
   const path = usePathname()
 
