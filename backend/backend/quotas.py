@@ -135,7 +135,7 @@ def can_add_service_token(app):
     else:
         token_limit = plan_limits["max_tokens_per_app"]
 
-    current_token_count = ServiceToken.objects.filter(app=app).count()
+    current_token_count = ServiceToken.objects.filter(app=app, deleted_at=None).count()
 
     if token_limit is None:
         return True
