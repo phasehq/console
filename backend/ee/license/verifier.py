@@ -32,14 +32,15 @@ def verify_signature(public_key_hex, license_str):
 
         if datetime.now().date() > data["expires_at"]:
             print("License is expired.")
-            # return False
+            valid = False
         else:
             print("License is valid.")
+            valid = True
 
         license = PhaseLicense(**data)
 
         print(license)
-        return True, license
+        return valid, license
     except exceptions.BadSignatureError:
         pass
 

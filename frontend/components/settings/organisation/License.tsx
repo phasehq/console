@@ -42,7 +42,7 @@ export const License = (props: {
         </div>
         {showExpiry && (
           <div className={clsx('text-xs', isExpired() && 'text-red-400')}>
-            {isExpired() ? 'Expired' : 'Valid till'}{' '}
+            {isExpired() ? 'Expired' : 'Expires'}{' '}
             {relativeTimeFromDates(new Date(license.expiresAt))}
           </div>
         )}
