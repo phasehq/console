@@ -13,18 +13,21 @@ PLAN_CONFIG = {
         "max_users": 5 if CLOUD_HOSTED else None,
         "max_apps": 3 if CLOUD_HOSTED else None,
         "max_envs_per_app": 3,
+        "max_tokens_per_app": 3 if CLOUD_HOSTED else None,
     },
     "PR": {
         "name": "Pro",
         "max_users": None,
         "max_apps": None,
         "max_envs_per_app": 10,
+        "max_tokens_per_app": 10 if CLOUD_HOSTED else None,
     },
     "EN": {
         "name": "Enterprise",
         "max_users": None,
         "max_apps": None,
         "max_envs_per_app": None,
+        "max_tokens_per_app": None,
     },
 }
 
@@ -33,12 +36,17 @@ def can_add_app(organisation):
     """Check if a new app can be added to the organisation."""
 
     App = apps.get_model("api", "App")
+    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
+
+    license_exists = ActivatedPhaseLicense.objects.filter(
+        organisation=organisation
+    ).exists()
 
     current_app_count = App.objects.filter(
         organisation=organisation, is_deleted=False
     ).count()
 
-    if settings.PHASE_LICENSE:
+    if license_exists:
         return True
     plan_limits = PLAN_CONFIG[organisation.plan]
     if plan_limits["max_apps"] is None:
@@ -51,8 +59,12 @@ def can_add_user(organisation):
 
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     OrganisationMemberInvite = apps.get_model("api", "OrganisationMemberInvite")
+    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
     plan_limits = PLAN_CONFIG[organisation.plan]
+    license_exists = ActivatedPhaseLicense.objects.filter(
+        organisation=organisation
+    ).exists()
 
     current_user_count = (
         OrganisationMember.objects.filter(
@@ -63,8 +75,13 @@ def can_add_user(organisation):
         ).count()
     )
 
-    if settings.PHASE_LICENSE:
-        user_limit = settings.PHASE_LICENSE.seats
+    if license_exists:
+        license = (
+            ActivatedPhaseLicense.objects.filter(organisation=organisation)
+            .order_by("-activated_at")
+            .first()
+        )
+        user_limit = license.seats
 
     else:
         user_limit = plan_limits["max_users"]
@@ -78,8 +95,15 @@ def can_add_environment(app):
     """Check if a new environment can be added to the app."""
 
     Environment = apps.get_model("api", "Environment")
+    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
-    if settings.PHASE_LICENSE:
+    plan_limits = PLAN_CONFIG[app.organisation.plan]
+
+    license_exists = ActivatedPhaseLicense.objects.filter(
+        organisation=app.organisation
+    ).exists()
+
+    if license_exists:
         return True
 
     current_env_count = Environment.objects.filter(app=app).count()
@@ -87,3 +111,33 @@ def can_add_environment(app):
     if plan_limits["max_envs_per_app"] is None:
         return True
     return current_env_count < plan_limits["max_envs_per_app"]
+
+
+def can_add_service_token(app):
+    """Check if a new service token can be added to the app."""
+
+    ServiceToken = apps.get_model("api", "ServiceToken")
+    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
+
+    plan_limits = PLAN_CONFIG[app.organisation.plan]
+
+    license_exists = ActivatedPhaseLicense.objects.filter(
+        organisation=app.organisation
+    ).exists()
+
+    if license_exists:
+        license = (
+            ActivatedPhaseLicense.objects.filter(organisation=app.organisation)
+            .order_by("-activated_at")
+            .first()
+        )
+        token_limit = license.tokens
+    else:
+        token_limit = plan_limits["max_tokens_per_app"]
+        return True
+
+    current_token_count = ServiceToken.objects.filter(app=app).count()
+
+    if token_limit is None:
+        return True
+    return current_token_count < token_limit
