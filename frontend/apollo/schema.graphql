@@ -84,6 +84,7 @@ type PhaseLicenseType {
   signatureDate: String
   issuingAuthority: String
   isActivated: Boolean
+  organisationOwner: OrganisationMemberType
 }
 
 enum PlanTier {
@@ -97,6 +98,32 @@ value as specified by
 [iso8601](https://en.wikipedia.org/wiki/ISO_8601).
 """
 scalar Date
+
+type OrganisationMemberType {
+  id: String!
+  role: ApiOrganisationMemberRoleChoices!
+  identityKey: String
+  wrappedKeyring: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  email: String
+  username: String
+  fullName: String
+  avatarUrl: String
+  self: Boolean
+}
+
+"""An enumeration."""
+enum ApiOrganisationMemberRoleChoices {
+  """Owner"""
+  OWNER
+
+  """Admin"""
+  ADMIN
+
+  """Developer"""
+  DEV
+}
 
 type ActivatedPhaseLicenseType {
   id: String!
@@ -142,32 +169,6 @@ type OrganisationPlanType {
   maxEnvsPerApp: Int
   userCount: Int
   appCount: Int
-}
-
-type OrganisationMemberType {
-  id: String!
-  role: ApiOrganisationMemberRoleChoices!
-  identityKey: String
-  wrappedKeyring: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  email: String
-  username: String
-  fullName: String
-  avatarUrl: String
-  self: Boolean
-}
-
-"""An enumeration."""
-enum ApiOrganisationMemberRoleChoices {
-  """Owner"""
-  OWNER
-
-  """Admin"""
-  ADMIN
-
-  """Developer"""
-  DEV
 }
 
 type OrganisationMemberInviteType {

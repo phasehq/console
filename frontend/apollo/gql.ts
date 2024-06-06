@@ -67,7 +67,7 @@ const documents = {
     "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n    role\n    memberId\n    keyring\n    recovery\n  }\n}": types.GetOrganisationsDocument,
     "query CheckOrganisationNameAvailability($name: String!) {\n  organisationNameAvailable(name: $name)\n}": types.CheckOrganisationNameAvailabilityDocument,
     "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n  }\n}": types.GetInvitesDocument,
-    "query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n  }\n}": types.GetLicenseDataDocument,
+    "query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n    organisationOwner {\n      fullName\n      email\n    }\n  }\n}": types.GetLicenseDataDocument,
     "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role\n    identityKey\n    self\n  }\n}": types.GetOrganisationAdminsAndSelfDocument,
     "query GetOrgLicense($organisationId: ID!) {\n  organisationLicense(organisationId: $organisationId) {\n    id\n    customerName\n    issuedAt\n    expiresAt\n    activatedAt\n    plan\n    seats\n    tokens\n  }\n}": types.GetOrgLicenseDocument,
     "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    self\n  }\n}": types.GetOrganisationMembersDocument,
@@ -330,7 +330,7 @@ export function graphql(source: "query GetInvites($orgId: ID!) {\n  organisation
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n  }\n}"): (typeof documents)["query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n  }\n}"];
+export function graphql(source: "query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n    organisationOwner {\n      fullName\n      email\n    }\n  }\n}"): (typeof documents)["query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n    organisationOwner {\n      fullName\n      email\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

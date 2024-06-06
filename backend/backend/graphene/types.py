@@ -566,9 +566,19 @@ class PhaseLicenseType(graphene.ObjectType):
     signature_date = graphene.String()
     issuing_authority = graphene.String()
     is_activated = graphene.Boolean()
+    organisation_owner = graphene.Field(OrganisationMemberType)
 
     def resolve_is_activated(self, info):
         return ActivatedPhaseLicense.objects.filter(id=self.id).exists()
+
+    def resolve_organisation_owner(self, info):
+        if ActivatedPhaseLicense.objects.filter(id=self.id).exists():
+            activated_license = ActivatedPhaseLicense.objects.get(id=self.id)
+
+            return OrganisationMember.objects.get(
+                organisation=activated_license.organisation,
+                role=OrganisationMember.OWNER,
+            )
 
 
 class ActivatedPhaseLicenseType(DjangoObjectType):
