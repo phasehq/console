@@ -11,18 +11,22 @@ import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
-import { useLazyQuery, useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useRouter } from 'next/navigation'
+import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import CheckOrganisationNameAvailability from '@/graphql/queries/organisation/checkOrgNameAvailable.gql'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { setDevicePassword } from '@/utils/localStorage'
+import { License } from '@/components/settings/organisation/License'
+import { LogoMark } from '@/components/common/LogoMark'
 
 const bip39 = require('bip39')
 
 const Onboard = () => {
   const { data: session } = useSession()
+  const [teamNameLock, setTeamNameLock] = useState(false)
   const [teamName, setTeamName] = useState<string>('')
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
@@ -32,24 +36,42 @@ const Onboard = () => {
   const [inputs, setInputs] = useState<Array<string>>([])
   const [step, setStep] = useState<number>(0)
 
+  const { data: licenseData } = useQuery(GetLicenseData)
   const [createOrganisation, { data, loading, error }] = useMutation(CreateOrg)
   const [checkOrganisationNameAvailability] = useLazyQuery(CheckOrganisationNameAvailability)
   const [isloading, setIsLoading] = useState<boolean>(false)
   const [recoveryDownloaded, setRecoveryDownloaded] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
+
   const router = useRouter()
 
   const errorToast = (message: string) => {
     toast.error(message)
   }
 
+  useEffect(() => {
+    if (licenseData?.license?.organisationName) {
+      setTeamName(licenseData.license.organisationName)
+      setTeamNameLock(true)
+
+      if (licenseData.license?.organisationOwner?.email === session?.user?.email) {
+        router.push(`/`)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [licenseData])
+
+  const licenseActivated = () => licenseData?.license?.isActivated
+
   const steps: Step[] = [
     {
       index: 0,
-      name: 'Organisation Name',
+      name: teamNameLock ? 'Organisation setup' : 'Organisation Name',
       icon: <MdGroups />,
-      title: 'Choose a name for your organisation',
-      description: (
+      title: teamNameLock ? 'Set up your organisation' : 'Choose a name for your organisation',
+      description: teamNameLock ? (
+        <></>
+      ) : (
         <div className="space-y-1">
           Your organisation name can be alphanumeric.
           <code>
@@ -244,63 +266,93 @@ const Onboard = () => {
     <main className="w-full flex flex-col justify-between h-screen">
       <HeroPattern />
 
-      <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-40">
-        {!success && (
-          <form
-            onSubmit={incrementStep}
-            className="space-y-8 p-8 border border-violet-200/10 rounded-lg bg-zinc-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
-          >
-            <div className="flex flex-col w-full">
-              {step >= 0 && (
-                <div className="text-black dark:text-white font-semibold text-2xl text-center">
-                  Welcome to Phase
-                </div>
-              )}
-              <Stepper steps={steps} activeStep={step} />
-            </div>
-
-            {step === 0 && <TeamName name={teamName} setName={setTeamName} />}
-            {step === 1 && (
-              <AccountPassword
-                pw={pw}
-                setPw={setPw}
-                pw2={pw2}
-                setPw2={setPw2}
-                savePassword={savePassword}
-                setSavePassword={setSavePassword}
-              />
-            )}
-            {step === 2 && (
-              <AccountRecovery
-                mnemonic={mnemonic}
-                onDownload={handleDownloadRecoveryKit}
-                onCopy={handleCopyRecoveryKit}
-              />
-            )}
-
-            <div className="flex justify-between w-full">
-              <div>
-                {step !== 0 && (
-                  <Button variant="secondary" onClick={decrementStep} type="button">
-                    Previous
-                  </Button>
+      {!licenseActivated() ? (
+        <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-40">
+          {success ? (
+            <SuccessPane />
+          ) : (
+            <form
+              onSubmit={incrementStep}
+              className="space-y-8 p-8 border border-violet-200/10 rounded-lg bg-zinc-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
+            >
+              <div className="flex flex-col w-full">
+                {step >= 0 && (
+                  <div className="text-black dark:text-white font-semibold text-2xl text-center">
+                    Welcome to Phase
+                  </div>
                 )}
+                <Stepper steps={steps} activeStep={step} />
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="primary"
-                  type="submit"
-                  isLoading={isloading || loading}
-                  disabled={step === steps.length - 1 && !recoveryDownloaded}
-                >
-                  {step === steps.length - 1 ? 'Finish' : 'Next'}
-                </Button>
+
+              {licenseData?.license && <License license={licenseData.license} showExpiry={false} />}
+
+              {step === 0 && (
+                <TeamName name={teamName} setName={setTeamName} isLocked={teamNameLock} />
+              )}
+              {step === 1 && (
+                <AccountPassword
+                  pw={pw}
+                  setPw={setPw}
+                  pw2={pw2}
+                  setPw2={setPw2}
+                  savePassword={savePassword}
+                  setSavePassword={setSavePassword}
+                />
+              )}
+              {step === 2 && (
+                <AccountRecovery
+                  mnemonic={mnemonic}
+                  onDownload={handleDownloadRecoveryKit}
+                  onCopy={handleCopyRecoveryKit}
+                />
+              )}
+
+              <div className="flex justify-between w-full">
+                <div>
+                  {step !== 0 && (
+                    <Button variant="secondary" onClick={decrementStep} type="button">
+                      Previous
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    isLoading={isloading || loading}
+                    disabled={step === steps.length - 1 && !recoveryDownloaded}
+                  >
+                    {step === steps.length - 1 ? 'Finish' : 'Next'}
+                  </Button>
+                </div>
               </div>
+            </form>
+          )}
+        </div>
+      ) : (
+        <div className="mx-auto my-auto w-full max-w-3xl flex flex-col gap-8 p-16 rounded-lg text-center items-center bg-zinc-200 dark:bg-zinc-800/40 ring-1 ring-inset ring-neutral-500/40 shadow-xl">
+          <LogoMark className="w-32 fill-black dark:fill-white" />
+
+          <div className="space-y-1">
+            <div className="text-black dark:text-white font-semibold text-3xl text-center">
+              Welcome to Phase at {licenseData.license.customerName}
             </div>
-          </form>
-        )}
-        {success && <SuccessPane />}
-      </div>
+            <p className="text-neutral-500 text-lg">
+              Your organisation admin has already set up this Phase instance.
+            </p>
+            <p className="text-neutral-500 text-lg">
+              Please contact{' '}
+              <a href={`mailto:${licenseData.license.organisationOwner.email}`}>
+                <span className="text-emerald-400 font-medium">
+                  {licenseData.license.organisationOwner.fullName}
+                </span>{' '}
+                ({licenseData.license.organisationOwner.email}){' '}
+              </a>
+              for an invite to join this workspace.
+            </p>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

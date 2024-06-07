@@ -11,9 +11,13 @@ import { HeroPattern } from '@/components/common/HeroPattern'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
+import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
+import { useQuery } from '@apollo/client'
 
 export default function Home() {
   const router = useRouter()
+
+  useQuery(GetLicenseData)
 
   const { organisations, setActiveOrganisation, loading } = useContext(organisationContext)
 

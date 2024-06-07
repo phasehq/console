@@ -12,7 +12,12 @@ from django.utils import timezone
 from django.conf import settings
 from api.services import Providers, ServiceConfig
 from api.tasks import trigger_sync_tasks
-from backend.quotas import can_add_app, can_add_environment, can_add_user
+from backend.quotas import (
+    can_add_app,
+    can_add_environment,
+    can_add_service_token,
+    can_add_user,
+)
 
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
@@ -91,6 +96,27 @@ class Organisation(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class ActivatedPhaseLicense(models.Model):
+    id = models.TextField(primary_key=True, editable=False)
+    customer_name = models.CharField(max_length=255)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
+    plan = models.CharField(
+        max_length=2,
+        choices=Organisation.PLAN_TIERS,
+        default=Organisation.ENTERPRISE_PLAN,
+    )
+    seats = models.IntegerField()
+    tokens = models.IntegerField()
+    metadata = models.JSONField()
+    environment = models.CharField(max_length=255)
+    license_type = models.CharField(max_length=255)
+    signature_date = models.DateField()
+    issuing_authority = models.CharField(max_length=255)
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    activated_at = models.DateTimeField(auto_now_add=True)
 
 
 class AppManager(models.Manager):
@@ -357,6 +383,14 @@ class EnvironmentToken(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
 
 
+class ServiceTokenManager(models.Manager):
+    def create(self, *args, **kwargs):
+        app = kwargs.get("app")
+        if not can_add_service_token(app):
+            raise ValueError("Cannot add more service tokens to this app.")
+        return super().create(*args, **kwargs)
+
+
 class ServiceToken(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     app = models.ForeignKey(App, on_delete=models.CASCADE)
@@ -372,6 +406,7 @@ class ServiceToken(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
+    objects = ServiceTokenManager()
 
 
 class UserToken(models.Model):

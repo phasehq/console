@@ -5,6 +5,7 @@ from enum import Enum
 from graphene import ObjectType, relay, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
+    ActivatedPhaseLicense,
     CustomUser,
     Environment,
     EnvironmentKey,
@@ -542,4 +543,45 @@ class OrganisationPlanType(ObjectType):
 class LockboxType(DjangoObjectType):
     class Meta:
         model = Lockbox
+        fields = "__all__"
+
+
+class PlanTier(graphene.Enum):
+    PRO_PLAN = "PRO"
+    ENTERPRISE_PLAN = "ENTERPRISE"
+
+
+class PhaseLicenseType(graphene.ObjectType):
+
+    id = graphene.String()
+    customer_name = graphene.String()
+    organisation_name = graphene.String()
+    plan = graphene.Field(PlanTier)
+    seats = graphene.Int()
+    tokens = graphene.Int()
+    issued_at = graphene.Date()
+    expires_at = graphene.Date()
+    environment = graphene.String()
+    license_type = graphene.String()
+    signature_date = graphene.String()
+    issuing_authority = graphene.String()
+    is_activated = graphene.Boolean()
+    organisation_owner = graphene.Field(OrganisationMemberType)
+
+    def resolve_is_activated(self, info):
+        return ActivatedPhaseLicense.objects.filter(id=self.id).exists()
+
+    def resolve_organisation_owner(self, info):
+        if ActivatedPhaseLicense.objects.filter(id=self.id).exists():
+            activated_license = ActivatedPhaseLicense.objects.get(id=self.id)
+
+            return OrganisationMember.objects.get(
+                organisation=activated_license.organisation,
+                role=OrganisationMember.OWNER,
+            )
+
+
+class ActivatedPhaseLicenseType(DjangoObjectType):
+    class Meta:
+        model = ActivatedPhaseLicense
         fields = "__all__"

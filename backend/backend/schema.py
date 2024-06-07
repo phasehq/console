@@ -21,6 +21,7 @@ from .graphene.queries.syncing import (
     resolve_test_nomad_creds,
 )
 from .graphene.queries.quotas import resolve_organisation_plan
+from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
     CreateEnvironmentKeyMutation,
     CreateEnvironmentMutation,
@@ -79,6 +80,7 @@ from .graphene.mutations.organisation import (
     UpdateUserWrappedSecretsMutation,
 )
 from .graphene.types import (
+    ActivatedPhaseLicenseType,
     AppType,
     ChartDataPointType,
     EnvironmentKeyType,
@@ -91,6 +93,7 @@ from .graphene.types import (
     OrganisationMemberType,
     OrganisationPlanType,
     OrganisationType,
+    PhaseLicenseType,
     ProviderCredentialsType,
     ProviderType,
     SecretEventType,
@@ -134,6 +137,12 @@ class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
+
+    license = graphene.Field(PhaseLicenseType)
+
+    organisation_license = graphene.Field(
+        ActivatedPhaseLicenseType, organisation_id=graphene.ID()
+    )
 
     organisation_plan = graphene.Field(
         OrganisationPlanType, organisation_id=graphene.ID()
@@ -282,6 +291,9 @@ class Query(graphene.ObjectType):
 
     def resolve_organisation_name_available(root, info, name):
         return not Organisation.objects.filter(name__iexact=name).exists()
+
+    resolve_license = resolve_license
+    resolve_organisation_license = resolve_organisation_license
 
     def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
         if not user_is_org_member(info.context.user.userId, organisation_id):

@@ -1,6 +1,10 @@
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
+import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
 import { useEffect } from 'react'
+import { FaCheckCircle } from 'react-icons/fa'
+import { FaCheck, FaLock } from 'react-icons/fa6'
+import { MdVerified } from 'react-icons/md'
 
 const DOMAIN_BANLIST = [
   'gmail.com',
@@ -42,6 +46,7 @@ const DOMAIN_BANLIST = [
 interface TeamNameProps {
   name: string
   setName: Function
+  isLocked?: boolean
 }
 
 export const TeamName = (props: TeamNameProps) => {
@@ -61,14 +66,20 @@ export const TeamName = (props: TeamNameProps) => {
       <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="orgname">
         Organisation name
       </label>
-      <input
-        id="orgname"
-        className="text-lg"
-        required
-        maxLength={MAX_INPUT_STRING_LENGTH}
-        value={props.name}
-        onChange={(e) => props.setName(e.target.value.replace(/[^a-z0-9]/gi, ''))}
-      />
+      <div className="relative">
+        <input
+          id="orgname"
+          className={clsx('text-lg w-full', props.isLocked && 'opacity-70')}
+          required
+          disabled={props.isLocked}
+          maxLength={MAX_INPUT_STRING_LENGTH}
+          value={props.name}
+          onChange={(e) => props.setName(e.target.value.replace(/[^a-z0-9]/gi, ''))}
+        />
+        {props.isLocked && (
+          <MdVerified className="absolute right-4 top-3 text-emerald-400 shrink-0" />
+        )}
+      </div>
     </div>
   )
 }

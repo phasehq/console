@@ -1,0 +1,15 @@
+query GetLicenseData {
+  license {
+    id
+    customerName
+    organisationName
+    expiresAt
+    plan
+    seats
+    isActivated
+    organisationOwner {
+      fullName
+      email
+    }
+  }
+}

@@ -1,75 +1,83 @@
 import ProgressBar from '@/components/common/ProgressBar'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
+import { GetOrgLicense } from '@/graphql/queries/organisation/getOrganisationLicense.gql'
+import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
 import { useQuery } from '@apollo/client'
 import { ReactNode, useContext } from 'react'
 import { PlanLabel } from './PlanLabel'
 import Spinner from '@/components/common/Spinner'
 import { calculatePercentage } from '@/utils/dataUnits'
 import { Button } from '@/components/common/Button'
-import { FaCheckCircle, FaCubes, FaTimesCircle, FaUsersCog } from 'react-icons/fa'
+import {
+  FaCheckCircle,
+  FaCube,
+  FaCubes,
+  FaProjectDiagram,
+  FaTimesCircle,
+  FaUser,
+  FaUsersCog,
+} from 'react-icons/fa'
 import Link from 'next/link'
 import GenericDialog from '@/components/common/GenericDialog'
 import { UpgradeRequestForm } from '@/components/forms/UpgradeRequestForm'
-import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { ActivatedPhaseLicenseType, ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { isCloudHosted } from '@/utils/appConfig'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
+import { License } from './License'
+import { BsListColumnsReverse } from 'react-icons/bs'
+import { FaKey } from 'react-icons/fa6'
 
 const plansInfo = {
   FR: {
     id: ApiOrganisationPlanChoices.Fr,
     name: 'Free',
     description: 'Try Phase without any commitments.',
+    seats: isCloudHosted() ? '5 Users' : 'Unlimited Users',
+    apps: isCloudHosted() ? '3 Apps' : 'Unlimited Apps',
+    tokens: isCloudHosted() ? '3 Service Tokens per app' : 'Unlimited Service Tokens per app',
     featureSummary: [
-      isCloudHosted() ? '5 Users' : 'Unlimited Users',
-      isCloudHosted() ? '3 Apps' : 'Unlimited Apps',
-      '3 Environments',
       'End-to-end Encryption',
       'Google/GitHub/Gitlab SSO',
-      'Unlimited Service Tokens',
       'Secret Versioning',
       'Secret Referencing',
       'Basic Access Control',
-      '24-hour audit log retention',
+      isCloudHosted() ? '24-hour audit log retention' : 'Unlimited Audit Log Retention',
       'Community Support',
     ],
     notIncluded: [
-      'Unlimited Users',
-      'Unlimited Apps',
-      'Unlimited Environments',
-      'SAML SSO',
-      'Custom RBAC',
-      'Point-in-time Recovery',
-      'Source IP-based allow listing',
-      '90-day audit log retention',
-      'Priority Support',
+      ...['SAML SSO', 'Priority Support'],
+      ...(isCloudHosted()
+        ? [
+            '90-day audit log retention',
+            'Unlimited Users',
+            'Unlimited Apps',
+            'Unlimited Environments',
+            'Unlimited Service Tokens',
+          ]
+        : []),
     ],
   },
   PR: {
     id: ApiOrganisationPlanChoices.Pr,
     name: 'Pro',
-    description: 'For fast moving teams with production applications.',
+    seats: 'Unlimited Users',
+    apps: 'Unlimited Apps',
+    tokens: isCloudHosted() ? '10 Service Tokens per app' : 'Unlimited Service Tokens per app',
     featureSummary: [
-      'Unlimited Users',
-      'Unlimited Apps',
-      '10 Environments per App',
       'End-to-end Encryption',
       'Google/GitHub/Gitlab SSO',
       'Role-based Access Control',
-      'Unlimited Service Tokens',
       'Secret Versioning',
       'Secret Referencing',
-      'Point-in-time Recovery',
-      'Source IP-based allow listing',
-      '90-day audit log retention',
+      isCloudHosted() ? '90-day audit log retention' : 'Unlimited Audit Log Retention',
       'Priority Support',
     ],
     notIncluded: [
-      'Unlimited Environments',
-      'SAML SSO',
-      'Custom RBAC',
-      'Unlimited audit log retention',
-      'Dedicated Support',
+      ...['SAML SSO', 'Dedicated Support'],
+      ...(isCloudHosted()
+        ? ['Unlimited audit log retention', 'Unlimited Environments', 'Unlimited Service Tokens']
+        : []),
     ],
   },
   EN: {
@@ -77,20 +85,15 @@ const plansInfo = {
     name: 'Enterprise',
     description:
       'Secure existing data in your enterprise workload. Get full onboarding and priority technical support.',
+    seats: 'Unlimited Users',
+    apps: 'Unlimited Apps',
+    tokens: 'Unlimited Service Tokens per app',
     featureSummary: [
-      'Unlimited Users',
-      'Unlimited Apps',
-      'Unlimited Environments per App',
       'End-to-end Encryption',
       'Google/GitHub/Gitlab/SAML SSO',
       'Role-based Access Control',
-      'Unlimited Service Tokens',
       'Secret Versioning',
       'Secret Referencing',
-      'Point-in-time Recovery',
-      'Source IP-based allow listing',
-      '99.99% Uptime SLA',
-      'Custom RBAC',
       'Dedicated support',
       'On-boarding and Migration assistance',
     ],
@@ -101,12 +104,16 @@ const plansInfo = {
 const PlanFeatureItem = (props: {
   children: ReactNode
   iconColor: string
-  iconType: 'check' | 'cross'
+  iconType: 'check' | 'cross' | 'user' | 'app' | 'env' | 'key'
 }) => {
   return (
     <div className="flex items-center gap-4 py-2 text-sm">
       {props.iconType === 'check' && <FaCheckCircle className={props.iconColor} />}
       {props.iconType === 'cross' && <FaTimesCircle className={props.iconColor} />}
+      {props.iconType === 'user' && <FaUser className={props.iconColor} />}
+      {props.iconType === 'app' && <FaCube className={props.iconColor} />}
+      {props.iconType === 'env' && <BsListColumnsReverse className={props.iconColor} />}
+      {props.iconType === 'key' && <FaKey className={props.iconColor} />}
       {props.children}
     </div>
   )
@@ -123,12 +130,25 @@ export const PlanInfo = () => {
     fetchPolicy: 'cache-and-network',
   })
 
+  const { data: licenseData } = useQuery(GetOrgLicense, {
+    variables: { organisationId: activeOrganisation?.id },
+    skip: !activeOrganisation,
+    fetchPolicy: 'cache-and-network',
+  })
+
+  //const { data: licenseData } = useQuery(GetLicenseData)
+
+  const license = (): ActivatedPhaseLicenseType | null => licenseData?.organisationLicense || null
+
   const appQuotaUsage = data
     ? calculatePercentage(data.organisationPlan.appCount, data.organisationPlan.maxApps)
     : 0
 
   const memberQuotaUsage = data
-    ? calculatePercentage(data.organisationPlan.userCount, data.organisationPlan.maxUsers)
+    ? calculatePercentage(
+        data.organisationPlan.userCount,
+        license()?.seats || data.organisationPlan.maxUsers
+      )
     : 0
 
   const progressBarColor = (value: number, maxValue: number) =>
@@ -146,47 +166,62 @@ export const PlanInfo = () => {
       <div className="space-y-4 ">
         <div className="text-lg font-medium py-2 border-b border-neutral-500/20">Current plan</div>
 
-        <div className="flex justify-between items-center py-4">
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <LogoWordMark className="fill-black dark:fill-white h-10" />{' '}
-              <PlanLabel plan={activeOrganisation.plan} />
-            </div>
-          </div>
-
-          {activeOrganisation.plan !== ApiOrganisationPlanChoices.En && (
-            <div className="flex items-center gap-4">
-              <Link href="https://phase.dev/pricing" target="_blank" rel="noreferrer">
-                <Button variant="secondary">Compare plans</Button>
-              </Link>
-              <GenericDialog
-                title="Request an Upgrade"
-                buttonVariant="primary"
-                buttonContent={'Upgrade'}
-                onClose={() => {}}
-              >
-                <div className="space-y-4">
-                  <div className="text-neutral-500">Request an upgrade to your account.</div>
-                  {isCloudHosted() ? (
-                    <UpgradeRequestForm onSuccess={() => {}} />
-                  ) : (
-                    <div>
-                      Please contact us at{' '}
-                      <a href="mailto:info@phase.dev" className="text-emerald-500">
-                        info@phase.dev
-                      </a>{' '}
-                      to request an upgrade.
+        <div className="py-4">
+          <div className="space-y-4 w-full">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <LogoWordMark className="fill-black dark:fill-white h-10" />{' '}
+                <PlanLabel plan={activeOrganisation.plan} />
+              </div>
+              {activeOrganisation.plan !== ApiOrganisationPlanChoices.En && (
+                <div className="flex items-center gap-4">
+                  <Link href="https://phase.dev/pricing" target="_blank" rel="noreferrer">
+                    <Button variant="secondary">
+                      <div className="whitespace-nowrap">Compare plans</div>
+                    </Button>
+                  </Link>
+                  <GenericDialog
+                    title="Request an Upgrade"
+                    buttonVariant="primary"
+                    buttonContent={'Upgrade'}
+                    onClose={() => {}}
+                  >
+                    <div className="space-y-4">
+                      <div className="text-neutral-500">Request an upgrade to your account.</div>
+                      {isCloudHosted() ? (
+                        <UpgradeRequestForm onSuccess={() => {}} />
+                      ) : (
+                        <div>
+                          Please contact us at{' '}
+                          <a href="mailto:info@phase.dev" className="text-emerald-500">
+                            info@phase.dev
+                          </a>{' '}
+                          to request an upgrade.
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </GenericDialog>
                 </div>
-              </GenericDialog>
+              )}
             </div>
-          )}
+            {license() && <License license={license()!} showExpiry />}
+          </div>
         </div>
 
         {planInfo && (
           <div className="grid grid-cols-2 gap-8">
             <div>
+              <PlanFeatureItem iconColor="text-emerald-500" iconType="user">
+                {license()?.seats ? `${license()?.seats} Users` : planInfo.seats}
+              </PlanFeatureItem>
+              <PlanFeatureItem iconColor="text-emerald-500" iconType="app">
+                {planInfo.apps}
+              </PlanFeatureItem>
+              <PlanFeatureItem iconColor="text-emerald-500" iconType="key">
+                {license()?.tokens
+                  ? `${license()?.tokens} Service Tokens per App`
+                  : planInfo.tokens}
+              </PlanFeatureItem>
               {planInfo.featureSummary.map((feature) => (
                 <PlanFeatureItem key={feature} iconColor="text-emerald-500" iconType="check">
                   {feature}
@@ -238,14 +273,14 @@ export const PlanInfo = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-lg font-medium text-black dark:text-white">Members</div>
-            <div className="text-neutral-500">{`${data.organisationPlan.userCount} ${data.organisationPlan.maxUsers ? `of ${data.organisationPlan.maxUsers}` : ''}  Seats used`}</div>
+            <div className="text-neutral-500">{`${data.organisationPlan.userCount} ${license()?.seats || data.organisationPlan.maxUsers ? `of ${license()?.seats || data.organisationPlan.maxUsers}` : ''}  Seats used`}</div>
           </div>
-          {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr && (
+          {(activeOrganisation.plan === ApiOrganisationPlanChoices.Fr || license()?.seats) && (
             <ProgressBar
               percentage={memberQuotaUsage}
               color={progressBarColor(
                 data.organisationPlan.userCount,
-                data.organisationPlan.maxUsers
+                license()?.seats || data.organisationPlan.maxUsers
               )}
               size="sm"
             />
