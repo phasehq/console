@@ -4,6 +4,9 @@ from django.apps import apps
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PlanTier(Enum):
@@ -63,9 +66,9 @@ def update_existing_org_license(phase_license):
         elif phase_license.plan == PlanTier.ENTERPRISE_PLAN.value:
             existing_org.plan = Organisation.ENTERPRISE_PLAN
         existing_org.save()
-        print(f"Updated license for {existing_org.name}")
+        logger.info(f"Updated license for {existing_org.name}")
     except Organisation.DoesNotExist:
-        print("Existing organisation not found for this license")
+        logger.info("Existing organisation not found for this license")
         pass
 
 
@@ -75,7 +78,7 @@ def activate_license(phase_license):
     ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
     if ActivatedPhaseLicense.objects.filter(id=phase_license.id).exists():
-        print("License is already activated")
+        logger.info("License is already activated")
         return True
 
     try:
@@ -110,7 +113,7 @@ def activate_license(phase_license):
         new_license = ActivatedPhaseLicense.objects.create(**fields)
         org.save()
 
-        print(f"Activated license: {new_license}")
+        logger.info(f"Activated license: {new_license}")
     except Organisation.DoesNotExist:
-        print("Existing organisation not found for this license")
+        logger.info("Existing organisation not found for this license")
         pass

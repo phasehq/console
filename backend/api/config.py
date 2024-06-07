@@ -9,4 +9,7 @@ class APIConfig(AppConfig):
         if settings.PHASE_LICENSE:
             from ee.license.utils import activate_license
 
-            activate_license(settings.PHASE_LICENSE)
+            try:
+                activate_license(settings.PHASE_LICENSE)
+            except:
+                pass
