@@ -58,6 +58,7 @@ const Onboard = () => {
         router.push(`/`)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [licenseData])
 
   const licenseActivated = () => licenseData?.license?.isActivated
@@ -261,72 +262,72 @@ const Onboard = () => {
     )
   }
 
-  const OnboardingForm = () => {
-    return (
-      <form
-        onSubmit={incrementStep}
-        className="space-y-8 p-8 border border-violet-200/10 rounded-lg bg-zinc-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
-      >
-        <div className="flex flex-col w-full">
-          {step >= 0 && (
-            <div className="text-black dark:text-white font-semibold text-2xl text-center">
-              Welcome to Phase
-            </div>
-          )}
-          <Stepper steps={steps} activeStep={step} />
-        </div>
-
-        {licenseData?.license && <License license={licenseData.license} showExpiry={false} />}
-
-        {step === 0 && <TeamName name={teamName} setName={setTeamName} isLocked={teamNameLock} />}
-        {step === 1 && (
-          <AccountPassword
-            pw={pw}
-            setPw={setPw}
-            pw2={pw2}
-            setPw2={setPw2}
-            savePassword={savePassword}
-            setSavePassword={setSavePassword}
-          />
-        )}
-        {step === 2 && (
-          <AccountRecovery
-            mnemonic={mnemonic}
-            onDownload={handleDownloadRecoveryKit}
-            onCopy={handleCopyRecoveryKit}
-          />
-        )}
-
-        <div className="flex justify-between w-full">
-          <div>
-            {step !== 0 && (
-              <Button variant="secondary" onClick={decrementStep} type="button">
-                Previous
-              </Button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              type="submit"
-              isLoading={isloading || loading}
-              disabled={step === steps.length - 1 && !recoveryDownloaded}
-            >
-              {step === steps.length - 1 ? 'Finish' : 'Next'}
-            </Button>
-          </div>
-        </div>
-      </form>
-    )
-  }
-
   return (
     <main className="w-full flex flex-col justify-between h-screen">
       <HeroPattern />
 
       {!licenseActivated() ? (
         <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-40">
-          {success ? <SuccessPane /> : <OnboardingForm />}
+          {success ? (
+            <SuccessPane />
+          ) : (
+            <form
+              onSubmit={incrementStep}
+              className="space-y-8 p-8 border border-violet-200/10 rounded-lg bg-zinc-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
+            >
+              <div className="flex flex-col w-full">
+                {step >= 0 && (
+                  <div className="text-black dark:text-white font-semibold text-2xl text-center">
+                    Welcome to Phase
+                  </div>
+                )}
+                <Stepper steps={steps} activeStep={step} />
+              </div>
+
+              {licenseData?.license && <License license={licenseData.license} showExpiry={false} />}
+
+              {step === 0 && (
+                <TeamName name={teamName} setName={setTeamName} isLocked={teamNameLock} />
+              )}
+              {step === 1 && (
+                <AccountPassword
+                  pw={pw}
+                  setPw={setPw}
+                  pw2={pw2}
+                  setPw2={setPw2}
+                  savePassword={savePassword}
+                  setSavePassword={setSavePassword}
+                />
+              )}
+              {step === 2 && (
+                <AccountRecovery
+                  mnemonic={mnemonic}
+                  onDownload={handleDownloadRecoveryKit}
+                  onCopy={handleCopyRecoveryKit}
+                />
+              )}
+
+              <div className="flex justify-between w-full">
+                <div>
+                  {step !== 0 && (
+                    <Button variant="secondary" onClick={decrementStep} type="button">
+                      Previous
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    isLoading={isloading || loading}
+                    disabled={step === steps.length - 1 && !recoveryDownloaded}
+                  >
+                    {step === steps.length - 1 ? 'Finish' : 'Next'}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          )}
         </div>
       ) : (
         <div className="mx-auto my-auto w-full max-w-3xl flex flex-col gap-8 p-16 rounded-lg text-center items-center bg-zinc-200 dark:bg-zinc-800/40 ring-1 ring-inset ring-neutral-500/40 shadow-xl">
