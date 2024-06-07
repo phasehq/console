@@ -35,7 +35,6 @@ const plansInfo = {
     description: 'Try Phase without any commitments.',
     seats: isCloudHosted() ? '5 Users' : 'Unlimited Users',
     apps: isCloudHosted() ? '3 Apps' : 'Unlimited Apps',
-    envs: isCloudHosted() ? '3 Environments' : 'Unlimited Environments',
     tokens: isCloudHosted() ? '3 Service Tokens per app' : 'Unlimited Service Tokens per app',
     featureSummary: [
       'End-to-end Encryption',
@@ -64,7 +63,6 @@ const plansInfo = {
     name: 'Pro',
     seats: 'Unlimited Users',
     apps: 'Unlimited Apps',
-    envs: isCloudHosted() ? '10 Environments per App' : 'Unlimited Environments',
     tokens: isCloudHosted() ? '10 Service Tokens per app' : 'Unlimited Service Tokens per app',
     featureSummary: [
       'End-to-end Encryption',
@@ -89,7 +87,6 @@ const plansInfo = {
       'Secure existing data in your enterprise workload. Get full onboarding and priority technical support.',
     seats: 'Unlimited Users',
     apps: 'Unlimited Apps',
-    envs: 'Unlimited Environments per App',
     tokens: 'Unlimited Service Tokens per app',
     featureSummary: [
       'End-to-end Encryption',
@@ -219,9 +216,6 @@ export const PlanInfo = () => {
               </PlanFeatureItem>
               <PlanFeatureItem iconColor="text-emerald-500" iconType="app">
                 {planInfo.apps}
-              </PlanFeatureItem>
-              <PlanFeatureItem iconColor="text-emerald-500" iconType="env">
-                {planInfo.envs}
               </PlanFeatureItem>
               <PlanFeatureItem iconColor="text-emerald-500" iconType="key">
                 {license()?.tokens
