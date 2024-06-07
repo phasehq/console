@@ -21,15 +21,20 @@ export default function Settings({ params }: { params: { team: string } }) {
 
   const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
 
+  const tabList = () => [
+    ...(activeUserIsAdmin ? [{ name: 'Organisation' }] : []),
+    ...[{ name: 'Account' }, { name: 'App' }],
+  ]
+
   return (
     <section className="w-full max-w-screen-lg mx-auto py-4 text-black dark:text-white">
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
         <Tab.Group>
-          {activeUserIsAdmin && (
-            <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
-              <Tab as={Fragment}>
+          <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+            {tabList().map((tab) => (
+              <Tab key={tab.name} as={Fragment}>
                 {({ selected }) => (
                   <div
                     className={clsx(
@@ -39,27 +44,13 @@ export default function Settings({ params }: { params: { team: string } }) {
                         : ' border-transparent cursor-pointer'
                     )}
                   >
-                    Organisation
+                    {tab.name}
                   </div>
                 )}
               </Tab>
+            ))}
+          </Tab.List>
 
-              <Tab as={Fragment}>
-                {({ selected }) => (
-                  <div
-                    className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
-                      selected
-                        ? 'border-emerald-500 font-semibold'
-                        : ' border-transparent cursor-pointer'
-                    )}
-                  >
-                    Account
-                  </div>
-                )}
-              </Tab>
-            </Tab.List>
-          )}
           <Tab.Panels>
             <div className="max-h-[80vh] overflow-y-auto px-4">
               {activeUserIsAdmin && (
@@ -86,7 +77,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                         <p className="text-neutral-500">Account information and recovery.</p>
                       </div>
                       <div className="py-4 whitespace-nowrap flex items-center gap-2">
-                        <Avatar imagePath={session?.user?.image!} size="xl" />
+                        <Avatar imagePath={session?.user?.image} size="xl" />
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-col">
                             <span className="text-lg font-medium">{session?.user?.name}</span>
@@ -115,8 +106,12 @@ export default function Settings({ params }: { params: { team: string } }) {
                       </div>
                     </div>
                   )}
+                </div>
+              </Tab.Panel>
 
-                  <div className="space-y-6 py-4 border-t border-neutral-500/20">
+              <Tab.Panel>
+                <div>
+                  <div className="space-y-6 py-4">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-semibold">App</h2>
                       <p className="text-neutral-500">
@@ -125,7 +120,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                     </div>
                     <div className="flex items-center gap-8">
                       <div className="font-semibold">Theme</div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-neutral-500">
                         <FaSun />
                         <ModeToggle />
                         <FaMoon />
