@@ -25,7 +25,7 @@ services:
     env_file: .env
     environment:
       NEXTAUTH_URL: "${HTTP_PROTOCOL}${HOST}"
-      BACKEND_API_BASE: "${HTTP_PROTOCOL}${HOST}/service"
+      BACKEND_API_BASE: "http://backend:8000"
       NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOCOL}${HOST}/service"
       NEXT_PUBLIC_NEXTAUTH_PROVIDERS: "${SSO_PROVIDERS}"
     networks:
