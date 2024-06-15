@@ -503,7 +503,7 @@ export default function Environment({
 
     const a = document.createElement('a')
     a.href = url
-    a.download = `${environment.name}.env`
+    a.download = `${environment.app.name} [${environment.name}].env`
 
     document.body.appendChild(a)
     a.click()
