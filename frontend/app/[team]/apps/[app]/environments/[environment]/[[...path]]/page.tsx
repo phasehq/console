@@ -845,7 +845,7 @@ export default function Environment({
                   </Button>
                   <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
                     <div className="flex items-center gap-2">
-                      <FaDownload /> Export .env
+                      <FaDownload /> Export as .env
                     </div>
                   </Button>
                   <SplitButton
