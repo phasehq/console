@@ -503,7 +503,15 @@ export default function Environment({
 
     const a = document.createElement('a')
     a.href = url
-    a.download = `${environment.name}.env`
+
+    // Check if secretPath is root or not and form the filename accordingly
+    if (secretPath === '/') {
+      a.download = `${environment.app.name}.${environment.name.toLowerCase()}.env`
+    } else {
+      // Replace all slashes with dots
+      const formattedSecretPath = secretPath.toLowerCase().replace(/\//g, '.')
+      a.download = `${environment.app.name}.${environment.name.toLowerCase()}${formattedSecretPath}.env`
+    }
 
     document.body.appendChild(a)
     a.click()
@@ -837,7 +845,7 @@ export default function Environment({
                   </Button>
                   <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
                     <div className="flex items-center gap-2">
-                      <FaDownload /> Export .env
+                      <FaDownload /> Export as .env
                     </div>
                   </Button>
                   <SplitButton
