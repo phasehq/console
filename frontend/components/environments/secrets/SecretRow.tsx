@@ -201,19 +201,21 @@ export default function SecretRow(props: {
             />
           </div>
 
-          <div
-            className={clsx(
-              (!secret.override || !secret.override.isActive) &&
-                'opacity-0 group-hover:opacity-100 transition-opacity ease'
-            )}
-          >
-            <OverrideDialog
-              secretName={secret.key}
-              secretId={secret.id}
-              environment={props.environment}
-              override={secret.override!}
-            />
-          </div>
+          {cannonicalSecret && (
+            <div
+              className={clsx(
+                (!secret.override || !secret.override.isActive) &&
+                  'opacity-0 group-hover:opacity-100 transition-opacity ease'
+              )}
+            >
+              <OverrideDialog
+                secretName={secret.key}
+                secretId={secret.id}
+                environment={props.environment}
+                override={secret.override!}
+              />
+            </div>
+          )}
 
           {cannonicalSecret && (
             <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
