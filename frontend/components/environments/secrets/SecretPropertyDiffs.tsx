@@ -87,14 +87,21 @@ export const SecretPropertyDiffs = (props: {
       {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
         <div className="pl-3 font-mono break-all">
           <span className="text-neutral-500 mr-2">TAGS:</span>
-          <div className="bg-red-200 dark:bg-red-950 text-red-500 flex-1 w-max gap-2 rounded-full">
+          <div className="inline-flex gap-2">
             {getRemovedTags().map((tag) => (
-              <Tag key={tag.id} tag={tag} />
+              <div key={tag.id} className="bg-red-200 dark:bg-red-950 text-red-500 rounded-full">
+                <Tag tag={tag} />
+              </div>
             ))}
           </div>
-          <div className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 flex-1 w-max gap-2 rounded-full">
+          <div className="inline-flex gap-2">
             {getAddedTags().map((tag) => (
-              <Tag key={tag.id} tag={tag} />
+              <div
+                key={tag.id}
+                className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 rounded-full"
+              >
+                <Tag tag={tag} />
+              </div>
             ))}
           </div>
         </div>
