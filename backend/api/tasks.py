@@ -193,7 +193,7 @@ def perform_cloudflare_pages_sync(environment_sync):
             .first()
         )
 
-        kv_pairs = get_environment_secrets(
+        secrets = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
 
@@ -209,7 +209,7 @@ def perform_cloudflare_pages_sync(environment_sync):
         project_info = environment_sync.options
 
         success, sync_data = sync_cloudflare_secrets(
-            kv_pairs,
+            secrets,
             account_id,
             access_token,
             project_info["project_name"],
