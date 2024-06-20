@@ -52,14 +52,16 @@ export const SecretPropertyDiffs = (props: {
             <span className="text-neutral-500 mr-2">VALUE:</span>
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center justify-between bg-red-200 dark:bg-red-950">
-              <s className=" text-red-500 ph-no-capture">{previousItem.value}</s>
+            <div className="flex-1 items-end gap-4 justify-between bg-red-200 dark:bg-red-950">
+              <div>
+                <s className=" text-red-500 ph-no-capture">{previousItem.value}</s>
+              </div>
               <Button
                 variant="outline"
                 onClick={() => handleRestoreValue(previousItem.value)}
                 title="Restore this value"
               >
-                <FaRedoAlt />
+                <FaRedoAlt className="shrink-0" />
                 <span className="font-sans text-xs">Restore</span>
               </Button>
             </div>
