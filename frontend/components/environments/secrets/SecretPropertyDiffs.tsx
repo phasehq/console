@@ -52,14 +52,16 @@ export const SecretPropertyDiffs = (props: {
             <span className="text-neutral-500 mr-2">VALUE:</span>
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center justify-between bg-red-200 dark:bg-red-950">
-              <s className=" text-red-500 ph-no-capture">{previousItem.value}</s>
+            <div className="flex-1 items-end gap-4 justify-between bg-red-200 dark:bg-red-950">
+              <div>
+                <s className=" text-red-500 ph-no-capture">{previousItem.value}</s>
+              </div>
               <Button
                 variant="outline"
                 onClick={() => handleRestoreValue(previousItem.value)}
                 title="Restore this value"
               >
-                <FaRedoAlt />
+                <FaRedoAlt className="shrink-0" />
                 <span className="font-sans text-xs">Restore</span>
               </Button>
             </div>
@@ -85,14 +87,21 @@ export const SecretPropertyDiffs = (props: {
       {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
         <div className="pl-3 font-mono break-all">
           <span className="text-neutral-500 mr-2">TAGS:</span>
-          <div className="bg-red-200 dark:bg-red-950 text-red-500 flex w-min gap-2 rounded-full">
+          <div className="inline-flex gap-2">
             {getRemovedTags().map((tag) => (
-              <Tag key={tag.id} tag={tag} />
+              <div key={tag.id} className="bg-red-200 dark:bg-red-950 text-red-500 rounded-full">
+                <Tag tag={tag} />
+              </div>
             ))}
           </div>
-          <div className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 flex w-min gap-2 rounded-full">
+          <div className="inline-flex gap-2">
             {getAddedTags().map((tag) => (
-              <Tag key={tag.id} tag={tag} />
+              <div
+                key={tag.id}
+                className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 rounded-full"
+              >
+                <Tag tag={tag} />
+              </div>
             ))}
           </div>
         </div>
