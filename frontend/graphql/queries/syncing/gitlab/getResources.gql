@@ -10,8 +10,8 @@ query GetGitLabResources($credentialId: ID!) {
   }
   gitlabGroups(credentialId: $credentialId) {
     id
-    name
-    path
+    fullName
+    fullPath
     webUrl
   }
 }
