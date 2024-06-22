@@ -91,7 +91,7 @@ const documents = {
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
     "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": types.GetServiceListDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
-    "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}": types.GetGitLabResourcesDocument,
+    "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    fullName\n    fullPath\n    webUrl\n  }\n}": types.GetGitLabResourcesDocument,
     "query TestNomadAuth($credentialId: ID!) {\n  testNomadCreds(credentialId: $credentialId)\n}": types.TestNomadAuthDocument,
     "query TestVaultAuth($credentialId: ID!) {\n  testVaultCreds(credentialId: $credentialId)\n}": types.TestVaultAuthDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
@@ -426,7 +426,7 @@ export function graphql(source: "query GetGithubRepos($credentialId: ID!) {\n  g
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}"): (typeof documents)["query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    name\n    path\n    webUrl\n  }\n}"];
+export function graphql(source: "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    fullName\n    fullPath\n    webUrl\n  }\n}"): (typeof documents)["query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    fullName\n    fullPath\n    webUrl\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
