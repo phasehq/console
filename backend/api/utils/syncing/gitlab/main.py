@@ -10,6 +10,7 @@ class NamespaceType(graphene.ObjectType):
     id = graphene.Int()
     name = graphene.String()
     path = graphene.String()
+    full_path = graphene.String()
 
 
 class GitLabProjectType(graphene.ObjectType):

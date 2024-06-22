@@ -4,14 +4,15 @@ query GetGitLabResources($credentialId: ID!) {
     name
     namespace {
       name
+      fullPath
     }
     pathWithNamespace
     webUrl
   }
   gitlabGroups(credentialId: $credentialId) {
     id
-    name
-    path
+    fullName
+    fullPath
     webUrl
   }
 }

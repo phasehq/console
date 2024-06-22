@@ -113,7 +113,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
           envId: phaseEnv?.id,
           path,
           credentialId: credential.id,
-          resourcePath: isGroup ? selectedGroup?.path : selectedProject?.pathWithNamespace,
+          resourcePath: isGroup ? selectedGroup?.fullPath : selectedProject?.pathWithNamespace,
           isGroup,
           isMasked,
           isProtected,
@@ -143,7 +143,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
     }
 
     const queryLower = groupsQuery.toLowerCase()
-    const nameMatches = group.name?.toLowerCase().includes(queryLower) || false
+    const nameMatches = group.fullName?.toLowerCase().includes(queryLower) || false
 
     return nameMatches
   })
@@ -304,7 +304,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                                 <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-96 w-full overflow-y-auto">
                                   {filteredProjects.map((project: GitLabProjectType) => (
                                     <Combobox.Option
-                                      key={`${project.namespace?.name}/${project.name}`}
+                                      key={`${project.namespace?.fullPath}/${project.name}`}
                                       value={project}
                                     >
                                       {({ active, selected }) => (
@@ -321,7 +321,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                                                 {project.name}{' '}
                                               </div>
                                               <div className="text-neutral-500 text-2xs">
-                                                {project.namespace?.name}
+                                                {project.namespace?.fullPath}
                                               </div>
                                             </div>
                                           </div>
@@ -358,7 +358,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                                   onChange={(event) => setGroupsQuery(event.target.value)}
                                   required
                                   displayValue={(group: GitLabGroupType) =>
-                                    group ? group?.name! : groupsQuery || ''
+                                    group ? group?.fullName! : groupsQuery || ''
                                   }
                                 />
                                 <div className="absolute inset-y-0 right-2 flex items-center">
@@ -384,7 +384,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                               <Combobox.Options as={Fragment}>
                                 <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md w-full shadow-2xl z-20 absolute max-h-96 overflow-y-auto">
                                   {filteredGroups.map((group: GitLabGroupType) => (
-                                    <Combobox.Option key={group.name} value={group}>
+                                    <Combobox.Option key={group.fullName} value={group}>
                                       {({ active, selected }) => (
                                         <div
                                           className={clsx(
@@ -396,7 +396,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                                             <ProviderIcon providerId="gitlab" />
                                             <div>
                                               <div className="font-semibold text-black dark:text-white">
-                                                {group.name}{' '}
+                                                {group.fullName}{' '}
                                               </div>
                                             </div>
                                           </div>
