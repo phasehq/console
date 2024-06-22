@@ -4,6 +4,7 @@ query GetGitLabResources($credentialId: ID!) {
     name
     namespace {
       name
+      fullPath
     }
     pathWithNamespace
     webUrl

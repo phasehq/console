@@ -304,7 +304,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                                 <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-96 w-full overflow-y-auto">
                                   {filteredProjects.map((project: GitLabProjectType) => (
                                     <Combobox.Option
-                                      key={`${project.namespace?.name}/${project.name}`}
+                                      key={`${project.namespace?.fullPath}/${project.name}`}
                                       value={project}
                                     >
                                       {({ active, selected }) => (
@@ -321,7 +321,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                                                 {project.name}{' '}
                                               </div>
                                               <div className="text-neutral-500 text-2xs">
-                                                {project.namespace?.name}
+                                                {project.namespace?.fullPath}
                                               </div>
                                             </div>
                                           </div>
