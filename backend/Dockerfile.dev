@@ -1,15 +1,32 @@
-FROM python:3.11.4-alpine3.18
+FROM python:3.12.1-alpine3.19@sha256:28230397c48cf4e2619822beb834ae7e46ebcd255b8f7cef58eff932fd75d2ce
 
 ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
+# Install dependencies
+RUN apk update && apk add --no-cache \
+    postgresql-dev \
+    build-base \
+    gcc \
+    musl-dev \
+    jpeg-dev \
+    zlib-dev \
+    libffi-dev \
+    cairo-dev \
+    pango-dev \
+    gdk-pixbuf-dev \
+    mariadb-dev \
+    python3-dev
+
 COPY requirements.txt /app/requirements.txt
 
-RUN pip install -r requirements.txt
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
 COPY . /app
 
 EXPOSE 8000
 
-CMD sh -c "python manage.py migrate && python manage.py runserver backend:8000"
+CMD sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
