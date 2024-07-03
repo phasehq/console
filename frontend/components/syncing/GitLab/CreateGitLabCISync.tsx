@@ -113,6 +113,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
           envId: phaseEnv?.id,
           path,
           credentialId: credential.id,
+          resourceId: isGroup ? selectedGroup?.id : selectedProject?.id,
           resourcePath: isGroup ? selectedGroup?.fullPath : selectedProject?.pathWithNamespace,
           isGroup,
           isMasked,

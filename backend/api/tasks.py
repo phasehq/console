@@ -609,10 +609,13 @@ def perform_gitlab_sync(environment_sync):
 
         project_info = environment_sync.options
 
+        resource_id = project_info.get("resource_id")
+        resource_path = project_info.get("resource_path")
+
         success, sync_data = sync_gitlab_secrets(
             secrets,
             environment_sync.authentication.id,
-            project_info.get("resource_path"),
+            resource_id if resource_id is not None else resource_path,
             project_info.get("is_group"),
             project_info.get("masked"),
             project_info.get("protected"),
