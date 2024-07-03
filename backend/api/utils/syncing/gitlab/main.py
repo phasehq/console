@@ -100,6 +100,8 @@ def list_gitlab_projects(credential_id):
 
     GITLAB_HOST, GITLAB_TOKEN = get_gitlab_credentials(credential_id)
 
+    GITLAB_PROJECTS_BASE_URL = f"{GITLAB_HOST}/api/v4/projects?membership=true&min_access_level=30&per_page=100"
+
     headers = {"Private-Token": GITLAB_TOKEN}
     url = f"{GITLAB_HOST}/api/v4/projects?membership=true&min_access_level=30&per_page=100"
     all_projects = []
@@ -113,11 +115,7 @@ def list_gitlab_projects(credential_id):
         all_projects.extend(projects)
 
         next_page = response.headers.get("X-Next-Page")
-        url = (
-            f"{GITLAB_HOST}/api/v4/projects?membership=true&per_page=100&page={next_page}"
-            if next_page
-            else None
-        )
+        url = f"{GITLAB_PROJECTS_BASE_URL}&page={next_page}" if next_page else None
 
     return all_projects
 
@@ -136,10 +134,12 @@ def list_gitlab_groups(credential_id):
 
     GITLAB_HOST, GITLAB_TOKEN = get_gitlab_credentials(credential_id)
 
-    headers = {"Private-Token": GITLAB_TOKEN}
-    url = (
+    GITLAB_GROUPS_BASE_URL = (
         f"{GITLAB_HOST}/api/v4/groups?membership=true&min_access_level=30&per_page=100"
     )
+
+    headers = {"Private-Token": GITLAB_TOKEN}
+    url = GITLAB_GROUPS_BASE_URL
     all_groups = []
 
     while url:
@@ -151,11 +151,7 @@ def list_gitlab_groups(credential_id):
         all_groups.extend(groups)
 
         next_page = response.headers.get("X-Next-Page")
-        url = (
-            f"{GITLAB_HOST}/api/v4/projects?membership=true&min_access_level=30&per_page=100&page={next_page}"
-            if next_page
-            else None
-        )
+        url = f"{GITLAB_GROUPS_BASE_URL}&page={next_page}" if next_page else None
 
     return all_groups
 
