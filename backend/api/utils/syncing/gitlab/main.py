@@ -7,14 +7,14 @@ from api.utils.syncing.auth import get_credentials
 
 
 class NamespaceType(graphene.ObjectType):
-    id = graphene.Int()
+    id = graphene.ID()
     name = graphene.String()
     path = graphene.String()
     full_path = graphene.String()
 
 
 class GitLabProjectType(graphene.ObjectType):
-    id = graphene.Int()
+    id = graphene.ID()
     name = graphene.String()
     name_with_namespace = graphene.String()
     path = graphene.String()

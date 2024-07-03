@@ -517,7 +517,7 @@ type GitHubRepoType {
 }
 
 type GitLabProjectType {
-  id: Int
+  id: ID
   name: String
   nameWithNamespace: String
   path: String
@@ -536,7 +536,7 @@ type GitLabProjectType {
 }
 
 type NamespaceType {
-  id: Int
+  id: ID
   name: String
   path: String
   fullPath: String
@@ -601,7 +601,7 @@ type Mutation {
   createGhActionsSync(credentialId: ID, envId: ID, owner: String, path: String, repoName: String): CreateGitHubActionsSync
   createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
-  createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourcePath: String): CreateGitLabCISync
+  createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation

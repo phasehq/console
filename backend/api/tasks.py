@@ -187,12 +187,6 @@ def perform_cloudflare_pages_sync(environment_sync):
         EnvironmentSync = apps.get_model("api", "EnvironmentSync")
         EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-        sync_event = (
-            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
-            .order_by("-created_at")
-            .first()
-        )
-
         secrets = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
@@ -214,6 +208,12 @@ def perform_cloudflare_pages_sync(environment_sync):
             access_token,
             project_info["project_name"],
             project_info["environment"],
+        )
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
         )
 
         if success:
@@ -268,12 +268,6 @@ def perform_github_actions_sync(environment_sync):
         EnvironmentSync = apps.get_model("api", "EnvironmentSync")
         EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-        sync_event = (
-            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
-            .order_by("-created_at")
-            .first()
-        )
-
         kv_pairs = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
@@ -294,6 +288,12 @@ def perform_github_actions_sync(environment_sync):
             access_token,
             project_info["repo_name"],
             project_info["owner"],
+        )
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
         )
 
         if success:
@@ -349,12 +349,6 @@ def perform_aws_sm_sync(environment_sync):
         EnvironmentSync = apps.get_model("api", "EnvironmentSync")
         EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-        sync_event = (
-            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
-            .order_by("-created_at")
-            .first()
-        )
-
         kv_pairs = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
@@ -378,6 +372,12 @@ def perform_aws_sm_sync(environment_sync):
             project_info.get("secret_name"),
             project_info.get("arn"),
             project_info.get("kms_id"),
+        )
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
         )
 
         if success:
@@ -432,12 +432,6 @@ def perform_vault_sync(environment_sync):
         EnvironmentSync = apps.get_model("api", "EnvironmentSync")
         EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-        sync_event = (
-            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
-            .order_by("-created_at")
-            .first()
-        )
-
         kv_pairs = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
@@ -456,6 +450,12 @@ def perform_vault_sync(environment_sync):
             environment_sync.authentication.id,
             project_info.get("engine"),
             project_info.get("path"),
+        )
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
         )
 
         if success:
@@ -511,12 +511,6 @@ def perform_nomad_sync(environment_sync):
         EnvironmentSync = apps.get_model("api", "EnvironmentSync")
         EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-        sync_event = (
-            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
-            .order_by("-created_at")
-            .first()
-        )
-
         kv_pairs = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
@@ -535,6 +529,12 @@ def perform_nomad_sync(environment_sync):
             environment_sync.authentication.id,
             project_info.get("path"),
             project_info.get("namespace"),
+        )
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
         )
 
         if success:
@@ -590,12 +590,6 @@ def perform_gitlab_sync(environment_sync):
         EnvironmentSync = apps.get_model("api", "EnvironmentSync")
         EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-        sync_event = (
-            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
-            .order_by("-created_at")
-            .first()
-        )
-
         secrets = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
@@ -609,13 +603,22 @@ def perform_gitlab_sync(environment_sync):
 
         project_info = environment_sync.options
 
+        resource_id = project_info.get("resource_id")
+        resource_path = project_info.get("resource_path")
+
         success, sync_data = sync_gitlab_secrets(
             secrets,
             environment_sync.authentication.id,
-            project_info.get("resource_path"),
+            resource_id if resource_id is not None else resource_path,
             project_info.get("is_group"),
             project_info.get("masked"),
             project_info.get("protected"),
+        )
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
         )
 
         if success:

@@ -371,6 +371,7 @@ class CreateGitLabCISync(graphene.Mutation):
         path = graphene.String()
         credential_id = graphene.ID()
         resource_path = graphene.String()
+        resource_id = graphene.String()
         is_group = graphene.Boolean()
         masked = graphene.Boolean()
         protected = graphene.Boolean()
@@ -386,6 +387,7 @@ class CreateGitLabCISync(graphene.Mutation):
         path,
         credential_id,
         resource_path,
+        resource_id,
         is_group,
         masked,
         protected,
@@ -403,6 +405,7 @@ class CreateGitLabCISync(graphene.Mutation):
 
         sync_options = {
             "resource_path": resource_path,
+            "resource_id": resource_id,
             "is_group": is_group,
             "masked": masked,
             "protected": protected,
