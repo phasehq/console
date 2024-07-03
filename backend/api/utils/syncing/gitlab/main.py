@@ -108,6 +108,9 @@ def list_gitlab_projects(credential_id):
 
     while url:
         response = requests.get(url, headers=headers)
+        print(
+            f"===> Fetching gitlab projects: {url} | {headers} ---> {response.status_code}"
+        )
         if response.status_code != 200:
             return None
 
@@ -144,6 +147,9 @@ def list_gitlab_groups(credential_id):
 
     while url:
         response = requests.get(url, headers=headers)
+        print(
+            f"===> Fetching gitlab groups: {url} | {headers} ---> {response.status_code}"
+        )
         if response.status_code != 200:
             return None
 
