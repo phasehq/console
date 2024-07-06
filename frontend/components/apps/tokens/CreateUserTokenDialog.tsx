@@ -2,8 +2,7 @@
 
 import { Button } from '@/components/common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { getUserKxPublicKey, getUserKxPrivateKey } from '@/utils/crypto'
-import { generateUserToken } from '@/utils/environments'
+
 import { ExpiryOptionT, humanReadableExpiry, tokenExpiryOptions } from '@/utils/tokens'
 import { useMutation } from '@apollo/client'
 import { Dialog, RadioGroup, Tab, Transition } from '@headlessui/react'
@@ -18,6 +17,7 @@ import CopyButton from '@/components/common/CopyButton'
 import { CliCommand } from '@/components/dashboard/CliCommand'
 import Link from 'next/link'
 import { getApiHost } from '@/utils/appConfig'
+import { getUserKxPublicKey, getUserKxPrivateKey, generateUserToken } from '@/utils/crypto'
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()

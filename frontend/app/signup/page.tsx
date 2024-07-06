@@ -8,7 +8,6 @@ import { MdGroups, MdKey, MdOutlinePassword } from 'react-icons/md'
 import { TeamName } from '@/components/onboarding/TeamName'
 import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
-import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
@@ -21,6 +20,13 @@ import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { setDevicePassword } from '@/utils/localStorage'
 import { License } from '@/components/settings/organisation/License'
 import { LogoMark } from '@/components/common/LogoMark'
+import {
+  organisationSeed,
+  organisationKeyring,
+  deviceVaultKey,
+  encryptAccountKeyring,
+  encryptAccountRecovery,
+} from '@/utils/crypto'
 
 const bip39 = require('bip39')
 
@@ -129,18 +135,15 @@ const Onboard = () => {
     return new Promise<{ publicKey: string; encryptedKeyring: string; encryptedMnemonic: string }>(
       (resolve) => {
         setTimeout(async () => {
-          const accountSeed = await cryptoUtils.organisationSeed(mnemonic, orgId)
+          const accountSeed = await organisationSeed(mnemonic, orgId)
 
-          const accountKeyRing = await cryptoUtils.organisationKeyring(accountSeed)
+          const accountKeyRing = await organisationKeyring(accountSeed)
 
-          const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
+          const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
 
-          const encryptedKeyring = await cryptoUtils.encryptAccountKeyring(
-            accountKeyRing,
-            deviceKey
-          )
+          const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
 
-          const encryptedMnemonic = await cryptoUtils.encryptAccountRecovery(mnemonic, deviceKey)
+          const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
           resolve({
             publicKey: accountKeyRing.publicKey,

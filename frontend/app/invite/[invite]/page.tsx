@@ -1,6 +1,5 @@
 'use client'
 
-import { cryptoUtils } from '@/utils/auth'
 import VerifyInvite from '@/graphql/queries/organisation/validateOrganisationInvite.gql'
 import AcceptOrganisationInvite from '@/graphql/mutations/organisation/acceptInvite.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
@@ -21,6 +20,14 @@ import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { LogoMark } from '@/components/common/LogoMark'
 import { setDevicePassword } from '@/utils/localStorage'
 import { useRouter } from 'next/navigation'
+import {
+  decodeb64string,
+  organisationSeed,
+  organisationKeyring,
+  deviceVaultKey,
+  encryptAccountKeyring,
+  encryptAccountRecovery,
+} from '@/utils/crypto'
 
 const bip39 = require('bip39')
 
@@ -64,7 +71,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
 
   useEffect(() => {
     const handleVerifyInvite = async () => {
-      const inviteId = await cryptoUtils.decodeb64string(params.invite)
+      const inviteId = await decodeb64string(params.invite)
 
       await verifyInvite({
         variables: { inviteId },
@@ -98,18 +105,15 @@ export default function Invite({ params }: { params: { invite: string } }) {
     return new Promise<{ publicKey: string; encryptedKeyring: string; encryptedMnemonic: string }>(
       (resolve) => {
         setTimeout(async () => {
-          const accountSeed = await cryptoUtils.organisationSeed(mnemonic, invite.organisation.id)
+          const accountSeed = await organisationSeed(mnemonic, invite.organisation.id)
 
-          const accountKeyRing = await cryptoUtils.organisationKeyring(accountSeed)
+          const accountKeyRing = await organisationKeyring(accountSeed)
 
-          const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
+          const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
 
-          const encryptedKeyring = await cryptoUtils.encryptAccountKeyring(
-            accountKeyRing,
-            deviceKey
-          )
+          const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
 
-          const encryptedMnemonic = await cryptoUtils.encryptAccountRecovery(mnemonic, deviceKey)
+          const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
           resolve({
             publicKey: accountKeyRing.publicKey,

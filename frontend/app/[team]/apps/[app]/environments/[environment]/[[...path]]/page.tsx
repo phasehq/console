@@ -11,14 +11,7 @@ import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
-import {
-  getUserKxPublicKey,
-  getUserKxPrivateKey,
-  decryptAsymmetric,
-  digest,
-  encryptAsymmetric,
-} from '@/utils/crypto'
-import { arraysEqual, envKeyring } from '@/utils/environments'
+
 import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -50,12 +43,16 @@ import { Input } from '@/components/common/Input'
 import { SplitButton } from '@/components/common/SplitButton'
 import { SecretFolderRow } from '@/components/environments/folders/SecretFolderRow'
 import { MdKeyboardReturn } from 'react-icons/md'
-
-type EnvKeyring = {
-  privateKey: string
-  publicKey: string
-  salt: string
-}
+import {
+  arraysEqual,
+  encryptAsymmetric,
+  digest,
+  getUserKxPublicKey,
+  getUserKxPrivateKey,
+  decryptAsymmetric,
+  envKeyring,
+  EnvKeyring,
+} from '@/utils/crypto'
 
 export default function Environment({
   params,

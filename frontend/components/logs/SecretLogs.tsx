@@ -16,20 +16,24 @@ import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { Avatar } from '../common/Avatar'
-import { EnvKeyring, envKeyring } from '@/utils/environments'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { getUserKxPublicKey, getUserKxPrivateKey, decryptAsymmetric } from '@/utils/crypto'
 import { organisationContext } from '@/contexts/organisationContext'
-import UnlockKeyringDialog from '../auth/UnlockKeyringDialog'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
+import {
+  getUserKxPublicKey,
+  getUserKxPrivateKey,
+  decryptAsymmetric,
+  envKeyring,
+  EnvKeypair,
+} from '@/utils/crypto'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
 
 type EnvKey = {
   envId: string
-  keys: EnvKeyring
+  keys: EnvKeypair
 }
 
 export default function SecretLogs(props: { app: string }) {

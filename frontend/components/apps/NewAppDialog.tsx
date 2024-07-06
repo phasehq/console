@@ -1,6 +1,5 @@
-import { cryptoUtils } from '@/utils/auth'
 import { Dialog, Switch, Transition } from '@headlessui/react'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useState } from 'react'
 import { FaPlus, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
@@ -20,20 +19,28 @@ import {
   SecretInput,
   SecretType,
 } from '@/apollo/graphql'
-import { splitSecret } from '@/utils/keyshares'
+
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { createNewEnv } from '@/utils/environments'
-import {
-  decryptAsymmetric,
-  digest,
-  encryptAsymmetric,
-  getUserKxPrivateKey,
-  getUserKxPublicKey,
-} from '@/utils/crypto'
+
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 import { Alert } from '../common/Alert'
 import { isCloudHosted } from '@/utils/appConfig'
+import {
+  getUserKxPublicKey,
+  getUserKxPrivateKey,
+  decryptAsymmetric,
+  encryptAsymmetric,
+  digest,
+  createNewEnv,
+  splitSecret,
+  appKeyring,
+  newAppSeed,
+  newAppToken,
+  newAppWrapKey,
+  encryptAppSeed,
+  getWrappedKeyShare,
+} from '@/utils/crypto'
 
 const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
@@ -99,21 +106,21 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
       publicKey: await getUserKxPublicKey(keyring!.publicKey),
       privateKey: await getUserKxPrivateKey(keyring!.privateKey),
     }
-  
+
     const envSalt = await decryptAsymmetric(
       env.wrappedSalt,
       userKxKeys.privateKey,
       userKxKeys.publicKey
     )
-  
+
     const promises = secrets.map(async (secret) => {
       const { key, value, comment } = secret
-  
+
       const encryptedKey = await encryptAsymmetric(key!, env.identityKey)
       const encryptedValue = await encryptAsymmetric(value!, env.identityKey)
       const keyDigest = await digest(key!, envSalt)
       const encryptedComment = await encryptAsymmetric(comment!, env.identityKey)
-  
+
       await createSecret({
         variables: {
           newSecret: {
@@ -128,10 +135,10 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
         },
       })
     })
-  
+
     return Promise.all(promises)
   }
-  
+
   /**
    * Handles the creation of example secrets for a given app. Defines the set of example secrets, fetches all envs for this app and handles creation of each set of secrets with the respective envs
    *
@@ -154,7 +161,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
         key: 'JWT_SECRET',
         value:
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjMzNjIwMTcxLCJleHAiOjIyMDg5ODUyMDB9.pHnckabbMbwTHAJOkb5Z7G7B4chY6GllJf6K2m96z3A',
-          comment: '',
+        comment: '',
       },
       {
         key: 'STRIPE_SECRET_KEY',
@@ -298,20 +305,17 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
     return new Promise<boolean>(async (resolve, reject) => {
       setTimeout(async () => {
-        const appSeed = await cryptoUtils.newAppSeed()
-        const appToken = await cryptoUtils.newAppToken()
-        const wrapKey = await cryptoUtils.newAppWrapKey()
+        const appSeed = await newAppSeed()
+        const appToken = await newAppToken()
+        const wrapKey = await newAppWrapKey()
         const id = crypto.randomUUID()
 
         try {
-          const encryptedAppSeed = await cryptoUtils.encryptedAppSeed(
-            appSeed,
-            keyring!.symmetricKey
-          )
-          const appKeys = await cryptoUtils.appKeyring(appSeed)
+          const encryptedAppSeed = await encryptAppSeed(appSeed, keyring!.symmetricKey)
+          const appKeys = await appKeyring(appSeed)
           const appKeyShares = await splitSecret(appKeys.privateKey)
 
-          const wrappedShare = await cryptoUtils.wrappedKeyShare(appKeyShares[1], wrapKey)
+          const wrappedShare = await getWrappedKeyShare(appKeyShares[1], wrapKey)
 
           const { data } = await createApp({
             variables: {
@@ -366,17 +370,17 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
     // Only apply application limits in Phase Cloud
     if (isCloudHosted()) {
       if (organisation.plan === ApiOrganisationPlanChoices.Fr) {
-        return appCount < FREE_APP_LIMIT;
+        return appCount < FREE_APP_LIMIT
       } else if (organisation.plan === ApiOrganisationPlanChoices.Pr) {
-        return appCount < PRO_APP_LIMIT;
+        return appCount < PRO_APP_LIMIT
       } else if (organisation.plan === ApiOrganisationPlanChoices.En) {
-        return true;
+        return true
       }
     } else {
       // No application limits on self-hosted
-      return true;
+      return true
     }
-  };
+  }
 
   const planDisplay = () => {
     if (organisation.plan === ApiOrganisationPlanChoices.Fr)
