@@ -1,4 +1,4 @@
-import { Maybe } from 'graphql/jsutils/Maybe'
+import { Maybe } from '@/apollo/graphql'
 
 export const getBox = async (boxId: string) => {
   const res = await fetch(`${process.env.BACKEND_API_BASE}/lockbox/${boxId}`, {
