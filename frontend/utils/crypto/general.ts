@@ -1,7 +1,138 @@
 import _sodium, { KeyPair, StringOutputFormat } from 'libsodium-wrappers-sumo'
-import { cryptoUtils } from '@/utils/auth'
+import { VERSION } from './constants'
 
-export const VERSION = 1
+/**
+ * Compares two arrays for equality.
+ *
+ * @param {any[]} arr1 - The first array.
+ * @param {any[]} arr2 - The second array.
+ * @returns {boolean} - True if the arrays are equal, false otherwise.
+ */
+export const arraysEqual = (arr1: any[], arr2: any[]) => {
+  if (arr1.length !== arr2.length) {
+    return false
+  }
+  for (let i = 0; i < arr1.length; i++) {
+    if (arr1[i] !== arr2[i]) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Returns 16 bytes from an input string that can be used as a salt for Argon2
+ *
+ * @param {string} input - The input string to hash
+ * @returns {Promise<Uint8Array>} - 16 byte salt
+ */
+export const saltFromString = async (input: string) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  const inputBytes = sodium.from_string(input)
+  const hash = sodium.crypto_generichash(16, inputBytes)
+  return hash
+}
+
+/**
+ * XChaCha20-Poly1305 encrypt
+ *
+ * @param {String} plaintext
+ * @param {Uint8Array} key
+ * @returns {Promise<Uint8Array>} - Ciphertext with appended nonce
+ */
+export const encryptRaw = async (plaintext: string, key: Uint8Array): Promise<Uint8Array> => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  let nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES)
+  let ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+    plaintext,
+    null,
+    null,
+    nonce,
+    key
+  )
+  return new Uint8Array([...ciphertext, ...nonce])
+}
+
+/**
+ * XChaCha20-Poly1305 decrypt
+ *
+ * @param {Uint8Array} encryptedMessage - Ciphertext + Nonce
+ * @param {Uint8Array} key - Decryption key
+ * @returns {Promise<Uint8Array>}
+ */
+export const decryptRaw = async (
+  encryptedMessage: Uint8Array,
+  key: Uint8Array
+): Promise<Uint8Array> => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  const messageLen = encryptedMessage.length - 24
+  const nonce = encryptedMessage.slice(messageLen)
+  const ciphertext = encryptedMessage.slice(0, messageLen)
+
+  const plaintext = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+    null,
+    ciphertext,
+    null,
+    nonce,
+    key
+  )
+
+  return plaintext
+}
+
+/**
+ * Encrypts a single string with the given key. Returns the ciphertext as a base64 string
+ *
+ * @param {string} plaintext - Plaintext string to encrypt
+ * @param {Uint8Array} key - Symmetric encryption key
+ * @returns {string}
+ */
+export const encryptString = async (plaintext: string, key: Uint8Array) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  return sodium.to_base64(await encryptRaw(plaintext, key), sodium.base64_variants.ORIGINAL)
+}
+
+/**
+ * Decrypts a single base64 ciphertext string with the given key. Returns the plaintext as a string
+ *
+ * @param cipherText - base64 string ciphertext with appended nonce
+ * @param key - Symmetric encryption key
+ * @returns {string}
+ */
+export const decryptString = async (cipherText: string, key: Uint8Array) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  return sodium.to_string(
+    await decryptRaw(sodium.from_base64(cipherText, sodium.base64_variants.ORIGINAL), key)
+  )
+}
+
+/**
+ *
+ */
+export const getWrappedKeyShare = async (keyShare: string, wrapKey: string) => {
+  await _sodium.ready
+  const sodium = _sodium
+  const keyBytes = sodium.from_hex(wrapKey)
+  const wrappedKey = await encryptRaw(keyShare, keyBytes)
+  return sodium.to_hex(wrappedKey)
+}
+
+export const decodeb64string = async (b64string: string) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  return sodium.to_string(sodium.from_base64(b64string, sodium.base64_variants.ORIGINAL))
+}
 
 /**
  * Returns an random key exchange keypair
@@ -101,7 +232,7 @@ export const encryptAsymmetric = async (plaintext: string, publicKey: string): P
 
       const symmetricKeys = await clientSessionKeys(oneTimeKeyPair, sodium.from_hex(publicKey))
 
-      const ciphertext = await cryptoUtils.encryptString(plaintext, symmetricKeys.sharedTx)
+      const ciphertext = await encryptString(plaintext, symmetricKeys.sharedTx)
 
       // Use sodium.memzero to wipe the keys from memory
       sodium.memzero(oneTimeKeyPair.privateKey)
@@ -144,7 +275,7 @@ export const decryptAsymmetric = async (
         sodium.from_hex(ciphertext.pubKey)
       )
 
-      const plaintext = await cryptoUtils.decryptString(ciphertext.data, sessionKeys.sharedRx)
+      const plaintext = await decryptString(ciphertext.data, sessionKeys.sharedRx)
 
       // Use sodium.memzero to wipe the keys from memory
       sodium.memzero(sessionKeys.sharedRx)
