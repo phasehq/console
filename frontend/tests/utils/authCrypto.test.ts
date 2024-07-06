@@ -35,9 +35,9 @@ import {
   encryptAppSeed,
   decryptAppSeed,
   getWrappedKeyShare,
+  VERSION,
 } from '@/utils/crypto'
 import _sodium from 'libsodium-wrappers-sumo'
-import { VERSION } from 'lodash'
 
 describe('Crypto Utils Tests', () => {
   test('randomKeyPair generates keys of correct length', async () => {
