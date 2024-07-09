@@ -103,6 +103,24 @@ export const encryptAccountKeyring = async (keyring: OrganisationKeyring, key: s
   return sodium.to_hex(encryptedKeyring)
 }
 
+export const getUserKxPublicKey = async (signingPublicKey: string) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  return sodium.to_hex(
+    sodium.crypto_sign_ed25519_pk_to_curve25519(sodium.from_hex(signingPublicKey))
+  )
+}
+
+export const getUserKxPrivateKey = async (signingPrivateKey: string) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  return sodium.to_hex(
+    sodium.crypto_sign_ed25519_sk_to_curve25519(sodium.from_hex(signingPrivateKey))
+  )
+}
+
 /**
  * Decrypts an Organisation keyring
  *

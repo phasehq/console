@@ -15,12 +15,11 @@ import {
   decryptRaw,
   randomKeyPair,
   decryptAsymmetric,
-  getUserKxPublicKey,
   encryptAsymmetric,
-  getUserKxPrivateKey,
   getWrappedKeyShare,
 } from './general'
 import { splitSecret } from './keyshares'
+import { getUserKxPublicKey, getUserKxPrivateKey } from './users'
 
 /**
  * Create a random seed for a new env
