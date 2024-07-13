@@ -1,3 +1,4 @@
+import re
 from nacl.hash import blake2b
 from nacl.utils import random
 from base64 import b64encode, b64decode
@@ -16,6 +17,7 @@ from nacl.encoding import RawEncoder
 from typing import Tuple
 from typing import List
 
+PREFIX = "ph"
 VERSION = 1
 
 
@@ -69,7 +71,7 @@ def encrypt_asymmetric(plaintext, public_key_hex):
 
     ciphertext = encrypt_string(plaintext, symmetric_keys[1])
 
-    return f"ph:v{VERSION}:{public_key.hex()}:{ciphertext}"
+    return f"{PREFIX}:v{VERSION}:{public_key.hex()}:{ciphertext}"
 
 
 def decrypt_asymmetric(ciphertext_string, private_key_hex, public_key_hex):
@@ -198,3 +200,30 @@ def blake2b_digest(input_str: str, salt: str) -> str:
     )
     hex_encoded = hashed.hex()
     return hex_encoded
+
+
+def validate_encrypted_string(encrypted_string):
+    """
+    Validates if the given string matches the phase encrypted data format.
+
+    The expected format is: `ph:v1:<public_key>:<ciphertext>`
+    where:
+    - `ph` is the fixed prefix.
+    - `v1` is the fixed version.
+    - `<public_key>` is a hexadecimal string.
+    - `<ciphertext>` is a Base64-encoded string.
+
+    Parameters:
+    encrypted_string (str): The encrypted string to validate.
+
+    Returns:
+    bool: True if the string matches the expected format, False otherwise.
+    """
+    # Define the regular expression pattern for an encrypted string
+    pattern = r"^ph:v1:([a-fA-F0-9]+):([a-zA-Z0-9+/=]+)$"
+
+    # Match the string against the pattern
+    match = re.match(pattern, encrypted_string)
+
+    # Return True if it matches, otherwise False
+    return bool(match)
