@@ -217,7 +217,7 @@ class E2EESecretsView(APIView):
                     user=request.auth["org_member"],
                     defaults={
                         "value": secret["override"]["value"],
-                        "is_active": secret["override"]["is_active"],
+                        "is_active": secret["override"]["isActive"],
                         "updated_at": timezone.now(),
                     },
                 )
@@ -515,7 +515,7 @@ class PublicSecretsView(APIView):
                     user=request.auth["org_member"],
                     defaults={
                         "value": secret["override"]["value"],
-                        "is_active": secret["override"]["is_active"],
+                        "is_active": secret["override"]["isActive"],
                         "updated_at": timezone.now(),
                     },
                 )
