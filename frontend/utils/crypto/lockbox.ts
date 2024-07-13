@@ -1,11 +1,10 @@
 import _sodium from 'libsodium-wrappers-sumo'
-import { LockboxType, Maybe } from '@/apollo/graphql'
 import { encryptAsymmetric, decryptAsymmetric } from './general'
 
 /**
- * Create a random seed for a new env
+ * Create a random seed for a new lockbox
  *
- * @returns {Promise<string>} - hex encoded env seed
+ * @returns {Promise<string>} - hex encoded lockbox seed
  */
 export const newBoxSeed = async () => {
   await _sodium.ready
@@ -16,7 +15,6 @@ export const newBoxSeed = async () => {
 }
 /**
  * Encrypts data using an asymmetric encryption with a randomly generated key pair.
- *
  *
  * @param {string} data - The data to be encrypted
  * @param {string} seed - The seed used to generate the reciever key pair
@@ -34,6 +32,14 @@ export const encryptBox = async (data: string, seed: string) => {
   return JSON.stringify({ data: ciphertext })
 }
 
+/**
+ * Decrypts the given boxData using keys derived from the given seed
+ *
+ * @param {string} boxData - encrypted box data
+ * @param {string} seed - hex encoded lockbox seed
+ *
+ * @returns {Promise<string>} - The decrypted data as a JSON string
+ */
 export const decryptBox = async (boxData: string, seed: string) => {
   await _sodium.ready
   const sodium = _sodium
