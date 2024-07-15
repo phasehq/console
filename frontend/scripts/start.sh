@@ -2,4 +2,4 @@
 
 # Set up runtime env vars and start next server
 bash scripts/replace-variable.sh && 
-yarn start
+node server.js
