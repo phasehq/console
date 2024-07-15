@@ -5,7 +5,7 @@ import { encryptAsymmetric } from '@/utils/crypto'
 import { useMutation } from '@apollo/client'
 import { Maybe } from '@graphql-tools/utils'
 import clsx from 'clsx'
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, Fragment, use } from 'react'
 import { FaUserEdit, FaTimes, FaTrash } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { CreateNewPersonalSecret } from '@/graphql/mutations/environments/createPersonalSecret.gql'
@@ -65,6 +65,10 @@ export const OverrideDialog = (props: {
   useEffect(() => {
     if (saveRequired) setSaved(false)
   }, [saveRequired])
+
+  useEffect(() => {
+    if (override && isActive !== override.isActive) toggleIsActive()
+  }, [override])
 
   const toggleIsActive = () => setIsActive(!isActive)
 
