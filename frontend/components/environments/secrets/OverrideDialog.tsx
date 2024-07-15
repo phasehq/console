@@ -68,6 +68,7 @@ export const OverrideDialog = (props: {
 
   useEffect(() => {
     if (override && isActive !== override.isActive) toggleIsActive()
+    if (override && value !== override.value) setValue(override?.value || '')
   }, [override])
 
   const toggleIsActive = () => setIsActive(!isActive)
