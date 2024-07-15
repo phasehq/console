@@ -1,6 +1,7 @@
 from api.auth import PhaseTokenAuthentication
 from api.models import (
     Environment,
+    PersonalSecret,
     Secret,
     SecretEvent,
     SecretTag,
@@ -153,6 +154,14 @@ class E2EESecretsView(APIView):
                 user_agent,
             )
 
+            # If the request is authenticated as a user and an override is supplied
+            if request.auth["org_member"] and "override" in secret:
+                PersonalSecret.objects.create(
+                    secret=secret_obj,
+                    user=request.auth["org_member"],
+                    value=secret["override"]["value"],
+                )
+
         return Response(status=status.HTTP_200_OK)
 
     def put(self, request):
@@ -224,6 +233,18 @@ class E2EESecretsView(APIView):
                 ip_address,
                 user_agent,
             )
+
+            # If the request is authenticated as a user and an override is supplied
+            if request.auth["org_member"] and "override" in secret:
+                PersonalSecret.objects.update_or_create(
+                    secret=secret_obj,
+                    user=request.auth["org_member"],
+                    defaults={
+                        "value": secret["override"]["value"],
+                        "is_active": secret["override"]["isActive"],
+                        "updated_at": timezone.now(),
+                    },
+                )
 
         return Response(status=status.HTTP_200_OK)
 
@@ -343,6 +364,10 @@ class PublicSecretsView(APIView):
                 secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
             else:
                 secret["comment"] = ""
+            if "override" in secret:
+                secret["override"]["value"] = encrypt_asymmetric(
+                    (secret["override"]["value"]), env_pubkey
+                )
 
         if check_for_duplicates_blind(secrets, env):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
@@ -391,6 +416,14 @@ class PublicSecretsView(APIView):
                 user_agent,
             )
 
+            # If the request is authenticated as a user and an override is supplied
+            if request.auth["org_member"] and "override" in secret:
+                PersonalSecret.objects.create(
+                    secret=secret_obj,
+                    user=request.auth["org_member"],
+                    value=secret["override"]["value"],
+                )
+
             created_secrets.append(secret_obj)
 
         serializer = SecretSerializer(
@@ -429,6 +462,10 @@ class PublicSecretsView(APIView):
 
                 if check_for_duplicates_blind(secrets, env):
                     return JsonResponse({"error": "Duplicate secret found"}, status=409)
+            if "override" in secret:
+                secret["override"]["value"] = encrypt_asymmetric(
+                    (secret["override"]["value"]), env_pubkey
+                )
 
         updated_secrets = []
 
@@ -494,6 +531,18 @@ class PublicSecretsView(APIView):
                 ip_address,
                 user_agent,
             )
+
+            # If the request is authenticated as a user and an override is supplied
+            if request.auth["org_member"] and "override" in secret:
+                PersonalSecret.objects.update_or_create(
+                    secret=secret_obj,
+                    user=request.auth["org_member"],
+                    defaults={
+                        "value": secret["override"]["value"],
+                        "is_active": secret["override"]["isActive"],
+                        "updated_at": timezone.now(),
+                    },
+                )
 
             updated_secrets.append(secret_obj)
 
