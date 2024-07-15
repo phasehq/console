@@ -42,10 +42,10 @@ RUN yarn build
 
 # ---- Release ----
 FROM base AS release
-# Copy production node_modules
-COPY --from=dependencies /tmp/node_modules ./node_modules
-# Copy app sources
-COPY --from=build /app/.next ./.next
+# Copy standalone output
+COPY --from=build /app/.next/standalone ./
+# Copy static files
+COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 # Copy scripts directory
 COPY --chown=app:app scripts ./scripts

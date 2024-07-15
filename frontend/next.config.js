@@ -69,6 +69,7 @@ const nextConfig = {
           },
         ]
   },
+  output: "standalone",
   experimental: {
     esmExternals: 'loose',
   },
