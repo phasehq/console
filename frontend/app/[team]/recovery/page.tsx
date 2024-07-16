@@ -8,7 +8,6 @@ import { useContext, useEffect, useState } from 'react'
 import { MdContentPaste, MdOutlineKey } from 'react-icons/md'
 import { useMutation } from '@apollo/client'
 import UpdateWrappedSecrets from '@/graphql/mutations/organisation/updateUserWrappedSecrets.gql'
-import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
 import { useRouter } from 'next/navigation'
@@ -18,6 +17,13 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { Avatar } from '@/components/common/Avatar'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { setDevicePassword } from '@/utils/localStorage'
+import {
+  organisationSeed,
+  organisationKeyring,
+  deviceVaultKey,
+  encryptAccountKeyring,
+  encryptAccountRecovery,
+} from '@/utils/crypto'
 
 export default function Recovery({ params }: { params: { team: string } }) {
   const { data: session } = useSession()
@@ -67,17 +73,17 @@ export default function Recovery({ params }: { params: { team: string } }) {
       setTimeout(async () => {
         const mnemonic = inputs.join(' ')
 
-        const accountSeed = await cryptoUtils.organisationSeed(mnemonic, org?.id!)
+        const accountSeed = await organisationSeed(mnemonic, org?.id!)
 
-        const accountKeyRing = await cryptoUtils.organisationKeyring(accountSeed)
+        const accountKeyRing = await organisationKeyring(accountSeed)
         if (accountKeyRing.publicKey !== org?.identityKey) {
           toast.error('Incorrect account recovery key!')
           reject('Incorrect account recovery key')
         }
 
-        const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
-        const encryptedKeyring = await cryptoUtils.encryptAccountKeyring(accountKeyRing, deviceKey)
-        const encryptedMnemonic = await cryptoUtils.encryptAccountRecovery(mnemonic, deviceKey)
+        const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
+        const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
+        const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
         setKeyring(accountKeyRing)
 

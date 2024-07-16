@@ -1,6 +1,6 @@
-import { OrganisationKeyring } from '@/utils/auth'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { organisationContext } from './organisationContext'
+import { OrganisationKeyring } from '@/utils/crypto'
 
 interface KeyringContextValue {
   keyring: OrganisationKeyring | null

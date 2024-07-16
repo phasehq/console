@@ -1,5 +1,4 @@
 import { EnvironmentType } from '@/apollo/graphql'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/environments'
 import { useMutation, useLazyQuery, useQuery } from '@apollo/client'
 import { Dialog, Transition } from '@headlessui/react'
 import { useState, Fragment, useContext } from 'react'
@@ -16,6 +15,7 @@ import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { FaServer } from 'react-icons/fa6'
 import { organisationContext } from '@/contexts/organisationContext'
+import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/crypto'
 
 export const EnableSSEDialog = (props: { appId: string }) => {
   const { appId } = props

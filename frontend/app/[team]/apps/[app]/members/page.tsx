@@ -30,11 +30,11 @@ import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
 import { userIsAdmin } from '@/utils/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
+import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { data } = useQuery(GetAppMembers, { variables: { appId: params.app } })

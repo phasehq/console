@@ -7,7 +7,6 @@ import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/get
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
-import { createNewEnv, decryptEnvSecretKVs, unwrapEnvSecretsForUser } from '@/utils/environments'
 import {
   ApiEnvironmentEnvTypeChoices,
   EnvironmentType,
@@ -16,7 +15,7 @@ import {
 } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
-import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+
 import {
   FaArrowRight,
   FaCheckCircle,
@@ -42,6 +41,7 @@ import { userIsAdmin } from '@/utils/permissions'
 import Spinner from '@/components/common/Spinner'
 import { Card } from '@/components/common/Card'
 import { BsListColumnsReverse } from 'react-icons/bs'
+import { unwrapEnvSecretsForUser, decryptEnvSecretKVs, createNewEnv } from '@/utils/crypto'
 
 type EnvSecrets = {
   env: EnvironmentType

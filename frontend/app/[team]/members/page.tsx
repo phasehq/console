@@ -25,17 +25,18 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, Transition } from '@headlessui/react'
 import { FaChevronDown, FaCopy, FaPlus, FaTimes, FaTrashAlt, FaUserAlt } from 'react-icons/fa'
 import clsx from 'clsx'
-import { cryptoUtils } from '@/utils/auth'
+
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
 import { userIsAdmin } from '@/utils/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/environments'
+
 import { Alert } from '@/components/common/Alert'
 import { Input } from '@/components/common/Input'
 import CopyButton from '@/components/common/CopyButton'
+import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -271,7 +272,7 @@ const InviteDialog = (props: { organisationId: string }) => {
       fetchPolicy: 'network-only',
     })
 
-    setInviteLink(cryptoUtils.getInviteLink(data?.inviteOrganisationMember.invite.id))
+    setInviteLink(getInviteLink(data?.inviteOrganisationMember.invite.id))
   }
 
   return (
@@ -319,9 +320,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                   </Dialog.Title>
 
                   <div className="space-y-4 divide-y divide-neutral-500/40">
-                    <p className="text-neutral-500">
-                      Invite a user to your Organisation.
-                    </p>
+                    <p className="text-neutral-500">Invite a user to your Organisation.</p>
                     <div>
                       {!inviteLink && (
                         <form className="space-y-8 py-4" onSubmit={handleInvite}>
@@ -332,12 +331,15 @@ const InviteDialog = (props: { organisationId: string }) => {
                           )}
 
                           <p className="text-neutral-500">
-                            Enter the email address of the user you want to invite below. An invitation link will be sent to this email address.
+                            Enter the email address of the user you want to invite below. An
+                            invitation link will be sent to this email address.
                           </p>
 
                           <Alert variant="info" icon={true}>
                             <p>
-                              You will need to manually provision access to <strong>  applications </strong> and  <strong> environments </strong> after the member has joined the organization.
+                              You will need to manually provision access to{' '}
+                              <strong> applications </strong> and <strong> environments </strong>{' '}
+                              after the member has joined the organization.
                             </p>
                           </Alert>
                           <div className="w-full">
@@ -731,7 +733,7 @@ export default function Members({ params }: { params: { team: string } }) {
                       <Button
                         variant="outline"
                         title="Copy invite link"
-                        onClick={() => handleCopy(cryptoUtils.getInviteLink(invite.id))}
+                        onClick={() => handleCopy(getInviteLink(invite.id))}
                       >
                         <div className="p-1">
                           <FaCopy />
