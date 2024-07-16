@@ -22,6 +22,9 @@ FROM base AS dependencies
 # Set NODE_ENV to production
 ENV NODE_ENV production
 
+# Disable Nextjs telemetry
+ENV NEXT_TELEMETRY_DISABLED 1
+
 # Install node packages
 RUN yarn install --production --frozen-lockfile --no-cache && yarn cache clean
 # Copy production node_modules aside
