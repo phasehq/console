@@ -20,7 +20,7 @@ from api.utils.secrets import (
 from api.utils.permissions import user_can_access_environment
 from api.utils.audit_logging import log_secret_event
 
-from api.utils.crypto import encrypt_asymmetric
+from api.utils.crypto import encrypt_asymmetric, validate_encrypted_string
 from api.utils.rest import (
     get_resolver_request_meta,
 )
@@ -107,6 +107,18 @@ class E2EESecretsView(APIView):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
         for secret in request_body["secrets"]:
+
+            # Check that all encrypted fields are valid
+            encrypted_fields = [secret["key"], secret["value"], secret["comment"]]
+            if "override" in secret:
+                encrypted_fields.append(secret["override"]["value"])
+
+            for encrypted_field in encrypted_fields:
+                if not validate_encrypted_string(encrypted_field):
+                    return JsonResponse(
+                        {"error": "Invalid ciphertext format"}, status=400
+                    )
+
             tags = SecretTag.objects.filter(id__in=secret["tags"])
 
             try:
@@ -169,6 +181,18 @@ class E2EESecretsView(APIView):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
         for secret in request_body["secrets"]:
+
+            # Check that all encrypted fields are valid
+            encrypted_fields = [secret["key"], secret["value"], secret["comment"]]
+            if "override" in secret:
+                encrypted_fields.append(secret["override"]["value"])
+
+            for encrypted_field in encrypted_fields:
+                if not validate_encrypted_string(encrypted_field):
+                    return JsonResponse(
+                        {"error": "Invalid ciphertext format"}, status=400
+                    )
+
             secret_obj = Secret.objects.get(id=secret["id"])
 
             tags = SecretTag.objects.filter(id__in=secret["tags"])
