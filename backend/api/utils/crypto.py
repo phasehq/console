@@ -219,11 +219,14 @@ def validate_encrypted_string(encrypted_string):
     Returns:
     bool: True if the string matches the expected format, False otherwise.
     """
-    # Define the regular expression pattern for an encrypted string
-    pattern = r"^ph:v1:([a-fA-F0-9]+):([a-zA-Z0-9+/=]+)$"
+    if encrypted_string:
+        # Define the regular expression pattern for an encrypted string
+        pattern = re.compile(f"ph:v{VERSION}:[0-9a-fA-F]{{64}}:.+")
 
-    # Match the string against the pattern
-    match = re.match(pattern, encrypted_string)
+        # Match the string against the pattern
+        match = re.match(pattern, encrypted_string)
 
-    # Return True if it matches, otherwise False
-    return bool(match)
+        # Return True if it matches, otherwise False
+        return bool(match)
+
+    return True
