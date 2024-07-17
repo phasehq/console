@@ -3,6 +3,7 @@ from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.vault.main import VaultMountType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
+from api.utils.syncing.railway.main import RailwayEnvironmentType, RailwayProjectType
 from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
@@ -19,6 +20,7 @@ from .graphene.queries.syncing import (
     resolve_env_syncs,
     resolve_test_vault_creds,
     resolve_test_nomad_creds,
+    resolve_railway_projects,
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
@@ -48,6 +50,7 @@ from .graphene.mutations.syncing import (
     CreateGitLabCISync,
     CreateNomadSync,
     CreateProviderCredentials,
+    CreateRailwaySync,
     CreateVaultSync,
     DeleteProviderCredentials,
     DeleteSync,
@@ -247,6 +250,8 @@ class Query(graphene.ObjectType):
     gitlab_projects = graphene.List(GitLabProjectType, credential_id=graphene.ID())
     gitlab_groups = graphene.List(GitLabGroupType, credential_id=graphene.ID())
 
+    railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
+
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_nomad_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -275,6 +280,8 @@ class Query(graphene.ObjectType):
 
     resolve_gitlab_projects = resolve_gitlab_projects
     resolve_gitlab_groups = resolve_gitlab_groups
+
+    resolve_railway_projects = resolve_railway_projects
 
     resolve_test_vault_creds = resolve_test_vault_creds
 
@@ -719,6 +726,9 @@ class Mutation(graphene.ObjectType):
 
     # GitLab
     create_gitlab_ci_sync = CreateGitLabCISync.Field()
+
+    # Railway
+    create_railway_sync = CreateRailwaySync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

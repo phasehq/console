@@ -35,6 +35,7 @@ type Query {
   githubRepos(credentialId: ID): [GitHubRepoType]
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
+  railwayProjects(credentialId: ID): [RailwayProjectType]
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
 }
@@ -571,6 +572,24 @@ type GitLabGroupType {
   createdAt: DateTime
 }
 
+type RailwayProjectType {
+  id: ID!
+  name: String!
+  environments: [RailwayEnvironmentType!]!
+  services: [RailwayServiceType!]!
+}
+
+type RailwayEnvironmentType {
+  id: ID!
+  name: String!
+  projectId: ID!
+}
+
+type RailwayServiceType {
+  id: ID!
+  name: String!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
@@ -602,6 +621,7 @@ type Mutation {
   createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
+  createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -753,6 +773,15 @@ type CreateNomadSync {
 
 type CreateGitLabCISync {
   sync: EnvironmentSyncType
+}
+
+type CreateRailwaySync {
+  sync: EnvironmentSyncType
+}
+
+input RailwayResourceInput {
+  id: ID!
+  name: String!
 }
 
 type CreateUserTokenMutation {
