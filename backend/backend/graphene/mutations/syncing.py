@@ -21,6 +21,11 @@ from api.models import (
 from api.services import ServiceConfig
 
 
+class RailwayResourceInput(graphene.InputObjectType):
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+
+
 class InitEnvSync(graphene.Mutation):
     class Arguments:
         app_id = graphene.ID()
@@ -432,6 +437,77 @@ class CreateGitLabCISync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateGitLabCISync(sync=sync)
+
+
+class CreateRailwaySync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        railway_project = graphene.Argument(RailwayResourceInput)
+        railway_environment = graphene.Argument(RailwayResourceInput)
+        railway_service = graphene.Argument(RailwayResourceInput, required=False)
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        railway_project,
+        railway_environment,
+        railway_service=None,
+    ):
+        service_id = "railway"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "project": {"id": railway_project.id, "name": railway_project.name},
+            "environment": {
+                "id": railway_environment.id,
+                "name": railway_environment.name,
+            },
+        }
+
+        if railway_service:
+            sync_options["service"] = {
+                "id": railway_service.id,
+                "name": railway_service.name,
+            }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError(
+                    f"A sync already exists for this Railway environment!"
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateRailwaySync(sync=sync)
 
 
 class DeleteSync(graphene.Mutation):

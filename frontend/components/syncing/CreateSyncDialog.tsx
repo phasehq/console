@@ -9,6 +9,7 @@ import { CreateGhActionsSync } from './GitHub/CreateGhActionsSync'
 import { CreateVaultSync } from './Vault/CreateVaultSync'
 import { CreateNomadSync } from './Nomad/CreateNomadSync'
 import { CreateGitLabCISync } from './GitLab/CreateGitLabCISync'
+import { CreateRailwaySync } from './Railway/CreateRailwaySync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -40,6 +41,8 @@ export const CreateSyncDialog = (props: {
         return <CreateVaultSync appId={props.appId} closeModal={closeModal} />
       case 'hashicorp_nomad':
         return <CreateNomadSync appId={props.appId} closeModal={closeModal} />
+      case 'railway':
+        return <CreateRailwaySync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null

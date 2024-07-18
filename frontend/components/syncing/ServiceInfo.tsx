@@ -1,4 +1,4 @@
-import { EnvironmentSyncType } from '@/apollo/graphql'
+import { EnvironmentSyncType, RailwayProjectType, RailwayResourceInput } from '@/apollo/graphql'
 import { FaEyeSlash, FaLock } from 'react-icons/fa'
 
 export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
@@ -54,6 +54,16 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
         {path}
         {isMasked && <FaEyeSlash title="Masked" />}
         {isProtected && <FaLock title="Protected" />}
+      </div>
+    )
+  } else if (sync.serviceInfo?.id?.includes('railway')) {
+    const project: RailwayResourceInput = JSON.parse(sync.options)['project']
+    const environment: RailwayResourceInput = JSON.parse(sync.options)['environment']
+    const service: RailwayResourceInput | undefined = JSON.parse(sync.options)['service']
+
+    return (
+      <div className="flex gap-2 text-xs text-neutral-500">
+        {project.name} {service ? ` - ${service.name}` : ''} ({environment.name})
       </div>
     )
   } else return <>{sync.serviceInfo?.id}</>

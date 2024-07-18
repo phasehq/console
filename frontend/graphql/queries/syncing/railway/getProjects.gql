@@ -1,0 +1,14 @@
+query GetRailwayProjects($credentialId: ID!) {
+  railwayProjects(credentialId: $credentialId) {
+    id
+    name
+    environments {
+      id
+      name
+    }
+    services {
+      id
+      name
+    }
+  }
+}

@@ -42,6 +42,12 @@ export default function Syncing({ params }: { params: { team: string; app: strin
       )}
       {data?.sseEnabled === true && (
         <>
+          {activeUserIsAdmin && (
+            <SyncOptions
+              appId={params.app}
+              defaultOpen={openCreateSyncPanel || (data.syncs && data.syncs.length === 0)}
+            />
+          )}
           {data.syncs && data.syncs.length > 0 && (
             <div className="flex flex-col gap-4 border-b border-neutral-500/40 pb-8">
               <div className="text-2xl font-semibold pb-4">Active Syncs</div>
@@ -49,13 +55,6 @@ export default function Syncing({ params }: { params: { team: string; app: strin
                 <SyncCard key={sync.id} sync={sync} showAppName={false} showManageButton={true} />
               ))}
             </div>
-          )}
-
-          {activeUserIsAdmin && (
-            <SyncOptions
-              appId={params.app}
-              defaultOpen={openCreateSyncPanel || (data.syncs && data.syncs.length === 0)}
-            />
           )}
         </>
       )}

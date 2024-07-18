@@ -54,6 +54,14 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    RAILWAY = {
+        "id": "railway",
+        "name": "Railway",
+        "expected_credentials": ["api_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
@@ -117,6 +125,13 @@ class ServiceConfig:
         "name": "Hashicorp Nomad",
         "provider": Providers.HASHICORP_NOMAD,
         "resource_type": "path",
+    }
+
+    RAILWAY = {
+        "id": "railway",
+        "name": "Railway",
+        "provider": Providers.RAILWAY,
+        "resource_type": "environment",
     }
 
     @classmethod
