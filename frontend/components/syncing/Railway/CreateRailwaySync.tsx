@@ -87,6 +87,9 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
         setRailwayProjects(projectsData?.railwayProjects)
         setCredentialsValid(true)
       }
+    } else if (!railwayProject || !railwayEnvironment) {
+      toast.error('Please select a Railway Project and Environment!')
+      return false
     } else {
       await createRailwaySync({
         variables: {
@@ -201,7 +204,7 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
                       <div className="space-y-2">
                         <Combobox.Label as={Fragment}>
                           <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
-                            Railway Project
+                            Railway Project <span className="text-red-500">*</span>
                           </label>
                         </Combobox.Label>
                         <div className="w-full relative flex items-center">
@@ -259,10 +262,14 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
               </div>
               {railwayProject && (
                 <div>
-                  <RadioGroup value={railwayEnvironment} onChange={setRailwayEnvironment}>
+                  <RadioGroup
+                    name="railwayEnvironment"
+                    value={railwayEnvironment}
+                    onChange={setRailwayEnvironment}
+                  >
                     <RadioGroup.Label as={Fragment}>
                       <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Project Environment
+                        Project Environment <span className="text-red-500">*</span>
                       </label>
                     </RadioGroup.Label>
                     <div className="flex flex-wrap items-center gap-2">
