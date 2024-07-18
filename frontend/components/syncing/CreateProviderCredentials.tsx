@@ -162,7 +162,7 @@ export const CreateProviderCredentials = (props: {
         )}
 
         {provider === null && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {providers.map((provider) => (
               <button key={provider.id} type="button" onClick={() => setProvider(provider)}>
                 <ProviderCard provider={provider} />
