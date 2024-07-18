@@ -1,6 +1,5 @@
 import _sodium from 'libsodium-wrappers-sumo'
-import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
-import { splitSecret } from '@/utils/keyshares'
+
 import {
   ApiEnvironmentEnvTypeChoices,
   ApiOrganisationMemberRoleChoices,
@@ -9,18 +8,18 @@ import {
   OrganisationMemberType,
   SecretType,
 } from '@/apollo/graphql'
+
+import { EnvKeypair, OrganisationKeyring } from './types'
 import {
+  encryptRaw,
+  decryptRaw,
+  randomKeyPair,
   decryptAsymmetric,
   encryptAsymmetric,
-  getUserKxPrivateKey,
-  getUserKxPublicKey,
-  randomKeyPair,
-} from './crypto'
-
-export type EnvKeyring = {
-  publicKey: string
-  privateKey: string
-}
+  getWrappedKeyShare,
+} from './general'
+import { splitSecret } from './keyshares'
+import { getUserKxPublicKey, getUserKxPrivateKey } from './users'
 
 /**
  * Create a random seed for a new env
@@ -86,7 +85,7 @@ export const encryptedEnvSeed = async (seed: string, key: string) => {
   const sodium = _sodium
 
   const keyBytes = sodium.from_hex(key)
-  const encryptedSeed = await cryptoUtils.encryptRaw(seed, keyBytes)
+  const encryptedSeed = await encryptRaw(seed, keyBytes)
   return sodium.to_hex(encryptedSeed)
 }
 
@@ -97,14 +96,14 @@ export const encryptedEnvSeed = async (seed: string, key: string) => {
  * @param {string} key - Decryption key as a hex string
  * @returns {Promise<string>} - hex encoded plaintext app seed
  */
-export const decryptedAppSeed = async (encryptedSeed: string, key: string) => {
+export const decryptedEnvSeed = async (encryptedSeed: string, key: string) => {
   await _sodium.ready
   const sodium = _sodium
 
   const ciphertextBytes = sodium.from_hex(encryptedSeed)
   const keyBytes = sodium.from_hex(key)
 
-  const seedBytes = await cryptoUtils.decryptRaw(ciphertextBytes, keyBytes)
+  const seedBytes = await decryptRaw(ciphertextBytes, keyBytes)
   return sodium.to_string(seedBytes)
 }
 
@@ -112,9 +111,9 @@ export const decryptedAppSeed = async (encryptedSeed: string, key: string) => {
  * Derives an env keyring from the given seed
  *
  * @param {string} envSeed - Env seed as a hex string
- * @returns {Promise<EnvKeyring>}
+ * @returns {Promise<EnvKeypair>}
  */
-export const envKeyring = async (envSeed: string): Promise<EnvKeyring> => {
+export const envKeyring = async (envSeed: string): Promise<EnvKeypair> => {
   await _sodium.ready
   const sodium = _sodium
 
@@ -163,7 +162,7 @@ export const generateEnvironmentToken = async (
   const envKeys = await envKeyring(envSeed)
 
   const keyShares = await splitSecret(envKeys.privateKey)
-  const wrappedKeyShare = await cryptoUtils.wrappedKeyShare(keyShares[1], wrapKey)
+  const wrappedKeyShare = await getWrappedKeyShare(keyShares[1], wrapKey)
 
   const envSalt = await decryptAsymmetric(
     key.wrappedSalt,
@@ -203,7 +202,7 @@ export const generateUserToken = async (
   const token = await newEnvToken()
 
   const keyShares = await splitSecret(userKeyring.privateKey)
-  const wrappedKeyShare = await cryptoUtils.wrappedKeyShare(keyShares[1], wrapKey)
+  const wrappedKeyShare = await getWrappedKeyShare(keyShares[1], wrapKey)
 
   const pssUser = `pss_user:v1:${token}:${userKeyring.publicKey}:${keyShares[0]}:${wrapKey}`
   const mutationPayload = {
@@ -431,23 +430,4 @@ export const createNewEnv = async (
       }
     }),
   }
-}
-
-/**
- * Compares two arrays for equality.
- *
- * @param {any[]} arr1 - The first array.
- * @param {any[]} arr2 - The second array.
- * @returns {boolean} - True if the arrays are equal, false otherwise.
- */
-export const arraysEqual = (arr1: any[], arr2: any[]) => {
-  if (arr1.length !== arr2.length) {
-    return false
-  }
-  for (let i = 0; i < arr1.length; i++) {
-    if (arr1[i] !== arr2[i]) {
-      return false
-    }
-  }
-  return true
 }

@@ -9,10 +9,18 @@ import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
-import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
+
 import { copyToClipBoard } from '@/utils/clipboard'
-import { getUserKxPublicKey, getUserKxPrivateKey, encryptAsymmetric } from '@/utils/crypto'
-import { generateUserToken } from '@/utils/environments'
+import {
+  OrganisationKeyring,
+  getUserKxPublicKey,
+  getUserKxPrivateKey,
+  generateUserToken,
+  encryptAsymmetric,
+  decodeb64string,
+  getKeyring,
+} from '@/utils/crypto'
+
 import { getDevicePassword } from '@/utils/localStorage'
 import { useMutation } from '@apollo/client'
 import { Disclosure, Transition } from '@headlessui/react'
@@ -93,11 +101,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
   const validateKeyring = async (password: string, organisation: OrganisationType) => {
     return new Promise<OrganisationKeyring>(async (resolve) => {
-      const decryptedKeyring = await cryptoUtils.getKeyring(
-        session?.user?.email!,
-        organisation,
-        password
-      )
+      const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, password)
 
       resolve(decryptedKeyring)
     })
@@ -142,9 +146,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
   useEffect(() => {
     const validateWebAuthRequest = async () => {
-      const decodedWebAuthReq = await cryptoUtils.decodeb64string(
-        decodeURIComponent(params.requestCode)
-      )
+      const decodedWebAuthReq = await decodeb64string(decodeURIComponent(params.requestCode))
       const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
 
       if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName)

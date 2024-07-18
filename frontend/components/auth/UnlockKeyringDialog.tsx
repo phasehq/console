@@ -5,7 +5,6 @@ import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { FaEye, FaEyeSlash, FaLock, FaShieldAlt, FaSignOutAlt, FaUnlock } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { cryptoUtils } from '@/utils/auth'
 import { useSession } from 'next-auth/react'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
@@ -18,6 +17,7 @@ import { handleSignout } from '@/apollo/client'
 import { SplitButton } from '../common/SplitButton'
 import { getDevicePassword, setDevicePassword } from '@/utils/localStorage'
 import { ToggleSwitch } from '../common/ToggleSwitch'
+import { getKeyring } from '@/utils/crypto'
 
 export default function UnlockKeyringDialog(props: { organisation: OrganisationType }) {
   const { organisation } = props
@@ -52,11 +52,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
           setDevicePassword(organisation.memberId!, sudoPassword)
         }
 
-        const decryptedKeyring = await cryptoUtils.getKeyring(
-          session?.user?.email!,
-          organisation,
-          sudoPassword
-        )
+        const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, sudoPassword)
         setKeyring(decryptedKeyring)
         setUnlocking(false)
         reset()

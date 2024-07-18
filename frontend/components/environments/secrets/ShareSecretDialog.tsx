@@ -11,10 +11,11 @@ import { Listbox, RadioGroup, Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import CopyButton from '@/components/common/CopyButton'
-import { boxExpiryString, encryptBox, newBoxSeed } from '@/utils/lockbox'
 import { getSecretPermalink } from '@/utils/secrets'
 import { organisationContext } from '@/contexts/organisationContext'
 import { getHostname } from '@/utils/appConfig'
+import { newBoxSeed, encryptBox } from '@/utils/crypto'
+import { boxExpiryString } from '@/utils/lockbox'
 
 interface ExpiryOptionT {
   name: string

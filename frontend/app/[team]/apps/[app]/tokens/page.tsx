@@ -2,23 +2,28 @@
 
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { RotateAppKey } from '@/graphql/mutations/rotateAppKeys.gql'
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
+import { useMutation, useQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { FaCopy, FaExclamationTriangle, FaInfo, FaTimes } from 'react-icons/fa'
 import { MdContentCopy, MdOutlineRotateLeft } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import { Dialog, Transition } from '@headlessui/react'
-import { cryptoUtils } from '@/utils/auth'
-import { splitSecret } from '@/utils/keyshares'
 import { Alert } from '@/components/common/Alert'
-import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 import { KeyringContext } from '@/contexts/keyringContext'
 import clsx from 'clsx'
 import { SecretTokens } from '@/components/apps/tokens/SecretTokens'
 import { organisationContext } from '@/contexts/organisationContext'
+import {
+  newAppWrapKey,
+  newAppToken,
+  decryptedEnvSeed,
+  appKeyring,
+  splitSecret,
+  getWrappedKeyShare,
+} from '@/utils/crypto'
 
 export default function Tokens({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -68,22 +73,22 @@ export default function Tokens({ params }: { params: { team: string; app: string
           setTimeout(async () => {
             setLoading(true)
             try {
-              const wrapKey = await cryptoUtils.newAppWrapKey()
-              const newAppToken = await cryptoUtils.newAppToken()
-              const appSeed = await cryptoUtils.decryptedAppSeed(app.appSeed, keyring!.symmetricKey)
+              const wrapKey = await newAppWrapKey()
+              const appToken = await newAppToken()
+              const appSeed = await decryptedEnvSeed(app.appSeed, keyring!.symmetricKey)
 
-              const appKeys = await cryptoUtils.appKeyring(appSeed)
+              const appKeys = await appKeyring(appSeed)
               const appKeyShares = await splitSecret(appKeys.privateKey)
-              const wrappedShare = await cryptoUtils.wrappedKeyShare(appKeyShares[1], wrapKey)
+              const wrappedShare = await getWrappedKeyShare(appKeyShares[1], wrapKey)
               await rotateAppKeys({
                 variables: {
                   id: app.id,
-                  appToken: newAppToken,
+                  appToken,
                   wrappedKeyShare: wrappedShare,
                 },
               })
 
-              setAppSecret(`pss:v${APP_VERSION}:${newAppToken}:${appKeyShares[0]}:${wrapKey}`)
+              setAppSecret(`pss:v${APP_VERSION}:${appToken}:${appKeyShares[0]}:${wrapKey}`)
 
               setLoading(false)
               resolve(true)

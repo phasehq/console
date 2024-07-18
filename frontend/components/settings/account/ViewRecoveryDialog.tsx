@@ -2,7 +2,7 @@ import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { organisationContext } from '@/contexts/organisationContext'
-import { cryptoUtils } from '@/utils/auth'
+import { deviceVaultKey, decryptAccountRecovery } from '@/utils/crypto'
 import { generateRecoveryPdf, copyRecoveryKit } from '@/utils/recovery'
 import { Dialog, Transition } from '@headlessui/react'
 import { useSession } from 'next-auth/react'
@@ -23,12 +23,9 @@ export const ViewRecoveryDialog = () => {
   const handleDecryptRecovery = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
 
-    const deviceKey = await cryptoUtils.deviceVaultKey(password, session?.user?.email!)
+    const deviceKey = await deviceVaultKey(password, session?.user?.email!)
 
-    const decryptedRecovery = await cryptoUtils.decryptAccountRecovery(
-      activeOrganisation?.recovery!,
-      deviceKey
-    )
+    const decryptedRecovery = await decryptAccountRecovery(activeOrganisation?.recovery!, deviceKey)
     setRecovery(decryptedRecovery)
   }
 
