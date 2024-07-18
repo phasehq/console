@@ -5,10 +5,9 @@ import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import CreateNewRailwaySync from '@/graphql/mutations/syncing/railway/createRailwayEnvironmentSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, use, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
 import {
-  CloudFlarePagesType,
   EnvironmentType,
   ProviderCredentialsType,
   RailwayEnvironmentType,
