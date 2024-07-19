@@ -41,8 +41,11 @@ export const ProviderCredentialPicker = (props: {
     ? credentials.filter((cred) => cred.provider?.id === providerFilter)
     : credentials
 
+  const credentialMatchesFilter =
+    credential && providerFilter ? credential.provider?.id === providerFilter : true
+
   useEffect(() => {
-    if (setDefault && filteredCredentials.length > 0 && !credential)
+    if (setDefault && filteredCredentials.length > 0 && !credentialMatchesFilter)
       setCredential(filteredCredentials[0])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerFilter, filteredCredentials, setDefault])
