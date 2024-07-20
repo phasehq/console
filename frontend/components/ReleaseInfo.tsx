@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { getHealth } from '@/utils/appConfig'
 import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
+import { Menu, Transition } from '@headlessui/react'
 
 const GITHUB_REPO = 'phasehq/console' // Update with your GitHub repo
 
@@ -60,54 +61,88 @@ export const ReleaseInfo = () => {
   const latestRelease = releases[0]
 
   return (
-    <div className="flex flex-col space-y-4 border-l border-neutral-500/40">
-      {releases.map((release, index) => (
-        <div key={release.id} className="flex gap-2 items-start">
-          <div
-            className={clsx(
-              'h-2 w-2 rounded-full -ml-1 mt-2',
-              release.tag_name === healthData.version
-                ? latestRelease.tag_name === healthData.version
-                  ? 'bg-emerald-500 font-bold'
-                  : 'bg-amber-500 font-bold'
-                : 'bg-neutral-500 hover:bg-neutral-400'
-            )}
-          ></div>
-          <div className="flex flex-col">
-            <Link
-              href={release.html_url}
-              target="_blank"
-              rel="noreferrer"
-              className={`transition ease text-sm ${
-                release.tag_name === healthData.version
-                  ? latestRelease.tag_name === healthData.version
-                    ? 'text-emerald-500 font-bold'
-                    : 'text-amber-500 font-bold'
-                  : 'text-neutral-500 hover:text-neutral-400'
-              }`}
-            >
-              {release.tag_name === healthData.version ? (
-                <strong>
-                  Current:{' '}
-                  <span className="font-mono">
-                    {release.name} ({release.tag_name})
-                  </span>
-                </strong>
-              ) : (
-                <>
-                  {index === 0 && <strong>Latest:</strong>}{' '}
-                  <span className="font-mono">
-                    {release.name} ({release.tag_name})
-                  </span>
-                </>
-              )}
-            </Link>
-            <p className="text-neutral-400 text-xs">
-              {relativeTimeFromDates(new Date(release.published_at))}
-            </p>
-          </div>
+    <Menu as="div" className="relative inline-block text-left">
+      <Menu.Button
+        title={
+          latestRelease.tag_name === healthData.version
+            ? 'You are running the latest version of the Phase Console'
+            : 'New version of the Phase Console is available.'
+        }
+      >
+        <div
+          className={clsx(
+            'font-mono text-sm font-semibold transition ease',
+            latestRelease.tag_name === healthData.version
+              ? 'text-emerald-500 hover:text-emerald-400'
+              : 'text-amber-500 hover:text-amber-400'
+          )}
+        >
+          {healthData.version}
         </div>
-      ))}
-    </div>
+      </Menu.Button>
+      <Transition
+        as={Fragment}
+        enter="transition ease-out duration-100"
+        enterFrom="transform opacity-0 scale-95"
+        enterTo="transform opacity-100 scale-100"
+        leave="transition ease-in duration-75"
+        leaveFrom="transform opacity-100 scale-100"
+        leaveTo="transform opacity-0 scale-95"
+      >
+        <Menu.Items className="absolute z-10 left-2 bottom-10 mt-2 w-60 p-4 origin-rop-right divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+          <Menu.Item>
+            <div className="flex flex-col space-y-4 border-l border-neutral-500/40">
+              {releases.map((release, index) => (
+                <div key={release.id} className="flex gap-2 items-start">
+                  <div
+                    className={clsx(
+                      'h-2 w-2 rounded-full -ml-1 mt-2',
+                      release.tag_name === healthData.version
+                        ? latestRelease.tag_name === healthData.version
+                          ? 'bg-emerald-500 font-bold'
+                          : 'bg-amber-500 font-bold'
+                        : 'bg-neutral-500 hover:bg-neutral-400'
+                    )}
+                  ></div>
+                  <div className="flex flex-col">
+                    <Link
+                      href={release.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`transition ease text-sm ${
+                        release.tag_name === healthData.version
+                          ? latestRelease.tag_name === healthData.version
+                            ? 'text-emerald-500 font-bold'
+                            : 'text-amber-500 font-bold'
+                          : 'text-neutral-500 hover:text-neutral-400'
+                      }`}
+                    >
+                      {release.tag_name === healthData.version ? (
+                        <strong>
+                          Current:{' '}
+                          <span className="font-mono">
+                            {release.name} ({release.tag_name})
+                          </span>
+                        </strong>
+                      ) : (
+                        <>
+                          {index === 0 && <strong>Latest:</strong>}{' '}
+                          <span className="font-mono">
+                            {release.name} ({release.tag_name})
+                          </span>
+                        </>
+                      )}
+                    </Link>
+                    <p className="text-neutral-400 text-xs">
+                      {relativeTimeFromDates(new Date(release.published_at))}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Menu.Item>
+        </Menu.Items>
+      </Transition>
+    </Menu>
   )
 }
