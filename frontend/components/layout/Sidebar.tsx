@@ -19,6 +19,8 @@ import { Fragment, useContext } from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
+import { VersionLabel } from '../VersionLabel'
+import { ReleaseInfo } from '../ReleaseInfo'
 
 export type SidebarLinkT = {
   name: string
@@ -171,6 +173,10 @@ const Sidebar = () => {
             />
           ))}
         </div>
+        <div className="flex flex-col justify-end h-full p-4">
+          <ReleaseInfo />
+        </div>
+
         <div className="p-4 w-full">
           <SidebarLink
             key={links[5].name}
