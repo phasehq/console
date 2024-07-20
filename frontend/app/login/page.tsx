@@ -1,3 +1,4 @@
+import { VersionLabel } from '@/components/VersionLabel'
 import SignInButtons from '@/components/auth/SignInButtons'
 import { HeroPattern } from '@/components/common/HeroPattern'
 
@@ -8,6 +9,10 @@ export default async function Login() {
         <HeroPattern />
         <div className="mx-auto my-auto max-w-2xl">
           <SignInButtons />
+        </div>
+
+        <div className="flex justify-end">
+          <VersionLabel />
         </div>
       </div>
     </>
