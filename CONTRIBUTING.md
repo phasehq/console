@@ -1,12 +1,8 @@
 # Contributing to Phase
 
-Thanks for taking the time to contribute! ❤️
+Thanks for taking the time to contribute! 🫡
 
 We welcome any contributions to Phase, big or small.
-
-## Community
-
-It's the early days of Phase and we're working hard to build an awesome, inclusive community.
 
 ## Bugs and issues
 
@@ -30,31 +26,48 @@ Anyone can contribute code to Phase. To get started, check out the local develop
 
 ## Licensing
 
-Most of Phase's code is under the MIT license, though some paid feature restrictions are covered by a proprietary license.
+Most of Phase's code is under the MIT license, though some paid feature restrictions may covered by a proprietary license.
 
 Any third party components incorporated into our code are licensed under the original license provided by the applicable component owner.
 
 ## Setup local development environment
+
 ### Dev server with hot reload
+
 1. Create a **.env.dev** file using
-    ```
+    ```bash
     cp .env.dev.example .env.dev
     ```
-2. Add atleast one OAuth provider in your **.env.dev**. Follow the [docs](https://docs.phase.dev/self-hosting/configuration/envars)
-3. Verify that **dev-docker-compose.yml** file is populated with the correct environment variables by running
+
+2. Add at least one of the available OAuth provider credentials in your **.env.dev**. Follow the [Phase Docs](https://docs.phase.dev/self-hosting/configuration/envars#single-sign-on-sso)
+
+3. Install the dependencies:
+
+    ```bash
+    docker compose -f dev-docker-compose.yml build
     ```
-    docker compose -f dev-docker-compose.yml --env-file .env.dev config
+
+4. Start the containers in dev mode using: 
     ```
-4. Start the containers using 
+    docker compose -f dev-docker-compose.yml up
     ```
-    docker-compose -f dev-docker-compose.yml --env-file .env.dev up
-    ```
+
 5. The Console is now running at <https://localhost> with [HMR(Hot Module Replacement)](https://webpack.js.org/concepts/hot-module-replacement) and a self-signed certificate.
+   
    >**Note : Your browser might warn you about the self-signed certificate. You can safely accept the certificate and proceed. 
 
-### Staging env to test production builds
+### Set up a staging environment
 
-1. Set up a `.env` file with `cp .env.example` and add atleast one OAuth provider. View the [docs](https://docs.phase.dev/self-hosting/configuration/envars) for more info.
-2. Build the image locally with `docker-compose -f staging-docker-compose.yml build`
-3. Bring docker compose up with `docker-compose -f staging-docker-compose.yml up`
-4. The Console is now running at `https://localhost`.
+1. Create a **.env** file using
+    ```bash
+    cp .env.example .env
+    ```
+2. Add at least one of the available OAuth provider credentials in your **.env**. Follow the [Phase Docs](https://docs.phase.dev/self-hosting/configuration/envars#single-sign-on-sso)
+
+2. Build the image locally with `docker compose -f staging-docker-compose.yml build`
+
+3. Start the Phase Console with `docker compose -f staging-docker-compose.yml up -d`
+
+4. The Console is now running at `https://localhost` with a self-signed certificate.
+
+   >**Note : Your browser might warn you about the self-signed certificate. You can safely accept the certificate and proceed. 
