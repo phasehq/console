@@ -1,13 +1,13 @@
-# Contributing to Phase
+# Contributing to Phase 🫡
 
-Thanks for taking the time to contribute! 🫡
+Thanks for taking the time to contribute!
 
 We welcome any contributions to Phase, big or small.
 
 ## Minimum System Requirements 🦕
 
 To run Phase locally, ensure your system meets the following minimum requirements:
-- System !=🥔
+- **System** !=🥔
 - **RAM:** >= 8GB (preferably 16GB)
 
 

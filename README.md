@@ -21,7 +21,11 @@ An open source and developer-friendly alternative to **HashiCorp Vault** and **A
 
 # Phase Console
 
-<img src="img/phase-console-secrets.webp" width="100%" alt="Phase Console" />
+<!-- Autoplay video -->
+<video width="100%" autoplay loop muted>
+  <source src="img/console-ui.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 
 |     | **Features**                                                                                                                                                |
