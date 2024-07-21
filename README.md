@@ -25,16 +25,17 @@ https://github.com/user-attachments/assets/160c721d-a941-440a-bc42-afd419c1df18
 
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 📈  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets and environment variables                |
-| ⌨️  | **[CLI](https://github.com/phasehq/cli)**: Import existing secrets from `.env` files, encrypt them and securely inject them in your application at runtime  |
-| 🤫  | **[Secret management](https://docs.phase.dev/console/apps)**: Secret Diffs, version control and Point-in-time Recovery                                                                                    |
-| 🙋  | **[RBAC](https://docs.phase.dev/console/users#user-roles)**: Fine-grained, role-based and cryptographic access control, per application, per environment.                                                      |
-| 🔌  | **[Integrations](https://docs.phase.dev/#integrate-phase)**: Automatically sync secrets to GitHub, Cloudflare Pages, AWS Secrets Manager etc.                                                        |
-| ![Kubernets](img/kubernetes.svg)  | **[Kubernetes](https://docs.phase.dev/integrations/platforms/kubernetes)**: Automatically deploy secrets to your Kubernetes Cluster with End-to-End encryption via Phase Secrets Operator   |
+| 📈  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets, and environment variables                |
+| ⌨️  | **[CLI](https://github.com/phasehq/cli)**: Import existing secrets from `.env` files, encrypt them, and securely inject them in your application at runtime  |
+| 🤫  | **[Secret management](https://docs.phase.dev/console/apps)**: Secret Diffs, version control, and recovery                                                                                    |
+| 🙋  | **[RBAC](https://docs.phase.dev/console/users#user-roles)**: Fine-grained, role-based, and cryptographic access control, per application, per environment.                                                      |
+| 🔌  | **[Integrations](https://docs.phase.dev/#integrate-phase)**: Automatically sync secrets to GitHub, Cloudflare Pages, GitLab CI, Railway, AWS Secrets Manager, etc.                                                        |
+| ![Kubernetes](img/kubernetes.svg)  | **[Kubernetes](https://docs.phase.dev/integrations/platforms/kubernetes)**: Automatically deploy secrets to your Kubernetes Cluster with End-to-End encryption via Phase Secrets Operator   |
 | ⛓️  | **[Secret referencing & overrides](https://docs.phase.dev/console/secrets)**: Create personal secrets. Inherit values from other secrets                                                              |
+| 🌐  | **[REST API](https://docs.phase.dev/public-api/secrets#get-secrets)**: Access and manage secrets programmatically                                                                                      |
+| 📦  | **[SDKs](https://docs.phase.dev/sdks)**: SDKs for integrating Phase with various programming languages and frameworks              
 | 🥡  | **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure                                                                            |
-| 🔑  | **[Service Tokens](https://docs.phase.dev/console/tokens#service-tokens)**: Authenticate CI runners, build tools and production environment with granular scope                                                    |
-| 🔍  | **[Audit Logs]()**: Complete visibility into every change and access event                                                                                  |
+| 🔍  | **[Audit Logs]()**: Complete visibility into every change and access event                                                                                  |                                                                        |                                                                                |
 
 [Explore Phase Console](https://docs.phase.dev/console)
 
@@ -86,6 +87,7 @@ Commands:
     users whoami     🙋 See details of the current user
     users logout     🏃 Logout from phase-cli
     users keyring    🔐 Display information about the Phase keyring
+    docs             📖 Open the Phase CLI Docs in your browser
     console          🖥️ Open the Phase Console in your browser
     update           🆙 Update the Phase CLI to the latest version
 ```
@@ -115,7 +117,7 @@ The quickest and most reliable way to get started is by signing up on the [Phase
 
 ### SDKs
 
-- [JavaScript Browser](https://github.com/phasehq/client-js-sdk)
+- [Golang](https://docs.phase.dev/sdks/go)
 - [Node.js](https://github.com/phasehq/node-sdk)
 - [Python](https://github.com/phasehq/python-sdk)
 
