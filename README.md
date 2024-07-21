@@ -20,12 +20,7 @@ An open source and developer-friendly alternative to **HashiCorp Vault** and **A
 ---
 
 # Phase Console
-
-<!-- Autoplay video -->
-<video width="100%" autoplay loop muted>
-  <source src="img/console-ui.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+https://github.com/user-attachments/assets/160c721d-a941-440a-bc42-afd419c1df18
 
 
 |     | **Features**                                                                                                                                                |
