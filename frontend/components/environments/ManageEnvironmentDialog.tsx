@@ -179,26 +179,21 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
       <div>
         <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Environment Members</h4>
         <p className="text-neutral-500">
-          The following users have access to secrets in this Environment
+          The following users have access to Secrets in this Environment
         </p>
       </div>
-      <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-1">
         {props.environment.members?.map((member) =>
           member ? (
-            <div className="flex items-center gap-2" key={member.email}>
-              <Avatar imagePath={member.avatarUrl!} size="md" />
-              <div className="flex flex-col">
-                <span className="font-medium text-sm">{member.fullName || member.email}</span>
-                {member.fullName && (
-                  <span className="text-neutral-500 text-xs">{member.email}</span>
-                )}
-              </div>
+            <div key={member.email} title={member.fullName || member.email || ''}>
+              <Avatar imagePath={member.avatarUrl!} size="lg" />
             </div>
           ) : (
             <></>
           )
         )}
       </div>
+
       {organisation && (
         <div className="flex justify-end">
           <Link href={`${organisation.name}/apps/${props.environment.app.id}/members`}>
@@ -225,8 +220,8 @@ export const ManageEnvironmentDialog = (props: { environment: EnvironmentType })
       }
     >
       <div className="space-y-4 divide-y divide-neutral-500/40">
-        <EnvironmentMembers environment={props.environment} />
         <RenameEnvironment environment={props.environment} />
+        <EnvironmentMembers environment={props.environment} />
         <DeleteEnvironment environment={props.environment} />
       </div>
     </GenericDialog>
