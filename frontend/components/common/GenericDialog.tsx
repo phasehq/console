@@ -82,4 +82,6 @@ const GenericDialog = forwardRef(
   }
 )
 
+GenericDialog.displayName = 'GenericDialog'
+
 export default GenericDialog
