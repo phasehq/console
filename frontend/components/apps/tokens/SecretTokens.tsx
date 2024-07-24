@@ -8,7 +8,7 @@ import { Button } from '@/components/common/Button'
 import { FaKey, FaTimes, FaTrashAlt } from 'react-icons/fa'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
-import clsx from 'clsx'
+import { clsx } from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userIsAdmin } from '@/utils/permissions'
 import { Avatar } from '@/components/common/Avatar'
@@ -179,12 +179,12 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
               </div>
 
               <div className="flex items-center gap-2">
-                {tokenEnvironments?.map(({ envType }: { envType: string }) => (
+                {tokenEnvironments?.map(({ name }: { name: string }) => (
                   <div
-                    key={envType}
-                    className="rounded-full py-0.5 px-2 text-zinc-700 ring-1 ring-inset ring-zinc-900/10 dark:text-zinc-400 dark:ring-white/10 tracking-widest text-xs font-medium"
+                    key={name}
+                    className="rounded-full py-0.5 px-2 text-zinc-700 ring-1 ring-inset ring-zinc-900/10 dark:text-zinc-400 dark:ring-white/10 text-xs font-medium"
                   >
-                    {envType}
+                    {name}
                   </div>
                 ))}
               </div>
