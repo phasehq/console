@@ -169,6 +169,7 @@ class AppType(DjangoObjectType):
 class EnvironmentType(DjangoObjectType):
     folder_count = graphene.Int()
     secret_count = graphene.Int()
+    members = graphene.List(OrganisationMemberType)
 
     class Meta:
         model = Environment
@@ -177,6 +178,7 @@ class EnvironmentType(DjangoObjectType):
             "name",
             "app",
             "env_type",
+            "index",
             "identity_key",
             "wrapped_seed",
             "wrapped_salt",
@@ -209,6 +211,14 @@ class EnvironmentType(DjangoObjectType):
         )
 
         return user_env_key.wrapped_salt
+
+    def resolve_members(self, info):
+        return [
+            env_key.user
+            for env_key in EnvironmentKey.objects.filter(
+                environment=self, deleted_at=None
+            )
+        ]
 
 
 class EnvironmentKeyType(DjangoObjectType):
