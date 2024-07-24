@@ -77,7 +77,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     closeModal()
   }
   return (
-    <div className="space-y-4 py-4">
+    <div className="space-y-4 pt-4">
       <div>
         <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Delete Environment</h4>
         <p className="text-neutral-500">
