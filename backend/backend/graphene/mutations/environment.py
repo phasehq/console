@@ -1,9 +1,11 @@
 from django.utils import timezone
+from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
 from api.utils.permissions import (
     member_can_access_org,
     user_can_access_app,
     user_can_access_environment,
+    user_is_admin,
     user_is_org_member,
 )
 from api.utils.audit_logging import log_secret_event
@@ -79,11 +81,21 @@ class CreateEnvironmentMutation(graphene.Mutation):
     class Arguments:
         environment_data = EnvironmentInput(required=True)
         admin_keys = graphene.List(EnvironmentKeyInput)
+        wrapped_seed = graphene.String(required=False)
+        wrapped_salt = graphene.String(required=False)
 
     environment = graphene.Field(EnvironmentType)
 
     @classmethod
-    def mutate(cls, root, info, environment_data, admin_keys):
+    def mutate(
+        cls,
+        root,
+        info,
+        environment_data,
+        admin_keys,
+        wrapped_seed=None,
+        wrapped_salt=None,
+    ):
         user_id = info.context.user.userId
 
         if not user_can_access_app(user_id, environment_data.app_id):
@@ -91,10 +103,30 @@ class CreateEnvironmentMutation(graphene.Mutation):
 
         app = App.objects.get(id=environment_data.app_id)
 
+        if Environment.objects.filter(
+            app=app, name__iexact=environment_data.name
+        ).exists():
+            raise GraphQLError(
+                "An Environment with this name already exists in this App!"
+            )
+
+        if environment_data.env_type.lower() == "dev":
+            index = 0
+        elif environment_data.env_type.lower() == "staging":
+            index = 1
+        elif environment_data.env_type.lower() == "prod":
+            index = 2
+        else:
+            max_index = Environment.objects.filter(app=app).aggregate(Max("index"))[
+                "index__max"
+            ]
+            index = max_index + 1
+
         environment = Environment.objects.create(
             app=app,
             name=environment_data.name,
             env_type=environment_data.env_type,
+            index=index,
             identity_key=environment_data.identity_key,
             wrapped_seed=environment_data.wrapped_seed,
             wrapped_salt=environment_data.wrapped_salt,
@@ -106,6 +138,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
             deleted_at=None,
         )
 
+        # Add the org owner to the environment
         EnvironmentKey.objects.create(
             environment=environment,
             user=org_owner,
@@ -113,6 +146,8 @@ class CreateEnvironmentMutation(graphene.Mutation):
             wrapped_seed=environment_data.wrapped_seed,
             wrapped_salt=environment_data.wrapped_salt,
         )
+
+        # Add admins to the environment
         for key in admin_keys:
             EnvironmentKey.objects.create(
                 environment=environment,
@@ -122,7 +157,95 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 identity_key=key.identity_key,
             )
 
+        # Add Server keys if provided
+        if wrapped_seed and wrapped_salt:
+            ServerEnvironmentKey.objects.create(
+                environment=environment,
+                identity_key=environment_data.identity_key,
+                wrapped_seed=wrapped_seed,
+                wrapped_salt=wrapped_salt,
+            )
+
         return CreateEnvironmentMutation(environment=environment)
+
+
+class RenameEnvironmentMutation(graphene.Mutation):
+    class Arguments:
+        environment_id = graphene.ID(required=True)
+        name = graphene.String(required=True)
+
+    environment = graphene.Field(EnvironmentType)
+
+    @classmethod
+    def mutate(cls, root, info, environment_id, name):
+        user = info.context.user
+        environment = Environment.objects.get(id=environment_id)
+        org = environment.app.organisation
+
+        if user_is_admin(user.userId, org.id):
+            if Environment.objects.filter(
+                app=environment.app, name__iexact=name
+            ).exists():
+                raise GraphQLError(
+                    "An Environment with this name already exists in this App!"
+                )
+            environment.name = name
+            environment.updated_at = timezone.now()
+            environment.save()
+
+            return RenameEnvironmentMutation(environment=environment)
+        else:
+            raise GraphQLError("You don't have permission to perform this action")
+
+
+class DeleteEnvironmentMutation(graphene.Mutation):
+    class Arguments:
+        environment_id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, environment_id):
+        user = info.context.user
+        environment = Environment.objects.get(id=environment_id)
+        org = environment.app.organisation
+
+        if user_is_admin(user.userId, org.id):
+            environment.delete()
+
+            return DeleteEnvironmentMutation(ok=True)
+        else:
+            raise GraphQLError("You don't have permission to perform this action")
+
+
+class SwapEnvironmentOrderMutation(graphene.Mutation):
+    class Arguments:
+        environment1_id = graphene.ID(required=True)
+        environment2_id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, environment1_id, environment2_id):
+        user = info.context.user
+        environment1 = Environment.objects.get(id=environment1_id)
+        environment2 = Environment.objects.get(id=environment2_id)
+        org = environment1.app.organisation
+
+        if user_is_admin(user.userId, org.id):
+            # Temporarily store the index of environment1
+            temp_index = environment1.index
+
+            # Swap the indices
+            environment1.index = environment2.index
+            environment2.index = temp_index
+
+            environment1.save()
+            environment2.save()
+
+            return SwapEnvironmentOrderMutation(ok=True)
+        else:
+            raise GraphQLError("You don't have permission to perform this action")
 
 
 class CreateEnvironmentKeyMutation(graphene.Mutation):
