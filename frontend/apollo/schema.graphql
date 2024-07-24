@@ -283,6 +283,7 @@ type EnvironmentType {
   app: AppType!
   name: String!
   envType: ApiEnvironmentEnvTypeChoices!
+  index: Int!
   identityKey: String!
   wrappedSeed: String!
   wrappedSalt: String!
@@ -290,6 +291,7 @@ type EnvironmentType {
   updatedAt: DateTime!
   folderCount: Int
   secretCount: Int
+  members: [OrganisationMemberType]
 }
 
 """An enumeration."""
@@ -302,6 +304,9 @@ enum ApiEnvironmentEnvTypeChoices {
 
   """Production"""
   PROD
+
+  """Custom"""
+  CUSTOM
 }
 
 type SecretFolderType {
@@ -604,7 +609,10 @@ type Mutation {
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): AddAppMemberMutation
   removeAppMember(appId: ID, memberId: ID): RemoveAppMemberMutation
   updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): UpdateMemberEnvScopeMutation
-  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!): CreateEnvironmentMutation
+  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
+  deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
+  renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
+  swapEnvironmentOrder(environment1Id: ID!, environment2Id: ID!): SwapEnvironmentOrderMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
@@ -709,6 +717,18 @@ input EnvironmentInput {
   wrappedSeed: String!
   wrappedSalt: String!
   identityKey: String!
+}
+
+type DeleteEnvironmentMutation {
+  ok: Boolean
+}
+
+type RenameEnvironmentMutation {
+  environment: EnvironmentType
+}
+
+type SwapEnvironmentOrderMutation {
+  ok: Boolean
 }
 
 type CreateEnvironmentKeyMutation {

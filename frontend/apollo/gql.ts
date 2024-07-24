@@ -19,7 +19,7 @@ const documents = {
     "mutation CreateApplication($id: ID!, $organisationId: ID!, $name: String!, $identityKey: String!, $appToken: String!, $appSeed: String!, $wrappedKeyShare: String!, $appVersion: Int!) {\n  createApp(\n    id: $id\n    organisationId: $organisationId\n    name: $name\n    identityKey: $identityKey\n    appToken: $appToken\n    appSeed: $appSeed\n    wrappedKeyShare: $wrappedKeyShare\n    appVersion: $appVersion\n  ) {\n    app {\n      id\n      name\n      identityKey\n    }\n  }\n}": types.CreateApplicationDocument,
     "mutation CreateOrg($id: ID!, $name: String!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!) {\n  createOrganisation(\n    id: $id\n    name: $name\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n  ) {\n    organisation {\n      id\n      name\n      memberId\n    }\n  }\n}": types.CreateOrgDocument,
     "mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    ok\n  }\n}": types.DeleteApplicationDocument,
-    "mutation CreateEnv($input: EnvironmentInput!) {\n  createEnvironment(environmentData: $input) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.CreateEnvDocument,
+    "mutation CreateEnv($envInput: EnvironmentInput!, $adminKeys: [EnvironmentKeyInput]) {\n  createEnvironment(environmentData: $envInput, adminKeys: $adminKeys) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.CreateEnvDocument,
     "mutation CreateEnvKey($envId: ID!, $userId: ID, $wrappedSeed: String!, $wrappedSalt: String!, $identityKey: String!) {\n  createEnvironmentKey(\n    envId: $envId\n    userId: $userId\n    wrappedSeed: $wrappedSeed\n    wrappedSalt: $wrappedSalt\n    identityKey: $identityKey\n  ) {\n    environmentKey {\n      id\n      createdAt\n    }\n  }\n}": types.CreateEnvKeyDocument,
     "mutation CreateEnvToken($envId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {\n  createEnvironmentToken(\n    envId: $envId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n  ) {\n    environmentToken {\n      id\n      createdAt\n    }\n  }\n}": types.CreateEnvTokenDocument,
     "mutation CreateNewSecretFolder($envId: ID!, $name: String!, $path: String!) {\n  createSecretFolder(envId: $envId, name: $name, path: $path) {\n    folder {\n      id\n      name\n      path\n    }\n  }\n}": types.CreateNewSecretFolderDocument,
@@ -27,6 +27,7 @@ const documents = {
     "mutation CreateNewSecret($newSecret: SecretInput!) {\n  createSecret(secretData: $newSecret) {\n    secret {\n      id\n      key\n      value\n      createdAt\n    }\n  }\n}": types.CreateNewSecretDocument,
     "mutation CreateNewSecretTag($orgId: ID!, $name: String!, $color: String!) {\n  createSecretTag(orgId: $orgId, name: $name, color: $color) {\n    tag {\n      id\n    }\n  }\n}": types.CreateNewSecretTagDocument,
     "mutation CreateNewServiceToken($appId: ID!, $environmentKeys: [EnvironmentKeyInput], $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $name: String!, $expiry: BigInt) {\n  createServiceToken(\n    appId: $appId\n    environmentKeys: $environmentKeys\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    name: $name\n    expiry: $expiry\n  ) {\n    serviceToken {\n      id\n      createdAt\n      expiresAt\n    }\n  }\n}": types.CreateNewServiceTokenDocument,
+    "mutation DeleteEnv($environmentId: ID!) {\n  deleteEnvironment(environmentId: $environmentId) {\n    ok\n  }\n}": types.DeleteEnvDocument,
     "mutation DeleteFolder($folderId: ID!) {\n  deleteSecretFolder(folderId: $folderId) {\n    ok\n  }\n}": types.DeleteFolderDocument,
     "mutation DeleteSecretOp($id: ID!) {\n  deleteSecret(id: $id) {\n    secret {\n      id\n    }\n  }\n}": types.DeleteSecretOpDocument,
     "mutation RevokeServiceToken($tokenId: ID!) {\n  deleteServiceToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeServiceTokenDocument,
@@ -34,7 +35,9 @@ const documents = {
     "mutation InitAppEnvironments($devEnv: EnvironmentInput!, $stagingEnv: EnvironmentInput!, $prodEnv: EnvironmentInput!, $devAdminKeys: [EnvironmentKeyInput], $stagAdminKeys: [EnvironmentKeyInput], $prodAdminKeys: [EnvironmentKeyInput]) {\n  devEnvironment: createEnvironment(\n    environmentData: $devEnv\n    adminKeys: $devAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  stagingEnvironment: createEnvironment(\n    environmentData: $stagingEnv\n    adminKeys: $stagAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  prodEnvironment: createEnvironment(\n    environmentData: $prodEnv\n    adminKeys: $prodAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.InitAppEnvironmentsDocument,
     "mutation LogSecretReads($ids: [ID]!) {\n  readSecret(ids: $ids) {\n    ok\n  }\n}": types.LogSecretReadsDocument,
     "mutation RemovePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}": types.RemovePersonalSecretDocument,
+    "mutation RenameEnv($environmentId: ID!, $name: String!) {\n  renameEnvironment(environmentId: $environmentId, name: $name) {\n    environment {\n      id\n      name\n      updatedAt\n    }\n  }\n}": types.RenameEnvDocument,
     "mutation CreateSharedSecret($input: LockboxInput!) {\n  createLockbox(input: $input) {\n    lockbox {\n      id\n      allowedViews\n      expiresAt\n    }\n  }\n}": types.CreateSharedSecretDocument,
+    "mutation SwapEnvOrder($environment1Id: ID!, $environment2Id: ID!) {\n  swapEnvironmentOrder(\n    environment1Id: $environment1Id\n    environment2Id: $environment2Id\n  ) {\n    ok\n  }\n}": types.SwapEnvOrderDocument,
     "mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {\n  createOrganisationMember(\n    orgId: $orgId\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n    inviteId: $inviteId\n  ) {\n    orgMember {\n      id\n      email\n      createdAt\n      role\n    }\n  }\n}": types.AcceptOrganisationInviteDocument,
     "mutation DeleteOrgInvite($inviteId: ID!) {\n  deleteInvitation(inviteId: $inviteId) {\n    ok\n  }\n}": types.DeleteOrgInviteDocument,
     "mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}": types.RemoveMemberDocument,
@@ -74,7 +77,7 @@ const documents = {
     "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    self\n  }\n}": types.GetOrganisationMembersDocument,
     "query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    userCount\n    appCount\n  }\n}": types.GetOrganisationPlanDocument,
     "query VerifyInvite($inviteId: ID!) {\n  validateInvite(inviteId: $inviteId) {\n    id\n    organisation {\n      id\n      name\n    }\n    inviteeEmail\n    invitedBy {\n      email\n    }\n    apps {\n      id\n      name\n    }\n  }\n}": types.VerifyInviteDocument,
-    "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n  sseEnabled(appId: $appId)\n}": types.GetAppEnvironmentsDocument,
+    "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n      id\n    }\n    secretCount\n    folderCount\n    index\n    members {\n      email\n      fullName\n      avatarUrl\n    }\n  }\n  sseEnabled(appId: $appId)\n}": types.GetAppEnvironmentsDocument,
     "query GetAppSecretsLogs($appId: ID!, $start: BigInt, $end: BigInt) {\n  logs(appId: $appId, start: $start, end: $end) {\n    secrets {\n      id\n      path\n      key\n      value\n      tags {\n        id\n        name\n        color\n      }\n      version\n      comment\n      timestamp\n      ipAddress\n      userAgent\n      user {\n        email\n        username\n        fullName\n        avatarUrl\n      }\n      serviceToken {\n        id\n        name\n      }\n      eventType\n      environment {\n        id\n        envType\n        name\n      }\n      secret {\n        id\n        path\n      }\n    }\n  }\n  secretsLogsCount(appId: $appId)\n  environmentKeys(appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    environment {\n      id\n    }\n  }\n}": types.GetAppSecretsLogsDocument,
     "query GetEnvironmentKey($envId: ID!, $appId: ID!) {\n  environmentKeys(environmentId: $envId, appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvironmentKeyDocument,
     "query GetEnvironmentTokens($envId: ID!) {\n  environmentTokens(environmentId: $envId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n  }\n}": types.GetEnvironmentTokensDocument,
@@ -140,7 +143,7 @@ export function graphql(source: "mutation DeleteApplication($id: ID!) {\n  delet
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation CreateEnv($input: EnvironmentInput!) {\n  createEnvironment(environmentData: $input) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}"): (typeof documents)["mutation CreateEnv($input: EnvironmentInput!) {\n  createEnvironment(environmentData: $input) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}"];
+export function graphql(source: "mutation CreateEnv($envInput: EnvironmentInput!, $adminKeys: [EnvironmentKeyInput]) {\n  createEnvironment(environmentData: $envInput, adminKeys: $adminKeys) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}"): (typeof documents)["mutation CreateEnv($envInput: EnvironmentInput!, $adminKeys: [EnvironmentKeyInput]) {\n  createEnvironment(environmentData: $envInput, adminKeys: $adminKeys) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -172,6 +175,10 @@ export function graphql(source: "mutation CreateNewServiceToken($appId: ID!, $en
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation DeleteEnv($environmentId: ID!) {\n  deleteEnvironment(environmentId: $environmentId) {\n    ok\n  }\n}"): (typeof documents)["mutation DeleteEnv($environmentId: ID!) {\n  deleteEnvironment(environmentId: $environmentId) {\n    ok\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation DeleteFolder($folderId: ID!) {\n  deleteSecretFolder(folderId: $folderId) {\n    ok\n  }\n}"): (typeof documents)["mutation DeleteFolder($folderId: ID!) {\n  deleteSecretFolder(folderId: $folderId) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -200,7 +207,15 @@ export function graphql(source: "mutation RemovePersonalSecret($secretId: ID!) {
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation RenameEnv($environmentId: ID!, $name: String!) {\n  renameEnvironment(environmentId: $environmentId, name: $name) {\n    environment {\n      id\n      name\n      updatedAt\n    }\n  }\n}"): (typeof documents)["mutation RenameEnv($environmentId: ID!, $name: String!) {\n  renameEnvironment(environmentId: $environmentId, name: $name) {\n    environment {\n      id\n      name\n      updatedAt\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation CreateSharedSecret($input: LockboxInput!) {\n  createLockbox(input: $input) {\n    lockbox {\n      id\n      allowedViews\n      expiresAt\n    }\n  }\n}"): (typeof documents)["mutation CreateSharedSecret($input: LockboxInput!) {\n  createLockbox(input: $input) {\n    lockbox {\n      id\n      allowedViews\n      expiresAt\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation SwapEnvOrder($environment1Id: ID!, $environment2Id: ID!) {\n  swapEnvironmentOrder(\n    environment1Id: $environment1Id\n    environment2Id: $environment2Id\n  ) {\n    ok\n  }\n}"): (typeof documents)["mutation SwapEnvOrder($environment1Id: ID!, $environment2Id: ID!) {\n  swapEnvironmentOrder(\n    environment1Id: $environment1Id\n    environment2Id: $environment2Id\n  ) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -360,7 +375,7 @@ export function graphql(source: "query VerifyInvite($inviteId: ID!) {\n  validat
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n  sseEnabled(appId: $appId)\n}"): (typeof documents)["query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n    }\n    secretCount\n    folderCount\n  }\n  sseEnabled(appId: $appId)\n}"];
+export function graphql(source: "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n      id\n    }\n    secretCount\n    folderCount\n    index\n    members {\n      email\n      fullName\n      avatarUrl\n    }\n  }\n  sseEnabled(appId: $appId)\n}"): (typeof documents)["query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n      id\n    }\n    secretCount\n    folderCount\n    index\n    members {\n      email\n      fullName\n      avatarUrl\n    }\n  }\n  sseEnabled(appId: $appId)\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
