@@ -78,7 +78,7 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
 
   const pathname = usePathname()
 
-  const [swapEnvs] = useMutation(SwapEnvOrder)
+  const [swapEnvs, { loading }] = useMutation(SwapEnvOrder)
 
   const handleSwapEnvironments = async (env1: EnvironmentType, env2: EnvironmentType) => {
     await swapEnvs({
@@ -121,6 +121,7 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
                 {index !== 0 && (
                   <Button
                     variant="secondary"
+                    disabled={loading}
                     title={`Swap with ${environments[index - 1].name}`}
                     onClick={() => handleSwapEnvironments(env, environments[index - 1])}
                   >
@@ -132,6 +133,7 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
                 {index !== environments.length - 1 && (
                   <Button
                     variant="secondary"
+                    disabled={loading}
                     title={`Swap with ${environments[index + 1].name}`}
                     onClick={() => handleSwapEnvironments(env, environments[index + 1])}
                   >
