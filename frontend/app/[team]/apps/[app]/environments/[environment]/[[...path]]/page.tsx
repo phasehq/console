@@ -740,7 +740,7 @@ export default function Environment({
                       leaveFrom="transform scale-100 opacity-100"
                       leaveTo="transform scale-95 opacity-0"
                       as="div"
-                      className="absolute z-10 left-0 origin-bottom-left mt-2"
+                      className="absolute z-20 left-0 origin-bottom-left mt-2"
                     >
                       <Menu.Items as={Fragment}>
                         <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
