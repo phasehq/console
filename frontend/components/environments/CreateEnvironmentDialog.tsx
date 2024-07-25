@@ -14,6 +14,7 @@ import { toast } from 'react-toastify'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import Spinner from '../common/Spinner'
 import { isCloudHosted } from '@/utils/appConfig'
+import { Alert } from '../common/Alert'
 
 export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -118,6 +119,10 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
           <div>
             <p className="text-neutral-500">Create a new Environment in this App</p>
           </div>
+
+          <Alert variant="info" icon={true} size="sm">
+            All Organisation Admins will have accesss to this Environment.
+          </Alert>
 
           <Input
             value={sanitizeInput(name)}
