@@ -18,7 +18,7 @@ export const Input = (props: InputProps) => {
   return (
     <div className="space-y-2 w-full">
       {label && (
-        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="accountId">
+        <label className="block text-neutral-500 text-sm mb-2" htmlFor="accountId">
           {label}
           {props.required && <span className="text-red-500 ml-1">*</span>}
         </label>

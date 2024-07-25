@@ -1,6 +1,10 @@
 import { FaCog, FaEdit, FaTimes, FaTrash, FaUserCog } from 'react-icons/fa'
 import GenericDialog from '../common/GenericDialog'
-import { EnvironmentType, OrganisationMemberType } from '@/apollo/graphql'
+import {
+  ApiOrganisationPlanChoices,
+  EnvironmentType,
+  OrganisationMemberType,
+} from '@/apollo/graphql'
 import { Input } from '../common/Input'
 import { Fragment, useContext, useState } from 'react'
 import { Button } from '../common/Button'
@@ -14,8 +18,14 @@ import { toast } from 'react-toastify'
 import { Avatar } from '../common/Avatar'
 import Link from 'next/link'
 import { organisationContext } from '@/contexts/organisationContext'
+import { isCloudHosted } from '@/utils/appConfig'
+import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const allowRename = organisation?.plan !== ApiOrganisationPlanChoices.Fr
+
   const [name, setName] = useState(props.environment?.name || '')
 
   const [renameEnvironment] = useMutation(RenameEnv)
@@ -38,19 +48,37 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
         <p className="text-neutral-500">Update the name of this Environment</p>
       </div>
       <Alert variant="info" size="sm">
-        Changing the name of this Environment will affect how you construct references to secrets.
+        {allowRename
+          ? 'Changing the name of this Environment will affect how you construct references to secrets.'
+          : 'Upgrade to Pro to rename Environments'}
       </Alert>
-      <Input value={name} setValue={setName} label="Environment name" required />
-      <div className="flex justify-end">
-        <Button type="submit" variant="primary" disabled={name === props.environment.name}>
-          <FaEdit /> Rename
-        </Button>
-      </div>
+      <Input
+        value={name}
+        setValue={setName}
+        label="Environment name"
+        required
+        disabled={!allowRename}
+      />
+      {allowRename && (
+        <div className="flex justify-end">
+          <Button type="submit" variant="primary" disabled={name === props.environment.name}>
+            <FaEdit /> Rename
+          </Button>
+        </div>
+      )}
     </form>
   )
 }
 
 const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const planDisplay = {
+    planName: 'Free',
+    dialogTitle: 'Upgrade to Pro',
+    description: `The Free plan does not have access to custom environments. To delete, rename or create Environments, please upgrade to Pro.`,
+  }
+
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState('')
 
@@ -61,6 +89,8 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
   const openModal = () => {
     setIsOpen(true)
   }
+
+  const allowDelete = organisation?.plan !== ApiOrganisationPlanChoices.Fr
 
   const [deleteEnvironment, { loading }] = useMutation(DeleteEnv)
 
@@ -118,10 +148,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Delete{' '}
-                      <span className="text-zinc-700 dark:text-zinc-200">
-                        {props.environment.name}
-                      </span>
+                      {allowDelete ? `Delete ${props.environment.name}` : planDisplay.dialogTitle}
                     </h3>
 
                     <Button variant="text" onClick={closeModal}>
@@ -129,38 +156,55 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="space-y-6 py-4">
-                    <p className="text-neutral-500">
-                      Are you sure you want to delete this environment?
-                    </p>
-                    <Alert variant="danger" size="sm">
-                      Deleting this Environment will permanently delete all Secrets and Integrations
-                      associated with it. This action cannot be undone!
-                    </Alert>
-                    <div>
-                      <p className="text-zinc-900 dark:text-zinc-100">
-                        Type{' '}
-                        <span className="font-semibold pointer-events-none text-red-500">
-                          {props.environment.name}
-                        </span>{' '}
-                        to confirm.
+                  {allowDelete ? (
+                    <div className="space-y-6 py-4">
+                      <p className="text-neutral-500">
+                        Are you sure you want to delete this environment?
                       </p>
-                      <Input value={name} setValue={setName} label="Environment name" required />
+                      <Alert variant="danger" size="sm">
+                        Deleting this Environment will permanently delete all Secrets and
+                        Integrations associated with it. This action cannot be undone!
+                      </Alert>
+                      <div>
+                        <p className="text-zinc-900 dark:text-zinc-100">
+                          Type{' '}
+                          <span className="font-semibold pointer-events-none text-red-500">
+                            {props.environment.name}
+                          </span>{' '}
+                          to confirm.
+                        </p>
+                        <Input value={name} setValue={setName} label="Environment name" required />
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <Button variant="secondary" type="button" onClick={closeModal}>
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={handleDelete}
+                          isLoading={loading}
+                          disabled={name !== props.environment?.name}
+                        >
+                          <FaTrash /> Delete
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <Button variant="secondary" type="button" onClick={closeModal}>
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="danger"
-                        onClick={handleDelete}
-                        isLoading={loading}
-                        disabled={name !== props.environment?.name}
-                      >
-                        <FaTrash /> Delete
-                      </Button>
+                  ) : (
+                    <div className="space-y-4 py-4">
+                      <p className="text-zinc-400">{planDisplay.description}</p>
+                      {isCloudHosted() ? (
+                        <UpgradeRequestForm onSuccess={closeModal} />
+                      ) : (
+                        <div>
+                          Please contact us at{' '}
+                          <a href="mailto:info@phase.dev" className="text-emerald-500">
+                            info@phase.dev
+                          </a>{' '}
+                          to request an upgrade.
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  )}
                 </Dialog.Panel>
               </Transition.Child>
             </div>

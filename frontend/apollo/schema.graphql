@@ -50,6 +50,7 @@ type OrganisationType {
   memberId: ID
   keyring: String
   recovery: String
+  planDetail: OrganisationPlanType
 }
 
 """
@@ -69,6 +70,15 @@ enum ApiOrganisationPlanChoices {
 
   """Enterprise"""
   EN
+}
+
+type OrganisationPlanType {
+  name: String
+  maxUsers: Int
+  maxApps: Int
+  maxEnvsPerApp: Int
+  userCount: Int
+  appCount: Int
 }
 
 type PhaseLicenseType {
@@ -162,15 +172,6 @@ Use of this type is *not recommended* as you lose the benefits of having a defin
 schema (one of the key benefits of GraphQL).
 """
 scalar JSONString
-
-type OrganisationPlanType {
-  name: String
-  maxUsers: Int
-  maxApps: Int
-  maxEnvsPerApp: Int
-  userCount: Int
-  appCount: Int
-}
 
 type OrganisationMemberInviteType {
   id: String!

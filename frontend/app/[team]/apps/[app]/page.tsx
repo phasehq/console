@@ -9,6 +9,7 @@ import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
 import {
   ApiEnvironmentEnvTypeChoices,
+  ApiOrganisationPlanChoices,
   EnvironmentType,
   SecretFolderType,
   SecretType,
@@ -74,6 +75,10 @@ type AppFolder = {
 }
 
 const Environments = (props: { environments: EnvironmentType[]; appId: string }) => {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const allowReordering = organisation?.plan !== ApiOrganisationPlanChoices.Fr
+
   const { environments, appId } = props
 
   const pathname = usePathname()
@@ -116,32 +121,34 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
                 </div>
               </div>
             </div>
-            <div className="flex justify-between items-center opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto">
-              <div>
-                {index !== 0 && (
-                  <Button
-                    variant="secondary"
-                    disabled={loading}
-                    title={`Swap with ${environments[index - 1].name}`}
-                    onClick={() => handleSwapEnvironments(env, environments[index - 1])}
-                  >
-                    <FaChevronLeft className="text-xs shrink-0" />
-                  </Button>
-                )}
+            {allowReordering && (
+              <div className="flex justify-between items-center opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto">
+                <div>
+                  {index !== 0 && (
+                    <Button
+                      variant="secondary"
+                      disabled={loading}
+                      title={`Swap with ${environments[index - 1].name}`}
+                      onClick={() => handleSwapEnvironments(env, environments[index - 1])}
+                    >
+                      <FaChevronLeft className="text-xs shrink-0" />
+                    </Button>
+                  )}
+                </div>
+                <div>
+                  {index !== environments.length - 1 && (
+                    <Button
+                      variant="secondary"
+                      disabled={loading}
+                      title={`Swap with ${environments[index + 1].name}`}
+                      onClick={() => handleSwapEnvironments(env, environments[index + 1])}
+                    >
+                      <FaChevronRight className="text-xs shrink-0" />
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div>
-                {index !== environments.length - 1 && (
-                  <Button
-                    variant="secondary"
-                    disabled={loading}
-                    title={`Swap with ${environments[index + 1].name}`}
-                    onClick={() => handleSwapEnvironments(env, environments[index + 1])}
-                  >
-                    <FaChevronRight className="text-xs shrink-0" />
-                  </Button>
-                )}
-              </div>
-            </div>
+            )}
           </div>
         </Card>
       ))}

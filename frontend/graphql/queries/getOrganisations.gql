@@ -5,6 +5,14 @@ query GetOrganisations {
     identityKey
     createdAt
     plan
+    planDetail {
+      name
+      maxUsers
+      maxApps
+      maxEnvsPerApp
+      userCount
+      appCount
+    }
     role
     memberId
     keyring

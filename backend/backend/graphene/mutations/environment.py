@@ -10,6 +10,7 @@ from api.utils.permissions import (
 )
 from api.utils.audit_logging import log_secret_event
 from api.utils.secrets import normalize_path_string
+from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -109,6 +110,8 @@ class CreateEnvironmentMutation(graphene.Mutation):
             raise GraphQLError(
                 "An Environment with this name already exists in this App!"
             )
+        if not can_add_environment(app):
+            raise GraphQLError("You cannot add any more Environments to this App!")
 
         if environment_data.env_type.lower() == "dev":
             index = 0
@@ -183,6 +186,11 @@ class RenameEnvironmentMutation(graphene.Mutation):
         org = environment.app.organisation
 
         if user_is_admin(user.userId, org.id):
+            if not can_use_custom_envs(org):
+                raise GraphQLError(
+                    "Your Organisation doesn't have access to Custom Environments"
+                )
+
             if Environment.objects.filter(
                 app=environment.app, name__iexact=name
             ).exists():
@@ -211,6 +219,12 @@ class DeleteEnvironmentMutation(graphene.Mutation):
         org = environment.app.organisation
 
         if user_is_admin(user.userId, org.id):
+
+            if not can_use_custom_envs(org):
+                raise GraphQLError(
+                    "Your Organisation doesn't have access to Custom Environments"
+                )
+
             environment.delete()
 
             return DeleteEnvironmentMutation(ok=True)
@@ -233,6 +247,11 @@ class SwapEnvironmentOrderMutation(graphene.Mutation):
         org = environment1.app.organisation
 
         if user_is_admin(user.userId, org.id):
+            if not can_use_custom_envs(org):
+                raise GraphQLError(
+                    "Your Organisation doesn't have access to Custom Environments"
+                )
+
             # Temporarily store the index of environment1
             temp_index = environment1.index
 
