@@ -138,7 +138,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                       associated with it. This action cannot be undone!
                     </Alert>
                     <div>
-                      <p>
+                      <p className="text-zinc-900 dark:text-zinc-100">
                         Type{' '}
                         <span className="font-semibold pointer-events-none text-red-500">
                           {props.environment.name}
@@ -196,7 +196,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
 
       {organisation && (
         <div className="flex justify-end">
-          <Link href={`${organisation.name}/apps/${props.environment.app.id}/members`}>
+          <Link href={`/${organisation.name}/apps/${props.environment.app.id}/members`}>
             <Button variant="primary">
               <FaUserCog /> Manage access
             </Button>
