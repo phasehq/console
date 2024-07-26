@@ -191,9 +191,11 @@ class RenameEnvironmentMutation(graphene.Mutation):
                     "Your Organisation doesn't have access to Custom Environments"
                 )
 
-            if Environment.objects.filter(
-                app=environment.app, name__iexact=name
-            ).exists():
+            if (
+                Environment.objects.filter(app=environment.app, name__iexact=name)
+                .exclude(id=environment_id)
+                .exists()
+            ):
                 raise GraphQLError(
                     "An Environment with this name already exists in this App!"
                 )
