@@ -53,6 +53,7 @@ import {
   envKeyring,
   EnvKeyring,
 } from '@/utils/crypto'
+import { SecretsEmptyState } from '@/components/environments/SecretsEmptyState'
 
 export default function Environment({
   params,
@@ -710,6 +711,24 @@ export default function Environment({
     )
   }
 
+  const NewSecretMenu = () => (
+    <SplitButton
+      variant="primary"
+      onClick={() => handleAddSecret(true)}
+      menuContent={
+        <div className="w-max">
+          <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
+            <div className="flex items-center gap-2">
+              <FaFolderPlus /> New Folder
+            </div>
+          </Button>
+        </div>
+      }
+    >
+      <FaPlus /> New Secret
+    </SplitButton>
+  )
+
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
@@ -827,43 +846,36 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
-            <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
-              <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
-                key
-              </div>
-              <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
-                value
-                <div className="flex items-center gap-4">
-                  <Button variant="outline" onClick={toggleGlobalReveal}>
-                    <div className="flex items-center gap-2">
-                      {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
-                      {globallyRevealed ? 'Mask all' : 'Reveal all'}
-                    </div>
-                  </Button>
-                  <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
-                    <div className="flex items-center gap-2">
-                      <FaDownload /> Export as .env
-                    </div>
-                  </Button>
-                  <SplitButton
-                    variant="primary"
-                    onClick={() => handleAddSecret(true)}
-                    menuContent={
-                      <div className="w-max">
-                        <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
-                          <div className="flex items-center gap-2">
-                            <FaFolderPlus /> New Folder
-                          </div>
-                        </Button>
+            {(updatedSecrets.length > 0 || folders.length > 0) && (
+              <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
+                <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
+                  key
+                </div>
+                <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
+                  value
+                  <div className="flex items-center gap-4">
+                    <Button variant="outline" onClick={toggleGlobalReveal}>
+                      <div className="flex items-center gap-2">
+                        {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
+                        {globallyRevealed ? 'Mask all' : 'Reveal all'}
                       </div>
-                    }
-                  >
-                    <FaPlus /> New Secret
-                  </SplitButton>
-                  <NewFolderMenu />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={downloadEnvFile}
+                      title="Download as .env file"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FaDownload /> Export as .env
+                      </div>
+                    </Button>
+                    <NewSecretMenu />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            <NewFolderMenu />
 
             {organisation &&
               filteredFolders.map((folder: SecretFolderType) => (
@@ -898,6 +910,12 @@ export default function Environment({
                   />
                 </div>
               ))}
+
+            {updatedSecrets.length === 0 && folders.length === 0 && (
+              <SecretsEmptyState>
+                <NewSecretMenu />
+              </SecretsEmptyState>
+            )}
           </div>
         </div>
       )}
