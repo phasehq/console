@@ -46,12 +46,11 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   const decryptKeyring = (sudoPassword: string) => {
     return new Promise(async (resolve, reject) => {
       setUnlocking(true)
-      setTimeout(async() => {
+      setTimeout( async () => {
         try {
           if (trustDevice) {
             setDevicePassword(organisation.memberId!, sudoPassword)
           }
-
           const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, sudoPassword)
           setKeyring(decryptedKeyring)
           setUnlocking(false)
@@ -63,7 +62,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
           setUnlocking(false)
           reject(e) // Reject the promise with the error
         }  
-      }, 300);
+      }, 100);
     })
   }
 
