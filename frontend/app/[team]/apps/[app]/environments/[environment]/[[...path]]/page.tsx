@@ -29,6 +29,7 @@ import {
   FaUndo,
   FaEye,
   FaEyeSlash,
+  FaMagic,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -42,7 +43,7 @@ import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { Input } from '@/components/common/Input'
 import { SplitButton } from '@/components/common/SplitButton'
 import { SecretFolderRow } from '@/components/environments/folders/SecretFolderRow'
-import { MdKeyboardReturn } from 'react-icons/md'
+import { MdKeyboardReturn, MdSearchOff } from 'react-icons/md'
 import {
   arraysEqual,
   encryptAsymmetric,
@@ -53,7 +54,7 @@ import {
   envKeyring,
   EnvKeyring,
 } from '@/utils/crypto'
-import { SecretsEmptyState } from '@/components/environments/SecretsEmptyState'
+import { EmptyState } from '@/components/common/EmptyState'
 
 export default function Environment({
   params,
@@ -812,7 +813,7 @@ export default function Environment({
               <FaTimesCircle
                 className={clsx(
                   'cursor-pointer text-neutral-500 transition-opacity ease',
-                  searchQuery ? 'opacity-100' : 'opacity-0'
+                  searchQuery ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
                 )}
                 role="button"
                 onClick={() => setSearchQuery('')}
@@ -911,10 +912,18 @@ export default function Environment({
                 </div>
               ))}
 
-            {updatedSecrets.length === 0 && folders.length === 0 && (
-              <SecretsEmptyState>
+            {filteredSecrets.length === 0 && filteredFolders.length === 0 && (
+              <EmptyState
+                title={searchQuery ? `No results for "${searchQuery}"` : 'No secrets here'}
+                subtitle="Add secrets or folders here to get started"
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    {searchQuery ? <MdSearchOff /> : <FaMagic />}
+                  </div>
+                }
+              >
                 <NewSecretMenu />
-              </SecretsEmptyState>
+              </EmptyState>
             )}
           </div>
         </div>
