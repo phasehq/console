@@ -63,7 +63,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
           setUnlocking(false)
           reject(e) // Reject the promise with the error
         }  
-      }, 2000);
+      }, 300);
     })
   }
 
