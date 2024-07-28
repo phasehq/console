@@ -48,7 +48,7 @@ const InvalidInvite = () => (
 )
 
 export default function Invite({ params }: { params: { invite: string } }) {
-  const [verifyInvite, { data, loading }] = useLazyQuery(VerifyInvite)
+  const [verifyInvite, { data, loading, called }] = useLazyQuery(VerifyInvite)
 
   const [acceptInvite] = useMutation(AcceptOrganisationInvite)
 
@@ -278,7 +278,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
         <HeroPattern />
 
         <div className="flex w-full h-screen max-w-4xl mx-auto flex-col gap-y-16 py-40">
-          {loading ? (
+          {loading || !called ? (
             <Loading />
           ) : invite ? (
             showWelcome ? (
