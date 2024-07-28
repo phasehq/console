@@ -92,6 +92,28 @@ Any third-party components incorporated into our code are licensed under the ori
 
    >**Note:** Your browser might warn you about the self-signed certificate. You can safely accept the certificate and proceed.
 
+### Set Up the Phase CLI
+
+1. Install the CLI:
+   - Option 1: Install via the official documentation: https://docs.phase.dev/cli/install
+   - Option 2: Set up the Phase CLI dev environment: https://github.com/phasehq/cli?tab=readme-ov-file#development
+
+2. Create a personal access token in the Phase Console:
+   - Follow the instructions at: https://docs.phase.dev/console/tokens#personal-access-tokens-pats
+
+3. Log in via the CLI:
+   - Run the following command:
+     ```
+     phase auth --mode token
+     ```
+   - Select "🛠️ Self Hosted" from the dropdown
+   - For the Phase Console host URL, enter: `http://localhost`
+     (Note: Use `http` instead of `https` to avoid SSL certificate errors with self-signed certificates)
+   - Enter your email
+   - Copy and paste your Phase personal access token you created in the Phase Console
+
+For more information on `phase auth`, see: https://docs.phase.dev/cli/commands#auth
+
 ### Common Problems / Issues 🗿
 
 1. **Certificate Errors**
@@ -125,7 +147,13 @@ Any third-party components incorporated into our code are licensed under the ori
 3. **Having Issues Signing In (Redirected Back to the Phase Console Log-In Screen Even After OAuth Authentication)**
    - Please make sure the OAuth credentials and the callback URL are correct and as described in the docs: [Phase Docs](https://docs.phase.dev/self-hosting/configuration/envars#single-sign-on-sso)
 
+4. **CLI Errors**
+   - If you encounter any CLI errors, run the CLI in debug mode to get more information:
+     ```
+     PHASE_DEBUG=True phase <your sub-command>
+     ```
+
 Need help?
 [Join our Slack](https://slack.phase.dev)
 
-Thank you for contributing to Phase! 
+Thank you for contributing to Phase!
