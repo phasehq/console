@@ -9,7 +9,7 @@ import {
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaChevronRight, FaExternalLinkAlt, FaKey } from 'react-icons/fa'
+import { FaChevronRight, FaExternalLinkAlt, FaKey, FaFilter, FaSearch } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
@@ -36,6 +36,37 @@ type EnvKey = {
   keys: EnvKeypair
 }
 
+const FilterCheckBox = ({ label, color }) => {
+  const [isChecked, setIsChecked] = useState(false);
+  return (
+    <label className="flex items-center border-1 bg-neutral-800 px-3 py-1 rounded-2xl cursor-pointer">
+      <input
+        type="checkbox"
+        className="form-checkbox hidden"
+        checked={isChecked}
+        onChange={() => setIsChecked(!isChecked)}
+      />
+      <span className={clsx(
+        "w-2 h-2 rounded-full border flex items-center border-neutral-500 justify-center me-2",
+        `bg-${color}-500 border-${color}-500`  
+      )}>
+          <span className={`w-1 h-1 rounded-full bg-${color}-500`}></span>
+      </span>
+      <span className="text-white text-sm">{label}</span>
+       <span className={clsx(
+        "w-2 h-2 rounded-full border text-center  border-neutral-500 flex items-center justify-center ms-2",
+        isChecked ? "bg-green-500 border-green-500" : "bg-transparent"
+      )}>
+        {isChecked && (
+          <svg className="w-1 h-1 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        )}
+      </span>    
+    </label>
+  );
+};
+
 export default function SecretLogs(props: { app: string }) {
   const DEFAULT_PAGE_SIZE = 25
   const loglistEndRef = useRef<HTMLTableCellElement>(null)
@@ -45,6 +76,7 @@ export default function SecretLogs(props: { app: string }) {
   const [logList, setLogList] = useState<SecretEventType[]>([])
   const [envKeys, setEnvKeys] = useState<EnvKey[]>([])
   const [endofList, setEndofList] = useState<boolean>(false)
+  const [filterBox, setFilterBox] = useState<boolean>(false)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
@@ -80,7 +112,15 @@ export default function SecretLogs(props: { app: string }) {
     })
   }
 
-  const clearLogList = () => setLogList([])
+  const filterLogList = () => {
+    setFilterBox((prev) => !prev)
+    console.log('filterLogList')
+  }
+
+  const clearLogList = () => {
+    console.log('loglist', logList)
+    setLogList([])
+  }
 
   /**
    * Gets the first page of logs, by resetting the log list and fetching logs using the current unix timestamp.
@@ -407,16 +447,72 @@ export default function SecretLogs(props: { app: string }) {
           <span className="text-neutral-500 font-light text-lg">
             {totalCount && <Count from={0} to={totalCount} />} Events
           </span>
-          <Button variant="secondary" onClick={clearLogList} disabled={loading}>
-            <FiRefreshCw
-              size={20}
-              className={clsx('mr-1', loading && logList.length === 0 ? 'animate-spin' : '')}
-            />{' '}
-            Refresh
-          </Button>
-        </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={filterLogList} disabled={loading}>
+                <FaFilter size={19} className={clsx('mr-1')} /> Filter
+              </Button>
+              <Button variant="secondary" onClick={clearLogList} disabled={loading}>
+                <FiRefreshCw
+                  size={20}
+                  className={clsx('mr-1', loading && logList.length === 0 ? 'animate-spin' : '')}
+                />{' '}
+                Refresh
+              </Button>
+            </div>
+          </div>
+              {filterBox && <div className="w-full flex justify-end"><div className="absolute mt-2 w-1/3 border-neutral-500/20 dark:bg-neutral-900 bg-neutral-300 border-2 rounded-lg z-10">
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex flex-col">
+                <h3 className="text-neutral-500 text-sm font-light mb-2">EVENT TYPE</h3>
+                <div className="flex justify-between">
+                     <FilterCheckBox color="green" label="Create" />
+                     <FilterCheckBox color="yellow" label="Update" />
+                     <FilterCheckBox color="blue" label="Read" />
+                     <FilterCheckBox color="red"  label="Delete" />
+               </div>
+              </div>
+            <div>
+                <h3 className="text-neutral-500 text-sm font-light mb-2">USER</h3>
+                    <div className="relative">
+                        <input 
+                          className="w-full rounded-md py-2 pr-10 pl-4 font-semibold text-neutral-500 placeholder-neutral-400"
+                          placeholder="Search"
+                        />
+                        <FaSearch 
+                          size={20} 
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400"
+                        />
+                    </div>
+              </div>
+            <div>
+                <h3 className="text-neutral-500 text-sm font-light mb-2">DATE</h3>
+                    
+
+                  <div id="date-range-picker" date-rangepicker className="flex justify-between items-center">
+                    <div className="relative">
+                      
+                      <input id="datepicker-range-start" name="start" type="text" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full ps-10 p-2.5  dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="From"/>
+                    <div className="absolute inset-y-0 flex items-center ps-3 pointer-events-none">
+                           <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M20 4a2 2 0 0 0-2-2h-2V1a1 1 0 0 0-2 0v1h-3V1a1 1 0 0 0-2 0v1H6V1a1 1 0 0 0-2 0v1H2a2 2 0 0 0-2 2v2h20V4ZM0 18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8H0v10Zm5-8h10a1 1 0 0 1 0 2H5a1 1 0 0 1 0-2Z"/>
+                          </svg>
+                      </div></div>
+                    <div className="relative">
+                      
+                      <input id="datepicker-range-end" name="end" type="text" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full ps-10 p-2.5  dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="To"/>
+                  <div className="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
+                           <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M20 4a2 2 0 0 0-2-2h-2V1a1 1 0 0 0-2 0v1h-3V1a1 1 0 0 0-2 0v1H6V1a1 1 0 0 0-2 0v1H2a2 2 0 0 0-2 2v2h20V4ZM0 18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8H0v10Zm5-8h10a1 1 0 0 1 0 2H5a1 1 0 0 1 0-2Z"/>
+                          </svg>
+                      </div></div>
+                  </div>
+              </div>
+            </div>
+            </div>
+            </div>
+            }
         <table className="table-auto w-full text-left text-sm font-light">
-          <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-10  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+          <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-9  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
             <tr className="text-neutral-500">
               <th></th>
               <th className="px-6 py-4">User</th>
