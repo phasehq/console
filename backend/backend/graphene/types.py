@@ -145,27 +145,6 @@ class OrganisationMemberInviteType(DjangoObjectType):
         )
 
 
-class AppType(DjangoObjectType):
-    sse_enabled = graphene.Boolean()
-
-    class Meta:
-        model = App
-        fields = (
-            "id",
-            "name",
-            "identity_key",
-            "wrapped_key_share",
-            "created_at",
-            "app_token",
-            "app_seed",
-            "app_version",
-        )
-
-    def resolve_sse_enabled(self, info):
-        app_envs = Environment.objects.filter(app=self).values_list("id")
-        return ServerEnvironmentKey.objects.filter(environment_id__in=app_envs).exists()
-
-
 class EnvironmentType(DjangoObjectType):
     folder_count = graphene.Int()
     secret_count = graphene.Int()
@@ -209,6 +188,45 @@ class EnvironmentType(DjangoObjectType):
         )
 
         return user_env_key.wrapped_salt
+
+
+class AppType(DjangoObjectType):
+    sse_enabled = graphene.Boolean()
+    environments = graphene.List(EnvironmentType)
+
+    class Meta:
+        model = App
+        fields = (
+            "id",
+            "name",
+            "identity_key",
+            "wrapped_key_share",
+            "created_at",
+            "app_token",
+            "app_seed",
+            "app_version",
+        )
+
+    def resolve_sse_enabled(self, info):
+        app_envs = Environment.objects.filter(app=self).values_list("id")
+        return ServerEnvironmentKey.objects.filter(environment_id__in=app_envs).exists()
+
+    def resolve_environments(self, info):
+        org_member = OrganisationMember.objects.get(
+            organisation=self.organisation,
+            user_id=info.context.user.userId,
+            deleted_at=None,
+        )
+
+        app_environments = Environment.objects.filter(app=self)
+
+        return [
+            app_env
+            for app_env in app_environments
+            if EnvironmentKey.objects.filter(
+                user=org_member, environment_id=app_env.id
+            ).exists()
+        ]
 
 
 class EnvironmentKeyType(DjangoObjectType):
