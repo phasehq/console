@@ -199,7 +199,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                   leaveFrom="opacity-100 scale-100"
                   leaveTo="opacity-0 scale-95"
                 >
-                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                     <Dialog.Title as="div" className="flex w-full justify-between">
                       <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                         Add a member
@@ -646,7 +646,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                   leaveFrom="opacity-100 scale-100"
                   leaveTo="opacity-0 scale-95"
                 >
-                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                     <Dialog.Title as="div" className="flex w-full justify-between">
                       <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                         Manage access for {props.member.fullName || props.member.email}

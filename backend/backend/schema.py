@@ -34,6 +34,7 @@ from .graphene.mutations.environment import (
     CreateSecretTagMutation,
     CreateServiceTokenMutation,
     CreateUserTokenMutation,
+    DeleteEnvironmentMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
     DeleteSecretMutation,
@@ -41,6 +42,8 @@ from .graphene.mutations.environment import (
     DeleteUserTokenMutation,
     EditSecretMutation,
     ReadSecretMutation,
+    RenameEnvironmentMutation,
+    SwapEnvironmentOrderMutation,
     UpdateMemberEnvScopeMutation,
 )
 from .graphene.mutations.syncing import (
@@ -379,9 +382,6 @@ class Query(graphene.ObjectType):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
-        # Define a custom sort order
-        env_sort_order = {"DEV": 1, "STAGING": 2, "PROD": 3}
-
         app = App.objects.get(id=app_id)
 
         if member_id is not None:
@@ -398,15 +398,11 @@ class Query(graphene.ObjectType):
         if environment_id:
             filter["id"] = environment_id
 
-        app_environments = Environment.objects.filter(**filter)
-
-        sorted_environments = sorted(
-            app_environments, key=lambda env: env_sort_order.get(env.env_type, 4)
-        )
+        app_environments = Environment.objects.filter(**filter).order_by("index")
 
         return [
             app_env
-            for app_env in sorted_environments
+            for app_env in app_environments
             if EnvironmentKey.objects.filter(
                 user=org_member, environment_id=app_env.id
             ).exists()
@@ -696,6 +692,9 @@ class Mutation(graphene.ObjectType):
     update_member_environment_scope = UpdateMemberEnvScopeMutation.Field()
 
     create_environment = CreateEnvironmentMutation.Field()
+    delete_environment = DeleteEnvironmentMutation.Field()
+    rename_environment = RenameEnvironmentMutation.Field()
+    swap_environment_order = SwapEnvironmentOrderMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
 

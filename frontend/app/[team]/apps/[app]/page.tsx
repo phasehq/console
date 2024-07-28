@@ -9,6 +9,7 @@ import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
 import {
   ApiEnvironmentEnvTypeChoices,
+  ApiOrganisationPlanChoices,
   EnvironmentType,
   SecretFolderType,
   SecretType,
@@ -19,6 +20,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import {
   FaArrowRight,
   FaCheckCircle,
+  FaChevronLeft,
   FaChevronRight,
   FaCircle,
   FaCopy,
@@ -42,6 +44,9 @@ import Spinner from '@/components/common/Spinner'
 import { Card } from '@/components/common/Card'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { unwrapEnvSecretsForUser, decryptEnvSecretKVs, createNewEnv } from '@/utils/crypto'
+import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
+import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
+import { SwapEnvOrder } from '@/graphql/mutations/environments/swapEnvironmentOrder.gql'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -69,36 +74,91 @@ type AppFolder = {
   }>
 }
 
-const Environments = (props: { environments: EnvironmentType[] }) => {
-  const { environments } = props
+const Environments = (props: { environments: EnvironmentType[]; appId: string }) => {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const allowReordering = organisation?.plan !== ApiOrganisationPlanChoices.Fr
+
+  const { environments, appId } = props
 
   const pathname = usePathname()
 
+  const [swapEnvs, { loading }] = useMutation(SwapEnvOrder)
+
+  const handleSwapEnvironments = async (env1: EnvironmentType, env2: EnvironmentType) => {
+    await swapEnvs({
+      variables: { environment1Id: env1.id, environment2Id: env2?.id },
+      refetchQueries: [{ query: GetAppEnvironments, variables: { appId } }],
+    })
+  }
+
   return (
     <div className="grid grid-cols-4 gap-4 py-4">
-      {environments.map((env: EnvironmentType) => (
-        <Link key={env.id} href={`${pathname}/environments/${env.id}`}>
-          {' '}
-          <Card>
+      {environments.map((env: EnvironmentType, index: number) => (
+        <Card key={env.id}>
+          <div className="group">
             <div className="flex gap-4">
               <div className="pt-1.5">
                 <BsListColumnsReverse className="text-black dark:text-white text-2xl" />
               </div>
-              <div className="space-y-6">
-                <div>
-                  <div className="font-semibold text-lg">{env.name}</div>
-                  <div className="text-neutral-500">
-                    {env.secretCount} secrets across {env.folderCount} folders
-                  </div>
+              <div className="space-y-6 w-full">
+                <div className="flex items-start justify-between">
+                  <Link href={`${pathname}/environments/${env.id}`} className="group">
+                    <div className="font-semibold text-lg">{env.name}</div>
+                    <div className="text-neutral-500">
+                      {env.secretCount} secrets across {env.folderCount} folders
+                    </div>
+                  </Link>
+                  <ManageEnvironmentDialog environment={env} />
                 </div>
-                <div className="flex items-center gap-2 text-emerald-500">
-                  Explore <FaArrowRight />
+
+                <div className="flex items-center">
+                  <Link href={`${pathname}/environments/${env.id}`}>
+                    <Button variant="primary">
+                      Explore <FaArrowRight />
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </div>
-          </Card>
-        </Link>
+            {allowReordering && (
+              <div className="flex justify-between items-center opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto">
+                <div>
+                  {index !== 0 && (
+                    <Button
+                      variant="secondary"
+                      disabled={loading}
+                      title={`Swap with ${environments[index - 1].name}`}
+                      onClick={() => handleSwapEnvironments(env, environments[index - 1])}
+                    >
+                      <FaChevronLeft className="text-xs shrink-0" />
+                    </Button>
+                  )}
+                </div>
+                <div>
+                  {index !== environments.length - 1 && (
+                    <Button
+                      variant="secondary"
+                      disabled={loading}
+                      title={`Swap with ${environments[index + 1].name}`}
+                      onClick={() => handleSwapEnvironments(env, environments[index + 1])}
+                    >
+                      <FaChevronRight className="text-xs shrink-0" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
       ))}
+      <Card>
+        <div className="flex flex-col w-full h-full">
+          <div className="mx-auto my-auto">
+            <CreateEnvironmentDialog appId={appId} />
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -600,7 +660,9 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               </div>
             </div>
 
-            {data?.appEnvironments && <Environments environments={data.appEnvironments} />}
+            {data?.appEnvironments && (
+              <Environments environments={data.appEnvironments} appId={params.app} />
+            )}
 
             <hr className="border-neutral-500/40" />
 
@@ -667,7 +729,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                         <Link href={`${pathname}/environments/${env.id}`}>
                           <Button variant="outline">
                             <div className="flex items-center gap-2 justify-center ">
-                              {env.envType}
+                              {env.name}
                               <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
                                 <FaArrowRight />
                               </div>

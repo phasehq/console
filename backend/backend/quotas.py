@@ -113,6 +113,10 @@ def can_add_environment(app):
     return current_env_count < plan_limits["max_envs_per_app"]
 
 
+def can_use_custom_envs(organisation):
+    return organisation.plan != "FR"
+
+
 def can_add_service_token(app):
     """Check if a new service token can be added to the app."""
 

@@ -51,7 +51,7 @@ export const SyncCard = (props: {
                 : 'text-black dark:text-white font-semibold'
             )}
           >
-            {sync.environment.envType}
+            {sync.environment.name}
           </span>
         </div>
 

@@ -1,5 +1,6 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import get_credentials
+from backend.quotas import PLAN_CONFIG
 import graphene
 from enum import Enum
 from graphene import ObjectType, relay, NonNull
@@ -29,6 +30,16 @@ from api.models import (
 )
 from logs.dynamodb_models import KMSLog
 from allauth.socialaccount.models import SocialAccount
+from django.utils import timezone
+
+
+class OrganisationPlanType(ObjectType):
+    name = graphene.String()
+    max_users = graphene.Int()
+    max_apps = graphene.Int()
+    max_envs_per_app = graphene.Int()
+    user_count = graphene.Int()
+    app_count = graphene.Int()
 
 
 class OrganisationType(DjangoObjectType):
@@ -36,6 +47,7 @@ class OrganisationType(DjangoObjectType):
     member_id = graphene.ID()
     keyring = graphene.String()
     recovery = graphene.String()
+    plan_detail = graphene.Field(OrganisationPlanType)
 
     class Meta:
         model = Organisation
@@ -80,6 +92,25 @@ class OrganisationType(DjangoObjectType):
             user=info.context.user, organisation=self, deleted_at=None
         )
         return org_member.identity_key
+
+    def resolve_plan_detail(self, info):
+
+        plan = PLAN_CONFIG[self.plan]
+
+        plan["user_count"] = (
+            OrganisationMember.objects.filter(
+                organisation=self, deleted_at=None
+            ).count()
+            + OrganisationMemberInvite.objects.filter(
+                organisation=self, valid=True, expires_at__gte=timezone.now()
+            ).count()
+        )
+
+        plan["app_count"] = App.objects.filter(
+            organisation=self, deleted_at=None
+        ).count()
+
+        return plan
 
 
 class OrganisationMemberType(DjangoObjectType):
@@ -148,6 +179,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
 class EnvironmentType(DjangoObjectType):
     folder_count = graphene.Int()
     secret_count = graphene.Int()
+    members = graphene.List(OrganisationMemberType)
 
     class Meta:
         model = Environment
@@ -156,6 +188,7 @@ class EnvironmentType(DjangoObjectType):
             "name",
             "app",
             "env_type",
+            "index",
             "identity_key",
             "wrapped_seed",
             "wrapped_salt",
@@ -188,6 +221,14 @@ class EnvironmentType(DjangoObjectType):
         )
 
         return user_env_key.wrapped_salt
+
+    def resolve_members(self, info):
+        return [
+            env_key.user
+            for env_key in EnvironmentKey.objects.filter(
+                environment=self, deleted_at=None
+            )
+        ]
 
 
 class AppType(DjangoObjectType):
@@ -547,15 +588,6 @@ class TimeRange(Enum):
 class LogsResponseType(ObjectType):
     kms = graphene.List(KMSLogType)
     secrets = graphene.List(SecretEventType)
-
-
-class OrganisationPlanType(ObjectType):
-    name = graphene.String()
-    max_users = graphene.Int()
-    max_apps = graphene.Int()
-    max_envs_per_app = graphene.Int()
-    user_count = graphene.Int()
-    app_count = graphene.Int()
 
 
 class LockboxType(DjangoObjectType):

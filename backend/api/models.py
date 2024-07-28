@@ -234,11 +234,13 @@ class Environment(models.Model):
     DEVELOPMENT = "dev"
     STAGING = "staging"
     PRODUCTION = "prod"
+    CUSTOM = "custom"
 
     ENV_TYPES = [
         (DEVELOPMENT, "Development"),
         (STAGING, "Staging"),
         (PRODUCTION, "Production"),
+        (CUSTOM, "Custom"),
     ]
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
@@ -249,6 +251,7 @@ class Environment(models.Model):
         choices=ENV_TYPES,
         default=DEVELOPMENT,
     )
+    index = models.IntegerField(default=0)
     identity_key = models.CharField(max_length=256)
     wrapped_seed = models.CharField(max_length=256)
     wrapped_salt = models.CharField(max_length=256)

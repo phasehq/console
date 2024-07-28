@@ -282,7 +282,7 @@ export default function SecretLogs(props: { app: string }) {
                   </div>
                 </div>
               </td>
-              <td className="whitespace-nowrap px-6 py-4 font-mono">{log.environment.envType}</td>
+              <td className="whitespace-nowrap px-6 py-4 font-mono">{log.environment.name}</td>
               <td className="whitespace-nowrap px-6 py-4 font-mono ph-no-capture">
                 {decryptedEvent?.path !== '/' && `${decryptedEvent?.path}/`}
                 {decryptedEvent?.key}

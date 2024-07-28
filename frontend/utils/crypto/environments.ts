@@ -383,13 +383,15 @@ export const decryptEnvSecrets = async (
  * @param {string} name - The name of the environment.
  * @param {ApiEnvironmentEnvTypeChoices} envType - The type of environment.
  * @param {OrganisationMemberType} owner - The user for whom the environment is created.
+ * @param {string?} serverKey - Server public key, if keys need to wrapped for sse
  * @returns {Promise<object>} - An object containing the environment payload.
  */
 export const createNewEnv = async (
   appId: string,
   name: string,
   envType: ApiEnvironmentEnvTypeChoices,
-  ownerAndAdmins: OrganisationMemberType[]
+  ownerAndAdmins: OrganisationMemberType[],
+  serverKey?: string
 ) => {
   const seed = await newEnvSeed()
   const keys = await envKeyring(seed)
@@ -410,7 +412,7 @@ export const createNewEnv = async (
       })
   )
 
-  return {
+  const payloads = {
     createEnvPayload: {
       appId,
       name,
@@ -429,5 +431,18 @@ export const createNewEnv = async (
         envId: '',
       }
     }),
+    serverKeysPayload: {} as { wrappedSeed: string; wrappedSalt: string },
   }
+
+  if (serverKey) {
+    const { wrappedSeed: serverWrappedSeed, wrappedSalt: serverWrappedSalt } =
+      await wrapEnvSecretsForServer({ seed, salt }, serverKey)
+
+    payloads.serverKeysPayload = {
+      wrappedSeed: serverWrappedSeed,
+      wrappedSalt: serverWrappedSalt,
+    }
+  }
+
+  return payloads
 }

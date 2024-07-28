@@ -29,6 +29,7 @@ import {
   FaUndo,
   FaEye,
   FaEyeSlash,
+  FaMagic,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -42,7 +43,7 @@ import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { Input } from '@/components/common/Input'
 import { SplitButton } from '@/components/common/SplitButton'
 import { SecretFolderRow } from '@/components/environments/folders/SecretFolderRow'
-import { MdKeyboardReturn } from 'react-icons/md'
+import { MdKeyboardReturn, MdSearchOff } from 'react-icons/md'
 import {
   arraysEqual,
   encryptAsymmetric,
@@ -53,6 +54,7 @@ import {
   envKeyring,
   EnvKeyring,
 } from '@/utils/crypto'
+import { EmptyState } from '@/components/common/EmptyState'
 
 export default function Environment({
   params,
@@ -710,6 +712,24 @@ export default function Environment({
     )
   }
 
+  const NewSecretMenu = () => (
+    <SplitButton
+      variant="primary"
+      onClick={() => handleAddSecret(true)}
+      menuContent={
+        <div className="w-max">
+          <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
+            <div className="flex items-center gap-2">
+              <FaFolderPlus /> New Folder
+            </div>
+          </Button>
+        </div>
+      }
+    >
+      <FaPlus /> New Secret
+    </SplitButton>
+  )
+
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
@@ -740,7 +760,7 @@ export default function Environment({
                       leaveFrom="transform scale-100 opacity-100"
                       leaveTo="transform scale-95 opacity-0"
                       as="div"
-                      className="absolute z-10 left-0 origin-bottom-left mt-2"
+                      className="absolute z-20 left-0 origin-bottom-left mt-2"
                     >
                       <Menu.Items as={Fragment}>
                         <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
@@ -793,7 +813,7 @@ export default function Environment({
               <FaTimesCircle
                 className={clsx(
                   'cursor-pointer text-neutral-500 transition-opacity ease',
-                  searchQuery ? 'opacity-100' : 'opacity-0'
+                  searchQuery ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
                 )}
                 role="button"
                 onClick={() => setSearchQuery('')}
@@ -827,43 +847,36 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
-            <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
-              <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
-                key
-              </div>
-              <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
-                value
-                <div className="flex items-center gap-4">
-                  <Button variant="outline" onClick={toggleGlobalReveal}>
-                    <div className="flex items-center gap-2">
-                      {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
-                      {globallyRevealed ? 'Mask all' : 'Reveal all'}
-                    </div>
-                  </Button>
-                  <Button variant="outline" onClick={downloadEnvFile} title="Download as .env file">
-                    <div className="flex items-center gap-2">
-                      <FaDownload /> Export as .env
-                    </div>
-                  </Button>
-                  <SplitButton
-                    variant="primary"
-                    onClick={() => handleAddSecret(true)}
-                    menuContent={
-                      <div className="w-max">
-                        <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
-                          <div className="flex items-center gap-2">
-                            <FaFolderPlus /> New Folder
-                          </div>
-                        </Button>
+            {(updatedSecrets.length > 0 || folders.length > 0) && (
+              <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
+                <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
+                  key
+                </div>
+                <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
+                  value
+                  <div className="flex items-center gap-4">
+                    <Button variant="outline" onClick={toggleGlobalReveal}>
+                      <div className="flex items-center gap-2">
+                        {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
+                        {globallyRevealed ? 'Mask all' : 'Reveal all'}
                       </div>
-                    }
-                  >
-                    <FaPlus /> New Secret
-                  </SplitButton>
-                  <NewFolderMenu />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={downloadEnvFile}
+                      title="Download as .env file"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FaDownload /> Export as .env
+                      </div>
+                    </Button>
+                    <NewSecretMenu />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            <NewFolderMenu />
 
             {organisation &&
               filteredFolders.map((folder: SecretFolderType) => (
@@ -898,6 +911,20 @@ export default function Environment({
                   />
                 </div>
               ))}
+
+            {filteredSecrets.length === 0 && filteredFolders.length === 0 && (
+              <EmptyState
+                title={searchQuery ? `No results for "${searchQuery}"` : 'No secrets here'}
+                subtitle="Add secrets or folders here to get started"
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    {searchQuery ? <MdSearchOff /> : <FaMagic />}
+                  </div>
+                }
+              >
+                <NewSecretMenu />
+              </EmptyState>
+            )}
           </div>
         </div>
       )}
