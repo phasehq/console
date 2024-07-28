@@ -168,6 +168,7 @@ export type AppType = {
   appToken: Scalars['String']['output'];
   appVersion: Scalars['Int']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
+  environments?: Maybe<Array<Maybe<EnvironmentType>>>;
   id: Scalars['String']['output'];
   identityKey: Scalars['String']['output'];
   name: Scalars['String']['output'];

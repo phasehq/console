@@ -46,23 +46,23 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   const decryptKeyring = (sudoPassword: string) => {
     return new Promise(async (resolve, reject) => {
       setUnlocking(true)
-
-      try {
-        if (trustDevice) {
-          setDevicePassword(organisation.memberId!, sudoPassword)
-        }
-
-        const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, sudoPassword)
-        setKeyring(decryptedKeyring)
-        setUnlocking(false)
-        reset()
-        closeModal()
-        resolve(true) // Resolve the promise successfully
-      } catch (e) {
-        console.error(e)
-        setUnlocking(false)
-        reject(e) // Reject the promise with the error
-      }
+      setTimeout( async () => {
+        try {
+          if (trustDevice) {
+            setDevicePassword(organisation.memberId!, sudoPassword)
+          }
+          const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, sudoPassword)
+          setKeyring(decryptedKeyring)
+          setUnlocking(false)
+          reset()
+          closeModal()
+          resolve(true) // Resolve the promise successfully
+        } catch (e) {
+          console.error(e)
+          setUnlocking(false)
+          reject(e) // Reject the promise with the error
+        }  
+      }, 100);
     })
   }
 
@@ -265,11 +265,13 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                               </div>
                             }
                           >
-                            {trustDevice ? (
-                              <FaShieldAlt className="shrink-0" />
-                            ) : (
-                              <FaUnlock className="shrink-0" />
-                            )}{' '}
+                            {!unlocking && (
+                              trustDevice ? (
+                                <FaShieldAlt className="shrink-0" />
+                                  ) : (
+                                <FaUnlock className="shrink-0" />
+                                  )
+                              )}{' '}
                             {trustDevice ? 'Remember' : 'Unlock'}
                           </SplitButton>
                         </div>
