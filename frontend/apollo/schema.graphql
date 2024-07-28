@@ -204,6 +204,7 @@ type EnvironmentType {
   app: AppType!
   name: String!
   envType: ApiEnvironmentEnvTypeChoices!
+  index: Int!
   identityKey: String!
   wrappedSeed: String!
   wrappedSalt: String!
@@ -211,6 +212,7 @@ type EnvironmentType {
   updatedAt: DateTime!
   folderCount: Int
   secretCount: Int
+  members: [OrganisationMemberType]
 }
 
 """An enumeration."""
@@ -223,6 +225,9 @@ enum ApiEnvironmentEnvTypeChoices {
 
   """Production"""
   PROD
+
+  """Custom"""
+  CUSTOM
 }
 
 """An enumeration."""
@@ -304,38 +309,6 @@ type SecretType {
   updatedAt: DateTime!
   history: [SecretEventType]
   override: PersonalSecretType
-}
-
-
-type EnvironmentType {
-  id: String!
-  app: AppType!
-  name: String!
-  envType: ApiEnvironmentEnvTypeChoices!
-  index: Int!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  folderCount: Int
-  secretCount: Int
-  members: [OrganisationMemberType]
-}
-
-"""An enumeration."""
-enum ApiEnvironmentEnvTypeChoices {
-  """Development"""
-  DEV
-
-  """Staging"""
-  STAGING
-
-  """Production"""
-  PROD
-
-  """Custom"""
-  CUSTOM
 }
 
 type SecretFolderType {
