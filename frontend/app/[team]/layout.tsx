@@ -9,6 +9,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect } from 'react'
 
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import CommandPalette from '@/components/common/CommandPalette'
 
 export default function RootLayout({
   children,
@@ -56,6 +57,7 @@ export default function RootLayout({
       {showNav && <NavBar team={params.team} />}
       {showNav && <Sidebar />}
       <div className={clsx('min-h-screen overflow-auto', showNav && 'pt-16')}>{children}</div>
+      <CommandPalette />
     </div>
   )
 }
