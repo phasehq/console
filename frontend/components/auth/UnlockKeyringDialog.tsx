@@ -18,6 +18,7 @@ import { SplitButton } from '../common/SplitButton'
 import { getDevicePassword, setDevicePassword } from '@/utils/localStorage'
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { getKeyring } from '@/utils/crypto'
+import Spinner from '../common/Spinner'
 
 export default function UnlockKeyringDialog(props: { organisation: OrganisationType }) {
   const { organisation } = props
@@ -31,6 +32,8 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   const [unlocking, setUnlocking] = useState(false)
 
   const { keyring, setKeyring } = useContext(KeyringContext)
+
+  const [devicePasswordExists, setDevicePasswordExists] = useState<boolean>(false)
 
   const { data: session } = useSession()
   const pathname = usePathname()
@@ -46,12 +49,16 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   const decryptKeyring = (sudoPassword: string) => {
     return new Promise(async (resolve, reject) => {
       setUnlocking(true)
-      setTimeout( async () => {
+      setTimeout(async () => {
         try {
           if (trustDevice) {
             setDevicePassword(organisation.memberId!, sudoPassword)
           }
-          const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, sudoPassword)
+          const decryptedKeyring = await getKeyring(
+            session?.user?.email!,
+            organisation,
+            sudoPassword
+          )
           setKeyring(decryptedKeyring)
           setUnlocking(false)
           reset()
@@ -61,8 +68,8 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
           console.error(e)
           setUnlocking(false)
           reject(e) // Reject the promise with the error
-        }  
-      }, 100);
+        }
+      }, 100)
     })
   }
 
@@ -84,6 +91,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
     const devicePassword = getDevicePassword(organisation.memberId!)
 
     if (devicePassword) {
+      setDevicePasswordExists(true)
       setPassword(devicePassword)
       decryptKeyring(devicePassword)
     }
@@ -146,147 +154,157 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                 leaveTo="opacity-0 scale-95"
               >
                 <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title as="div" className="flex w-full gap-2 items-center">
-                    <FaLock
-                      className={clsx(
-                        keyring === null ? 'text-red-500' : 'text-emerald-500',
-                        'transition-colors ease'
-                      )}
-                    />
-                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Unlock User Keyring
-                    </h3>
-                  </Dialog.Title>
-                  <form onSubmit={handleFormSubmit}>
-                    <div className="py-4">
-                      <p className="text-neutral-500">
-                        Please enter your <code>sudo</code> password to unlock the user keyring.
-                        This is required for data to be decrypted on this screen.
-                      </p>
+                  {!devicePasswordExists && (
+                    <Dialog.Title as="div" className="flex w-full gap-2 items-center">
+                      <FaLock
+                        className={clsx(
+                          keyring === null ? 'text-red-500' : 'text-emerald-500',
+                          'transition-colors ease'
+                        )}
+                      />
+                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+                        Unlock User Keyring
+                      </h3>
+                    </Dialog.Title>
+                  )}
+                  {devicePasswordExists ? (
+                    <div className="flex flex-col items-center justify-center gap-4 p-8">
+                      <div className="font-medium text-lg text-neutral-500">
+                        Initializing account keys...
+                      </div>
+                      <Spinner size="lg" />
                     </div>
+                  ) : (
+                    <form onSubmit={handleFormSubmit}>
+                      <div className="py-4">
+                        <p className="text-neutral-500">
+                          Please enter your <code>sudo</code> password to unlock the user keyring.
+                          This is required for data to be decrypted on this screen.
+                        </p>
+                      </div>
 
-                    <div className="ring-1 ring-inset ring-neutral-500/40 shadow-lg p-4 rounded-lg bg-zinc-200 dark:bg-zinc-800 space-y-4">
-                      <div className="flex justify-between">
-                        <div className="flex flex-col gap-4">
-                          <div className="whitespace-nowrap flex items-start gap-2">
-                            <div className="pt-2">
-                              <Avatar imagePath={session?.user?.image!} size="md" />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium text-black dark:text-white">
-                                  {session?.user?.name}
-                                </span>
-                                <span className="text-neutral-500 text-2xs">
-                                  {session?.user?.email}
-                                </span>
+                      <div className="ring-1 ring-inset ring-neutral-500/40 shadow-lg p-4 rounded-lg bg-zinc-200 dark:bg-zinc-800 space-y-4">
+                        <div className="flex justify-between">
+                          <div className="flex flex-col gap-4">
+                            <div className="whitespace-nowrap flex items-start gap-2">
+                              <div className="pt-2">
+                                <Avatar imagePath={session?.user?.image!} size="md" />
                               </div>
-                              <div className="flex items-center gap-2 text-xs">
-                                <h2 className="font-semibold text-black dark:text-white">
-                                  {organisation.name}
-                                </h2>
-                                <span className="text-neutral-500">
-                                  <RoleLabel role={organisation.role!} />
-                                </span>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium text-black dark:text-white">
+                                    {session?.user?.name}
+                                  </span>
+                                  <span className="text-neutral-500 text-2xs">
+                                    {session?.user?.email}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <h2 className="font-semibold text-black dark:text-white">
+                                    {organisation.name}
+                                  </h2>
+                                  <span className="text-neutral-500">
+                                    <RoleLabel role={organisation.role!} />
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
+
+                          <div>
+                            <Button type="button" variant="outline" onClick={() => handleSignout()}>
+                              <div className="flex items-center gap-1 text-xs">
+                                <FaSignOutAlt /> Log out
+                              </div>
+                            </Button>
+                          </div>
                         </div>
 
-                        <div>
-                          <Button type="button" variant="outline" onClick={() => handleSignout()}>
-                            <div className="flex items-center gap-1 text-xs">
-                              <FaSignOutAlt /> Log out
-                            </div>
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-end gap-4">
-                        <div className="space-y-1 w-full">
-                          <label
-                            className="block text-gray-700 text-sm font-bold mb-2"
-                            htmlFor="password"
-                          >
-                            Sudo password
-                          </label>
-                          <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 roudned-md focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
-                            <input
-                              id="password"
-                              ref={inputRef}
-                              tabIndex={0}
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              type={showPw ? 'text' : 'password'}
-                              minLength={16}
-                              required
-                              autoFocus
-                              className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
-                            />
-                            <button
-                              className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
-                              type="button"
-                              onClick={() => setShowPw(!showPw)}
-                              tabIndex={-1}
+                        <div className="flex justify-between items-end gap-4">
+                          <div className="space-y-1 w-full">
+                            <label
+                              className="block text-gray-700 text-sm font-bold mb-2"
+                              htmlFor="password"
                             >
-                              {showPw ? <FaEyeSlash /> : <FaEye />}
-                            </button>
+                              Sudo password
+                            </label>
+                            <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 roudned-md focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
+                              <input
+                                id="password"
+                                ref={inputRef}
+                                tabIndex={0}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                type={showPw ? 'text' : 'password'}
+                                minLength={16}
+                                required
+                                autoFocus
+                                className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md ph-no-capture"
+                              />
+                              <button
+                                className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
+                                type="button"
+                                onClick={() => setShowPw(!showPw)}
+                                tabIndex={-1}
+                              >
+                                {showPw ? <FaEyeSlash /> : <FaEye />}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="pb-1">
+                            <SplitButton
+                              type="submit"
+                              variant="primary"
+                              isLoading={unlocking}
+                              menuContent={
+                                <div className="space-y-4 w-96 p-2">
+                                  <div>
+                                    <div className="text-black dark:text-white font-semibold">
+                                      Remember password
+                                    </div>
+                                    <div className="text-neutral-500 text-sm">
+                                      Store your sudo password on this device to automatically
+                                      unlock your keyring when you log in.
+                                    </div>
+                                  </div>
+
+                                  <div
+                                    className={clsx(
+                                      'flex items-center gap-2 text-sm pt-2',
+                                      trustDevice ? 'text-emerald-500' : 'text-neutral-500'
+                                    )}
+                                  >
+                                    <ToggleSwitch
+                                      value={trustDevice}
+                                      onToggle={() => setTrustDevice(!trustDevice)}
+                                    />
+                                    Remember password on this device
+                                  </div>
+                                </div>
+                              }
+                            >
+                              {!unlocking &&
+                                (trustDevice ? (
+                                  <FaShieldAlt className="shrink-0" />
+                                ) : (
+                                  <FaUnlock className="shrink-0" />
+                                ))}{' '}
+                              {trustDevice ? 'Remember' : 'Unlock'}
+                            </SplitButton>
                           </div>
                         </div>
-                        <div className="pb-1">
-                          <SplitButton
-                            type="submit"
-                            variant="primary"
-                            isLoading={unlocking}
-                            menuContent={
-                              <div className="space-y-4 w-96 p-2">
-                                <div>
-                                  <div className="text-black dark:text-white font-semibold">
-                                    Remember password
-                                  </div>
-                                  <div className="text-neutral-500 text-sm">
-                                    Store your sudo password on this device to automatically unlock
-                                    your keyring when you log in.
-                                  </div>
-                                </div>
 
-                                <div
-                                  className={clsx(
-                                    'flex items-center gap-2 text-sm pt-2',
-                                    trustDevice ? 'text-emerald-500' : 'text-neutral-500'
-                                  )}
-                                >
-                                  <ToggleSwitch
-                                    value={trustDevice}
-                                    onToggle={() => setTrustDevice(!trustDevice)}
-                                  />
-                                  Remember password on this device
-                                </div>
-                              </div>
-                            }
+                        <div className="flex items-center justify-between border-t border-neutral-500/20 pt-2">
+                          <Link
+                            className="text-xs text-neutral-500 hover:text-black dark:hover:text-white transition ease"
+                            href={`/${organisation.name}/recovery`}
                           >
-                            {!unlocking && (
-                              trustDevice ? (
-                                <FaShieldAlt className="shrink-0" />
-                                  ) : (
-                                <FaUnlock className="shrink-0" />
-                                  )
-                              )}{' '}
-                            {trustDevice ? 'Remember' : 'Unlock'}
-                          </SplitButton>
+                            Forgot password?
+                          </Link>
                         </div>
                       </div>
-
-                      <div className="flex items-center justify-between border-t border-neutral-500/20 pt-2">
-                        <Link
-                          className="text-xs text-neutral-500 hover:text-black dark:hover:text-white transition ease"
-                          href={`/${organisation.name}/recovery`}
-                        >
-                          Forgot password?
-                        </Link>
-                      </div>
-                    </div>
-                  </form>
+                    </form>
+                  )}
                 </Dialog.Panel>
               </Transition.Child>
             </div>
