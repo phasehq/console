@@ -7835,13 +7835,14 @@ postcss@^8.4.23, postcss@^8.4.33:
     picocolors "^1.0.0"
     source-map-js "^1.0.2"
 
-posthog-js@^1.104.4:
-  version "1.105.5"
-  resolved "https://registry.yarnpkg.com/posthog-js/-/posthog-js-1.105.5.tgz#8d38903bd399c8b96ed5652da7bedb4c58da6cfd"
-  integrity sha512-aYli9C2XSQhV5tU05obcOHrX1iHfRb/FlikxiE33DRhjZaBjVQvT/vPBtUjcM0hW784nYSqXzs21CNeFyEpU+Q==
+posthog-js@^1.150.1:
+  version "1.150.1"
+  resolved "https://registry.yarnpkg.com/posthog-js/-/posthog-js-1.150.1.tgz#ce2e0aa0dc30369bf1b1b9a38b9fbf25e5c01ba0"
+  integrity sha512-jHSnqtAWkUQkiedQgHpD00+z8RUF0loDq7ORakBKfQjdntTJIEk16ewqTNRxnpE86guWDoy2J3iAqLgAYfFaLA==
   dependencies:
     fflate "^0.4.8"
     preact "^10.19.3"
+    web-vitals "^4.0.1"
 
 preact-render-to-string@^5.1.19:
   version "5.2.6"
@@ -9481,6 +9482,11 @@ web-streams-polyfill@^3.2.1:
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/web-streams-polyfill/-/web-streams-polyfill-3.2.1.tgz#71c2718c52b45fd49dbeee88634b3a60ceab42a6"
   integrity sha512-e0MO3wdXWKrLbL0DgGnUV7WHVuw9OUvL4hjgnPkIeEvESk74gAITi5G606JtZPp39cd8HA9VQzCIvA49LpPN5Q==
+
+web-vitals@^4.0.1:
+  version "4.2.2"
+  resolved "https://registry.yarnpkg.com/web-vitals/-/web-vitals-4.2.2.tgz#e883245180b95e175eb75a5ca8903b1a11597d7a"
+  integrity sha512-nYfoOqb4EmElljyXU2qdeE76KsvoHdftQKY4DzA9Aw8DervCg2bG634pHLrJ/d6+B4mE3nWTSJv8Mo7B2mbZkw==
 
 webcrypto-core@^1.7.7:
   version "1.7.7"

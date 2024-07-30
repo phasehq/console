@@ -37,7 +37,7 @@
     "next-auth": "^4.24.5",
     "nextjs-toploader": "^1.6.4",
     "npm": "^10.4.0",
-    "posthog-js": "^1.104.4",
+    "posthog-js": "^1.150.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.2.1",
