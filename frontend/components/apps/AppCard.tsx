@@ -1,12 +1,12 @@
-import { useQuery } from '@apollo/client';
-import { FaBox, FaBoxes, FaCube, FaUser, FaUsers } from 'react-icons/fa';
-import { Card } from '../common/Card';
-import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql';
-import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql';
-import { AppType } from '@/apollo/graphql';
-import { ProviderIcon } from '../syncing/ProviderIcon';
-import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql';
-import React from 'react';
+import { useQuery } from '@apollo/client'
+import { FaBox, FaBoxes, FaCube, FaUser, FaUsers } from 'react-icons/fa'
+import { Card } from '../common/Card'
+import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
+import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { AppType } from '@/apollo/graphql'
+import { ProviderIcon } from '../syncing/ProviderIcon'
+import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
+import React from 'react'
 
 interface AppCardProps {
   app: AppType;
@@ -108,5 +108,5 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
         </div>
       </div>
     </Card>
-  );
-};
+  )
+}
