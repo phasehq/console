@@ -9,7 +9,7 @@ import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import React from 'react'
 
 interface AppCardProps {
-  app: AppType;
+  app: AppType
 }
 
 export const AppCard: React.FC<AppCardProps> = ({ app }) => {
