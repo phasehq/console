@@ -1,6 +1,6 @@
 'use client'
 
-import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
+import { EnvironmentType, SecretFolderType, SecretInput, SecretTagType, SecretType } from '@/apollo/graphql'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { GetFolders } from '@/graphql/queries/secrets/getFolders.gql'
@@ -30,7 +30,9 @@ import {
   FaEye,
   FaEyeSlash,
   FaMagic,
+  FaInfoCircle,
 } from 'react-icons/fa'
+import { VscDiffModified, VscAdd } from "react-icons/vsc";
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
@@ -55,6 +57,21 @@ import {
   EnvKeyring,
 } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
+import GenericDialog from '@/components/common/GenericDialog'
+
+type ChangeDetail = {
+  old: string | SecretTagType[];
+  new: string | SecretTagType[];
+};
+
+type SecretChange = {
+  type: "Added" | "Modified";
+  secretName: string,
+  key?: ChangeDetail;
+  value?: ChangeDetail;
+  comment?: ChangeDetail;
+  tags?: ChangeDetail;
+};
 
 export default function Environment({
   params,
@@ -75,6 +92,8 @@ export default function Environment({
   const [isLoading, setIsloading] = useState(false)
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
+  const [allChanges, setAllChanges] = useState<Record<string, SecretChange>>({});
+  const [isChangesModalOpen, setIsChangesModalOpen] = useState(false)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -730,6 +749,164 @@ export default function Environment({
     </SplitButton>
   )
 
+  const handleChangesReveal = () => {
+    const changes = getChanges();
+    setAllChanges(changes);
+    setIsChangesModalOpen(true); 
+  };
+
+  const getChanges = (): Record<string, SecretChange> => {
+    const changes: Record<string, SecretChange> = {};
+  
+    updatedSecrets.forEach((updatedSecret) => {
+      const originalSecret = secrets.find(
+        (secret) => secret.id === updatedSecret.id
+      );
+  
+      //adding new secret if it doenst exist
+      if (!originalSecret) {
+        changes[updatedSecret.key] = {
+          type: "Added",
+          secretName: updatedSecret.key,
+          key: {
+            old: "",
+            new: updatedSecret.key,
+          },
+          value: {
+            old: "",
+            new: updatedSecret.value,
+          },
+          comment: {
+            old: "",
+            new: updatedSecret.comment,
+          },
+          tags: {
+            old: [],
+            new: updatedSecret.tags,
+          },
+        };
+        return;
+      }
+  
+      const secretChanges: Partial<SecretChange> = {
+        type: "Modified",
+        secretName: originalSecret.key,
+      };
+  
+      if (originalSecret.key !== updatedSecret.key) {
+        secretChanges.key = {
+          old: originalSecret.key,
+          new: updatedSecret.key,
+        };
+      }
+  
+      if (originalSecret.value !== updatedSecret.value) {
+        secretChanges.value = {
+          old: originalSecret.value,
+          new: updatedSecret.value,
+        };
+      }
+  
+      if (originalSecret.comment !== updatedSecret.comment) {
+        secretChanges.comment = {
+          old: originalSecret.comment || "",
+          new: updatedSecret.comment,
+        };
+      }
+  
+      if (!arraysEqual(originalSecret.tags, updatedSecret.tags)) {
+        secretChanges.tags = {
+          old: originalSecret.tags,
+          new: updatedSecret.tags,
+        };
+      }
+  
+      if (
+        secretChanges.key ||
+        secretChanges.value ||
+        secretChanges.comment ||
+        secretChanges.tags
+      ) {
+        changes[updatedSecret.key] = secretChanges as SecretChange;
+      }
+    });
+  
+    return changes;
+  };
+
+  const limitString = (str: string) => { 
+    if (str.length <=50) return str
+    return str.slice(0, 50) + '...';
+  } 
+  
+  const DisplayChanges = ({ change }: any) => {
+    
+    //filtering removed tags and added tags into individual arrays
+    const removedTags = Array.isArray(change.tags?.old) ? change.tags.old.filter(
+      (tag) => !change.tags?.new.some(newTag => newTag.id === tag.id)
+    ) : [];
+  
+    const addedTags = Array.isArray(change.tags?.new) ? change.tags.new.filter(
+      (tag) => !change.tags?.old.some(oldTag => oldTag.id === tag.id)
+    ) : [];
+  
+    return (
+      <div className='flex flex-col space-y-1 ml-8 text-md'>
+        {change.key?.new && (
+          <div className="flex flex-row space-x-2 flex-wrap">
+            <p className='text-gray-600'>KEY:</p>
+            {change.key?.old && (
+              <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through'>{change.key.old}</p>
+            )}
+            <p className='bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture ml-1 text-sm'>{change.key.new}</p>
+          </div>
+        )}
+        {change.value?.new && (
+          <div className="flex flex-row space-x-2 flex-wrap">
+            <p className='text-gray-600'>VALUE:</p>
+            {change.value?.old && (
+              <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through'>{limitString(change.value.old)}</p>
+            )}
+            <p className='bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture'>{limitString(change.value.new)}</p>
+          </div>
+        )}
+        {change.comment?.new && (
+          <div className="flex flex-row space-x-2 flex-wrap">
+            <p className='text-gray-600'>COMMENT:</p>
+            {change.comment?.old && (
+              <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through'>{change.comment.old}</p>
+            )}
+            <p className='bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture'>{change.comment.new}</p>
+          </div>
+        )}
+        {removedTags.length > 0 && (
+          <div className="flex flex-row space-x-2">
+            <p className="text-gray-600">TAGS REMOVED:</p>
+            <div className="inline-flex gap-2">
+              {removedTags.map((tag) => (
+                <div key={tag.id} className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through">
+                  {tag.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {addedTags.length > 0 && (
+          <div className="flex flex-row space-x-2">
+            <p className="text-gray-600">TAGS ADDED:</p>
+            <div className="inline-flex gap-2">
+              {addedTags.map((tag) => (
+                <div key={tag.id} className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture">
+                  {tag.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
@@ -793,10 +970,51 @@ export default function Environment({
               <FolderBreadcrumbLinks path={params.path} />
             </div>
             {unsavedChanges && (
+              <div onClick={handleChangesReveal}>
               <Alert variant="warning" icon={true} size="sm">
-                You have undeployed changes to this environment.
+                <span className="mr-[-0.5rem]" onClick={handleChangesReveal}>
+                  You have undeployed changes to this environment.
+                </span>
+                <GenericDialog
+                  buttonVariant=""
+                  title="Undeployed changes"
+                  onClose={() => setIsChangesModalOpen(false)}
+                  buttonContent={<FaInfoCircle />}
+                >
+                  <div className="flex flex-col space-y-2">
+                    {Object.entries(allChanges).map(([id, change]) => (
+                      <div key={id} className="flex flex-row space-x-2 items-center">
+                        {change.type === "Added" && (
+                          <div className='flex flex-col space-y-1'>
+                            <div className='flex flex-row items-center space-x-2'>
+                              <VscAdd className="text-green-500" />
+                              <p className="font-mono font-bold text-green-700">
+                                Added {change.secretName}
+                              </p>
+                            </div>
+                            <DisplayChanges change={change} />
+                          </div>
+                        )}
+                        {change.type === "Modified" && (
+                          <div className="flex flex-col space-y-1">
+                            <div className="flex items-center space-x-2">
+                              <div className='flex flex-row space-x-2 items-center'>
+                                <VscDiffModified className="text-yellow-500" />
+                                <p className="font-mono font-bold text-yellow-700">
+                                  Modified {change.secretName}
+                                </p>
+                              </div>
+                            </div>
+                            <DisplayChanges change={change} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </GenericDialog>
               </Alert>
-            )}
+            </div>
+          )}
           </div>
 
           <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
