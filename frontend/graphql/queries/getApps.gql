@@ -5,5 +5,9 @@ query GetApps($organisationId: ID!, $appId: ID) {
     identityKey
     createdAt
     sseEnabled
+    environments {
+      id
+      name
+    }
   }
 }
