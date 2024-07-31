@@ -6,8 +6,12 @@ import Sidebar from '@/components/layout/Sidebar'
 import { organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
-import { useContext, useEffect } from 'react'
-
+import { useContext, useEffect,useState } from 'react'
+//Importing utilities for tree sidebar
+import { useQuery } from '@apollo/client'
+import { GetApps } from '@/graphql/queries/getApps.gql'
+import { AppType } from '@/apollo/graphql'
+import loading from '../loading'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
 export default function RootLayout({
@@ -15,10 +19,22 @@ export default function RootLayout({
   params,
 }: {
   children: React.ReactNode
-  params: { team: string }
-}) {
-  const { activeOrganisation, setActiveOrganisation, organisations, loading } =
+  params: { team: string, app:string }
+}) { 
+  
+  //Fetching app data
+  const { activeOrganisation, setActiveOrganisation, organisations } =
     useContext(organisationContext)
+    const { activeOrganisation: organisation } = useContext(organisationContext)
+    const { data } = useQuery(GetApps, {
+      variables: {
+        organisationId: organisation?.id,
+      },
+      skip: !organisation,
+    })
+  
+    const apps = data?.apps as AppType[]
+
 
   const router = useRouter()
 
@@ -44,7 +60,6 @@ export default function RootLayout({
   const path = usePathname()
 
   const showNav = !path?.split('/').includes('recovery')
-
   return (
     <div
       className={clsx(
@@ -54,7 +69,7 @@ export default function RootLayout({
     >
       {activeOrganisation && <UnlockKeyringDialog organisation={activeOrganisation} />}
       {showNav && <NavBar team={params.team} />}
-      {showNav && <Sidebar />}
+      {showNav && <Sidebar apps={apps} key={apps?.length} />} {/*Sending app data*/}
       <div className={clsx('min-h-screen overflow-auto', showNav && 'pt-16')}>{children}</div>
     </div>
   )
