@@ -47,7 +47,8 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
     });
   }
   let itemCount = 0
-  let noOfIcons = 0
+  let iconPrint = 1
+  const noOfIcons = Object.values(providerCounts).filter((value) => value > 0).length;
   //Counting number of values with are greater than 0
   Object.entries(providerCounts).map(([provider, count]) => {
     itemCount = itemCount+count
@@ -102,8 +103,8 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
         <div className="flex justify-start items-center mt-[-1.6rem] pl-[20.5rem]">
         {syncData?.sseEnabled &&
               Object.entries(providerCounts).map(([provider, count]) => {
-                  if(count > 0 && noOfIcons <= 5){
-                    noOfIcons++
+                  if(count > 0 && iconPrint <= 5){
+                    iconPrint++;
                   return (
                     <div key={provider} className="flex-row flex items-center ml-2 ">
                       <ProviderIcon providerId={provider} />
@@ -113,7 +114,7 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
                 
                 return null;
               })}
-              {syncData?.sseEnabled && itemCount > 5 &&
+              {syncData?.sseEnabled && noOfIcons > 5 &&
                 <div className="tfont-normal text-neutral-500 text-sm flex items-center mr-[-1.3rem]">
                   +n
                 </div>
