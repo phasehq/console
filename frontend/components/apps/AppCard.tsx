@@ -23,13 +23,13 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
 
   //storing number of syncs
   const providerCounts = {
-    cloudflare: 0,
+    cloudflare: 1,
     aws: 0,
-    github: 0,
-    gitlab: 0,
-    hashicorp_vault: 0,
-    hashicorp_nomad: 0,
-    others: 0,
+    github: 1,
+    gitlab: 1,
+    hashicorp_vault: 1,
+    hashicorp_nomad: 2,
+    others: 1,
   };
 
   //Counting number of syncs for each integration
@@ -115,7 +115,7 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
                 return null;
               })}
               {syncData?.sseEnabled && noOfIcons > 5 &&
-                <div className="tfont-normal text-neutral-500 text-sm flex items-center mr-[-1.3rem]">
+                <div className="tfont-normal text-neutral-500 text-sm flex items-center mr-[-1.3rem] mt-[-0.5rem]">
                   +n
                 </div>
               }
