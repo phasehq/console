@@ -23,13 +23,13 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
 
   //storing number of syncs
   const providerCounts = {
-    cloudflare: 1,
+    cloudflare: 0,
     aws: 0,
-    github: 1,
-    gitlab: 1,
-    hashicorp_vault: 1,
-    hashicorp_nomad: 2,
-    others: 1,
+    github: 0,
+    gitlab: 0,
+    hashicorp_vault: 0,
+    hashicorp_nomad: 0,
+    others: 0,
   };
 
   //Counting number of syncs for each integration
