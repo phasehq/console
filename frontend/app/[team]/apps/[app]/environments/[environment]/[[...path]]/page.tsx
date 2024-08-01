@@ -659,7 +659,8 @@ export default function Environment({
       return (
         <div className="flex flex-wrap">
           <Link href={basePath} className="p-2 flex items-center gap-2 font-light">
-            <span className="text-neutral-500">/</span>
+          <FaHome className="group-hover:text-white" />
+            <span className="text-xl text-neutral-500 ">~/</span>
           </Link>
         </div>
       )
@@ -672,9 +673,10 @@ export default function Environment({
           href={basePath}
           className="p-2 flex items-center gap-2 font-light text-neutral-500 group"
         >
-          <FaHome className="group-hover:text-white" />/
+        <FaHome className="group-hover:text-white" />
+          <span className="text-xl group-hover:text-white">~/</span>
         </Link>
-        {/* Map over path segments */}
+                {/* Map over path segments */}
         {path.map((segment, index) => {
           // Construct the href for each segment
           const href = `${basePath}/${path.slice(0, index + 1).join('/')}`
@@ -697,16 +699,17 @@ export default function Environment({
           )
         })}
         {
-          <div className="px-4">
-            <Link
-              href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
-              title="Go up one level"
-            >
-              <Button variant="secondary">
-                <MdKeyboardReturn className="shrink-0" />
-              </Button>
-            </Link>
-          </div>
+<div className="px-4">
+  <Link
+    href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
+    title="Go up one level"
+  >
+    <Button variant="secondary">
+      <MdKeyboardReturn className="shrink-0" />
+        <span className="ml-2">Go Back</span>
+    </Button>
+  </Link>
+</div>
         }
       </div>
     )
@@ -820,13 +823,14 @@ export default function Environment({
               />
             </div>
             <div className="flex gap-2 items-center">
-              {unsavedChanges && (
-                <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-                  <span className="px-2 py-1">
-                    <FaUndo className="text-lg" />
-                  </span>
-                </Button>
-              )}
+            {unsavedChanges && (
+            <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
+              <span className="px-2 py-1">
+                <FaUndo className="text-lg" />
+              </span>
+              <span>Discard changes</span>
+            </Button>
+            )}
 
               {data.envSyncs && (
                 <div>
