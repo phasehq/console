@@ -1,6 +1,7 @@
 import { useQuery } from '@apollo/client'
-import { FaBox, FaBoxes, FaCube, FaUser, FaUsers } from 'react-icons/fa'
+import { FaBox, FaBoxes, FaCube, FaUser, FaUsers, FaProjectDiagram } from 'react-icons/fa'
 import { Card } from '../common/Card'
+import clsx from 'clsx'
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { AppType } from '@/apollo/graphql'
@@ -22,7 +23,7 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
 
   //storing number of syncs
   const providerCounts = {
-    cloudflare: 0,
+    cloudflare: 1,
     aws: 0,
     github: 0,
     gitlab: 0,
@@ -45,42 +46,24 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
       
     });
   }
-
+  let itemCount = 0
+  let noOfIcons = 0
   //Counting number of values with are greater than 0
-  const itemCount = Object.values(providerCounts).filter(value => value > 0).length;
-  let noOfIcons = 1
+  Object.entries(providerCounts).map(([provider, count]) => {
+    itemCount = itemCount+count
+  })
 
   return (
     <Card>
-      <div className="rounded-xl p-8 flex flex-col w-full gap-8 justify-between">
+      <div className={clsx("rounded-xl p-8 flex flex-col w-full justify-between",
+        (itemCount>0)&&(syncData?.sseEnabled)?"gap-8":"gap-10"
+      )}>
         <div className="space-y-2">
           <div className="flex justify-between items-center">
             <div className="text-2xl font-bold flex items-center gap-2">
               <FaCube size="28" className="text-neutral-800 dark:text-neutral-300 group-hover:text-emerald-500 transition-colors duration-300" />
               {name}
             </div>
-            <div className='text-md flex-row font-bold flex items-center'>
-              {/* Added logic to print icons */}
-            {syncData?.sseEnabled &&
-              Object.entries(providerCounts).map(([provider, count]) => {
-                  if(count > 0 && noOfIcons <= 3){
-                    noOfIcons++
-                  return (
-                    <div key={provider} className="text-md flex-row font-bold flex items-center">
-                      <ProviderIcon providerId={provider} />
-                      <div className='mr-2'>({count})</div>
-                    </div>
-                  );
-                }
-                
-                return null;
-              })}
-              {syncData?.sseEnabled && itemCount > 3 &&
-                <div className="text-md flex-row font-bold flex items-center">
-                  +n
-                </div>
-              }
-              </div>
           </div>
           <div className="text-xs font-mono text-neutral-500 w-full break-all">{appId}</div>
         </div>
@@ -96,7 +79,7 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
             </span>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 ml-4">
             <div className="flex items-center gap-2 text-2xl">
               {appEnvsData?.appEnvironments.length > 1 ? <FaBoxes /> : <FaBox />}
               <span className="font-light">{appEnvsData?.appEnvironments.length}</span>
@@ -105,7 +88,37 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
               {appEnvsData?.appEnvironments.length > 1 ? 'Environments' : 'Environment'}
             </span>
           </div>
+        {/* Component for Environments */}
+          {syncData?.sseEnabled && itemCount>0 && <div className="space-y-1">
+            <div className="flex items-center gap-2 text-2xl">
+               <FaProjectDiagram />
+              <span className="font-light">{itemCount}</span>
+            </div>
+            <span className="text-neutral-500 font-medium text-xs uppercase tracking-widest">
+              {itemCount > 1 ? 'Integrations' : 'Integration'}
+            </span>
+          </div>}
         </div>
+        <div className="flex justify-start items-center mt-[-1.6rem] pl-[20.5rem]">
+        {syncData?.sseEnabled &&
+              Object.entries(providerCounts).map(([provider, count]) => {
+                  if(count > 0 && noOfIcons <= 5){
+                    noOfIcons++
+                  return (
+                    <div key={provider} className="flex-row flex items-center ml-2 ">
+                      <ProviderIcon providerId={provider} />
+                    </div>
+                  );
+                }
+                
+                return null;
+              })}
+              {syncData?.sseEnabled && itemCount > 5 &&
+                <div className="tfont-normal text-neutral-500 text-sm flex items-center mr-[-1.3rem]">
+                  +n
+                </div>
+              }
+         </div>
       </div>
     </Card>
   )
