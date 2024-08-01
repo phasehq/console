@@ -23,7 +23,7 @@ export const AppCard: React.FC<AppCardProps> = ({ app }) => {
 
   //storing number of syncs
   const providerCounts = {
-    cloudflare: 1,
+    cloudflare: 0,
     aws: 0,
     github: 0,
     gitlab: 0,
