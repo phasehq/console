@@ -9,3 +9,15 @@ export const getHostname = () => `${window.location.protocol}//${window.location
 export const getApiHost = () => {
   return isCloudHosted() ? 'https://api.phase.dev' : `${getHostname()}/service/public`
 }
+
+export const getHealth = async (baseUrl: string) => {
+  const res = await fetch(`${baseUrl}/493c5048-99f9-4eac-ad0d-98c3740b491f/health`, {
+    cache: 'no-store',
+  })
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch data')
+  }
+
+  return res.json()
+}
