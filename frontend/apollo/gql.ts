@@ -16,6 +16,7 @@ const documents = {
     "mutation AddMemberToApp($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(memberId: $memberId, appId: $appId, envKeys: $envKeys) {\n    app {\n      id\n    }\n  }\n}": types.AddMemberToAppDocument,
     "mutation RemoveMemberFromApp($memberId: ID!, $appId: ID!) {\n  removeAppMember(memberId: $memberId, appId: $appId) {\n    app {\n      id\n    }\n  }\n}": types.RemoveMemberFromAppDocument,
     "mutation UpdateEnvScope($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.UpdateEnvScopeDocument,
+    "mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}": types.InitStripeProUpgradeCheckoutDocument,
     "mutation CreateApplication($id: ID!, $organisationId: ID!, $name: String!, $identityKey: String!, $appToken: String!, $appSeed: String!, $wrappedKeyShare: String!, $appVersion: Int!) {\n  createApp(\n    id: $id\n    organisationId: $organisationId\n    name: $name\n    identityKey: $identityKey\n    appToken: $appToken\n    appSeed: $appSeed\n    wrappedKeyShare: $wrappedKeyShare\n    appVersion: $appVersion\n  ) {\n    app {\n      id\n      name\n      identityKey\n    }\n  }\n}": types.CreateApplicationDocument,
     "mutation CreateOrg($id: ID!, $name: String!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!) {\n  createOrganisation(\n    id: $id\n    name: $name\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n  ) {\n    organisation {\n      id\n      name\n      memberId\n    }\n  }\n}": types.CreateOrgDocument,
     "mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    ok\n  }\n}": types.DeleteApplicationDocument,
@@ -63,6 +64,7 @@ const documents = {
     "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}": types.CreateNewUserTokenDocument,
     "mutation RevokeUserToken($tokenId: ID!) {\n  deleteUserToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeUserTokenDocument,
     "query GetAppMembers($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role\n  }\n}": types.GetAppMembersDocument,
+    "query GetCheckoutDetails($stripeSessionId: String!) {\n  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}": types.GetCheckoutDetailsDocument,
     "query GetAppActivityChart($appId: ID!, $period: TimeRange) {\n  appActivityChart(appId: $appId, period: $period) {\n    index\n    date\n    data\n  }\n}": types.GetAppActivityChartDocument,
     "query GetAppDetail($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n    appToken\n    appSeed\n    appVersion\n    sseEnabled\n  }\n}": types.GetAppDetailDocument,
     "query GetAppKmsLogs($appId: ID!, $start: BigInt, $end: BigInt) {\n  logs(appId: $appId, start: $start, end: $end) {\n    kms {\n      id\n      timestamp\n      phaseNode\n      eventType\n      ipAddress\n      country\n      city\n      phSize\n    }\n  }\n  kmsLogsCount(appId: $appId)\n}": types.GetAppKmsLogsDocument,
@@ -128,6 +130,10 @@ export function graphql(source: "mutation RemoveMemberFromApp($memberId: ID!, $a
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation UpdateEnvScope($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation UpdateEnvScope($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}"): (typeof documents)["mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -316,6 +322,10 @@ export function graphql(source: "mutation RevokeUserToken($tokenId: ID!) {\n  de
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetAppMembers($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role\n  }\n}"): (typeof documents)["query GetAppMembers($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetCheckoutDetails($stripeSessionId: String!) {\n  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}"): (typeof documents)["query GetCheckoutDetails($stripeSessionId: String!) {\n  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
