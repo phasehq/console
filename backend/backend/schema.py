@@ -4,6 +4,11 @@ from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.vault.main import VaultMountType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayEnvironmentType, RailwayProjectType
+from ee.billing.graphene.queries.stripe import (
+    StripeCheckoutDetails,
+    resolve_stripe_checkout_details,
+)
+from ee.billing.graphene.mutations.stripe import CreateProUpgradeCheckoutSession
 from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
@@ -258,6 +263,10 @@ class Query(graphene.ObjectType):
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_nomad_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
+
+    stripe_checkout_details = graphene.Field(
+        StripeCheckoutDetails, stripe_session_id=graphene.String(required=True)
+    )
 
     # --------------------------------------------------------------------
 
@@ -673,6 +682,8 @@ class Query(graphene.ObjectType):
 
         return time_series_logs
 
+    resolve_stripe_checkout_details = resolve_stripe_checkout_details
+
 
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
@@ -750,6 +761,9 @@ class Mutation(graphene.ObjectType):
 
     # Lockbox
     create_lockbox = CreateLockboxMutation.Field()
+
+    # Billing
+    create_pro_upgrade_checkout_session = CreateProUpgradeCheckoutSession.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
