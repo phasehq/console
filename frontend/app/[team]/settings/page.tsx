@@ -13,6 +13,7 @@ import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
 import { Fragment, useContext } from 'react'
 import { FaMoon, FaSun } from 'react-icons/fa'
+import Spinner from '@/components/common/Spinner'
 
 export default function Settings({ params }: { params: { team: string } }) {
   const { activeOrganisation } = useContext(organisationContext)
@@ -25,6 +26,13 @@ export default function Settings({ params }: { params: { team: string } }) {
     ...(activeUserIsAdmin ? [{ name: 'Organisation' }] : []),
     ...[{ name: 'Account' }, { name: 'App' }],
   ]
+
+  if (!activeOrganisation)
+    return (
+      <div className="flex items-center justify-center py-40">
+        <Spinner size="md" />{' '}
+      </div>
+    )
 
   return (
     <section className="w-full max-w-screen-lg mx-auto py-4 text-black dark:text-white">

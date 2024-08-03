@@ -2,9 +2,9 @@ import ProgressBar from '@/components/common/ProgressBar'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { GetOrgLicense } from '@/graphql/queries/organisation/getOrganisationLicense.gql'
-import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
-import { useQuery } from '@apollo/client'
-import { ReactNode, useContext } from 'react'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
+import { useMutation, useQuery } from '@apollo/client'
+import { ReactNode, useContext, useEffect } from 'react'
 import { PlanLabel } from './PlanLabel'
 import Spinner from '@/components/common/Spinner'
 import { calculatePercentage } from '@/utils/dataUnits'
@@ -27,6 +27,9 @@ import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { License } from './License'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { FaKey } from 'react-icons/fa6'
+import { ProUpgradeDialog } from '@/ee/billing/ProUpgradeDialog'
+import { useSearchParams } from 'next/navigation'
+import { PostCheckoutScreen } from '@/ee/billing/PostCheckoutScreen'
 
 const plansInfo = {
   FR: {
@@ -122,6 +125,8 @@ const PlanFeatureItem = (props: {
 export const PlanInfo = () => {
   const { activeOrganisation } = useContext(organisationContext)
 
+  const searchParams = useSearchParams()
+
   const planInfo = activeOrganisation ? plansInfo[activeOrganisation.plan] : undefined
 
   const { loading, data } = useQuery(GetOrganisationPlan, {
@@ -135,6 +140,12 @@ export const PlanInfo = () => {
     skip: !activeOrganisation,
     fetchPolicy: 'cache-and-network',
   })
+
+  // useEffect(() => {
+  //   const stripeSessionId = searchParams?.get('stripe_session_id')
+  //   if (stripeSessionId && activeOrganisation) {
+  //   }
+  // }, [activeOrganisation, searchParams])
 
   //const { data: licenseData } = useQuery(GetLicenseData)
 
@@ -181,15 +192,24 @@ export const PlanInfo = () => {
                     </Button>
                   </Link>
                   <GenericDialog
-                    title="Request an Upgrade"
+                    title={`Upgrade to ${activeOrganisation.plan === ApiOrganisationPlanChoices.Fr ? 'Pro' : 'Enterprise'}`}
                     buttonVariant="primary"
                     buttonContent={'Upgrade'}
                     onClose={() => {}}
                   >
                     <div className="space-y-4">
-                      <div className="text-neutral-500">Request an upgrade to your account.</div>
+                      <div className="text-neutral-500">
+                        Get access to all the features in Phase{' '}
+                        {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr
+                          ? 'Pro'
+                          : 'Enterprise'}
+                      </div>
                       {isCloudHosted() ? (
-                        <UpgradeRequestForm onSuccess={() => {}} />
+                        activeOrganisation.plan === ApiOrganisationPlanChoices.Pr ? (
+                          <UpgradeRequestForm onSuccess={() => {}} />
+                        ) : (
+                          <ProUpgradeDialog userCount={data.organisationPlan.userCount} />
+                        )
                       ) : (
                         <div>
                           Please contact us at{' '}
@@ -294,6 +314,10 @@ export const PlanInfo = () => {
           </div>
         </div>
       </div>
+
+      {searchParams?.get('stripe_session_id') && (
+        <PostCheckoutScreen stripeSessionId={searchParams.get('stripe_session_id')!} />
+      )}
     </div>
   )
 }
