@@ -55,7 +55,10 @@ export default function RootLayout({
       {activeOrganisation && <UnlockKeyringDialog organisation={activeOrganisation} />}
       {showNav && <NavBar team={params.team} />}
       {showNav && <Sidebar />}
-      <div className={clsx('min-h-screen overflow-auto', showNav && 'pt-16')}>{children}</div>
+      <div className="grid h-screen">
+        <div></div>
+        <div className={clsx('overflow-auto', showNav && 'mt-16')}>{children}</div>
+      </div>
     </div>
   )
 }

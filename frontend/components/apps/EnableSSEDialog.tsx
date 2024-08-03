@@ -29,7 +29,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
   const [enableSse, { loading }] = useMutation(InitAppSyncing)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
-  const activeUserIsAdmin = false //organisation ? userIsAdmin(organisation.role!) : false
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
