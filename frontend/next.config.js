@@ -1,13 +1,13 @@
 /** @type {import('next').NextConfig} */
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://session.phase.dev https://checkout.stripe.com https://*.js.stripe.com;
+  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://session.phase.dev https://checkout.stripe.com https://js.stripe.com https://*.js.stripe.com;
   style-src 'self' 'unsafe-inline';
   object-src 'none';
   base-uri 'self';
   connect-src 'self' data: http://127.0.0.1:* https://*.phase.dev https://phase.statuspage.io/api/v2/status.json https://checkout.stripe.com https://api.stripe.com; 
   font-src 'self';
-  frame-src 'self' https://checkout.stripe.com https://*.js.stripe.com https://hooks.stripe.com;
+  frame-src 'self' https://checkout.stripe.com https://*.js.stripe.com https://js.stripe.com https://hooks.stripe.com;
   img-src 'self' https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://secure.gravatar.com https://gitlab.com https://*.stripe.com; 
   manifest-src 'self';
   media-src 'self';
