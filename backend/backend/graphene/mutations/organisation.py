@@ -1,6 +1,6 @@
 from api.emails import send_invite_email, send_user_joined_email
 from api.utils.permissions import user_is_admin, user_is_org_member
-from ee.billing.stripe import create_stripe_customer, update_stripe_subscription_seats
+
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -49,6 +49,8 @@ class CreateOrganisationMutation(graphene.Mutation):
         )
 
         if settings.APP_HOST == "cloud":
+            from ee.billing.stripe import create_stripe_customer
+
             create_stripe_customer(org, owner.email)
 
         if settings.PHASE_LICENSE:
@@ -206,6 +208,8 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             invite.save()
 
             if settings.APP_HOST == "cloud":
+                from ee.billing.stripe import update_stripe_subscription_seats
+
                 update_stripe_subscription_seats(org)
 
             try:
@@ -235,6 +239,8 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
             org_member.delete()
 
             if settings.APP_HOST == "cloud":
+                from ee.billing.stripe import update_stripe_subscription_seats
+
                 update_stripe_subscription_seats(org_member.organisation)
 
             return DeleteOrganisationMemberMutation(ok=True)
