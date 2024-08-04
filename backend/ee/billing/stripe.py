@@ -13,8 +13,7 @@ def create_stripe_customer(organisation, email):
         email=email,
     )
     organisation.stripe_customer_id = stripe_customer.id
-    organisation.save()
-    stripe.Subscription.create(
+    subscription = stripe.Subscription.create(
         customer=stripe_customer.id,
         items=[
             {
@@ -22,6 +21,8 @@ def create_stripe_customer(organisation, email):
             }
         ],
     )
+    organisation.stripe_subscription_id = subscription.id
+    organisation.save()
 
 
 def update_stripe_subscription_seats(organisation):
