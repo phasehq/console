@@ -73,13 +73,12 @@ export const PostCheckoutScreen = ({ stripeSessionId }: { stripeSessionId: strin
                   </div>
 
                   <p className="text-lg font-semibold">
-                    Your subscription of Phase {planName} is now active!
+                    Your subscription of Phase Pro is now active!
                   </p>
                   <div></div>
 
                   <p className="text-neutral-500">
-                    Billing Period: {new Date(billingStartDate * 1000).toDateString()} to{' '}
-                    {new Date(billingEndDate * 1000).toDateString()}
+                    Renewal date: {new Date(billingEndDate * 1000).toLocaleDateString()}
                   </p>
                 </div>
               </Dialog.Panel>
