@@ -2,22 +2,13 @@ import ProgressBar from '@/components/common/ProgressBar'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { GetOrgLicense } from '@/graphql/queries/organisation/getOrganisationLicense.gql'
-import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
-import { useMutation, useQuery } from '@apollo/client'
-import { ReactNode, useContext, useEffect } from 'react'
+import { useQuery } from '@apollo/client'
+import { ReactNode, useContext } from 'react'
 import { PlanLabel } from './PlanLabel'
 import Spinner from '@/components/common/Spinner'
 import { calculatePercentage } from '@/utils/dataUnits'
 import { Button } from '@/components/common/Button'
-import {
-  FaCheckCircle,
-  FaCube,
-  FaCubes,
-  FaProjectDiagram,
-  FaTimesCircle,
-  FaUser,
-  FaUsersCog,
-} from 'react-icons/fa'
+import { FaCheckCircle, FaCube, FaCubes, FaTimesCircle, FaUser, FaUsersCog } from 'react-icons/fa'
 import Link from 'next/link'
 import GenericDialog from '@/components/common/GenericDialog'
 import { UpgradeRequestForm } from '@/components/forms/UpgradeRequestForm'
@@ -141,14 +132,6 @@ export const PlanInfo = () => {
     fetchPolicy: 'cache-and-network',
   })
 
-  // useEffect(() => {
-  //   const stripeSessionId = searchParams?.get('stripe_session_id')
-  //   if (stripeSessionId && activeOrganisation) {
-  //   }
-  // }, [activeOrganisation, searchParams])
-
-  //const { data: licenseData } = useQuery(GetLicenseData)
-
   const license = (): ActivatedPhaseLicenseType | null => licenseData?.organisationLicense || null
 
   const appQuotaUsage = data
@@ -195,6 +178,7 @@ export const PlanInfo = () => {
                     title={`Upgrade to ${activeOrganisation.plan === ApiOrganisationPlanChoices.Fr ? 'Pro' : 'Enterprise'}`}
                     buttonVariant="primary"
                     buttonContent={'Upgrade'}
+                    size="sm"
                     onClose={() => {}}
                   >
                     <div className="space-y-4">
