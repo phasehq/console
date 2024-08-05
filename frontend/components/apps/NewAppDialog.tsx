@@ -41,6 +41,7 @@ import {
   encryptAppSeed,
   getWrappedKeyShare,
 } from '@/utils/crypto'
+import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 
 const FREE_APP_LIMIT = 3
 const PRO_APP_LIMIT = 10
@@ -397,6 +398,20 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
       }
   }
 
+  if (!allowNewApp() && !createSuccess)
+    return (
+      <div className="flex items-center justify-center cursor-pointer w-full h-full group">
+        <UpsellDialog
+          buttonLabel={
+            <>
+              <FaPlus />
+              Create an App
+            </>
+          }
+        />
+      </div>
+    )
+
   return (
     <>
       <div
@@ -524,23 +539,6 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
                         </div>
                       </form>
                     ))}
-
-                  {!allowNewApp() && !createSuccess && (
-                    <div className="space-y-4 py-4">
-                      <p className="text-zinc-400">{planDisplay()?.description}</p>
-                      {isCloudHosted() ? (
-                        <UpgradeRequestForm onSuccess={closeModal} />
-                      ) : (
-                        <div>
-                          Please contact us at{' '}
-                          <a href="mailto:info@phase.dev" className="text-emerald-500">
-                            info@phase.dev
-                          </a>{' '}
-                          to request an upgrade.
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </Dialog.Panel>
               </Transition.Child>
             </div>

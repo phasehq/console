@@ -38,6 +38,7 @@ type Query {
   railwayProjects(credentialId: ID): [RailwayProjectType]
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
+  stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
 }
 
 type OrganisationType {
@@ -141,8 +142,8 @@ type ActivatedPhaseLicenseType {
   customerName: String!
   organisation: OrganisationType!
   plan: ApiActivatedPhaseLicensePlanChoices!
-  seats: Int!
-  tokens: Int!
+  seats: Int
+  tokens: Int
   metadata: JSONString!
   environment: String!
   licenseType: String!
@@ -597,6 +598,15 @@ type RailwayServiceType {
   name: String!
 }
 
+type StripeCheckoutDetails {
+  paymentStatus: String
+  customerEmail: String
+  billingStartDate: String
+  billingEndDate: String
+  subscriptionId: String
+  planName: String
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
@@ -646,6 +656,7 @@ type Mutation {
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation
+  createProUpgradeCheckoutSession(billingPeriod: String, organisationId: ID!): CreateProUpgradeCheckoutSession
 }
 
 type CreateOrganisationMutation {
@@ -892,4 +903,8 @@ input LockboxInput {
   data: JSONString
   allowedViews: Int
   expiry: BigInt
+}
+
+type CreateProUpgradeCheckoutSession {
+  clientSecret: String
 }

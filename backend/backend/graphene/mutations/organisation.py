@@ -48,6 +48,11 @@ class CreateOrganisationMutation(graphene.Mutation):
             wrapped_recovery=wrapped_recovery,
         )
 
+        if settings.APP_HOST == "cloud":
+            from ee.billing.stripe import create_stripe_customer
+
+            create_stripe_customer(org, owner.email)
+
         if settings.PHASE_LICENSE:
             from ee.license.utils import activate_license
 
@@ -202,6 +207,11 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             invite.valid = False
             invite.save()
 
+            if settings.APP_HOST == "cloud":
+                from ee.billing.stripe import update_stripe_subscription_seats
+
+                update_stripe_subscription_seats(org)
+
             try:
                 send_user_joined_email(invite, org_member)
             except Exception as e:
@@ -227,6 +237,11 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
 
         if user_is_admin(info.context.user.userId, org_member.organisation.id):
             org_member.delete()
+
+            if settings.APP_HOST == "cloud":
+                from ee.billing.stripe import update_stripe_subscription_seats
+
+                update_stripe_subscription_seats(org_member.organisation)
 
             return DeleteOrganisationMemberMutation(ok=True)
         else:

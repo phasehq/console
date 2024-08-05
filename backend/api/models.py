@@ -92,6 +92,8 @@ class Organisation(models.Model):
         choices=PLAN_TIERS,
         default=FREE_PLAN,
     )
+    stripe_customer_id = models.CharField(max_length=255, blank=True, null=True)
+    stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True)
     list_display = ("name", "identity_key", "id")
 
     def __str__(self):
@@ -107,8 +109,8 @@ class ActivatedPhaseLicense(models.Model):
         choices=Organisation.PLAN_TIERS,
         default=Organisation.ENTERPRISE_PLAN,
     )
-    seats = models.IntegerField()
-    tokens = models.IntegerField()
+    seats = models.IntegerField(null=True)
+    tokens = models.IntegerField(null=True)
     metadata = models.JSONField()
     environment = models.CharField(max_length=255)
     license_type = models.CharField(max_length=255)
