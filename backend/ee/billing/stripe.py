@@ -52,6 +52,7 @@ def update_stripe_subscription_seats(organisation):
                     "quantity": new_seat_count,
                 }
             ],
+            proration_behavior='always_invoice'
         )
         return updated_subscription
 
