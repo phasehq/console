@@ -74,10 +74,8 @@ const Sidebar = () => {
               </div>
               <FaChevronDown
                 className={clsx(
-                  'transition ease ',
-                  open
-                    ? 'rotate-180 text-zinc-800 dark:text-zinc-100'
-                    : 'rotate-0 group-hover:text-zinc-800 dark:group-hover:text-zinc-100'
+                  'transition ease opacity-0 group-hover:opacity-100 text-zinc-800 dark:text-zinc-100',
+                  open ? 'rotate-180 opacity-100' : 'rotate-0'
                 )}
               />
             </Menu.Button>
