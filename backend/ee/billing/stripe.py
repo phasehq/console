@@ -8,6 +8,8 @@ from django.conf import settings
 def create_stripe_customer(organisation, email):
     stripe.api_key = settings.STRIPE["secret_key"]
 
+    seats = get_organisation_seats(organisation)
+
     stripe_customer = stripe.Customer.create(
         name=organisation.name,
         email=email,
@@ -18,6 +20,7 @@ def create_stripe_customer(organisation, email):
         items=[
             {
                 "price": settings.STRIPE["prices"]["free"],
+                "quantity": seats,
             }
         ],
     )
@@ -52,7 +55,7 @@ def update_stripe_subscription_seats(organisation):
                     "quantity": new_seat_count,
                 }
             ],
-            proration_behavior='always_invoice'
+            proration_behavior="always_invoice",
         )
         return updated_subscription
 
