@@ -10,6 +10,7 @@ import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
 import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
+import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import {
@@ -18,6 +19,8 @@ import {
   AppType,
   ApiOrganisationMemberRoleChoices,
   EnvironmentType,
+  ApiActivatedPhaseLicensePlanChoices,
+  ApiOrganisationPlanChoices,
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -37,6 +40,8 @@ import { Alert } from '@/components/common/Alert'
 import { Input } from '@/components/common/Input'
 import CopyButton from '@/components/common/CopyButton'
 import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
+import { isCloudHosted } from '@/utils/appConfig'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -220,6 +225,20 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
 const InviteDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
 
+  const { activeOrganisation } = useContext(organisationContext)
+
+  const FREE_SEAT_LIMIT = 5
+
+  const { data } = useQuery(GetOrganisationPlan, {
+    variables: { organisationId },
+    fetchPolicy: 'cache-and-network',
+  })
+
+  const upsell =
+    isCloudHosted() &&
+    activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
+    data.organisationPlan.userCount === FREE_SEAT_LIMIT
+
   const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -274,6 +293,17 @@ const InviteDialog = (props: { organisationId: string }) => {
 
     setInviteLink(getInviteLink(data?.inviteOrganisationMember.invite.id))
   }
+
+  if (upsell)
+    return (
+      <UpsellDialog
+        buttonLabel={
+          <>
+            <FaPlus /> Add a member
+          </>
+        }
+      />
+    )
 
   return (
     <>

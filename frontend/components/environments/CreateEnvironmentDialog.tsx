@@ -15,6 +15,7 @@ import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import Spinner from '../common/Spinner'
 import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
+import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 
 export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -102,6 +103,19 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       </div>
     )
 
+  if (!allowNewEnv)
+    return (
+      <UpsellDialog
+        title="Upgrade to Pro to create custom environments"
+        buttonLabel={
+          <>
+            <FaPlus /> New Environment
+          </>
+        }
+        buttonVariant="outline"
+      />
+    )
+
   return (
     <GenericDialog
       title={allowNewEnv ? 'Create a new Environment' : planDisplay()?.dialogTitle || ''}
@@ -114,47 +128,30 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
         </div>
       }
     >
-      {allowNewEnv ? (
-        <form className="space-y-4 py-4" onSubmit={handleSubmit}>
-          <div>
-            <p className="text-neutral-500">Create a new Environment in this App</p>
-          </div>
-
-          <Alert variant="info" icon={true} size="sm">
-            All Organisation Admins will have accesss to this Environment.
-          </Alert>
-
-          <Input
-            value={sanitizeInput(name)}
-            setValue={setName}
-            label="Environment name"
-            required
-            maxLength={32}
-            data-autofocus
-          />
-
-          <div className="flex justify-end">
-            <Button type="submit" variant="primary" isLoading={loading}>
-              Create
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <div className="space-y-4 py-4">
-          <p className="text-zinc-400">{planDisplay()?.description}</p>
-          {isCloudHosted() ? (
-            <UpgradeRequestForm onSuccess={closeModal} />
-          ) : (
-            <div>
-              Please contact us at{' '}
-              <a href="mailto:info@phase.dev" className="text-emerald-500">
-                info@phase.dev
-              </a>{' '}
-              to request an upgrade.
-            </div>
-          )}
+      <form className="space-y-4 py-4" onSubmit={handleSubmit}>
+        <div>
+          <p className="text-neutral-500">Create a new Environment in this App</p>
         </div>
-      )}
+
+        <Alert variant="info" icon={true} size="sm">
+          All Organisation Admins will have accesss to this Environment.
+        </Alert>
+
+        <Input
+          value={sanitizeInput(name)}
+          setValue={setName}
+          label="Environment name"
+          required
+          maxLength={32}
+          data-autofocus
+        />
+
+        <div className="flex justify-end">
+          <Button type="submit" variant="primary" isLoading={loading}>
+            Create
+          </Button>
+        </div>
+      </form>
     </GenericDialog>
   )
 }

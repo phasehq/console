@@ -20,6 +20,7 @@ import Link from 'next/link'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
+import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -106,6 +107,21 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     toast.success('Environment deleted!')
     closeModal()
   }
+
+  if (!allowDelete)
+    return (
+      <div className="flex justify-end pt-4">
+        <UpsellDialog
+          title="Upgrade to Pro to customize environments"
+          buttonLabel={
+            <>
+              <FaTrash /> Delete
+            </>
+          }
+          buttonVariant="danger"
+        />
+      </div>
+    )
   return (
     <div className="space-y-4 pt-4">
       <div>
@@ -148,7 +164,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                 <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      {allowDelete ? `Delete ${props.environment.name}` : planDisplay.dialogTitle}
+                      Delete {props.environment.name}
                     </h3>
 
                     <Button variant="text" onClick={closeModal}>
@@ -156,55 +172,38 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                     </Button>
                   </Dialog.Title>
 
-                  {allowDelete ? (
-                    <div className="space-y-6 py-4">
-                      <p className="text-neutral-500">
-                        Are you sure you want to delete this environment?
+                  <div className="space-y-6 py-4">
+                    <p className="text-neutral-500">
+                      Are you sure you want to delete this environment?
+                    </p>
+                    <Alert variant="danger" size="sm">
+                      Deleting this Environment will permanently delete all Secrets and Integrations
+                      associated with it. This action cannot be undone!
+                    </Alert>
+                    <div>
+                      <p className="text-zinc-900 dark:text-zinc-100">
+                        Type{' '}
+                        <span className="font-semibold pointer-events-none text-red-500">
+                          {props.environment.name}
+                        </span>{' '}
+                        to confirm.
                       </p>
-                      <Alert variant="danger" size="sm">
-                        Deleting this Environment will permanently delete all Secrets and
-                        Integrations associated with it. This action cannot be undone!
-                      </Alert>
-                      <div>
-                        <p className="text-zinc-900 dark:text-zinc-100">
-                          Type{' '}
-                          <span className="font-semibold pointer-events-none text-red-500">
-                            {props.environment.name}
-                          </span>{' '}
-                          to confirm.
-                        </p>
-                        <Input value={name} setValue={setName} label="Environment name" required />
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <Button variant="secondary" type="button" onClick={closeModal}>
-                          Cancel
-                        </Button>
-                        <Button
-                          variant="danger"
-                          onClick={handleDelete}
-                          isLoading={loading}
-                          disabled={name !== props.environment?.name}
-                        >
-                          <FaTrash /> Delete
-                        </Button>
-                      </div>
+                      <Input value={name} setValue={setName} label="Environment name" required />
                     </div>
-                  ) : (
-                    <div className="space-y-4 py-4">
-                      <p className="text-zinc-400">{planDisplay.description}</p>
-                      {isCloudHosted() ? (
-                        <UpgradeRequestForm onSuccess={closeModal} />
-                      ) : (
-                        <div>
-                          Please contact us at{' '}
-                          <a href="mailto:info@phase.dev" className="text-emerald-500">
-                            info@phase.dev
-                          </a>{' '}
-                          to request an upgrade.
-                        </div>
-                      )}
+                    <div className="flex items-center justify-between gap-4">
+                      <Button variant="secondary" type="button" onClick={closeModal}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={handleDelete}
+                        isLoading={loading}
+                        disabled={name !== props.environment?.name}
+                      >
+                        <FaTrash /> Delete
+                      </Button>
                     </div>
-                  )}
+                  </div>
                 </Dialog.Panel>
               </Transition.Child>
             </div>

@@ -21,6 +21,7 @@ import { FaKey } from 'react-icons/fa6'
 import { ProUpgradeDialog } from '@/ee/billing/ProUpgradeDialog'
 import { useSearchParams } from 'next/navigation'
 import { PostCheckoutScreen } from '@/ee/billing/PostCheckoutScreen'
+import { UpsellDialog } from './UpsellDialog'
 
 const plansInfo = {
   FR: {
@@ -174,37 +175,7 @@ export const PlanInfo = () => {
                       <div className="whitespace-nowrap">Compare plans</div>
                     </Button>
                   </Link>
-                  <GenericDialog
-                    title={`Upgrade to ${activeOrganisation.plan === ApiOrganisationPlanChoices.Fr ? 'Pro' : 'Enterprise'}`}
-                    buttonVariant="primary"
-                    buttonContent={'Upgrade'}
-                    size="sm"
-                    onClose={() => {}}
-                  >
-                    <div className="space-y-4">
-                      <div className="text-neutral-500">
-                        Get access to all the features in Phase{' '}
-                        {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr
-                          ? 'Pro'
-                          : 'Enterprise'}
-                      </div>
-                      {isCloudHosted() ? (
-                        activeOrganisation.plan === ApiOrganisationPlanChoices.Pr ? (
-                          <UpgradeRequestForm onSuccess={() => {}} />
-                        ) : (
-                          <ProUpgradeDialog userCount={data.organisationPlan.userCount} />
-                        )
-                      ) : (
-                        <div>
-                          Please contact us at{' '}
-                          <a href="mailto:info@phase.dev" className="text-emerald-500">
-                            info@phase.dev
-                          </a>{' '}
-                          to request an upgrade.
-                        </div>
-                      )}
-                    </div>
-                  </GenericDialog>
+                  <UpsellDialog />
                 </div>
               )}
             </div>
