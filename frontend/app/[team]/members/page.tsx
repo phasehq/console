@@ -672,7 +672,7 @@ export default function Members({ params }: { params: { team: string } }) {
   }
 
   return (
-    <section className="h-screen overflow-y-auto">
+    <section className="overflow-y-auto">
       <div className="w-full space-y-10 p-8 text-black dark:text-white">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold">{params.team} Members</h1>
