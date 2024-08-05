@@ -19,6 +19,7 @@ import { Fragment, useContext } from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
+import { PlanLabel } from '../settings/organisation/PlanLabel'
 
 export type SidebarLinkT = {
   name: string
@@ -61,11 +62,23 @@ const Sidebar = () => {
           <>
             <Menu.Button
               as="div"
-              className="p-2 text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer flex items-center justify-between w-full"
+              className="p-2 text-neutral-500 cursor-pointer flex items-center justify-between w-full group"
             >
-              <span className="truncate">{activeOrganisation?.name}</span>
+              <div className="flex flex-col gap-0.5">
+                <div>
+                  <PlanLabel plan={activeOrganisation?.plan!} />
+                </div>
+                <span className="truncate font-semibold tracking-wider text-lg">
+                  {activeOrganisation?.name}{' '}
+                </span>
+              </div>
               <FaChevronDown
-                className={clsx('transition ease', open ? 'rotate-180' : 'rotate-0')}
+                className={clsx(
+                  'transition ease ',
+                  open
+                    ? 'rotate-180 text-zinc-800 dark:text-zinc-100'
+                    : 'rotate-0 group-hover:text-zinc-800 dark:group-hover:text-zinc-100'
+                )}
               />
             </Menu.Button>
             <Transition
@@ -77,7 +90,7 @@ const Sidebar = () => {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute z-10 -right-2 top-12 mt-2 w-56 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+              <Menu.Items className="absolute z-10 left-0 shadow-2xl top-16 mt-2 w-64 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
                 {showOrgsMenu ? (
                   <div className="px-1 py-1">
                     {organisations?.map((org: OrganisationType) => (
@@ -88,11 +101,18 @@ const Sidebar = () => {
                               title={`Switch to ${org.name}`}
                               className={`${
                                 active
-                                  ? 'hover:text-emerald-500 dark:text-white dark:hover:text-emerald-500'
-                                  : 'text-gray-900 dark:text-white dark:hover:text-emerald-500'
-                              } group flex w-full  gap-2 items-center justify-between rounded-md px-2 py-2 text-base font-medium`}
+                                  ? 'hover:text-zinc-900  dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                                  : 'text-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-500'
+                              } group flex w-full gap-2 items-center justify-between px-2 py-2 border-b border-neutral-500/20`}
                             >
-                              <span className="truncate w-[80%] text-left">{org.name}</span>
+                              <div className="flex flex-col gap-0.5 w-full">
+                                <div>
+                                  <PlanLabel plan={org?.plan!} />
+                                </div>
+                                <span className="truncate w-[80%] text-left font-medium text-base">
+                                  {org.name}
+                                </span>
+                              </div>
                               <FaExchangeAlt />
                             </div>
                           </Link>
