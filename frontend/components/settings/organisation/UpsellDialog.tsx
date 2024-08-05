@@ -50,10 +50,19 @@ export const UpsellDialog = ({
             <ProUpgradeDialog userCount={data.organisationPlan.userCount} />
           )
         ) : (
-          <div>
+          <div className="text-zinc-900 dark:text-zinc-100">
             Please contact us at{' '}
-            <a href="mailto:info@phase.dev" className="text-emerald-500">
+            <a href="mailto:info@phase.dev" className="text-emerald-500 hover:text-emerald-600">
               info@phase.dev
+            </a>{' '}
+            or get in touch via{' '}
+            <a
+              href="https://slack.phase.dev"
+              className="text-emerald-500 hover:text-emerald-600"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Slack
             </a>{' '}
             to request an upgrade.
           </div>
