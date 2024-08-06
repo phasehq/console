@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Fragment, useContext } from 'react'
-import { OrganisationType } from '@/apollo/graphql'
+import { ApiOrganisationMemberRoleChoices, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
@@ -55,6 +55,8 @@ const Sidebar = () => {
 
   const showOrgsMenu = organisations === null ? false : organisations?.length > 1
 
+  const isOwner = organisations?.some((org) => org.role?.toLowerCase() === 'owner')
+
   const OrgsMenu = () => {
     return (
       <Menu as="div" className="relative inline-block text-left ">
@@ -62,7 +64,7 @@ const Sidebar = () => {
           <>
             <Menu.Button
               as="div"
-              className="p-2 text-neutral-500 cursor-pointer flex items-center justify-between w-full group"
+              className="p-2 text-neutral-500 cursor-pointer flex items-center justify-between w-full group bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10 rounded-lg"
             >
               <div className="flex flex-col gap-0.5">
                 <div>
@@ -119,13 +121,15 @@ const Sidebar = () => {
                     ))}
                   </div>
                 ) : null}
-                <div className="py-3 px-1 flex justify-center">
-                  <Link href="/signup">
-                    <Button variant="secondary">
-                      <FaPlus /> Create New Organisation
-                    </Button>
-                  </Link>
-                </div>
+                {!isOwner && (
+                  <div className="py-3 px-1 flex justify-center">
+                    <Link href="/signup">
+                      <Button variant="secondary">
+                        <FaPlus /> Create New Organisation
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </Menu.Items>
             </Transition>
           </>
