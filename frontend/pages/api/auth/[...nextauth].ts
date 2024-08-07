@@ -145,5 +145,12 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
 }
 
 // eslint-disable-next-line import/no-anonymous-default-export
-export default (req: NextApiRequest, res: NextApiResponse) =>
-  NextAuth(req, res, authOptions(req, res))
+export default async function auth(req: NextApiRequest, res: NextApiResponse) {
+  // Exclude /health from authentication
+  if (req.url === '/api/health') {
+    res.status(200).json({status: 'alive'})
+    return
+  }
+
+  return await NextAuth(req, res, authOptions(req, res))
+}
