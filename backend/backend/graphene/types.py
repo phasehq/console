@@ -226,7 +226,7 @@ class EnvironmentType(DjangoObjectType):
         return [
             env_key.user
             for env_key in EnvironmentKey.objects.filter(
-                environment=self, deleted_at=None
+                environment=self, deleted_at=None, user__deleted_at=None
             )
         ]
 
