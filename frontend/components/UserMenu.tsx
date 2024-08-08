@@ -39,28 +39,26 @@ export default function UserMenu() {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute z-10 -right-2 top-12 mt-2 w-72 origin-bottom-left divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+          <Menu.Items className="absolute z-20 -right-2 top-12 mt-2 w-72 origin-bottom-left divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
             <Menu.Item>
               <div className="py-4 flex items-start gap-2 p-2">
                 <div className="py-1.5">
                   <Avatar imagePath={session?.user?.image!} size="md" />
                 </div>
-                <div className="flex flex-col gap-1 flex-grow min-w-0">
+                <div className="flex flex-col flex-grow min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                       {session?.user?.name}
                     </span>
-                    {activeOrganisation && (
-                      <RoleLabel role={activeOrganisation?.role!} />
-                    )}
                   </div>
-                  <span className="text-neutral-500 text-2xs truncate">
-                    {session?.user?.email}
-                  </span>
+                  <span className="text-neutral-500 text-2xs truncate">{session?.user?.email}</span>
                   {activeOrganisation && (
-                    <span className="text-neutral-500 text-2xs truncate">
-                      {activeOrganisation?.name}
-                    </span>
+                    <div className="flex items-center gap-1 text-2xs pt-1">
+                      {activeOrganisation && <RoleLabel role={activeOrganisation?.role!} />} @{' '}
+                      <span className="text-zinc-900 dark:text-zinc-100  truncate">
+                        {activeOrganisation?.name}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
