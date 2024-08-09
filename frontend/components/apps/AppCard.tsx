@@ -5,6 +5,7 @@ import { AppType } from '@/apollo/graphql'
 import { ProviderIcon } from '../syncing/ProviderIcon'
 import { Avatar } from '../common/Avatar'
 import { BsListColumnsReverse } from 'react-icons/bs'
+import { EncryptionModeIndicator } from './EncryptionModeIndicator'
 
 interface AppCardProps {
   app: AppType
@@ -40,7 +41,7 @@ export const AppCard = (props: AppCardProps) => {
       <div className="rounded-xl p-4 flex flex-col w-full gap-10 justify-between">
         <div className="space-y-1">
           <div className="text-2xl font-semibold flex items-center gap-2 text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease">
-            {name}
+            {name} <EncryptionModeIndicator app={props.app} />
           </div>
           <div className="text-2xs font-mono text-neutral-500 w-full break-all text-left">{id}</div>
         </div>
