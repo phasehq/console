@@ -51,7 +51,7 @@ export const AppCard = (props: AppCardProps) => {
               <FaUsers />
               <span className="font-light">{members.length}</span>
             </div>
-            <span className="text-neutral-500 font-medium text-xs uppercase tracking-widest">
+            <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
               {members.length > 1 ? 'Members' : 'Member'}
             </span>
             <div className="flex items-center gap-1 text-base">
@@ -69,7 +69,7 @@ export const AppCard = (props: AppCardProps) => {
               <BsListColumnsReverse />
               <span className="font-light">{environments.length}</span>
             </div>
-            <span className="text-neutral-500 font-medium text-xs uppercase tracking-widest">
+            <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
               {environments.length > 1 ? 'Environments' : 'Environment'}
             </span>
             <div className="flex items-center gap-1 text-base">
@@ -90,7 +90,7 @@ export const AppCard = (props: AppCardProps) => {
                 <FaProjectDiagram />
                 <span className="font-light">{totalSyncCount}</span>
               </div>
-              <span className="text-neutral-500 font-medium text-xs uppercase tracking-widest">
+              <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
                 {totalSyncCount > 1 ? 'Integrations' : 'Integration'}
               </span>
               <div className="flex items-center gap-2 text-base">
