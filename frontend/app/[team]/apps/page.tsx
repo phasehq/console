@@ -35,7 +35,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
           </Link>
         ))}
         {organisation && apps && (
-          <div className="bg-zinc-100 dark:bg-neutral-800 opacity-80 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl flex flex-col gap-y-20 min-h-[252px]">
+          <div className="bg-zinc-100 dark:bg-neutral-800 opacity-80 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl flex flex-col gap-y-20 min-h-60">
             <NewAppDialog organisation={organisation} appCount={apps.length} />
           </div>
         )}
