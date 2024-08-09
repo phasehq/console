@@ -56,7 +56,7 @@ export const AppCard = (props: AppCardProps) => {
             </span>
             <div className="flex items-center gap-1 text-base">
               {members.slice(0, 5).map((member) => (
-                <Avatar imagePath={member?.avatarUrl} size="sm" />
+                <Avatar key={member!.id} imagePath={member!.avatarUrl} size="sm" />
               ))}
               {surplusMemberCount > 0 && (
                 <span className="text-neutral-500 text-xs">+{surplusMemberCount}</span>
@@ -74,7 +74,10 @@ export const AppCard = (props: AppCardProps) => {
             </span>
             <div className="flex items-center gap-1 text-base">
               {environments.slice(0, 5).map((env) => (
-                <div className="bg-neutral-400/10 ring-1 inset-inset ring-neutral-400/20 rounded-full px-2 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold">
+                <div
+                  key={env!.id}
+                  className="bg-neutral-400/10 ring-1 inset-inset ring-neutral-400/20 rounded-full px-2 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold"
+                >
                   {env!.name.slice(0, 1)}
                 </div>
               ))}
