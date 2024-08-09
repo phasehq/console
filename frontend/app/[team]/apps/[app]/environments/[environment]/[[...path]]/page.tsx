@@ -55,8 +55,10 @@ import {
   EnvKeyring,
 } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
+import { SortOption, sortSecrets } from '@/utils/secrets'
+import SortMenu from '@/components/environments/secrets/SortMenu'
 
-export default function Environment({
+export default function EnvironmentPath({
   params,
 }: {
   params: { team: string; app: string; environment: string; path?: string[] }
@@ -75,6 +77,8 @@ export default function Environment({
   const [isLoading, setIsloading] = useState(false)
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
+
+  const [sort, setSort] = useState<SortOption>('-created')
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -487,6 +491,8 @@ export default function Environment({
           return searchRegex.test(secret.key)
         })
 
+  const filteredAndSortedSecrets = sortSecrets(filteredSecrets, sort)
+
   const cannonicalSecret = (id: string) => secrets.find((secret) => secret.id === id)
 
   const downloadEnvFile = () => {
@@ -659,7 +665,7 @@ export default function Environment({
       return (
         <div className="flex flex-wrap">
           <Link href={basePath} className="p-2 flex items-center gap-2 font-light">
-          <FaHome className="group-hover:text-white" />
+            <FaHome className="group-hover:text-white" />
             <span className="text-xl text-neutral-500 ">~/</span>
           </Link>
         </div>
@@ -673,10 +679,10 @@ export default function Environment({
           href={basePath}
           className="p-2 flex items-center gap-2 font-light text-neutral-500 group"
         >
-        <FaHome className="group-hover:text-white" />
+          <FaHome className="group-hover:text-white" />
           <span className="text-xl group-hover:text-white">~/</span>
         </Link>
-                {/* Map over path segments */}
+        {/* Map over path segments */}
         {path.map((segment, index) => {
           // Construct the href for each segment
           const href = `${basePath}/${path.slice(0, index + 1).join('/')}`
@@ -699,17 +705,17 @@ export default function Environment({
           )
         })}
         {
-<div className="px-4">
-  <Link
-    href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
-    title="Go up one level"
-  >
-    <Button variant="secondary">
-      <MdKeyboardReturn className="shrink-0" />
-        <span className="ml-2">Go Back</span>
-    </Button>
-  </Link>
-</div>
+          <div className="px-4">
+            <Link
+              href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
+              title="Go up one level"
+            >
+              <Button variant="secondary">
+                <MdKeyboardReturn className="shrink-0" />
+                <span className="ml-2">Go Back</span>
+              </Button>
+            </Link>
+          </div>
         }
       </div>
     )
@@ -803,34 +809,41 @@ export default function Environment({
           </div>
 
           <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
-            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-              <div className="">
-                <FaSearch className="text-neutral-500" />
+            <div className="flex items-center gap-4">
+              <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+                <div className="">
+                  <FaSearch className="text-neutral-500" />
+                </div>
+                <input
+                  placeholder="Search"
+                  className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <FaTimesCircle
+                  className={clsx(
+                    'cursor-pointer text-neutral-500 transition-opacity ease',
+                    searchQuery
+                      ? 'opacity-100 pointer-events-auto'
+                      : 'opacity-0 pointer-events-none'
+                  )}
+                  role="button"
+                  onClick={() => setSearchQuery('')}
+                />
               </div>
-              <input
-                placeholder="Search"
-                className="custom bg-zinc-100 dark:bg-zinc-800"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <FaTimesCircle
-                className={clsx(
-                  'cursor-pointer text-neutral-500 transition-opacity ease',
-                  searchQuery ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                )}
-                role="button"
-                onClick={() => setSearchQuery('')}
-              />
+              <div>
+                <SortMenu sort={sort} setSort={setSort} />
+              </div>
             </div>
             <div className="flex gap-2 items-center">
-            {unsavedChanges && (
-            <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-              <span className="px-2 py-1">
-                <FaUndo className="text-lg" />
-              </span>
-              <span>Discard changes</span>
-            </Button>
-            )}
+              {unsavedChanges && (
+                <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
+                  <span className="px-2 py-1">
+                    <FaUndo className="text-lg" />
+                  </span>
+                  <span>Discard changes</span>
+                </Button>
+              )}
 
               {data.envSyncs && (
                 <div>
@@ -892,7 +905,7 @@ export default function Environment({
               ))}
 
             {organisation &&
-              filteredSecrets.map((secret, index: number) => (
+              filteredAndSortedSecrets.map((secret, index: number) => (
                 <div
                   ref={secretToHighlight === secret.id ? highlightedRef : null}
                   className={clsx(
@@ -916,7 +929,7 @@ export default function Environment({
                 </div>
               ))}
 
-            {filteredSecrets.length === 0 && filteredFolders.length === 0 && (
+            {filteredAndSortedSecrets.length === 0 && filteredFolders.length === 0 && (
               <EmptyState
                 title={searchQuery ? `No results for "${searchQuery}"` : 'No secrets here'}
                 subtitle="Add secrets or folders here to get started"
