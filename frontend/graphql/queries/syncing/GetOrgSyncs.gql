@@ -55,5 +55,24 @@ query GetOrganisationSyncs($orgId: ID!) {
     identityKey
     createdAt
     sseEnabled
+    members {
+      id
+    }
+    environments {
+      id
+      name
+      syncs {
+        id
+        serviceInfo {
+          id
+          name
+          provider {
+            id
+            name
+          }
+        }
+        status
+      }
+    }
   }
 }
