@@ -8,7 +8,7 @@ interface GenericDialogProps {
   title: string
   onClose: () => void
   children: ReactNode
-  buttonVariant: 'primary' | 'secondary' | 'danger' | 'outline'
+  buttonVariant: 'primary' | 'secondary' | 'danger' | 'outline' | ''
   buttonContent: ReactNode
   size?: 'lg' | 'md' | 'sm'
 }
