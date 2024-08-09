@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Fragment, useContext } from 'react'
-import { ApiOrganisationMemberRoleChoices, OrganisationType } from '@/apollo/graphql'
+import { OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
@@ -59,14 +59,14 @@ const Sidebar = () => {
 
   const OrgsMenu = () => {
     return (
-      <Menu as="div" className="relative inline-block text-left ">
+      <Menu as="div" className="relative inline-block text-left w-full">
         {({ open }) => (
           <>
             <Menu.Button
               as="div"
               className="p-2 text-neutral-500 cursor-pointer flex items-center justify-between w-full group bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10 rounded-lg"
             >
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-0.5 min-w-0">
                 <div>
                   <PlanLabel plan={activeOrganisation?.plan!} />
                 </div>
@@ -76,7 +76,7 @@ const Sidebar = () => {
               </div>
               <FaChevronDown
                 className={clsx(
-                  'transition ease opacity-0 group-hover:opacity-100 text-zinc-800 dark:text-zinc-100',
+                  'transition ease opacity-0 group-hover:opacity-100 text-zinc-800 dark:text-zinc-100 flex-shrink-0 ml-2',
                   open ? 'rotate-180 opacity-100' : 'rotate-0'
                 )}
               />
@@ -101,19 +101,19 @@ const Sidebar = () => {
                               title={`Switch to ${org.name}`}
                               className={`${
                                 active
-                                  ? 'hover:text-zinc-900  dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                                  ? 'hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-neutral-700'
                                   : 'text-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-500'
                               } group flex w-full gap-2 items-center justify-between px-2 py-2 border-b border-neutral-500/20`}
                             >
-                              <div className="flex flex-col gap-0.5 w-full">
+                              <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
                                 <div>
                                   <PlanLabel plan={org?.plan!} />
                                 </div>
-                                <span className="truncate w-[80%] text-left font-medium text-base">
+                                <span className="truncate text-left font-medium text-base">
                                   {org.name}
                                 </span>
                               </div>
-                              <FaExchangeAlt />
+                              <FaExchangeAlt className="flex-shrink-0" />
                             </div>
                           </Link>
                         )}
