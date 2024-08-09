@@ -176,10 +176,66 @@ class OrganisationMemberInviteType(DjangoObjectType):
         )
 
 
+class ProviderType(graphene.ObjectType):
+    id = graphene.String(required=True)
+    name = graphene.String(required=True)
+    expected_credentials = graphene.List(
+        graphene.NonNull(graphene.String), required=True
+    )
+    optional_credentials = graphene.List(
+        graphene.NonNull(graphene.String), required=True
+    )
+    auth_scheme = graphene.String()
+
+
+class ServiceType(ObjectType):
+    id = graphene.String()
+    name = graphene.String()
+    resource_type = graphene.String()
+    provider = graphene.Field(ProviderType)
+
+
+class EnvironmentSyncEventType(DjangoObjectType):
+    class Meta:
+        model = EnvironmentSyncEvent
+        fields = ("id", "env_sync", "status", "created_at", "completed_at", "meta")
+
+
+class EnvironmentSyncType(DjangoObjectType):
+    service_info = graphene.Field(ServiceType)
+    history = graphene.List(NonNull(EnvironmentSyncEventType), required=True)
+
+    class Meta:
+        model = EnvironmentSync
+        fields = (
+            "id",
+            "environment",
+            "path",
+            "service_info",
+            "options",
+            "is_active",
+            "created_at",
+            "last_sync",
+            "status",
+            "authentication",
+            "history",
+        )
+
+    def resolve_service_info(self, info):
+        service_config = ServiceConfig.get_service_config(self.service.lower())
+        return service_config
+
+    def resolve_history(self, info):
+        return EnvironmentSyncEvent.objects.filter(env_sync=self).order_by(
+            "-created_at"
+        )
+
+
 class EnvironmentType(DjangoObjectType):
     folder_count = graphene.Int()
     secret_count = graphene.Int()
-    members = graphene.List(OrganisationMemberType)
+    members = graphene.NonNull(graphene.List(OrganisationMemberType))
+    syncs = graphene.NonNull(graphene.List(EnvironmentSyncType))
 
     class Meta:
         model = Environment
@@ -230,10 +286,14 @@ class EnvironmentType(DjangoObjectType):
             )
         ]
 
+    def resolve_syncs(self, info):
+        return EnvironmentSync.objects.filter(environment=self)
+
 
 class AppType(DjangoObjectType):
     sse_enabled = graphene.Boolean()
-    environments = graphene.List(EnvironmentType)
+    environments = graphene.NonNull(graphene.List(EnvironmentType))
+    members = graphene.NonNull(graphene.List(OrganisationMemberType))
 
     class Meta:
         model = App
@@ -268,6 +328,9 @@ class AppType(DjangoObjectType):
                 user=org_member, environment_id=app_env.id
             ).exists()
         ]
+
+    def resolve_members(self, info):
+        return self.members.filter(deleted_at=None)
 
 
 class EnvironmentKeyType(DjangoObjectType):
@@ -312,25 +375,6 @@ class EnvironmentTokenType(DjangoObjectType):
         )
 
 
-class ProviderType(graphene.ObjectType):
-    id = graphene.String(required=True)
-    name = graphene.String(required=True)
-    expected_credentials = graphene.List(
-        graphene.NonNull(graphene.String), required=True
-    )
-    optional_credentials = graphene.List(
-        graphene.NonNull(graphene.String), required=True
-    )
-    auth_scheme = graphene.String()
-
-
-class ServiceType(ObjectType):
-    id = graphene.String()
-    name = graphene.String()
-    resource_type = graphene.String()
-    provider = graphene.Field(ProviderType)
-
-
 class ProviderCredentialsType(DjangoObjectType):
     sync_count = graphene.Int()
     provider = graphene.Field(ProviderType)
@@ -357,42 +401,6 @@ class ProviderCredentialsType(DjangoObjectType):
 
     def resolve_credentials(self, info):
         return get_credentials(self.id)
-
-
-class EnvironmentSyncEventType(DjangoObjectType):
-    class Meta:
-        model = EnvironmentSyncEvent
-        fields = ("id", "env_sync", "status", "created_at", "completed_at", "meta")
-
-
-class EnvironmentSyncType(DjangoObjectType):
-    service_info = graphene.Field(ServiceType)
-    history = graphene.List(NonNull(EnvironmentSyncEventType), required=True)
-
-    class Meta:
-        model = EnvironmentSync
-        fields = (
-            "id",
-            "environment",
-            "path",
-            "service_info",
-            "options",
-            "is_active",
-            "created_at",
-            "last_sync",
-            "status",
-            "authentication",
-            "history",
-        )
-
-    def resolve_service_info(self, info):
-        service_config = ServiceConfig.get_service_config(self.service.lower())
-        return service_config
-
-    def resolve_history(self, info):
-        return EnvironmentSyncEvent.objects.filter(env_sync=self).order_by(
-            "-created_at"
-        )
 
 
 class UserTokenType(DjangoObjectType):
