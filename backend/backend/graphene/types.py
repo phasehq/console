@@ -319,7 +319,7 @@ class AppType(DjangoObjectType):
             deleted_at=None,
         )
 
-        app_environments = Environment.objects.filter(app=self)
+        app_environments = Environment.objects.filter(app=self).order_by("index")
 
         return [
             app_env
