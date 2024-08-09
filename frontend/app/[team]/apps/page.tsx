@@ -28,7 +28,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
       style={{ height: 'calc(100vh - 64px)' }}
     >
       <h1 className="text-3xl font-bold capitalize col-span-4">Apps</h1>
-      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-8">
         {apps?.map((app) => (
           <Link href={`/${params.team}/apps/${app.id}`} key={app.id}>
             <AppCard app={app} />
