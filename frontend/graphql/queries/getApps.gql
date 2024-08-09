@@ -7,21 +7,14 @@ query GetApps($organisationId: ID!, $appId: ID) {
     sseEnabled
     members {
       id
-      identityKey
       email
       fullName
       avatarUrl
-      createdAt
-      role
     }
     environments {
       id
       name
       envType
-      identityKey
-      wrappedSeed
-      wrappedSalt
-      createdAt
       syncs {
         id
         serviceInfo {
