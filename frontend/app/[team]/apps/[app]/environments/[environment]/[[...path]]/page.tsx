@@ -742,7 +742,7 @@ export default function EnvironmentPath({
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
-        <div className="flex flex-col py-4 gap-4">
+        <div className="flex flex-col py-4 bg-zinc-200 dark:bg-zinc-900">
           <div className="flex items-center gap-8">
             {envLinks.length > 1 ? (
               <Menu as="div" className="relative group">
@@ -808,7 +808,7 @@ export default function EnvironmentPath({
             )}
           </div>
 
-          <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 pb-4">
+          <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4 sticky top-0 z-20 bg-zinc-200 dark:bg-zinc-900 backdrop-blur-md">
             <div className="flex items-center gap-4">
               <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
                 <div className="">
@@ -831,7 +831,7 @@ export default function EnvironmentPath({
                   onClick={() => setSearchQuery('')}
                 />
               </div>
-              <div>
+              <div className="relative z-20">
                 <SortMenu sort={sort} setSort={setSort} />
               </div>
             </div>
@@ -865,7 +865,7 @@ export default function EnvironmentPath({
           </div>
           <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
             {(updatedSecrets.length > 0 || folders.length > 0) && (
-              <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
+              <div className="flex items-center w-full sticky top-16 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
                 <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
                 </div>
