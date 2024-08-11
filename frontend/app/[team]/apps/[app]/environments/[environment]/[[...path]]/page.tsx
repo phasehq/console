@@ -4,9 +4,7 @@ import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/ap
 import { KeyringContext } from '@/contexts/keyringContext'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { GetFolders } from '@/graphql/queries/secrets/getFolders.gql'
-import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
-import { UpdateSecret } from '@/graphql/mutations/environments/editSecret.gql'
-import { DeleteSecretOp } from '@/graphql/mutations/environments/deleteSecret.gql'
+import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
@@ -69,8 +67,9 @@ export default function Environment({
   const highlightedRef = useRef<HTMLDivElement>(null)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
-  const [secrets, setSecrets] = useState<SecretType[]>([])
-  const [updatedSecrets, updateSecrets] = useState<SecretType[]>([])
+  const [serverSecrets, setServerSecrets] = useState<SecretType[]>([])
+  const [clientSecrets, setClientSecrets] = useState<SecretType[]>([])
+  const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isLoading, setIsloading] = useState(false)
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
@@ -83,7 +82,7 @@ export default function Environment({
   const secretPath = params.path ? `/${params.path.join('/')}` : '/'
 
   const logGlobalReveals = async () => {
-    await readSecrets({ variables: { ids: secrets.map((secret) => secret.id) } })
+    await readSecrets({ variables: { ids: serverSecrets.map((secret) => secret.id) } })
   }
 
   const toggleGlobalReveal = () => {
@@ -97,19 +96,20 @@ export default function Environment({
 
   useEffect(() => {
     // 2. Scroll into view when secretToHighlight changes
-    if (highlightedRef.current && secrets.length > 0) {
+    if (highlightedRef.current && serverSecrets.length > 0) {
       highlightedRef.current.scrollIntoView({
         behavior: 'smooth',
         block: 'nearest',
         inline: 'nearest',
       })
     }
-  }, [secretToHighlight, secrets])
+  }, [secretToHighlight, serverSecrets])
 
   const unsavedChanges =
-    secrets.length !== updatedSecrets.length ||
-    secrets.some((secret, index) => {
-      const updatedSecret = updatedSecrets[index]
+    serverSecrets.length !== clientSecrets.length ||
+    secretsToDelete.length > 0 ||
+    serverSecrets.some((secret, index) => {
+      const updatedSecret = clientSecrets[index]
 
       // Compare secret properties (comment, key, tags, value)
       return (
@@ -139,9 +139,7 @@ export default function Environment({
 
   const savingAndFetching = isLoading || loading
 
-  const [createSecret] = useMutation(CreateNewSecret)
-  const [updateSecret] = useMutation(UpdateSecret)
-  const [deleteSecret] = useMutation(DeleteSecretOp)
+  const [bulkProcessSecrets] = useMutation(BulkProcessSecrets)
 
   const [createFolder] = useMutation(CreateNewSecretFolder)
   const [deleteFolder] = useMutation(DeleteFolder)
@@ -175,23 +173,37 @@ export default function Environment({
       environment,
     } as SecretType
     start
-      ? updateSecrets([newSecret, ...updatedSecrets])
-      : updateSecrets([...updatedSecrets, newSecret])
+      ? setClientSecrets([newSecret, ...clientSecrets])
+      : setClientSecrets([...clientSecrets, newSecret])
   }
 
-  const handleUpdateSecret = async (secret: SecretType) => {
-    const { id, key, value, comment, tags } = secret
+  const handleBulkUpdateSecrets = async () => {
+    const secretsToCreate: SecretInput[] = []
+    const secretsToUpdate: SecretInput[] = []
 
-    const encryptedKey = await encryptAsymmetric(key, environment.identityKey)
-    const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
-    const keyDigest = await digest(key, envKeys!.salt)
-    const encryptedComment = await encryptAsymmetric(comment, environment.identityKey)
-    const tagIds = tags.map((tag) => tag.id)
+    await Promise.all(
+      clientSecrets.map(async (clientSecret, index) => {
+        const { id, key, value, comment, tags } = clientSecret
+        const isNewSecret = id.split('-')[0] === 'new'
+        const serverSecret = serverSecrets.find((secret) => secret.id === id)
 
-    if (id.split('-')[0] === 'new') {
-      await createSecret({
-        variables: {
-          newSecret: {
+        const isModified =
+          !isNewSecret &&
+          serverSecret &&
+          (serverSecret.comment !== clientSecret.comment ||
+            serverSecret.key !== clientSecret.key ||
+            !arraysEqual(serverSecret.tags, clientSecret.tags) ||
+            serverSecret.value !== clientSecret.value)
+
+        // Only process if the secret is new or has been modified
+        if (isNewSecret || isModified) {
+          const encryptedKey = await encryptAsymmetric(key, environment.identityKey)
+          const encryptedValue = await encryptAsymmetric(value, environment.identityKey)
+          const keyDigest = await digest(key, envKeys!.salt)
+          const encryptedComment = await encryptAsymmetric(comment, environment.identityKey)
+          const tagIds = tags.map((tag) => tag.id)
+
+          const secretInput: SecretInput = {
             envId: params.environment,
             path: secretPath,
             key: encryptedKey,
@@ -199,31 +211,24 @@ export default function Environment({
             value: encryptedValue,
             comment: encryptedComment,
             tags: tagIds,
-          } as SecretInput,
-        },
-        refetchQueries: [
-          {
-            query: GetSecrets,
-            variables: {
-              appId: params.app,
-              envId: params.environment,
-              path: secretPath,
-            },
-          },
-        ],
+          }
+
+          if (isNewSecret) {
+            secretsToCreate.push(secretInput)
+          } else {
+            secretsToUpdate.push({ ...secretInput, id })
+          }
+        }
       })
-    } else {
-      await updateSecret({
+    )
+
+    // Only call the mutation if there are changes
+    if (secretsToCreate.length > 0 || secretsToUpdate.length > 0 || secretsToDelete.length > 0) {
+      const { data, errors } = await bulkProcessSecrets({
         variables: {
-          id,
-          secretData: {
-            key: encryptedKey,
-            keyDigest,
-            value: encryptedValue,
-            path: secretPath,
-            comment: encryptedComment,
-            tags: tagIds,
-          } as SecretInput,
+          secretsToCreate,
+          secretsToUpdate,
+          secretsToDelete,
         },
         refetchQueries: [
           {
@@ -236,30 +241,22 @@ export default function Environment({
           },
         ],
       })
+
+      if (!errors) setSecretsToDelete([])
     }
   }
 
-  const handleDeleteSecret = async (id: string) => {
-    if (id.split('-')[0] === 'new')
-      updateSecrets(updatedSecrets.filter((secret) => secret.id !== id))
-    else {
-      await deleteSecret({
-        variables: {
-          id,
-        },
-        refetchQueries: [
-          {
-            query: GetSecrets,
-            variables: {
-              appId: params.app,
-              envId: params.environment,
-              path: secretPath,
-            },
-          },
-        ],
-      })
+  const stageSecretForDelete = async (id: string) => {
+    if (id.split('-')[0] !== 'new') {
+      if (secretsToDelete.includes(id))
+        setSecretsToDelete(secretsToDelete.filter((secretId) => secretId !== id))
+      else {
+        const secretToDelete = clientSecrets.find((secret) => secret.id === id)
+        if (secretToDelete) setSecretsToDelete([...secretsToDelete, ...[secretToDelete.id]])
+      }
+    } else {
+      setClientSecrets(clientSecrets.filter((secret) => secret.id !== id))
     }
-    toast.success('Secret deleted.')
   }
 
   const handleDeleteFolder = async (id: string) => {
@@ -382,29 +379,29 @@ export default function Environment({
       }
 
       decryptSecrets().then((decryptedSecrets) => {
-        setSecrets(decryptedSecrets)
-        updateSecrets(decryptedSecrets)
+        setServerSecrets(decryptedSecrets)
+        setClientSecrets(decryptedSecrets)
       })
     }
   }, [envKeys, data])
 
   const handleUpdateSecretProperty = (id: string, property: string, value: any) => {
-    const updatedSecretList = updatedSecrets.map((secret) => {
+    const updatedSecretList = clientSecrets.map((secret) => {
       if (secret.id === id) {
         return { ...secret, [property]: value }
       }
       return secret
     })
 
-    updateSecrets(updatedSecretList)
+    setClientSecrets(updatedSecretList)
   }
 
   const getUpdatedSecrets = () => {
     const changedElements = []
 
-    for (let i = 0; i < updatedSecrets.length; i++) {
-      const updatedSecret = updatedSecrets[i]
-      const originalSecret = secrets.find((secret) => secret.id === updatedSecret.id)
+    for (let i = 0; i < clientSecrets.length; i++) {
+      const updatedSecret = clientSecrets[i]
+      const originalSecret = serverSecrets.find((secret) => secret.id === updatedSecret.id)
 
       // this is a newly created secret that doesn't exist on the server yet
       if (!originalSecret) {
@@ -425,7 +422,7 @@ export default function Environment({
   const duplicateKeysExist = () => {
     const keySet = new Set<string>()
 
-    for (const secret of updatedSecrets) {
+    for (const secret of clientSecrets) {
       if (keySet.has(secret.key)) {
         return true // Duplicate key found
       }
@@ -450,9 +447,7 @@ export default function Environment({
       return false
     }
 
-    const updates = changedSecrets.map((secret) => handleUpdateSecret(secret))
-
-    await Promise.all(updates)
+    await handleBulkUpdateSecrets()
 
     setTimeout(() => setIsloading(false), 500)
 
@@ -460,10 +455,11 @@ export default function Environment({
   }
 
   const handleDiscardChanges = () => {
-    updateSecrets(secrets)
+    setClientSecrets(serverSecrets)
+    setSecretsToDelete([])
   }
 
-  const secretNames = secrets.map((secret) => {
+  const secretNames = serverSecrets.map((secret) => {
     const { id, key } = secret
     return {
       id,
@@ -481,16 +477,16 @@ export default function Environment({
 
   const filteredSecrets =
     searchQuery === ''
-      ? updatedSecrets
-      : updatedSecrets.filter((secret) => {
+      ? clientSecrets
+      : clientSecrets.filter((secret) => {
           const searchRegex = new RegExp(searchQuery, 'i')
           return searchRegex.test(secret.key)
         })
 
-  const cannonicalSecret = (id: string) => secrets.find((secret) => secret.id === id)
+  const cannonicalSecret = (id: string) => serverSecrets.find((secret) => secret.id === id)
 
   const downloadEnvFile = () => {
-    const envContent = secrets
+    const envContent = serverSecrets
       .map((secret) => {
         const comment = secret.comment ? `#${secret.comment}\n` : ''
         return `${comment}${secret.key}=${secret.value}`
@@ -659,7 +655,7 @@ export default function Environment({
       return (
         <div className="flex flex-wrap">
           <Link href={basePath} className="p-2 flex items-center gap-2 font-light">
-          <FaHome className="group-hover:text-white" />
+            <FaHome className="group-hover:text-white" />
             <span className="text-xl text-neutral-500 ">~/</span>
           </Link>
         </div>
@@ -673,10 +669,10 @@ export default function Environment({
           href={basePath}
           className="p-2 flex items-center gap-2 font-light text-neutral-500 group"
         >
-        <FaHome className="group-hover:text-white" />
+          <FaHome className="group-hover:text-white" />
           <span className="text-xl group-hover:text-white">~/</span>
         </Link>
-                {/* Map over path segments */}
+        {/* Map over path segments */}
         {path.map((segment, index) => {
           // Construct the href for each segment
           const href = `${basePath}/${path.slice(0, index + 1).join('/')}`
@@ -699,17 +695,17 @@ export default function Environment({
           )
         })}
         {
-<div className="px-4">
-  <Link
-    href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
-    title="Go up one level"
-  >
-    <Button variant="secondary">
-      <MdKeyboardReturn className="shrink-0" />
-        <span className="ml-2">Go Back</span>
-    </Button>
-  </Link>
-</div>
+          <div className="px-4">
+            <Link
+              href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
+              title="Go up one level"
+            >
+              <Button variant="secondary">
+                <MdKeyboardReturn className="shrink-0" />
+                <span className="ml-2">Go Back</span>
+              </Button>
+            </Link>
+          </div>
         }
       </div>
     )
@@ -823,14 +819,14 @@ export default function Environment({
               />
             </div>
             <div className="flex gap-2 items-center">
-            {unsavedChanges && (
-            <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-              <span className="px-2 py-1">
-                <FaUndo className="text-lg" />
-              </span>
-              <span>Discard changes</span>
-            </Button>
-            )}
+              {unsavedChanges && (
+                <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
+                  <span className="px-2 py-1">
+                    <FaUndo className="text-lg" />
+                  </span>
+                  <span>Discard changes</span>
+                </Button>
+              )}
 
               {data.envSyncs && (
                 <div>
@@ -841,6 +837,7 @@ export default function Environment({
               <Button
                 variant={unsavedChanges ? 'warning' : 'primary'}
                 disabled={!unsavedChanges || savingAndFetching}
+                isLoading={savingAndFetching}
                 onClick={handleSaveChanges}
               >
                 <div className="flex items-center gap-2">
@@ -851,7 +848,7 @@ export default function Environment({
             </div>
           </div>
           <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
-            {(updatedSecrets.length > 0 || folders.length > 0) && (
+            {(clientSecrets.length > 0 || folders.length > 0) && (
               <div className="flex items-center w-full sticky top-0 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
                 <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
@@ -910,8 +907,9 @@ export default function Environment({
                     cannonicalSecret={cannonicalSecret(secret.id)}
                     secretNames={secretNames}
                     handlePropertyChange={handleUpdateSecretProperty}
-                    handleDelete={handleDeleteSecret}
+                    handleDelete={stageSecretForDelete}
                     globallyRevealed={globallyRevealed}
+                    stagedForDelete={secretsToDelete.includes(secret.id)}
                   />
                 </div>
               ))}
