@@ -5,7 +5,7 @@ import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
-import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
+import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
@@ -20,7 +20,6 @@ import {
   SecretType,
 } from '@/apollo/graphql'
 
-import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { KeyringContext } from '@/contexts/keyringContext'
 
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
@@ -57,7 +56,7 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
   const [createApp, { error }] = useMutation(CreateApplication)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
-  const [createSecret] = useMutation(CreateNewSecret)
+  const [bulkProcessSecrets] = useMutation(BulkProcessSecrets)
 
   const [getApps] = useLazyQuery(GetApps)
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
@@ -102,42 +101,55 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
    *
    * @throws {Error} If the specified environment is invalid or if an error occurs during processing.
    */
-  async function processSecrets(env: EnvironmentType, secrets: Array<Partial<SecretType>>) {
+  async function processSecrets(
+    envs: Array<{ env: EnvironmentType; secrets: Array<Partial<SecretType>> }>
+  ) {
     const userKxKeys = {
       publicKey: await getUserKxPublicKey(keyring!.publicKey),
       privateKey: await getUserKxPrivateKey(keyring!.privateKey),
     }
 
-    const envSalt = await decryptAsymmetric(
-      env.wrappedSalt,
-      userKxKeys.privateKey,
-      userKxKeys.publicKey
-    )
+    const allSecretsToCreate: SecretInput[] = []
 
-    const promises = secrets.map(async (secret) => {
-      const { key, value, comment } = secret
+    await Promise.all(
+      envs.map(async ({ env, secrets }) => {
+        const envSalt = await decryptAsymmetric(
+          env.wrappedSalt,
+          userKxKeys.privateKey,
+          userKxKeys.publicKey
+        )
 
-      const encryptedKey = await encryptAsymmetric(key!, env.identityKey)
-      const encryptedValue = await encryptAsymmetric(value!, env.identityKey)
-      const keyDigest = await digest(key!, envSalt)
-      const encryptedComment = await encryptAsymmetric(comment!, env.identityKey)
+        const envSecretsPromises = secrets.map(async (secret) => {
+          const { key, value, comment } = secret
 
-      await createSecret({
-        variables: {
-          newSecret: {
+          const encryptedKey = await encryptAsymmetric(key!, env.identityKey)
+          const encryptedValue = await encryptAsymmetric(value!, env.identityKey)
+          const keyDigest = await digest(key!, envSalt)
+          const encryptedComment = await encryptAsymmetric(comment!, env.identityKey)
+
+          allSecretsToCreate.push({
             envId: env.id,
             key: encryptedKey,
             keyDigest,
             value: encryptedValue,
             path: '/',
             comment: encryptedComment,
-            tags: [],
-          } as SecretInput,
-        },
-      })
-    })
+            tags: [], // Adjust as necessary if you need to include tags
+          })
+        })
 
-    return Promise.all(promises)
+        await Promise.all(envSecretsPromises)
+      })
+    )
+
+    // Use the bulkProcessSecrets mutation
+    await bulkProcessSecrets({
+      variables: {
+        secretsToCreate: allSecretsToCreate,
+        secretsToUpdate: [],
+        secretsToDelete: [],
+      },
+    })
   }
 
   /**
@@ -234,24 +246,31 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
     const { data: appEnvsData } = await getAppEnvs({ variables: { appId } })
 
-    await processSecrets(
-      appEnvsData.appEnvironments.find(
-        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Dev
-      ),
-      DEV_SECRETS
-    )
-    await processSecrets(
-      appEnvsData.appEnvironments.find(
-        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Staging
-      ),
-      STAG_SECRETS
-    )
-    await processSecrets(
-      appEnvsData.appEnvironments.find(
-        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Prod
-      ),
-      PROD_SECRETS
-    )
+    const envsToProcess = [
+      {
+        env: appEnvsData.appEnvironments.find(
+          (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Dev
+        ),
+        secrets: DEV_SECRETS,
+      },
+      {
+        env: appEnvsData.appEnvironments.find(
+          (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Staging
+        ),
+        secrets: STAG_SECRETS,
+      },
+      {
+        env: appEnvsData.appEnvironments.find(
+          (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Prod
+        ),
+        secrets: PROD_SECRETS,
+      },
+    ]
+
+    // Remove any null or undefined environments
+    const validEnvsToProcess = envsToProcess.filter(({ env }) => env !== undefined)
+
+    await processSecrets(validEnvsToProcess)
   }
 
   /**
