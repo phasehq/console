@@ -121,6 +121,7 @@ export default function SecretRow(props: {
       <div className="w-1/3 relative">
         <input
           ref={keyInputRef}
+          disabled={stagedForDelete}
           className={clsx(
             INPUT_BASE_STYLE,
             'rounded-sm',
@@ -154,7 +155,7 @@ export default function SecretRow(props: {
         </div>
       </div>
       <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-transparent transition ease p-px">
-        {isBoolean && (
+        {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
               title="Toggle value"
@@ -178,6 +179,7 @@ export default function SecretRow(props: {
         <input
           className={clsx(INPUT_BASE_STYLE, inputTextColor(), 'w-full focus:outline-none p-2')}
           value={secret.value}
+          disabled={stagedForDelete}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
         />
@@ -197,25 +199,29 @@ export default function SecretRow(props: {
             )}
           </div>
 
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-            <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
-          </div>
+          {!stagedForDelete && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+              <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
+            </div>
+          )}
 
-          <div
-            className={clsx(
-              secret.comment.length === 0 &&
-                'opacity-0 group-hover:opacity-100 transition-opacity ease'
-            )}
-          >
-            <CommentDialog
-              secretName={secret.key}
-              secretId={secret.id}
-              comment={secret.comment}
-              handlePropertyChange={handlePropertyChange}
-            />
-          </div>
+          {!stagedForDelete && (
+            <div
+              className={clsx(
+                secret.comment.length === 0 &&
+                  'opacity-0 group-hover:opacity-100 transition-opacity ease'
+              )}
+            >
+              <CommentDialog
+                secretName={secret.key}
+                secretId={secret.id}
+                comment={secret.comment}
+                handlePropertyChange={handlePropertyChange}
+              />
+            </div>
+          )}
 
-          {cannonicalSecret && (
+          {cannonicalSecret && !stagedForDelete && (
             <div
               className={clsx(
                 (!secret.override || !secret.override.isActive) &&
