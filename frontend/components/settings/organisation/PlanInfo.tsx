@@ -2,22 +2,13 @@ import ProgressBar from '@/components/common/ProgressBar'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { GetOrgLicense } from '@/graphql/queries/organisation/getOrganisationLicense.gql'
-import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
 import { useQuery } from '@apollo/client'
 import { ReactNode, useContext } from 'react'
 import { PlanLabel } from './PlanLabel'
 import Spinner from '@/components/common/Spinner'
 import { calculatePercentage } from '@/utils/dataUnits'
 import { Button } from '@/components/common/Button'
-import {
-  FaCheckCircle,
-  FaCube,
-  FaCubes,
-  FaProjectDiagram,
-  FaTimesCircle,
-  FaUser,
-  FaUsersCog,
-} from 'react-icons/fa'
+import { FaCheckCircle, FaCube, FaCubes, FaTimesCircle, FaUser, FaUsersCog } from 'react-icons/fa'
 import Link from 'next/link'
 import GenericDialog from '@/components/common/GenericDialog'
 import { UpgradeRequestForm } from '@/components/forms/UpgradeRequestForm'
@@ -27,6 +18,10 @@ import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { License } from './License'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { FaKey } from 'react-icons/fa6'
+import { ProUpgradeDialog } from '@/ee/billing/ProUpgradeDialog'
+import { useSearchParams } from 'next/navigation'
+import { PostCheckoutScreen } from '@/ee/billing/PostCheckoutScreen'
+import { UpsellDialog } from './UpsellDialog'
 
 const plansInfo = {
   FR: {
@@ -122,6 +117,8 @@ const PlanFeatureItem = (props: {
 export const PlanInfo = () => {
   const { activeOrganisation } = useContext(organisationContext)
 
+  const searchParams = useSearchParams()
+
   const planInfo = activeOrganisation ? plansInfo[activeOrganisation.plan] : undefined
 
   const { loading, data } = useQuery(GetOrganisationPlan, {
@@ -135,8 +132,6 @@ export const PlanInfo = () => {
     skip: !activeOrganisation,
     fetchPolicy: 'cache-and-network',
   })
-
-  //const { data: licenseData } = useQuery(GetLicenseData)
 
   const license = (): ActivatedPhaseLicenseType | null => licenseData?.organisationLicense || null
 
@@ -180,27 +175,7 @@ export const PlanInfo = () => {
                       <div className="whitespace-nowrap">Compare plans</div>
                     </Button>
                   </Link>
-                  <GenericDialog
-                    title="Request an Upgrade"
-                    buttonVariant="primary"
-                    buttonContent={'Upgrade'}
-                    onClose={() => {}}
-                  >
-                    <div className="space-y-4">
-                      <div className="text-neutral-500">Request an upgrade to your account.</div>
-                      {isCloudHosted() ? (
-                        <UpgradeRequestForm onSuccess={() => {}} />
-                      ) : (
-                        <div>
-                          Please contact us at{' '}
-                          <a href="mailto:info@phase.dev" className="text-emerald-500">
-                            info@phase.dev
-                          </a>{' '}
-                          to request an upgrade.
-                        </div>
-                      )}
-                    </div>
-                  </GenericDialog>
+                  <UpsellDialog />
                 </div>
               )}
             </div>
@@ -294,6 +269,10 @@ export const PlanInfo = () => {
           </div>
         </div>
       </div>
+
+      {searchParams?.get('stripe_session_id') && (
+        <PostCheckoutScreen stripeSessionId={searchParams.get('stripe_session_id')!} />
+      )}
     </div>
   )
 }

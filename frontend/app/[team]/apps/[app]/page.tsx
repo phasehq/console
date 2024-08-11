@@ -20,10 +20,10 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import {
   FaArrowRight,
   FaCheckCircle,
-  FaChevronLeft,
   FaChevronRight,
   FaCircle,
   FaCopy,
+  FaExchangeAlt,
   FaExternalLinkAlt,
   FaFolder,
   FaRegEye,
@@ -131,7 +131,7 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
                       title={`Swap with ${environments[index - 1].name}`}
                       onClick={() => handleSwapEnvironments(env, environments[index - 1])}
                     >
-                      <FaChevronLeft className="text-xs shrink-0" />
+                      <FaExchangeAlt className="text-xs shrink-0" />
                     </Button>
                   )}
                 </div>
@@ -143,7 +143,7 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
                       title={`Swap with ${environments[index + 1].name}`}
                       onClick={() => handleSwapEnvironments(env, environments[index + 1])}
                     >
-                      <FaChevronRight className="text-xs shrink-0" />
+                      <FaExchangeAlt className="text-xs shrink-0" />
                     </Button>
                   )}
                 </div>

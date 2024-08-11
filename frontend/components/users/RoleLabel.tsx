@@ -15,7 +15,7 @@ export const RoleLabel = (props: { role: string }) => {
   return (
     <span
       className={clsx(
-        'px-2 py-1 rounded-full ring-1 ring-inset uppercase text-2xs font-medium tracking-wide',
+        'px-2 py-0.5 rounded-full ring-1 ring-inset uppercase text-2xs font-medium tracking-wide',
         roleStyle()
       )}
     >

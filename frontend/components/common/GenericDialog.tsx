@@ -2,6 +2,7 @@ import { useState, useImperativeHandle, forwardRef, ReactNode, Fragment } from '
 import { Dialog, Transition } from '@headlessui/react'
 import { FaTimes } from 'react-icons/fa'
 import { Button } from './Button'
+import clsx from 'clsx'
 
 interface GenericDialogProps {
   title: string
@@ -9,10 +10,11 @@ interface GenericDialogProps {
   children: ReactNode
   buttonVariant: 'primary' | 'secondary' | 'danger' | 'outline' | ''
   buttonContent: ReactNode
+  size?: 'lg' | 'md' | 'sm'
 }
 
 const GenericDialog = forwardRef(
-  ({ title, onClose, children, buttonVariant, buttonContent }: GenericDialogProps, ref) => {
+  ({ title, onClose, children, buttonVariant, buttonContent, size }: GenericDialogProps, ref) => {
     const [isOpen, setIsOpen] = useState<boolean>(false)
 
     const closeModal = () => {
@@ -27,6 +29,14 @@ const GenericDialog = forwardRef(
     useImperativeHandle(ref, () => ({
       closeModal,
     }))
+
+    const sizeVariants = {
+      lg: 'max-w-4xl',
+      md: 'max-w-2xl',
+      sm: 'max-w-lg',
+    }
+
+    const sizeClass = size ? sizeVariants[size] : sizeVariants['md']
 
     return (
       <>
@@ -61,7 +71,12 @@ const GenericDialog = forwardRef(
                   leaveFrom="opacity-100 scale-100"
                   leaveTo="opacity-0 scale-95"
                 >
-                  <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Panel
+                    className={clsx(
+                      'w-full transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all',
+                      sizeClass
+                    )}
+                  >
                     <Dialog.Title as="div" className="flex w-full justify-between">
                       <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200">
                         {title}
