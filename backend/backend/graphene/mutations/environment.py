@@ -957,7 +957,7 @@ class CreatePersonalSecretMutation(graphene.Mutation):
         secret = Secret.objects.get(id=override_data.secret_id)
         org = secret.environment.app.organisation
         org_member = OrganisationMember.objects.get(
-            organisation=org, user=info.context.user
+            organisation=org, user=info.context.user, deleted_at=None
         )
 
         if not user_can_access_environment(info.context.user, secret.environment.id):
