@@ -487,7 +487,6 @@ export default function EnvironmentPath({
           return searchRegex.test(secret.key)
         })
 
-
   const cannonicalSecret = (id: string) => serverSecrets.find((secret) => secret.id === id)
 
   const filteredAndSortedSecrets = sortSecrets(filteredSecrets, sort)
@@ -842,28 +841,22 @@ export default function EnvironmentPath({
                     <span>Discard changes</span>
                   </Button>
                 )}
-
-                role="button"
-                onClick={() => setSearchQuery('')}
-              />
-            </div>
-            <div className="flex gap-2 items-center">
-              {unsavedChanges && (
-                <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-                  <span className="px-2 py-1">
-                    <FaUndo className="text-lg" />
-                  </span>
-                  <span>Discard changes</span>
-                </Button>
-              )}
-
+              </div>
+              <div className="flex gap-2 items-center">
+                {unsavedChanges && (
+                  <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
+                    <span className="px-2 py-1">
+                      <FaUndo className="text-lg" />
+                    </span>
+                    <span>Discard changes</span>
+                  </Button>
+                )}
 
                 {data.envSyncs && (
                   <div>
                     <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
                   </div>
                 )}
-
 
                 <Button
                   variant={unsavedChanges ? 'warning' : 'primary'}
@@ -879,9 +872,8 @@ export default function EnvironmentPath({
               </div>
             </div>
 
-            {(updatedSecrets.length > 0 || folders.length > 0) && (
+            {(clientSecrets.length > 0 || folders.length > 0) && (
               <div className="flex items-center w-full">
-
                 <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
                 </div>
