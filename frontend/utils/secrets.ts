@@ -1,6 +1,14 @@
 import { SecretType } from '@/apollo/graphql'
 
-export type SortOption = 'key' | '-key' | 'created' | '-created' | 'updated' | '-updated'
+export type SortOption =
+  | 'key'
+  | '-key'
+  | 'value'
+  | '-value'
+  | 'created'
+  | '-created'
+  | 'updated'
+  | '-updated'
 
 /**
  * Returns the negative of a supplied boolean value as a string in either lowercase, UPPERCASE or Title Case
@@ -60,6 +68,10 @@ export const sortSecrets = (secrets: SecretType[], sort: SortOption): SecretType
         return a.key.localeCompare(b.key)
       case '-key':
         return b.key.localeCompare(a.key)
+      case 'value':
+        return a.key.localeCompare(b.value)
+      case '-value':
+        return b.key.localeCompare(a.value)
       case 'created':
         return new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
       case '-created':
