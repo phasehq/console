@@ -1,5 +1,15 @@
 import { SecretType } from '@/apollo/graphql'
 
+export type SortOption =
+  | 'key'
+  | '-key'
+  | 'value'
+  | '-value'
+  | 'created'
+  | '-created'
+  | 'updated'
+  | '-updated'
+
 /**
  * Returns the negative of a supplied boolean value as a string in either lowercase, UPPERCASE or Title Case
  * true <-> false
@@ -49,4 +59,29 @@ export const toggleBooleanKeepingCase = (value: string): string => {
 
 export const getSecretPermalink = (secret: SecretType, orgName: string) => {
   return `/${orgName}/apps/${secret.environment.app.id}/environments/${secret.environment.id}${secret.path}?secret=${secret.id}`
+}
+
+export const sortSecrets = (secrets: SecretType[], sort: SortOption): SecretType[] => {
+  return secrets.slice().sort((a, b) => {
+    switch (sort) {
+      case 'key':
+        return a.key.localeCompare(b.key)
+      case '-key':
+        return b.key.localeCompare(a.key)
+      case 'value':
+        return a.key.localeCompare(b.value)
+      case '-value':
+        return b.key.localeCompare(a.value)
+      case 'created':
+        return new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
+      case '-created':
+        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+      case 'updated':
+        return new Date(a.updatedAt!).getTime() - new Date(b.updatedAt!).getTime()
+      case '-updated':
+        return new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime()
+      default:
+        return 0
+    }
+  })
 }

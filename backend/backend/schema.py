@@ -436,7 +436,7 @@ class Query(graphene.ObjectType):
         if path:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("created_at")
+        return Secret.objects.filter(**filter).order_by("-created_at")
 
     def resolve_folders(root, info, env_id, path=None):
         if not user_can_access_environment(info.context.user.userId, env_id):

@@ -54,7 +54,7 @@ class CreateOrganisationMutation(graphene.Mutation):
             create_stripe_customer(org, owner.email)
 
         if settings.PHASE_LICENSE:
-            from ee.license.utils import activate_license
+            from ee.licensing.utils import activate_license
 
             activate_license(settings.PHASE_LICENSE)
 
