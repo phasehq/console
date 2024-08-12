@@ -1,13 +1,15 @@
 import { Menu, Transition } from '@headlessui/react'
-import { FaSortAmountDown, FaArrowUp, FaArrowDown } from 'react-icons/fa'
+import { FaSortAmountDown, FaArrowUp, FaArrowDown, FaCalendar, FaCalendarAlt } from 'react-icons/fa'
 import { Fragment } from 'react'
 import { SortOption } from '@/utils/secrets'
 import clsx from 'clsx'
+import { FaA, FaKey } from 'react-icons/fa6'
 
 const sortOptions = [
-  { label: 'Created', value: 'created' },
-  { label: 'Updated', value: 'updated' },
-  { label: 'Key', value: 'key' },
+  { label: 'Created', value: 'created', icon: <FaCalendarAlt /> },
+  { label: 'Updated', value: 'updated', icon: <FaCalendarAlt /> },
+  { label: 'Key', value: 'key', icon: <FaKey /> },
+  { label: 'Value', value: 'value', icon: <FaKey /> },
 ]
 
 const SortMenu = ({
@@ -17,6 +19,9 @@ const SortMenu = ({
   sort: SortOption
   setSort: (option: SortOption) => void
 }) => {
+  const activeSortLabel = sortOptions.find((option) => sort.includes(option.value))?.label
+  const activeSortDirectionIcon = sort.includes('-') ? <FaArrowDown /> : <FaArrowUp />
+
   return (
     <Menu as="div" className="flex relative">
       {({ open }) => (
@@ -31,7 +36,7 @@ const SortMenu = ({
               )}
             >
               <FaSortAmountDown />
-              Sort
+              Sort: {activeSortLabel} {activeSortDirectionIcon}
             </button>
           </Menu.Button>
           <Transition
@@ -42,10 +47,10 @@ const SortMenu = ({
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className="absolute z-20 left-20 origin-top-right top-0"
+            className="absolute z-20 left-0 origin-top-right top-12"
           >
             <Menu.Items as={Fragment} static>
-              <div className="p-2 ring-1 ring-inset ring-neutral-500/20 bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-xl text-sm">
+              <div className="p-2 ring-1 ring-inset ring-neutral-500/20 bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-xl text-sm w-40">
                 {sortOptions.map((option) => (
                   <Menu.Item key={option.value}>
                     {({ active }) => (
@@ -67,7 +72,10 @@ const SortMenu = ({
                           }
                         )}
                       >
-                        {option.label}
+                        <div className="flex items-center gap-2">
+                          {option.icon}
+                          {option.label}
+                        </div>
                         {sort === option.value ? (
                           <FaArrowUp />
                         ) : sort === `-${option.value}` ? (

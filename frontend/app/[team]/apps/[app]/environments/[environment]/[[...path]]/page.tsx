@@ -808,64 +808,65 @@ export default function EnvironmentPath({
             )}
           </div>
 
-          <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4 sticky top-0 z-20 bg-zinc-200 dark:bg-zinc-900 backdrop-blur-md">
-            <div className="flex items-center gap-4">
-              <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-                <div className="">
-                  <FaSearch className="text-neutral-500" />
+          <div className="space-y-0 sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
+            <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
+              <div className="flex items-center gap-4">
+                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+                  <div className="">
+                    <FaSearch className="text-neutral-500" />
+                  </div>
+                  <input
+                    placeholder="Search"
+                    className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <FaTimesCircle
+                    className={clsx(
+                      'cursor-pointer text-neutral-500 transition-opacity ease',
+                      searchQuery
+                        ? 'opacity-100 pointer-events-auto'
+                        : 'opacity-0 pointer-events-none'
+                    )}
+                    role="button"
+                    onClick={() => setSearchQuery('')}
+                  />
                 </div>
-                <input
-                  placeholder="Search"
-                  className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <FaTimesCircle
-                  className={clsx(
-                    'cursor-pointer text-neutral-500 transition-opacity ease',
-                    searchQuery
-                      ? 'opacity-100 pointer-events-auto'
-                      : 'opacity-0 pointer-events-none'
-                  )}
-                  role="button"
-                  onClick={() => setSearchQuery('')}
-                />
+                <div className="relative z-20">
+                  <SortMenu sort={sort} setSort={setSort} />
+                </div>
               </div>
-              <div className="relative z-20">
-                <SortMenu sort={sort} setSort={setSort} />
-              </div>
-            </div>
-            <div className="flex gap-2 items-center">
-              {unsavedChanges && (
-                <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-                  <span className="px-2 py-1">
-                    <FaUndo className="text-lg" />
-                  </span>
-                  <span>Discard changes</span>
+              <div className="flex gap-2 items-center">
+                {unsavedChanges && (
+                  <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
+                    <span className="px-2 py-1">
+                      <FaUndo className="text-lg" />
+                    </span>
+                    <span>Discard changes</span>
+                  </Button>
+                )}
+
+                {data.envSyncs && (
+                  <div>
+                    <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
+                  </div>
+                )}
+
+                <Button
+                  variant={unsavedChanges ? 'warning' : 'primary'}
+                  disabled={!unsavedChanges || savingAndFetching}
+                  onClick={handleSaveChanges}
+                >
+                  <div className="flex items-center gap-2">
+                    {!unsavedChanges && <FaCheckCircle className="text-emerald-500" />}
+                    <span className="text-lg">{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
+                  </div>
                 </Button>
-              )}
-
-              {data.envSyncs && (
-                <div>
-                  <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
-                </div>
-              )}
-
-              <Button
-                variant={unsavedChanges ? 'warning' : 'primary'}
-                disabled={!unsavedChanges || savingAndFetching}
-                onClick={handleSaveChanges}
-              >
-                <div className="flex items-center gap-2">
-                  {!unsavedChanges && <FaCheckCircle className="text-emerald-500" />}
-                  <span className="text-lg">{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
-                </div>
-              </Button>
+              </div>
             </div>
-          </div>
-          <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
+
             {(updatedSecrets.length > 0 || folders.length > 0) && (
-              <div className="flex items-center w-full sticky top-16 z-10 bg-zinc-200/70 dark:bg-zinc-900/70 backdrop-blur-md">
+              <div className="flex items-center w-full">
                 <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
                 </div>
@@ -892,7 +893,9 @@ export default function EnvironmentPath({
                 </div>
               </div>
             )}
+          </div>
 
+          <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
             <NewFolderMenu />
 
             {organisation &&
