@@ -30,6 +30,9 @@ from .graphene.queries.syncing import (
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
+    BulkCreateSecretMutation,
+    BulkDeleteSecretMutation,
+    BulkEditSecretMutation,
     CreateEnvironmentKeyMutation,
     CreateEnvironmentMutation,
     CreateEnvironmentTokenMutation,
@@ -755,6 +758,10 @@ class Mutation(graphene.ObjectType):
     edit_secret = EditSecretMutation.Field()
     delete_secret = DeleteSecretMutation.Field()
     read_secret = ReadSecretMutation.Field()
+
+    create_secrets = BulkCreateSecretMutation.Field()
+    edit_secrets = BulkEditSecretMutation.Field()
+    delete_secrets = BulkDeleteSecretMutation.Field()
 
     create_override = CreatePersonalSecretMutation.Field()
     remove_override = DeletePersonalSecretMutation.Field()
