@@ -832,16 +832,7 @@ export default function EnvironmentPath({
                   <SortMenu sort={sort} setSort={setSort} />
                 </div>
               </div>
-              <div className="flex gap-2 items-center">
-                {unsavedChanges && (
-                  <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-                    <span className="px-2 py-1">
-                      <FaUndo className="text-lg" />
-                    </span>
-                    <span>Discard changes</span>
-                  </Button>
-                )}
-              </div>
+
               <div className="flex gap-2 items-center">
                 {unsavedChanges && (
                   <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
