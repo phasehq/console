@@ -105,14 +105,14 @@ export default function SecretRow(props: {
 
   const rowBgColor = () => {
     if (!cannonicalSecret) return 'bg-emerald-400/20 dark:bg-emerald-400/10'
-    else if (secretHasBeenModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
     else if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
+    else if (secretHasBeenModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
   }
 
   const inputTextColor = () => {
-    if (!cannonicalSecret) return 'text-emerald-900 dark:text-emerald-200'
-    else if (secretHasBeenModified()) return 'text-amber-800 dark:text-amber-300'
+    if (!cannonicalSecret) return 'text-emerald-700 dark:text-emerald-200'
     else if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
+    else if (secretHasBeenModified()) return 'text-amber-700 dark:text-amber-300'
     else return 'text-zinc-900 dark:text-zinc-100'
   }
 
