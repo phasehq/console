@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import timedelta
 import logging.config
 
-from ee.license.verifier import check_license
+from ee.licensing.verifier import check_license
 
 # Clear prev config
 LOGGING_CONFIG = None
