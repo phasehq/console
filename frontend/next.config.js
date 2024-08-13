@@ -29,9 +29,9 @@ const ContentSecurityPolicySelfHosted = `
   worker-src 'none';
 `
 
-const isCloudHosted = process.env.APP_HOST?.trim() === 'cloud'
+const isCloudHosted = () => process.env.APP_HOST?.trim() === 'cloud'
 
-const ContentSecurityPolicy = isCloudHosted
+const ContentSecurityPolicy = isCloudHosted()
   ? ContentSecurityPolicyCloud
   : ContentSecurityPolicySelfHosted
 
