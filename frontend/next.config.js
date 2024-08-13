@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-const ContentSecurityPolicy = `
+const ContentSecurityPolicyCloud = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://session.phase.dev https://checkout.stripe.com https://js.stripe.com https://*.js.stripe.com;
   style-src 'self' 'unsafe-inline';
@@ -13,6 +13,27 @@ const ContentSecurityPolicy = `
   media-src 'self';
   worker-src 'none';
 `
+
+const ContentSecurityPolicySelfHosted = `
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://session.phase.dev;
+  style-src 'self' 'unsafe-inline';
+  object-src 'none';
+  base-uri 'self';
+  connect-src 'self' data: http://127.0.0.1:* https://*.phase.dev https://phase.statuspage.io/api/v2/status.json; 
+  font-src 'self';
+  frame-src 'self';
+  img-src 'self' https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://secure.gravatar.com https://gitlab.com; 
+  manifest-src 'self';
+  media-src 'self';
+  worker-src 'none';
+`
+
+const isCloudHosted = process.env.APP_HOST?.trim() === 'cloud'
+
+const ContentSecurityPolicy = isCloudHosted
+  ? ContentSecurityPolicyCloud
+  : ContentSecurityPolicySelfHosted
 
 const securityHeaders = [
   //Strict-Transport-Security: This header informs browsers it should only be accessed using HTTPS, instead of using HTTP. Using the configuration below, all present and future subdomains will use HTTPS for a max-age of 2 years. This blocks access to pages or subdomains that can only be served over HTTP.
