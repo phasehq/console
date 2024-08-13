@@ -655,6 +655,9 @@ type Mutation {
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
   deleteSecret(id: ID!): DeleteSecretMutation
   readSecret(ids: [ID]): ReadSecretMutation
+  createSecrets(secretsData: [SecretInput]!): BulkCreateSecretMutation
+  editSecrets(secretsData: [SecretInput]!): BulkEditSecretMutation
+  deleteSecrets(ids: [ID]!): BulkDeleteSecretMutation
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation
@@ -853,6 +856,7 @@ type CreateSecretMutation {
 }
 
 input SecretInput {
+  id: ID
   envId: ID
   path: String
   key: String!
@@ -872,6 +876,18 @@ type DeleteSecretMutation {
 
 type ReadSecretMutation {
   ok: Boolean
+}
+
+type BulkCreateSecretMutation {
+  secrets: [SecretType]
+}
+
+type BulkEditSecretMutation {
+  secrets: [SecretType]
+}
+
+type BulkDeleteSecretMutation {
+  secrets: [SecretType]
 }
 
 type CreatePersonalSecretMutation {

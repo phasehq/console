@@ -63,6 +63,7 @@ class EnvironmentKeyInput(graphene.InputObjectType):
 
 
 class SecretInput(graphene.InputObjectType):
+    id = graphene.ID(required=False)
     env_id = graphene.ID(required=False)
     path = graphene.String(required=False)
     key = graphene.String(required=True)
@@ -688,6 +689,65 @@ class CreateSecretMutation(graphene.Mutation):
         return CreateSecretMutation(secret=secret)
 
 
+class BulkCreateSecretMutation(graphene.Mutation):
+    class Arguments:
+        secrets_data = graphene.List(SecretInput, required=True)
+
+    secrets = graphene.List(SecretType)
+
+    @classmethod
+    def mutate(cls, root, info, secrets_data):
+        created_secrets = []
+
+        for secret_data in secrets_data:
+            env = Environment.objects.get(id=secret_data.env_id)
+            org = env.app.organisation
+            if not user_is_org_member(info.context.user.userId, org.id):
+                raise GraphQLError("You don't have permission to perform this action")
+
+            tags = SecretTag.objects.filter(id__in=secret_data.tags)
+
+            path = (
+                normalize_path_string(secret_data.path)
+                if secret_data.path is not None
+                else "/"
+            )
+
+            folder = None
+            if path != "/":
+                folder_name = path.split("/")[-1]
+                folder_path, _, _ = path.rpartition("/" + folder_name)
+                folder_path = folder_path if folder_path else "/"
+                folder = SecretFolder.objects.get(
+                    environment_id=env.id, path=folder_path, name=folder_name
+                )
+
+            secret_obj_data = {
+                "environment_id": env.id,
+                "path": path,
+                "folder_id": folder.id if folder is not None else None,
+                "key": secret_data.key,
+                "key_digest": secret_data.key_digest,
+                "value": secret_data.value,
+                "version": 1,
+                "comment": secret_data.comment,
+            }
+
+            secret = Secret.objects.create(**secret_obj_data)
+            secret.tags.set(tags)
+            created_secrets.append(secret)
+
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=org, deleted_at=None
+            )
+            log_secret_event(
+                secret, SecretEvent.CREATE, org_member, None, ip_address, user_agent
+            )
+
+        return BulkCreateSecretMutation(secrets=created_secrets)
+
+
 class EditSecretMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
@@ -740,6 +800,59 @@ class EditSecretMutation(graphene.Mutation):
         return EditSecretMutation(secret=secret)
 
 
+class BulkEditSecretMutation(graphene.Mutation):
+    class Arguments:
+        secrets_data = graphene.List(SecretInput, required=True)
+
+    secrets = graphene.List(SecretType)
+
+    @classmethod
+    def mutate(cls, root, info, secrets_data):
+        updated_secrets = []
+
+        for secret_data in secrets_data:
+            secret = Secret.objects.get(id=secret_data.id)
+            env = secret.environment
+            org = env.app.organisation
+            if not user_is_org_member(info.context.user.userId, org.id):
+                raise GraphQLError("You don't have permission to perform this action")
+
+            tags = SecretTag.objects.filter(id__in=secret_data.tags)
+
+            path = (
+                normalize_path_string(secret_data.path)
+                if secret_data.path is not None
+                else "/"
+            )
+
+            secret_obj_data = {
+                "path": path,
+                "key": secret_data.key,
+                "key_digest": secret_data.key_digest,
+                "value": secret_data.value,
+                "version": secret.version + 1,
+                "comment": secret_data.comment,
+            }
+
+            for key, value in secret_obj_data.items():
+                setattr(secret, key, value)
+
+            secret.updated_at = timezone.now()
+            secret.tags.set(tags)
+            secret.save()
+            updated_secrets.append(secret)
+
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=org, deleted_at=None
+            )
+            log_secret_event(
+                secret, SecretEvent.UPDATE, org_member, None, ip_address, user_agent
+            )
+
+        return BulkEditSecretMutation(secrets=updated_secrets)
+
+
 class DeleteSecretMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
@@ -770,6 +883,40 @@ class DeleteSecretMutation(graphene.Mutation):
         )
 
         return DeleteSecretMutation(secret=secret)
+
+
+class BulkDeleteSecretMutation(graphene.Mutation):
+    class Arguments:
+        ids = graphene.List(graphene.ID, required=True)
+
+    secrets = graphene.List(SecretType)
+
+    @classmethod
+    def mutate(cls, root, info, ids):
+        deleted_secrets = []
+
+        for id in ids:
+            secret = Secret.objects.get(id=id)
+            env = secret.environment
+            org = env.app.organisation
+
+            if not user_is_org_member(info.context.user.userId, org.id):
+                raise GraphQLError("You don't have permission to perform this action")
+
+            secret.updated_at = timezone.now()
+            secret.deleted_at = timezone.now()
+            secret.save()
+            deleted_secrets.append(secret)
+
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=org, deleted_at=None
+            )
+            log_secret_event(
+                secret, SecretEvent.DELETE, org_member, None, ip_address, user_agent
+            )
+
+        return BulkDeleteSecretMutation(secrets=deleted_secrets)
 
 
 class ReadSecretMutation(graphene.Mutation):
@@ -810,7 +957,7 @@ class CreatePersonalSecretMutation(graphene.Mutation):
         secret = Secret.objects.get(id=override_data.secret_id)
         org = secret.environment.app.organisation
         org_member = OrganisationMember.objects.get(
-            organisation=org, user=info.context.user
+            organisation=org, user=info.context.user, deleted_at=None
         )
 
         if not user_can_access_environment(info.context.user, secret.environment.id):
@@ -837,7 +984,7 @@ class DeletePersonalSecretMutation(graphene.Mutation):
         secret = Secret.objects.get(id=secret_id)
         org = secret.environment.app.organisation
         org_member = OrganisationMember.objects.get(
-            organisation=org, user=info.context.user
+            organisation=org, user=info.context.user, deleted_at=None
         )
 
         if not user_can_access_environment(info.context.user, secret.environment.id):
