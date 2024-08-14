@@ -2,11 +2,11 @@ import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { UpgradeRequestForm } from '@/components/forms/UpgradeRequestForm'
 import { organisationContext } from '@/contexts/organisationContext'
-import { ProUpgradeDialog } from '@/ee/billing/ProUpgradeDialog'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { isCloudHosted } from '@/utils/appConfig'
 import { useQuery } from '@apollo/client'
 import { ReactNode, useContext } from 'react'
+import dynamic from 'next/dynamic'
 
 export const UpsellDialog = ({
   title,
@@ -18,6 +18,11 @@ export const UpsellDialog = ({
   buttonVariant?: 'primary' | 'secondary' | 'outline' | 'danger'
 }) => {
   const { activeOrganisation } = useContext(organisationContext)
+
+  // Dynamically import ProUpgradeDialog only if the app is cloud-hosted
+  const ProUpgradeDialog = isCloudHosted()
+    ? dynamic(() => import('@/ee/billing/ProUpgradeDialog'))
+    : null
 
   const { data, loading } = useQuery(GetOrganisationPlan, {
     variables: { organisationId: activeOrganisation?.id },
@@ -47,7 +52,7 @@ export const UpsellDialog = ({
           activeOrganisation.plan === ApiOrganisationPlanChoices.Pr ? (
             <UpgradeRequestForm onSuccess={() => {}} />
           ) : (
-            <ProUpgradeDialog userCount={data.organisationPlan.userCount} />
+            ProUpgradeDialog && <ProUpgradeDialog userCount={data.organisationPlan.userCount} />
           )
         ) : (
           <div className="text-zinc-900 dark:text-zinc-100">
