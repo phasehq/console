@@ -1,6 +1,4 @@
-import { useSession } from 'next-auth/react'
 import { useCallback, useContext, useState } from 'react'
-import { toast } from 'react-toastify'
 import { InitStripeProUpgradeCheckout } from '@/graphql/mutations/billing/initProUpgradeCheckout.gql'
 import { useMutation } from '@apollo/client'
 import { loadStripe } from '@stripe/stripe-js'
@@ -9,7 +7,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
-import { FaArrowRight, FaCheckCircle, FaUser } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
 import { FaCartShopping } from 'react-icons/fa6'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
@@ -60,7 +57,7 @@ const prices: PriceOption[] = [
   },
 ]
 
-export const ProUpgradeDialog = (props: { userCount: number }) => {
+const ProUpgradeDialog = (props: { userCount: number }) => {
   const [checkoutPreview, setCheckoutPreview] = useState<BillingPeriods>('yearly')
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriods | null>(null)
 
@@ -140,3 +137,5 @@ export const ProUpgradeDialog = (props: { userCount: number }) => {
     </div>
   )
 }
+
+export default ProUpgradeDialog

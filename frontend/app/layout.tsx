@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <link rel="icon" type="image/svg+xml" href={`favicon.svg`} key="favicon" />
+        <link rel="icon" type="image/svg+xml" href={`/favicon.svg`} key="favicon" />
         <link
           rel="mask-icon"
           type="image/svg+xml"
