@@ -9,6 +9,7 @@ import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcess
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import {
   ApiEnvironmentEnvTypeChoices,
@@ -42,9 +43,6 @@ import {
 } from '@/utils/crypto'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 
-const FREE_APP_LIMIT = 3
-const PRO_APP_LIMIT = 10
-
 export default function NewAppDialog(props: { appCount: number; organisation: OrganisationType }) {
   const { organisation, appCount } = props
   const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -62,6 +60,13 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
 
   const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation,
+  })
+
+  const { data: orgPlanData } = useQuery(GetOrganisationPlan, {
     variables: {
       organisationId: organisation?.id,
     },
@@ -387,17 +392,12 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   }
 
   const allowNewApp = () => {
-    // Only apply application limits in Phase Cloud
-    if (isCloudHosted()) {
-      if (organisation.plan === ApiOrganisationPlanChoices.Fr) {
-        return appCount < FREE_APP_LIMIT
-      } else if (organisation.plan === ApiOrganisationPlanChoices.Pr) {
-        return appCount < PRO_APP_LIMIT
-      } else if (organisation.plan === ApiOrganisationPlanChoices.En) {
-        return true
-      }
-    } else {
-      // No application limits on self-hosted
+    if (
+      organisation.plan === ApiOrganisationPlanChoices.Fr ||
+      organisation.plan === ApiOrganisationPlanChoices.Pr
+    ) {
+      return appCount < orgPlanData?.organisationPlan.maxApps
+    } else if (organisation.plan === ApiOrganisationPlanChoices.En) {
       return true
     }
   }
@@ -407,13 +407,13 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
       return {
         planName: 'Free',
         dialogTitle: 'Upgrade to Pro',
-        description: `The Free plan is limited to ${FREE_APP_LIMIT} Apps. To create more Apps, please upgrade to Pro.`,
+        description: `The Free plan is limited to ${orgPlanData?.organisationPlan.maxApps} Apps. To create more Apps, please upgrade to Pro.`,
       }
     else if (organisation.plan === ApiOrganisationPlanChoices.Pr)
       return {
         planName: 'Pro',
         dialogTitle: 'Upgrade to Enterprise',
-        description: `The Pro plan is limited to ${PRO_APP_LIMIT} Apps. To create more Apps, please upgrade to Enterprise.`,
+        description: `The Pro plan is limited to ${orgPlanData?.organisationPlan.maxApps} Apps. To create more Apps, please upgrade to Enterprise.`,
       }
   }
 
