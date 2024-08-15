@@ -13,7 +13,7 @@ class APIConfig(AppConfig):
 
     def activate_license_post_migrate(self, **kwargs):
         if settings.PHASE_LICENSE:
-            from ee.license.utils import activate_license
+            from ee.licensing.utils import activate_license
 
             try:
                 activate_license(settings.PHASE_LICENSE)

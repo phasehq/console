@@ -5,10 +5,11 @@ import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
-import { CreateNewSecret } from '@/graphql/mutations/environments/createSecret.gql'
+import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import {
   ApiEnvironmentEnvTypeChoices,
@@ -20,12 +21,10 @@ import {
   SecretType,
 } from '@/apollo/graphql'
 
-import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { KeyringContext } from '@/contexts/keyringContext'
 
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 import { Alert } from '../common/Alert'
-import { isCloudHosted } from '@/utils/appConfig'
 import {
   getUserKxPublicKey,
   getUserKxPrivateKey,
@@ -43,9 +42,6 @@ import {
 } from '@/utils/crypto'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 
-const FREE_APP_LIMIT = 3
-const PRO_APP_LIMIT = 10
-
 export default function NewAppDialog(props: { appCount: number; organisation: OrganisationType }) {
   const { organisation, appCount } = props
   const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -57,12 +53,19 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
   const [createApp, { error }] = useMutation(CreateApplication)
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
-  const [createSecret] = useMutation(CreateNewSecret)
+  const [bulkProcessSecrets] = useMutation(BulkProcessSecrets)
 
   const [getApps] = useLazyQuery(GetApps)
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
 
   const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation,
+  })
+
+  const { data: orgPlanData } = useQuery(GetOrganisationPlan, {
     variables: {
       organisationId: organisation?.id,
     },
@@ -102,42 +105,55 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
    *
    * @throws {Error} If the specified environment is invalid or if an error occurs during processing.
    */
-  async function processSecrets(env: EnvironmentType, secrets: Array<Partial<SecretType>>) {
+  async function processSecrets(
+    envs: Array<{ env: EnvironmentType; secrets: Array<Partial<SecretType>> }>
+  ) {
     const userKxKeys = {
       publicKey: await getUserKxPublicKey(keyring!.publicKey),
       privateKey: await getUserKxPrivateKey(keyring!.privateKey),
     }
 
-    const envSalt = await decryptAsymmetric(
-      env.wrappedSalt,
-      userKxKeys.privateKey,
-      userKxKeys.publicKey
-    )
+    const allSecretsToCreate: SecretInput[] = []
 
-    const promises = secrets.map(async (secret) => {
-      const { key, value, comment } = secret
+    await Promise.all(
+      envs.map(async ({ env, secrets }) => {
+        const envSalt = await decryptAsymmetric(
+          env.wrappedSalt,
+          userKxKeys.privateKey,
+          userKxKeys.publicKey
+        )
 
-      const encryptedKey = await encryptAsymmetric(key!, env.identityKey)
-      const encryptedValue = await encryptAsymmetric(value!, env.identityKey)
-      const keyDigest = await digest(key!, envSalt)
-      const encryptedComment = await encryptAsymmetric(comment!, env.identityKey)
+        const envSecretsPromises = secrets.map(async (secret) => {
+          const { key, value, comment } = secret
 
-      await createSecret({
-        variables: {
-          newSecret: {
+          const encryptedKey = await encryptAsymmetric(key!, env.identityKey)
+          const encryptedValue = await encryptAsymmetric(value!, env.identityKey)
+          const keyDigest = await digest(key!, envSalt)
+          const encryptedComment = await encryptAsymmetric(comment!, env.identityKey)
+
+          allSecretsToCreate.push({
             envId: env.id,
             key: encryptedKey,
             keyDigest,
             value: encryptedValue,
             path: '/',
             comment: encryptedComment,
-            tags: [],
-          } as SecretInput,
-        },
-      })
-    })
+            tags: [], // Adjust as necessary if you need to include tags
+          })
+        })
 
-    return Promise.all(promises)
+        await Promise.all(envSecretsPromises)
+      })
+    )
+
+    // Use the bulkProcessSecrets mutation
+    await bulkProcessSecrets({
+      variables: {
+        secretsToCreate: allSecretsToCreate,
+        secretsToUpdate: [],
+        secretsToDelete: [],
+      },
+    })
   }
 
   /**
@@ -234,24 +250,31 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
 
     const { data: appEnvsData } = await getAppEnvs({ variables: { appId } })
 
-    await processSecrets(
-      appEnvsData.appEnvironments.find(
-        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Dev
-      ),
-      DEV_SECRETS
-    )
-    await processSecrets(
-      appEnvsData.appEnvironments.find(
-        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Staging
-      ),
-      STAG_SECRETS
-    )
-    await processSecrets(
-      appEnvsData.appEnvironments.find(
-        (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Prod
-      ),
-      PROD_SECRETS
-    )
+    const envsToProcess = [
+      {
+        env: appEnvsData.appEnvironments.find(
+          (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Dev
+        ),
+        secrets: DEV_SECRETS,
+      },
+      {
+        env: appEnvsData.appEnvironments.find(
+          (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Staging
+        ),
+        secrets: STAG_SECRETS,
+      },
+      {
+        env: appEnvsData.appEnvironments.find(
+          (env: EnvironmentType) => env.envType === ApiEnvironmentEnvTypeChoices.Prod
+        ),
+        secrets: PROD_SECRETS,
+      },
+    ]
+
+    // Remove any null or undefined environments
+    const validEnvsToProcess = envsToProcess.filter(({ env }) => env !== undefined)
+
+    await processSecrets(validEnvsToProcess)
   }
 
   /**
@@ -368,17 +391,12 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
   }
 
   const allowNewApp = () => {
-    // Only apply application limits in Phase Cloud
-    if (isCloudHosted()) {
-      if (organisation.plan === ApiOrganisationPlanChoices.Fr) {
-        return appCount < FREE_APP_LIMIT
-      } else if (organisation.plan === ApiOrganisationPlanChoices.Pr) {
-        return appCount < PRO_APP_LIMIT
-      } else if (organisation.plan === ApiOrganisationPlanChoices.En) {
-        return true
-      }
-    } else {
-      // No application limits on self-hosted
+    if (
+      organisation.plan === ApiOrganisationPlanChoices.Fr ||
+      organisation.plan === ApiOrganisationPlanChoices.Pr
+    ) {
+      return appCount < orgPlanData?.organisationPlan.maxApps
+    } else if (organisation.plan === ApiOrganisationPlanChoices.En) {
       return true
     }
   }
@@ -388,13 +406,13 @@ export default function NewAppDialog(props: { appCount: number; organisation: Or
       return {
         planName: 'Free',
         dialogTitle: 'Upgrade to Pro',
-        description: `The Free plan is limited to ${FREE_APP_LIMIT} Apps. To create more Apps, please upgrade to Pro.`,
+        description: `The Free plan is limited to ${orgPlanData?.organisationPlan.maxApps} Apps. To create more Apps, please upgrade to Pro.`,
       }
     else if (organisation.plan === ApiOrganisationPlanChoices.Pr)
       return {
         planName: 'Pro',
         dialogTitle: 'Upgrade to Enterprise',
-        description: `The Pro plan is limited to ${PRO_APP_LIMIT} Apps. To create more Apps, please upgrade to Enterprise.`,
+        description: `The Pro plan is limited to ${orgPlanData?.organisationPlan.maxApps} Apps. To create more Apps, please upgrade to Enterprise.`,
       }
   }
 

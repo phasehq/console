@@ -67,7 +67,18 @@ export function Button(buttonProps: ButtonProps) {
     />
   )
 
-  const spinnerColor = variant === 'danger' ? 'red' : 'emerald'
+  const spinnerColor = () => {
+    switch (variant) {
+      case 'primary':
+        return 'emerald'
+      case 'danger':
+        return 'red'
+      case 'warning':
+        return 'amber'
+      default:
+        return 'emerald'
+    }
+  }
 
   return (
     <button
@@ -76,7 +87,7 @@ export function Button(buttonProps: ButtonProps) {
       disabled={buttonProps.disabled || isLoading}
     >
       {!isLoading && arrow === 'left' && arrowIcon}
-      {isLoading && <Spinner size={'sm'} color={spinnerColor} />}
+      {isLoading && <Spinner size={'sm'} color={spinnerColor()} />}
       {children}
       {!isLoading && arrow === 'right' && arrowIcon}
     </button>

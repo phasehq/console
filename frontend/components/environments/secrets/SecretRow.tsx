@@ -1,6 +1,6 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
 import { useEffect, useRef, useState } from 'react'
-import { FaEyeSlash, FaEye } from 'react-icons/fa'
+import { FaEyeSlash, FaEye, FaUndo, FaTrashAlt } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
@@ -8,7 +8,6 @@ import clsx from 'clsx'
 import { useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
 
-import { DeleteConfirmDialog } from './DeleteDialog'
 import { CommentDialog } from './CommentDialog'
 import { HistoryDialog } from './HistoryDialog'
 import { OverrideDialog } from './OverrideDialog'
@@ -26,6 +25,7 @@ export default function SecretRow(props: {
   handlePropertyChange: Function
   handleDelete: Function
   globallyRevealed: boolean
+  stagedForDelete?: boolean
 }) {
   const {
     orgId,
@@ -35,6 +35,7 @@ export default function SecretRow(props: {
     handlePropertyChange,
     handleDelete,
     globallyRevealed,
+    stagedForDelete,
   } = props
 
   const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
@@ -85,7 +86,7 @@ export default function SecretRow(props: {
   }
 
   const INPUT_BASE_STYLE =
-    'w-full text-zinc-800 font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 dark:text-white transition ease ph-no-capture'
+    'w-full font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -102,11 +103,25 @@ export default function SecretRow(props: {
     )
   }
 
+  const rowBgColor = () => {
+    if (!cannonicalSecret) return 'bg-emerald-400/20 dark:bg-emerald-400/10'
+    else if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
+    else if (secretHasBeenModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
+  }
+
+  const inputTextColor = () => {
+    if (!cannonicalSecret) return 'text-emerald-700 dark:text-emerald-200'
+    else if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
+    else if (secretHasBeenModified()) return 'text-amber-700 dark:text-amber-300'
+    else return 'text-zinc-900 dark:text-zinc-100'
+  }
+
   return (
-    <div className="flex flex-row w-full gap-2 group relative z-0">
+    <div className={clsx('flex flex-row w-full gap-2 group relative z-0', rowBgColor())}>
       <div className="w-1/3 relative">
         <input
           ref={keyInputRef}
+          disabled={stagedForDelete}
           className={clsx(
             INPUT_BASE_STYLE,
             'rounded-sm',
@@ -115,7 +130,7 @@ export default function SecretRow(props: {
               : keyIsDuplicate
                 ? 'ring-1 ring-inset ring-amber-500'
                 : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
-            secretHasBeenModified() && '!text-amber-500'
+            inputTextColor()
           )}
           value={secret.key}
           onChange={(e) =>
@@ -139,8 +154,8 @@ export default function SecretRow(props: {
           </div>
         </div>
       </div>
-      <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-transparent group-hover:bg-zinc-100 dark:group-hover:bg-zinc-700 transition ease p-px">
-        {isBoolean && (
+      <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-transparent transition ease p-px">
+        {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
               title="Toggle value"
@@ -162,8 +177,9 @@ export default function SecretRow(props: {
           </div>
         )}
         <input
-          className={clsx(INPUT_BASE_STYLE, 'w-full focus:outline-none p-2')}
+          className={clsx(INPUT_BASE_STYLE, inputTextColor(), 'w-full focus:outline-none p-2')}
           value={secret.value}
+          disabled={stagedForDelete}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
         />
@@ -183,25 +199,29 @@ export default function SecretRow(props: {
             )}
           </div>
 
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-            <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
-          </div>
+          {!stagedForDelete && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+              <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
+            </div>
+          )}
 
-          <div
-            className={clsx(
-              secret.comment.length === 0 &&
-                'opacity-0 group-hover:opacity-100 transition-opacity ease'
-            )}
-          >
-            <CommentDialog
-              secretName={secret.key}
-              secretId={secret.id}
-              comment={secret.comment}
-              handlePropertyChange={handlePropertyChange}
-            />
-          </div>
+          {!stagedForDelete && (
+            <div
+              className={clsx(
+                secret.comment.length === 0 &&
+                  'opacity-0 group-hover:opacity-100 transition-opacity ease'
+              )}
+            >
+              <CommentDialog
+                secretName={secret.key}
+                secretId={secret.id}
+                comment={secret.comment}
+                handlePropertyChange={handlePropertyChange}
+              />
+            </div>
+          )}
 
-          {cannonicalSecret && (
+          {cannonicalSecret && !stagedForDelete && (
             <div
               className={clsx(
                 (!secret.override || !secret.override.isActive) &&
@@ -225,7 +245,16 @@ export default function SecretRow(props: {
         </div>
       </div>
       <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-center">
-        <DeleteConfirmDialog secretName={secret.key} secretId={secret.id} onDelete={handleDelete} />
+        {/* <DeleteConfirmDialog secretName={secret.key} secretId={secret.id} onDelete={handleDelete} /> */}
+        <Button
+          variant="danger"
+          onClick={() => handleDelete(secret.id)}
+          title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
+        >
+          <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
+            {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+          </div>
+        </Button>
       </div>
     </div>
   )

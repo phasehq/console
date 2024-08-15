@@ -30,6 +30,9 @@ from .graphene.queries.syncing import (
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
+    BulkCreateSecretMutation,
+    BulkDeleteSecretMutation,
+    BulkEditSecretMutation,
     CreateEnvironmentKeyMutation,
     CreateEnvironmentMutation,
     CreateEnvironmentTokenMutation,
@@ -433,7 +436,7 @@ class Query(graphene.ObjectType):
         if path:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("created_at")
+        return Secret.objects.filter(**filter).order_by("-created_at")
 
     def resolve_folders(root, info, env_id, path=None):
         if not user_can_access_environment(info.context.user.userId, env_id):
@@ -755,6 +758,10 @@ class Mutation(graphene.ObjectType):
     edit_secret = EditSecretMutation.Field()
     delete_secret = DeleteSecretMutation.Field()
     read_secret = ReadSecretMutation.Field()
+
+    create_secrets = BulkCreateSecretMutation.Field()
+    edit_secrets = BulkEditSecretMutation.Field()
+    delete_secrets = BulkDeleteSecretMutation.Field()
 
     create_override = CreatePersonalSecretMutation.Field()
     remove_override = DeletePersonalSecretMutation.Field()

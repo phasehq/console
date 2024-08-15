@@ -17,7 +17,7 @@ urlpatterns = [
     path("social/login/", include("api.urls")),
     path("logout/", csrf_exempt(logout_view)),
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
-    path("/health", health_check),
+    path("health/", health_check),
     # To not break legacy health checks. TODO: Remove
     path("493c5048-99f9-4eac-ad0d-98c3740b491f/health", health_check),
     path("secrets/", E2EESecretsView.as_view()),

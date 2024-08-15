@@ -19,7 +19,6 @@ import {
   AppType,
   ApiOrganisationMemberRoleChoices,
   EnvironmentType,
-  ApiActivatedPhaseLicensePlanChoices,
   ApiOrganisationPlanChoices,
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
@@ -227,8 +226,6 @@ const InviteDialog = (props: { organisationId: string }) => {
 
   const { activeOrganisation } = useContext(organisationContext)
 
-  const FREE_SEAT_LIMIT = 5
-
   const { data } = useQuery(GetOrganisationPlan, {
     variables: { organisationId },
     fetchPolicy: 'cache-and-network',
@@ -237,7 +234,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const upsell =
     isCloudHosted() &&
     activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
-    data.organisationPlan.userCount === FREE_SEAT_LIMIT
+    data?.organisationPlan.userCount === data?.organisationPlan.maxUsers
 
   const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
 
