@@ -10,17 +10,17 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 PLAN_CONFIG = {
     "FR": {
         "name": "Free",
-        "max_users": 5 if CLOUD_HOSTED else None,
-        "max_apps": 3 if CLOUD_HOSTED else None,
+        "max_users": 5 if CLOUD_HOSTED else 20,
+        "max_apps": 3 if CLOUD_HOSTED else 20,
         "max_envs_per_app": 3,
-        "max_tokens_per_app": 3 if CLOUD_HOSTED else None,
+        "max_tokens_per_app": 3,
     },
     "PR": {
         "name": "Pro",
         "max_users": None,
         "max_apps": None,
         "max_envs_per_app": 10,
-        "max_tokens_per_app": 10 if CLOUD_HOSTED else None,
+        "max_tokens_per_app": 10,
     },
     "EN": {
         "name": "Enterprise",
