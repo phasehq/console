@@ -25,7 +25,6 @@ import { KeyringContext } from '@/contexts/keyringContext'
 
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 import { Alert } from '../common/Alert'
-import { isCloudHosted } from '@/utils/appConfig'
 import {
   getUserKxPublicKey,
   getUserKxPrivateKey,
