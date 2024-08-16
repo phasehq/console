@@ -74,12 +74,14 @@ const Sidebar = () => {
                   {activeOrganisation?.name}{' '}
                 </span>
               </div>
-              <FaChevronDown
-                className={clsx(
-                  'transition ease opacity-0 group-hover:opacity-100 text-zinc-800 dark:text-zinc-100 flex-shrink-0 ml-2',
-                  open ? 'rotate-180 opacity-100' : 'rotate-0'
-                )}
-              />
+              {showOrgsMenu && (
+                <FaChevronDown
+                  className={clsx(
+                    'transition ease opacity-0 group-hover:opacity-100 text-zinc-800 dark:text-zinc-100 flex-shrink-0 ml-2',
+                    open ? 'rotate-180 opacity-100' : 'rotate-0'
+                  )}
+                />
+              )}
             </Menu.Button>
             <Transition
               as={Fragment}
