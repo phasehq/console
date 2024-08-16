@@ -30,7 +30,7 @@ import {
   FaMagic,
   FaInfoCircle,
 } from 'react-icons/fa'
-import { VscDiffModified, VscAdd } from "react-icons/vsc";
+import { GoDotFill } from "react-icons/go";
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
@@ -58,6 +58,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { SortOption, sortSecrets } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 import GenericDialog from '@/components/common/GenericDialog'
+import { Tag } from '@/components/environments/Tag'
 
 type ChangeDetail = {
   old: string | SecretTagType[];
@@ -419,7 +420,7 @@ export default function EnvironmentPath({
     setClientSecrets(updatedSecretList)
   }
 
-  const getUpdatedSecrets = () => {
+  const getclientSecrets = () => {
     const changedElements = []
 
     for (let i = 0; i < clientSecrets.length; i++) {
@@ -457,7 +458,7 @@ export default function EnvironmentPath({
 
   const handleSaveChanges = async () => {
     setIsloading(true)
-    const changedSecrets = getUpdatedSecrets()
+    const changedSecrets = getclientSecrets()
     if (changedSecrets.some((secret) => secret.key.length === 0)) {
       toast.error('Secret keys cannot be empty!')
       setIsloading(false)
@@ -763,12 +764,11 @@ export default function EnvironmentPath({
   const getChanges = (): Record<string, SecretChange> => {
     const changes: Record<string, SecretChange> = {};
   
-    updatedSecrets.forEach((updatedSecret) => {
-      const originalSecret = secrets.find(
-        (secret) => secret.id === updatedSecret.id
+    clientSecrets.forEach((updatedSecret) => {
+      const originalSecret = serverSecrets.find(
+        (serverSecrets) => serverSecrets.id === updatedSecret.id
       );
   
-      //adding new secret if it doenst exist
       if (!originalSecret) {
         changes[updatedSecret.key] = {
           type: "Added",
@@ -845,64 +845,57 @@ export default function EnvironmentPath({
   } 
   
   const DisplayChanges = ({ change }: any) => {
-    
-    //filtering removed tags and added tags into individual arrays
-    const removedTags = Array.isArray(change.tags?.old) ? change.tags.old.filter(
-      (tag) => !change.tags?.new.some(newTag => newTag.id === tag.id)
-    ) : [];
+    const removedTags = change.tags?.old?.filter(tag => 
+      !change.tags?.new?.some(newTag => newTag.id === tag.id)
+    ) || [];
   
-    const addedTags = Array.isArray(change.tags?.new) ? change.tags.new.filter(
-      (tag) => !change.tags?.old.some(oldTag => oldTag.id === tag.id)
-    ) : [];
+    const addedTags = change.tags?.new?.filter(tag => 
+      !change.tags?.old?.some(oldTag => oldTag.id === tag.id)
+    ) || [];
   
     return (
-      <div className='flex flex-col space-y-1 ml-8 text-md'>
-        {change.key?.new && (
-          <div className="flex flex-row space-x-2 flex-wrap">
-            <p className='text-gray-600'>KEY:</p>
+      <div className='flex flex-col ml-6 text-md space-y-[0.15rem]'>
+        {(change.key?.new) && (change.type == "Modified") && (
+          <div className="flex flex-row space-x-2 flex-wrap items-center">
+            <p className='text-zinc-500 mr-1'>KEY:</p>
             {change.key?.old && (
               <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through'>{change.key.old}</p>
             )}
-            <p className='bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture ml-1 text-sm'>{change.key.new}</p>
+            <p className={change.type == 'Added' ? 'dark:text-white': 'dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 ph-no-capture ml-1'}>
+              {change.key.new}
+            </p>
           </div>
         )}
         {change.value?.new && (
-          <div className="flex flex-row space-x-2 flex-wrap">
-            <p className='text-gray-600'>VALUE:</p>
+          <div className="flex flex-row space-x-1 flex-wrap items-center">
+            <p className='text-zinc-500 mr-1'>VALUE:</p>
             {change.value?.old && (
               <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through'>{limitString(change.value.old)}</p>
             )}
-            <p className='bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture'>{limitString(change.value.new)}</p>
+           <p className={change.type == 'Added' ? 'dark:text-white': 'dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 ph-no-capture'}>{limitString(change.value.new)}</p>
           </div>
         )}
         {change.comment?.new && (
-          <div className="flex flex-row space-x-2 flex-wrap">
-            <p className='text-gray-600'>COMMENT:</p>
+          <div className="flex flex-row space-x-1 flex-wrap items-center">
+            <p className='text-zinc-500 mr-1'>COMMENT:</p>
             {change.comment?.old && (
               <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through'>{change.comment.old}</p>
             )}
-            <p className='bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture'>{change.comment.new}</p>
+           <p className={change.type == 'Added' ? 'dark:text-white': 'dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 ph-no-capture'}>{change.comment.new}</p>
           </div>
         )}
-        {removedTags.length > 0 && (
-          <div className="flex flex-row space-x-2">
-            <p className="text-gray-600">TAGS REMOVED:</p>
+        {(removedTags?.length > 0 || addedTags?.length > 0) && (
+          <div className="flex flex-row space-x-1 items-center">
+            <p className="text-zinc-500 mr-1">TAGS:</p>
             <div className="inline-flex gap-2">
-              {removedTags.map((tag) => (
-                <div key={tag.id} className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through">
-                  {tag.name}
+              {removedTags?.map((tag: SecretTagType) => (
+                <div key={tag.id} className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through rounded-full">
+                  <Tag tag={tag} buttonVariant="deleted"/>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-        {addedTags.length > 0 && (
-          <div className="flex flex-row space-x-2">
-            <p className="text-gray-600">TAGS ADDED:</p>
-            <div className="inline-flex gap-2">
-              {addedTags.map((tag) => (
-                <div key={tag.id} className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture">
-                  {tag.name}
+              {addedTags?.map((tag: SecretTagType) => (
+                <div key={tag.id} className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture rounded-full">
+                  <Tag tag={tag} buttonVariant="added"/>
                 </div>
               ))}
             </div>
@@ -987,27 +980,30 @@ export default function EnvironmentPath({
                   buttonContent={<FaInfoCircle />}
                 >
                   <div className="flex flex-col space-y-2">
+                    <h1 className='text-zinc-500 mb-5'>The following changes are pending deployment</h1>
                     {Object.entries(allChanges).map(([id, change]) => (
-                      <div key={id} className="flex flex-row space-x-2 items-center">
+                      <div key={id} className="flex flex-row items-center">
                         {change.type === "Added" && (
-                          <div className='flex flex-col space-y-1'>
+                          <div className='flex flex-col mb-6'>
                             <div className='flex flex-row items-center space-x-2'>
-                              <VscAdd className="text-green-500" />
-                              <p className="font-mono font-bold text-green-700">
-                                Added {change.secretName}
+                              <GoDotFill className="text-emerald-400" />
+                              <p className="font-mono font-bold text-emerald-400 ">
+                                Created 
                               </p>
+                              <p className='dark:text-white text-black'>{change.secretName}</p>
                             </div>
                             <DisplayChanges change={change} />
                           </div>
                         )}
                         {change.type === "Modified" && (
-                          <div className="flex flex-col space-y-1">
+                          <div className="flex flex-col mb-6">
                             <div className="flex items-center space-x-2">
                               <div className='flex flex-row space-x-2 items-center'>
-                                <VscDiffModified className="text-yellow-500" />
-                                <p className="font-mono font-bold text-yellow-700">
-                                  Modified {change.secretName}
+                                <GoDotFill className="text-yellow-500" />
+                                <p className="font-mono font-bold text-amber-400 ">
+                                  Updated 
                                 </p>
+                                <p className='dark:text-white text-black'>{change.secretName}</p>
                               </div>
                             </div>
                             <DisplayChanges change={change} />
@@ -1015,6 +1011,18 @@ export default function EnvironmentPath({
                         )}
                       </div>
                     ))}
+                    {secretsToDelete?.map(secretId => {
+                      const deletedSecret = serverSecrets.find(secret => secret.id === secretId);
+                      return (
+                        <div className="flex items-center space-x-2 mb-6">
+                          <GoDotFill className="text-red-400" />
+                          <p key={secretId} className='text-red-400'>
+                            Deleted
+                          </p>
+                          <p className='dark:text-white text-black'>{deletedSecret?.key}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </GenericDialog>
               </Alert>
