@@ -53,35 +53,41 @@ const Sidebar = () => {
 
   const { organisations, activeOrganisation } = useContext(organisationContext)
 
-  const showOrgsMenu = organisations === null ? false : organisations?.length > 1
+  const showOrgsMenu = organisations && organisations.length > 1
 
   const isOwner = organisations?.some((org) => org.role?.toLowerCase() === 'owner')
 
   const OrgsMenu = () => {
+    const OrgLabel = () => (
+      <div className="p-2 text-neutral-500 flex items-center justify-between w-full bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10 rounded-lg">
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <div>
+            <PlanLabel plan={activeOrganisation?.plan!} />
+          </div>
+          <span className="truncate font-semibold tracking-wider text-lg">
+            {activeOrganisation?.name}
+          </span>
+        </div>
+      </div>
+    )
+
+    if (!showOrgsMenu) return <OrgLabel />
+
     return (
       <Menu as="div" className="relative inline-block text-left w-full">
         {({ open }) => (
           <>
-            <Menu.Button
-              as="div"
-              className="p-2 text-neutral-500 cursor-pointer flex items-center justify-between w-full group bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10 rounded-lg"
-            >
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <div>
-                  <PlanLabel plan={activeOrganisation?.plan!} />
-                </div>
-                <span className="truncate font-semibold tracking-wider text-lg">
-                  {activeOrganisation?.name}{' '}
-                </span>
-              </div>
-              {showOrgsMenu && (
+            <Menu.Button className="w-full">
+              <div className="relative">
+                <OrgLabel />
                 <FaChevronDown
                   className={clsx(
-                    'transition ease opacity-0 group-hover:opacity-100 text-zinc-800 dark:text-zinc-100 flex-shrink-0 ml-2',
-                    open ? 'rotate-180 opacity-100' : 'rotate-0'
+                    'absolute right-2 top-1/2 -translate-y-1/2 transition-transform',
+                    'text-zinc-800 dark:text-zinc-100',
+                    open ? 'rotate-180' : 'rotate-0'
                   )}
                 />
-              )}
+              </div>
             </Menu.Button>
             <Transition
               as={Fragment}
@@ -93,36 +99,34 @@ const Sidebar = () => {
               leaveTo="transform opacity-0 scale-95"
             >
               <Menu.Items className="absolute z-10 left-0 shadow-2xl top-16 mt-2 w-64 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                {showOrgsMenu ? (
-                  <div className="px-1 py-1">
-                    {organisations?.map((org: OrganisationType) => (
-                      <Menu.Item key={org.id}>
-                        {({ active }) => (
-                          <Link href={`/${org.name}`}>
-                            <div
-                              title={`Switch to ${org.name}`}
-                              className={`${
-                                active
-                                  ? 'hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-neutral-700'
-                                  : 'text-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-500'
-                              } group flex w-full gap-2 items-center justify-between px-2 py-2 border-b border-neutral-500/20`}
-                            >
-                              <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
-                                <div>
-                                  <PlanLabel plan={org?.plan!} />
-                                </div>
-                                <span className="truncate text-left font-medium text-base">
-                                  {org.name}
-                                </span>
+                <div className="px-1 py-1">
+                  {organisations?.map((org: OrganisationType) => (
+                    <Menu.Item key={org.id}>
+                      {({ active }) => (
+                        <Link href={`/${org.name}`}>
+                          <div
+                            title={`Switch to ${org.name}`}
+                            className={`${
+                              active
+                                ? 'hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                                : 'text-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-500'
+                            } group flex w-full gap-2 items-center justify-between px-2 py-2 border-b border-neutral-500/20`}
+                          >
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
+                              <div>
+                                <PlanLabel plan={org?.plan!} />
                               </div>
-                              <FaExchangeAlt className="flex-shrink-0" />
+                              <span className="truncate text-left font-medium text-base">
+                                {org.name}
+                              </span>
                             </div>
-                          </Link>
-                        )}
-                      </Menu.Item>
-                    ))}
-                  </div>
-                ) : null}
+                            <FaExchangeAlt className="flex-shrink-0" />
+                          </div>
+                        </Link>
+                      )}
+                    </Menu.Item>
+                  ))}
+                </div>
                 {!isOwner && (
                   <div className="py-3 px-1 flex justify-center">
                     <Link href="/signup">
