@@ -420,7 +420,7 @@ export default function EnvironmentPath({
     setClientSecrets(updatedSecretList)
   }
 
-  const getclientSecrets = () => {
+  const getUpdatedSecrets = () => {
     const changedElements = []
 
     for (let i = 0; i < clientSecrets.length; i++) {
@@ -458,7 +458,7 @@ export default function EnvironmentPath({
 
   const handleSaveChanges = async () => {
     setIsloading(true)
-    const changedSecrets = getclientSecrets()
+    const changedSecrets = getUpdatedSecrets()
     if (changedSecrets.some((secret) => secret.key.length === 0)) {
       toast.error('Secret keys cannot be empty!')
       setIsloading(false)
