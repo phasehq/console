@@ -857,27 +857,27 @@ export default function EnvironmentPath({
       <div className='flex flex-col ml-6 text-md space-y-[0.15rem]'>
         {(change.key?.new) && (change.type == "Modified") && (
           <div className="flex flex-row space-x-2 flex-wrap items-center">
-            <p className='text-zinc-500 mr-1'>KEY:</p>
+            <p className='text-zinc-500 mr-1 font-mono'>KEY:</p>
             {change.key?.old && (
-              <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through'>{change.key.old}</p>
+              <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through font-mono'>{change.key.old}</p>
             )}
-            <p className={change.type == 'Added' ? 'dark:text-white': 'dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 ph-no-capture ml-1'}>
+            <p className={change.type == 'Added' ? 'dark:text-white font-mono': 'dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 ph-no-capture ml-1 font-mono'}>
               {change.key.new}
             </p>
           </div>
         )}
         {change.value?.new && (
           <div className="flex flex-row space-x-1 flex-wrap items-center">
-            <p className='text-zinc-500 mr-1'>VALUE:</p>
+            <p className='text-zinc-500 mr-1 font-mono'>VALUE:</p>
             {change.value?.old && (
-              <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through'>{limitString(change.value.old)}</p>
+              <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through font-mono'>{limitString(change.value.old)}</p>
             )}
            <p className={change.type == 'Added' ? 'dark:text-white font-mono': 'dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 ph-no-capture font-mono'}>{limitString(change.value.new)}</p>
           </div>
         )}
         {change.comment?.new && (
           <div className="flex flex-row space-x-1 flex-wrap items-center">
-            <p className='text-zinc-500 mr-1'>COMMENT:</p>
+            <p className='text-zinc-500 mr-1 font-mono'>COMMENT:</p>
             {change.comment?.old && (
               <p className='bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through font-mono'>{change.comment.old}</p>
             )}
@@ -886,7 +886,7 @@ export default function EnvironmentPath({
         )}
         {(removedTags?.length > 0 || addedTags?.length > 0) && (
           <div className="flex flex-row space-x-1 items-center">
-            <p className="text-zinc-500 mr-1">TAGS:</p>
+            <p className="text-zinc-500 mr-1 font-mono">TAGS:</p>
             <div className="inline-flex gap-2">
               {removedTags?.map((tag: SecretTagType) => (
                 <div key={tag.id} className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through rounded-full">
@@ -987,10 +987,10 @@ export default function EnvironmentPath({
                           <div className='flex flex-col mb-6'>
                             <div className='flex flex-row items-center space-x-2'>
                               <GoDotFill className="text-emerald-400" />
-                              <p className="font-mono font-bold text-emerald-400">
+                              <p className="text-emerald-400">
                                 Created 
                               </p>
-                              <p className='dark:text-white text-black'>{change.secretName}</p>
+                              <p className='dark:text-white text-black font-mono'>{change.secretName}</p>
                             </div>
                             <DisplayChanges change={change} />
                           </div>
@@ -1000,10 +1000,10 @@ export default function EnvironmentPath({
                             <div className="flex items-center space-x-2">
                               <div className='flex flex-row space-x-2 items-center'>
                                 <GoDotFill className="text-yellow-500" />
-                                <p className="font-mono font-bold text-amber-400 ">
+                                <p className="text-amber-400 ">
                                   Updated 
                                 </p>
-                                <p className='dark:text-white text-black'>{change.secretName}</p>
+                                <p className='dark:text-white text-black font-mono'>{change.secretName}</p>
                               </div>
                             </div>
                             <DisplayChanges change={change} />
@@ -1016,10 +1016,10 @@ export default function EnvironmentPath({
                       return (
                         <div className="flex items-center space-x-2 mb-6">
                           <GoDotFill className="text-red-400" />
-                          <p key={secretId} className='text-red-400 font-mono'>
+                          <p key={secretId} className='text-red-400'>
                             Deleted
                           </p>
-                          <p className='dark:text-white text-black'>{deletedSecret?.key}</p>
+                          <p className='dark:text-white text-black font-mono'>{deletedSecret?.key}</p>
                         </div>
                       );
                     })}
