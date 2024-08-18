@@ -147,12 +147,16 @@ const CommandPalette: React.FC = () => {
 
   const flattenedCommands = allCommands.flatMap(group => group.items);
 
-  const filteredCommands = query === ''
-    ? flattenedCommands
-    : flattenedCommands.filter((command) =>
-        command.name.toLowerCase().includes(query.toLowerCase()) ||
-        command.description.toLowerCase().includes(query.toLowerCase())
-      );
+  const filteredCommands = React.useMemo(() => {
+    if (query === '') return flattenedCommands;
+  
+    const keywords = query.toLowerCase().split(/\s+/);
+    
+    return flattenedCommands.filter((command) => {
+      const searchableText = `${command.name} ${command.description}`.toLowerCase();
+      return keywords.every(keyword => searchableText.includes(keyword));
+    });
+  }, [query, flattenedCommands]);
 
   useEffect(() => {
     const detectPlatform = () => {
