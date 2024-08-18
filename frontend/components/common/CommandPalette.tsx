@@ -123,7 +123,7 @@ const CommandPalette: React.FC = () => {
       })) || []),
       {
         id: `${app.id}-logs`,
-        name: `${app.name} Logs`,
+        name: `Go to Logs`,
         description: `View logs for ${app.name}`,
         icon: <FaListCheck className="h-5 w-5" />,
         action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
