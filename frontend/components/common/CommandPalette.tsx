@@ -13,7 +13,9 @@ import {
   CogIcon,
   WindowIcon,
   LightBulbIcon,
-  ServerIcon,
+  HomeIcon,
+  Square3Stack3DIcon,
+  PuzzlePieceIcon,
 } from '@heroicons/react/24/outline';
 
 type CommandItem = {
@@ -22,6 +24,11 @@ type CommandItem = {
   description: string;
   icon: React.ReactNode;
   action: () => void;
+};
+
+type CommandGroup = {
+  name: string;
+  items: CommandItem[];
 };
 
 const CommandPalette: React.FC = () => {
@@ -43,35 +50,45 @@ const CommandPalette: React.FC = () => {
     setIsOpen(false);
   };
 
-  const baseCommands: CommandItem[] = [
+  const navigationCommands: CommandItem[] = [
     {
-      id: 'create-app',
-      name: 'Create an App',
-      description: 'Create a new application',
-      icon: <PlusIcon className="h-5 w-5" />,
+      id: 'go-home',
+      name: 'Go to Home',
+      description: 'Navigate to the home page',
+      icon: <HomeIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}`),
+    },
+    {
+      id: 'go-all-apps',
+      name: 'Go to All Apps',
+      description: 'View all applications',
+      icon: <Square3Stack3DIcon className="h-5 w-5" />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/apps`),
     },
     {
-      id: 'invite-user',
-      name: 'Invite a User',
-      description: 'Invite a new user to the organization',
-      icon: <UsersIcon className="h-5 w-5" />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/members`),
-    },
-    {
-      id: 'manage-org-users',
-      name: 'Manage Organisation Users',
-      description: 'Manage users in your organization',
-      icon: <UsersIcon className="h-5 w-5" />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/members`),
-    },
-    {
-      id: 'navigate-settings',
-      name: 'Navigate to Settings',
-      description: 'Go to settings page',
+      id: 'go-settings',
+      name: 'Go to Settings',
+      description: 'Navigate to settings page',
       icon: <CogIcon className="h-5 w-5" />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/settings`),
     },
+    {
+      id: 'go-members',
+      name: 'Go to Members',
+      description: 'Manage organization members',
+      icon: <UsersIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/members`),
+    },
+    {
+      id: 'go-integrations',
+      name: 'Go to Integrations',
+      description: 'Manage integrations',
+      icon: <PuzzlePieceIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations`),
+    },
+  ];
+
+  const actionCommands: CommandItem[] = [
     {
       id: 'toggle-theme',
       name: 'Toggle dark / light theme',
@@ -79,38 +96,55 @@ const CommandPalette: React.FC = () => {
       icon: <WindowIcon className="h-5 w-5" />,
       action: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
     },
+    {
+      id: 'create-app',
+      name: 'Create an App',
+      description: 'Create a new application',
+      icon: <PlusIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/apps/new`),
+    },
+    {
+      id: 'invite-user',
+      name: 'Invite a User',
+      description: 'Invite a new user to the organization',
+      icon: <UsersIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/members/invite`),
+    },
   ];
 
-  const appCommands: CommandItem[] = appsData?.apps?.flatMap((app: any) => [
-    {
-      id: `${app.id}-details`,
-      name: `${app.name} Details`,
-      description: `View details for ${app.name}`,
-      icon: <ServerIcon className="h-5 w-5" />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}`),
-    },
-    {
-      id: `${app.id}-logs`,
-      name: `${app.name} Logs`,
-      description: `View logs for ${app.name}`,
-      icon: <LightBulbIcon className="h-5 w-5" />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
-    },
-    ...(app.environments?.map((env: any) => ({
-      id: `${app.id}-${env.id}`,
-      name: `${app.name} > ${env.name} Environment`,
-      description: `Go to ${env.name} environment of ${app.name}`,
-      icon: <ArrowRightCircleIcon className="h-5 w-5" />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
-    })) || []),
-  ]) || [];
+  const appCommands: CommandGroup[] = appsData?.apps?.map((app: any) => ({
+    name: app.name,
+    items: [
+      {
+        id: `${app.id}-logs`,
+        name: `${app.name} Logs`,
+        description: `View logs for ${app.name}`,
+        icon: <LightBulbIcon className="h-5 w-5" />,
+        action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
+      },
+      ...(app.environments?.map((env: any) => ({
+        id: `${app.id}-${env.id}`,
+        name: `${env.name} Environment`,
+        description: `Go to ${env.name} environment of ${app.name}`,
+        icon: <ArrowRightCircleIcon className="h-5 w-5" />,
+        action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
+      })) || []),
+    ],
+  })) || [];
 
-  const allCommands = [...baseCommands, ...appCommands];
+  const allCommands: CommandGroup[] = [
+    { name: 'Navigation', items: navigationCommands },
+    { name: 'Actions', items: actionCommands },
+    ...appCommands,
+  ];
 
-  const filteredCommands = allCommands.filter(command =>
-    command.name.toLowerCase().includes(query.toLowerCase()) ||
-    command.description.toLowerCase().includes(query.toLowerCase())
-  );
+  const filteredCommands = allCommands.map(group => ({
+    ...group,
+    items: group.items.filter(command =>
+      command.name.toLowerCase().includes(query.toLowerCase()) ||
+      command.description.toLowerCase().includes(query.toLowerCase())
+    ),
+  })).filter(group => group.items.length > 0);
 
   useEffect(() => {
     setModifierKey(
@@ -172,7 +206,7 @@ const CommandPalette: React.FC = () => {
             leaveFrom="opacity-100 scale-100"
             leaveTo="opacity-0 scale-95"
           >
-            <Dialog.Panel className="mx-auto max-w-xl transform divide-y divide-zinc-100 overflow-hidden rounded-xl bg-zinc-50 shadow-2xl ring-1 ring-black ring-opacity-5 backdrop-blur backdrop-filter transition-all dark:divide-zinc-800 dark:bg-zinc-900">
+            <Dialog.Panel className="mx-auto max-w-xl transform overflow-hidden rounded-xl bg-zinc-50 shadow-2xl ring-1 ring-black ring-opacity-5 backdrop-blur backdrop-filter transition-all dark:bg-zinc-900 dark:ring-zinc-800">
               <div className="relative">
                 <FaSearch
                   className="pointer-events-none absolute left-6 top-3.5 h-5 w-5 text-zinc-500 dark:text-zinc-400"
@@ -187,28 +221,38 @@ const CommandPalette: React.FC = () => {
                 />
               </div>
 
-              {filteredCommands.length > 0 && (
-                <ul className="max-h-80 scroll-py-2 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800">
-                  {filteredCommands.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex cursor-default select-none items-center px-4 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-700/50"
-                      onClick={() => {
-                        item.action();
-                        setIsOpen(false);
-                      }}
-                    >
-                      <div className="flex h-6 w-6 items-center justify-center">
-                        {item.icon}
-                      </div>
-                      <div className="ml-3">
-                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</div>
-                        <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{item.description}</div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div className="max-h-[42rem] overflow-y-auto">
+                {filteredCommands.map((group, groupIndex) => (
+                  <div key={group.name}>
+                    {groupIndex > 0 && (
+                      <div className="border-t border-zinc-200 dark:border-zinc-700 my-2"></div>
+                    )}
+                    <div className="px-4 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                      {group.name}
+                    </div>
+                    <ul>
+                      {group.items.map((item) => (
+                        <li
+                          key={item.id}
+                          className="flex cursor-default select-none items-center px-4 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-700/50"
+                          onClick={() => {
+                            item.action();
+                            setIsOpen(false);
+                          }}
+                        >
+                          <div className="flex h-6 w-6 items-center justify-center">
+                            {item.icon}
+                          </div>
+                          <div className="ml-3">
+                            <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</div>
+                            <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{item.description}</div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
 
               {query !== '' && filteredCommands.length === 0 && (
                 <div className="py-14 px-6 text-center sm:px-14">
