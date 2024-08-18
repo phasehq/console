@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, Fragment, useContext } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import React, { useState, useEffect, Fragment, useContext } from 'react';
+import { Combobox, Dialog, Transition } from '@headlessui/react';
 import { FaSearch } from "react-icons/fa";
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@apollo/client';
@@ -35,7 +35,6 @@ const CommandPalette: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [modifierKey, setModifierKey] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { activeOrganisation } = useContext(organisationContext);
   const { theme, setTheme } = useContext(ThemeContext);
@@ -133,18 +132,19 @@ const CommandPalette: React.FC = () => {
   })) || [];
 
   const allCommands: CommandGroup[] = [
+    ...(appCommands.length > 0 ? appCommands : []),
     { name: 'Navigation', items: navigationCommands },
     { name: 'Actions', items: actionCommands },
-    ...appCommands,
   ];
 
-  const filteredCommands = allCommands.map(group => ({
-    ...group,
-    items: group.items.filter(command =>
-      command.name.toLowerCase().includes(query.toLowerCase()) ||
-      command.description.toLowerCase().includes(query.toLowerCase())
-    ),
-  })).filter(group => group.items.length > 0);
+  const flattenedCommands = allCommands.flatMap(group => group.items);
+
+  const filteredCommands = query === ''
+    ? flattenedCommands
+    : flattenedCommands.filter((command) =>
+        command.name.toLowerCase().includes(query.toLowerCase()) ||
+        command.description.toLowerCase().includes(query.toLowerCase())
+      );
 
   useEffect(() => {
     setModifierKey(
@@ -176,15 +176,12 @@ const CommandPalette: React.FC = () => {
         <span className="flex-grow text-left truncate">Find something...</span>
         <kbd className="flex-shrink-0 text-2xs text-zinc-400 dark:text-zinc-500">
           <kbd className="font-sans">{modifierKey}</kbd>
-          <kbd className="font-sans">+ K</kbd>
+          <kbd className="font-sans"> + K</kbd>
         </kbd>
       </button>
 
       <Transition.Root show={isOpen} as={Fragment} afterLeave={() => setQuery('')}>
-        <Dialog
-          onClose={setIsOpen}
-          className="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 md:p-20"
-        >
+        <Dialog onClose={setIsOpen} className="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 md:p-20">
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -206,58 +203,74 @@ const CommandPalette: React.FC = () => {
             leaveFrom="opacity-100 scale-100"
             leaveTo="opacity-0 scale-95"
           >
-            <Dialog.Panel className="mx-auto max-w-xl transform overflow-hidden rounded-xl bg-zinc-50 shadow-2xl ring-1 ring-black ring-opacity-5 backdrop-blur backdrop-filter transition-all dark:bg-zinc-900 dark:ring-zinc-800">
+            <Combobox
+              as="div"
+              className="mx-auto max-w-xl transform overflow-hidden rounded-xl bg-zinc-50 shadow-2xl ring-1 ring-black ring-opacity-5 backdrop-blur backdrop-filter transition-all dark:bg-zinc-900 dark:ring-zinc-800"
+              onChange={(item: CommandItem) => {
+                item.action();
+                setIsOpen(false);
+              }}
+            >
               <div className="relative">
                 <FaSearch
                   className="pointer-events-none absolute left-6 top-3.5 h-5 w-5 text-zinc-500 dark:text-zinc-400"
                   aria-hidden="true"
                 />
-                <input
-                  type="text"
+                <Combobox.Input
                   className="h-14 w-full border-0 bg-transparent pl-14 pr-4 text-zinc-900 focus:ring-0 sm:text-sm dark:text-white"
                   placeholder="Type a command or search..."
-                  onChange={(e) => setQuery(e.target.value)}
-                  ref={inputRef}
+                  onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
 
-              <div className="max-h-[42rem] overflow-y-auto">
-                {filteredCommands.map((group, groupIndex) => (
-                  <div key={group.name}>
-                    {groupIndex > 0 && (
-                      <div className="border-t border-zinc-200 dark:border-zinc-700 my-2"></div>
-                    )}
-                    <div className="px-4 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-                      {group.name}
-                    </div>
-                    <ul>
-                      {group.items.map((item) => (
-                        <li
-                          key={item.id}
-                          className="flex cursor-default select-none items-center px-4 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-700/50"
-                          onClick={() => {
-                            item.action();
-                            setIsOpen(false);
-                          }}
-                        >
-                          <div className="flex h-6 w-6 items-center justify-center">
-                            {item.icon}
-                          </div>
-                          <div className="ml-3">
-                            <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</div>
-                            <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{item.description}</div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
+              {filteredCommands.length > 0 && (
+                <Combobox.Options static className="max-h-[42rem] overflow-y-auto">
+                  {allCommands.map((group, groupIndex) => {
+                    const filteredGroupCommands = group.items.filter((command) =>
+                      filteredCommands.some((fc) => fc.id === command.id)
+                    );
+
+                    if (filteredGroupCommands.length === 0) return null;
+
+                    return (
+                      <div key={group.name}>
+                        {groupIndex > 0 && (
+                          <div className="border-t border-zinc-200 dark:border-zinc-700 my-2"></div>
+                        )}
+                        <div className="px-4 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                          {group.name}
+                        </div>
+                        <ul>
+                          {filteredGroupCommands.map((item) => (
+                            <Combobox.Option key={item.id} value={item} as={Fragment}>
+                              {({ active }) => (
+                                <li
+                                  className={`flex cursor-default select-none items-center px-4 py-2 ${
+                                    active ? 'bg-zinc-200 dark:bg-zinc-700/50' : ''
+                                  }`}
+                                >
+                                  <div className="flex h-6 w-6 items-center justify-center text-zinc-900 dark:text-zinc-100">
+                                    {item.icon}
+                                  </div>
+                                  <div className="ml-3">
+                                    <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</div>
+                                    <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{item.description}</div>
+                                  </div>
+                                </li>
+                              )}
+                            </Combobox.Option>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </Combobox.Options>
+              )}
 
               {query !== '' && filteredCommands.length === 0 && (
                 <div className="py-14 px-6 text-center sm:px-14">
                   <FaSearch
-                    className="mx-auto h-6 w-6 text-zinc-500 dark:text-zinc-400"
+                    className="mx-auto h-6 w-5 text-zinc-500 dark:text-zinc-400"
                     aria-hidden="true"
                   />
                   <p className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">
@@ -265,7 +278,7 @@ const CommandPalette: React.FC = () => {
                   </p>
                 </div>
               )}
-            </Dialog.Panel>
+            </Combobox>
           </Transition.Child>
         </Dialog>
       </Transition.Root>
