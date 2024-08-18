@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Fragment, useContext } from 'react';
 import { Combobox, Dialog, Transition } from '@headlessui/react';
-import { FaCog, FaCubes, FaHome, FaKey, FaMoon, FaPlus, FaProjectDiagram, FaSearch, FaSun, FaUserPlus, FaUsersCog } from "react-icons/fa";
+import { FaBolt, FaCog, FaCompass, FaCubes, FaHome, FaKey, FaMoon, FaPlus, FaProjectDiagram, FaSearch, FaSun, FaUserPlus, FaUsersCog } from "react-icons/fa";
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@apollo/client';
 import { GetApps } from '@/graphql/queries/getApps.gql';
@@ -20,6 +20,7 @@ type CommandItem = {
 type CommandGroup = {
   name: string;
   items: CommandItem[];
+  icon: React.ReactNode;
 };
 
 const CommandPalette: React.FC = () => {
@@ -111,6 +112,7 @@ const CommandPalette: React.FC = () => {
 
   const appCommands: CommandGroup[] = appsData?.apps?.map((app: any) => ({
     name: `Application - ${app.name}`,
+    icon: <FaCubes className="h-5 w-5" />,
     items: [
       ...(app.environments?.map((env: any) => ({
         id: `${app.id}-${env.id}`,
@@ -131,8 +133,16 @@ const CommandPalette: React.FC = () => {
 
   const allCommands: CommandGroup[] = [
     ...(appCommands.length > 0 ? appCommands : []),
-    { name: 'Actions', items: actionCommands },
-    { name: 'Navigation', items: navigationCommands },
+    { 
+      name: 'Actions', 
+      icon: <FaBolt className="h-5 w-5" />,
+      items: actionCommands 
+    },
+    { 
+      name: 'Navigation', 
+      icon: <FaCompass className="h-5 w-5" />,
+      items: navigationCommands 
+    },
   ];
 
   const flattenedCommands = allCommands.flatMap(group => group.items);
@@ -243,7 +253,8 @@ const CommandPalette: React.FC = () => {
                         {groupIndex > 0 && (
                           <div className="border-t border-zinc-200 dark:border-zinc-700 my-2"></div>
                         )}
-                        <div className="px-4 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                        <div className="px-4 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 flex items-center">
+                          <span className="mr-2">{group.icon}</span>
                           {group.name}
                         </div>
                         <ul>
