@@ -8,7 +8,6 @@ import { organisationContext } from '@/contexts/organisationContext';
 import { ThemeContext } from '@/contexts/themeContext';
 import {
   PlusIcon,
-  CommandLineIcon,
   ArrowRightCircleIcon,
   UsersIcon,
   CogIcon,
@@ -80,16 +79,6 @@ const CommandPalette: React.FC = () => {
       icon: <WindowIcon className="h-5 w-5" />,
       action: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
     },
-    {
-      id: 'list-all-apps',
-      name: 'List All Apps',
-      description: 'Show all applications in the organization',
-      icon: <CommandLineIcon className="h-5 w-5" />,
-      action: () => {
-        const appsList = appsData?.apps.map((app: any) => `${app.name} (ID: ${app.id})`).join('\n');
-        alert(`All Apps:\n${appsList}`);
-      },
-    },
   ];
 
   const appCommands: CommandItem[] = appsData?.apps?.flatMap((app: any) => [
@@ -98,17 +87,7 @@ const CommandPalette: React.FC = () => {
       name: `${app.name} Details`,
       description: `View details for ${app.name}`,
       icon: <ServerIcon className="h-5 w-5" />,
-      action: () => {
-        const details = `
-          App Name: ${app.name}
-          ID: ${app.id}
-          Identity Key: ${app.identityKey}
-          Created At: ${new Date(app.createdAt).toLocaleString()}
-          SSE Enabled: ${app.sseEnabled ? 'Yes' : 'No'}
-          Members: ${app.members.map((m: any) => m.email).join(', ')}
-        `;
-        alert(details);
-      },
+      action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}`),
     },
     {
       id: `${app.id}-logs`,
@@ -122,16 +101,7 @@ const CommandPalette: React.FC = () => {
       name: `${app.name} > ${env.name} Environment`,
       description: `Go to ${env.name} environment of ${app.name}`,
       icon: <ArrowRightCircleIcon className="h-5 w-5" />,
-      action: () => {
-        const envDetails = `
-          Environment Name: ${env.name}
-          ID: ${env.id}
-          Type: ${env.envType}
-          Syncs: ${env.syncs.map((s: any) => s.serviceInfo.name).join(', ')}
-        `;
-        alert(envDetails);
-        handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`);
-      },
+      action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
     })) || []),
   ]) || [];
 
