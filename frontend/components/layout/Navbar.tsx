@@ -11,6 +11,7 @@ import { StatusIndicator } from '../common/StatusIndicator'
 import { organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
 import { LogoMark } from '../common/LogoMark'
+import CommandPalette from '../common/CommandPalette'
 
 export const NavBar = (props: { team: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -80,6 +81,11 @@ export const NavBar = (props: { team: string }) => {
 
         {activeEnv && <span className="text-black dark:text-white">{activeEnv.name}</span>}
       </div>
+
+      <div className="w-1/3 flex justify-center">
+        <CommandPalette />
+      </div>
+
       <div className="flex gap-4 items-center justify-end">
         <StatusIndicator />
 
