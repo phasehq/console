@@ -1,22 +1,13 @@
 import React, { useState, useEffect, Fragment, useContext } from 'react';
 import { Combobox, Dialog, Transition } from '@headlessui/react';
-import { FaSearch } from "react-icons/fa";
+import { FaCog, FaCubes, FaHome, FaKey, FaMoon, FaPlus, FaProjectDiagram, FaSearch, FaSun, FaUserPlus, FaUsersCog } from "react-icons/fa";
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@apollo/client';
 import { GetApps } from '@/graphql/queries/getApps.gql';
 import { organisationContext } from '@/contexts/organisationContext';
 import { ThemeContext } from '@/contexts/themeContext';
-import {
-  PlusIcon,
-  UsersIcon,
-  CogIcon,
-  WindowIcon,
-  HomeIcon,
-  Square3Stack3DIcon,
-  PuzzlePieceIcon,
-  LightBulbIcon,
-} from '@heroicons/react/24/outline';
 import { BsListColumnsReverse } from 'react-icons/bs';
+import { FaListCheck } from 'react-icons/fa6';
 
 type CommandItem = {
   id: string;
@@ -54,59 +45,66 @@ const CommandPalette: React.FC = () => {
       id: 'go-home',
       name: 'Go to Home',
       description: 'Navigate to the home page',
-      icon: <HomeIcon className="h-5 w-5" />,
+      icon: <FaHome className="h-5 w-5" />,
       action: () => handleNavigation(`/${activeOrganisation?.name}`),
     },
     {
       id: 'go-all-apps',
       name: 'Go to All Apps',
       description: 'View all applications',
-      icon: <Square3Stack3DIcon className="h-5 w-5" />,
+      icon: <FaCubes className="h-5 w-5" />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/apps`),
-    },
-    {
-      id: 'go-settings',
-      name: 'Go to Settings',
-      description: 'Navigate to settings page',
-      icon: <CogIcon className="h-5 w-5" />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/settings`),
     },
     {
       id: 'go-members',
       name: 'Go to Members',
       description: 'Manage organization members',
-      icon: <UsersIcon className="h-5 w-5" />,
+      icon: <FaUsersCog className="h-5 w-5" />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/members`),
     },
     {
       id: 'go-integrations',
       name: 'Go to Integrations',
       description: 'Manage integrations',
-      icon: <PuzzlePieceIcon className="h-5 w-5" />,
+      icon: <FaProjectDiagram className="h-5 w-5" />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/integrations`),
+    },
+    {
+      id: 'go-pat',
+      name: 'Go to Access',
+      description: 'Navigate to personal access tokens',
+      icon: <FaKey className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/tokens`),
+    },
+    {
+      id: 'go-settings',
+      name: 'Go to Settings',
+      description: 'Navigate to settings page',
+      icon: <FaCog className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/settings`),
     },
   ];
 
   const actionCommands: CommandItem[] = [
     {
       id: 'toggle-theme',
-      name: 'Toggle dark / light theme',
+      name: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
       description: 'Switch between dark and light mode',
-      icon: <WindowIcon className="h-5 w-5" />,
+      icon: theme === 'dark' ? <FaSun className="h-5 w-5" /> : <FaMoon className="h-5 w-5" />,
       action: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
     },
     {
       id: 'create-app',
       name: 'Create an App',
       description: 'Create a new application',
-      icon: <PlusIcon className="h-5 w-5" />,
+      icon: <FaPlus className="h-5 w-5" />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/apps/new`),
     },
     {
       id: 'invite-user',
       name: 'Invite a User',
       description: 'Invite a new user to the organization',
-      icon: <UsersIcon className="h-5 w-5" />,
+      icon: <FaUserPlus className="h-5 w-5" />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/members/invite`),
     },
   ];
@@ -125,7 +123,7 @@ const CommandPalette: React.FC = () => {
         id: `${app.id}-logs`,
         name: `${app.name} Logs`,
         description: `View logs for ${app.name}`,
-        icon: <LightBulbIcon className="h-5 w-5" />,
+        icon: <FaListCheck className="h-5 w-5" />,
         action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
       },
     ],
