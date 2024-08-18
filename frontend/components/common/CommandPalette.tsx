@@ -8,15 +8,15 @@ import { organisationContext } from '@/contexts/organisationContext';
 import { ThemeContext } from '@/contexts/themeContext';
 import {
   PlusIcon,
-  ArrowRightCircleIcon,
   UsersIcon,
   CogIcon,
   WindowIcon,
-  LightBulbIcon,
   HomeIcon,
   Square3Stack3DIcon,
   PuzzlePieceIcon,
+  LightBulbIcon,
 } from '@heroicons/react/24/outline';
+import { BsListColumnsReverse } from 'react-icons/bs';
 
 type CommandItem = {
   id: string;
@@ -112,8 +112,15 @@ const CommandPalette: React.FC = () => {
   ];
 
   const appCommands: CommandGroup[] = appsData?.apps?.map((app: any) => ({
-    name: app.name,
+    name: `Application - ${app.name}`,
     items: [
+      ...(app.environments?.map((env: any) => ({
+        id: `${app.id}-${env.id}`,
+        name: `Go to ${env.name}`,
+        description: `Explore ${env.name} environment of ${app.name}`,
+        icon: <BsListColumnsReverse className="h-5 w-5" />,
+        action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
+      })) || []),
       {
         id: `${app.id}-logs`,
         name: `${app.name} Logs`,
@@ -121,20 +128,13 @@ const CommandPalette: React.FC = () => {
         icon: <LightBulbIcon className="h-5 w-5" />,
         action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
       },
-      ...(app.environments?.map((env: any) => ({
-        id: `${app.id}-${env.id}`,
-        name: `${env.name} Environment`,
-        description: `Go to ${env.name} environment of ${app.name}`,
-        icon: <ArrowRightCircleIcon className="h-5 w-5" />,
-        action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
-      })) || []),
     ],
   })) || [];
 
   const allCommands: CommandGroup[] = [
     ...(appCommands.length > 0 ? appCommands : []),
-    { name: 'Navigation', items: navigationCommands },
     { name: 'Actions', items: actionCommands },
+    { name: 'Navigation', items: navigationCommands },
   ];
 
   const flattenedCommands = allCommands.flatMap(group => group.items);
@@ -147,10 +147,18 @@ const CommandPalette: React.FC = () => {
       );
 
   useEffect(() => {
-    setModifierKey(
-      /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform) ? '⌘' : 'Ctrl'
-    );
-  }, []);
+    const detectPlatform = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      if (userAgent.includes('mac')) return 'macOS';
+      if (userAgent.includes('iphone') || userAgent.includes('ipad') || userAgent.includes('ipod')) return 'iOS';
+      if (userAgent.includes('win')) return 'Windows';
+      if (userAgent.includes('linux')) return 'Linux';
+      return 'Unknown';
+    };
+  
+    const platform = detectPlatform();
+    setModifierKey(/^(mac|ios)/i.test(platform) ? '⌘' : 'Ctrl');
+    }, []);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
