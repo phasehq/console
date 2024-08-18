@@ -1,11 +1,27 @@
-import React, { useState, useRef, useEffect, Fragment } from 'react';
+import React, { useState, useRef, useEffect, Fragment, useContext } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { FaSearch } from "react-icons/fa";
+import { useRouter } from 'next/navigation';
+import { useQuery } from '@apollo/client';
+import { GetApps } from '@/graphql/queries/getApps.gql';
+import { organisationContext } from '@/contexts/organisationContext';
+import { ThemeContext } from '@/contexts/themeContext';
+import {
+  PlusIcon,
+  CommandLineIcon,
+  ArrowRightCircleIcon,
+  UsersIcon,
+  CogIcon,
+  WindowIcon,
+  LightBulbIcon,
+  ServerIcon,
+} from '@heroicons/react/24/outline';
 
 type CommandItem = {
   id: string;
   name: string;
   description: string;
+  icon: React.ReactNode;
   action: () => void;
 };
 
@@ -14,20 +30,116 @@ const CommandPalette: React.FC = () => {
   const [query, setQuery] = useState('');
   const [modifierKey, setModifierKey] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const { activeOrganisation } = useContext(organisationContext);
+  const { theme, setTheme } = useContext(ThemeContext);
 
-  // This is a placeholder. You'll need to populate this with actual commands.
-  const commands: CommandItem[] = [
+  const { data: appsData } = useQuery(GetApps, {
+    variables: { organisationId: activeOrganisation?.id },
+    skip: !activeOrganisation?.id,
+  });
+
+  const handleNavigation = (url: string) => {
+    router.push(url);
+    setIsOpen(false);
+  };
+
+  const baseCommands: CommandItem[] = [
     {
-      id: 'home',
-      name: 'Go to Home',
-      description: 'Navigate to the home page',
-      action: () => { /* implement navigation */ },
+      id: 'create-app',
+      name: 'Create an App',
+      description: 'Create a new application',
+      icon: <PlusIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/apps`),
     },
-    // Add more commands here
+    {
+      id: 'invite-user',
+      name: 'Invite a User',
+      description: 'Invite a new user to the organization',
+      icon: <UsersIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/members`),
+    },
+    {
+      id: 'manage-org-users',
+      name: 'Manage Organisation Users',
+      description: 'Manage users in your organization',
+      icon: <UsersIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/members`),
+    },
+    {
+      id: 'navigate-settings',
+      name: 'Navigate to Settings',
+      description: 'Go to settings page',
+      icon: <CogIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/settings`),
+    },
+    {
+      id: 'toggle-theme',
+      name: 'Toggle dark / light theme',
+      description: 'Switch between dark and light mode',
+      icon: <WindowIcon className="h-5 w-5" />,
+      action: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
+    },
+    {
+      id: 'list-all-apps',
+      name: 'List All Apps',
+      description: 'Show all applications in the organization',
+      icon: <CommandLineIcon className="h-5 w-5" />,
+      action: () => {
+        const appsList = appsData?.apps.map((app: any) => `${app.name} (ID: ${app.id})`).join('\n');
+        alert(`All Apps:\n${appsList}`);
+      },
+    },
   ];
 
-  const filteredCommands = commands.filter(command =>
-    command.name.toLowerCase().includes(query.toLowerCase())
+  const appCommands: CommandItem[] = appsData?.apps?.flatMap((app: any) => [
+    {
+      id: `${app.id}-details`,
+      name: `${app.name} Details`,
+      description: `View details for ${app.name}`,
+      icon: <ServerIcon className="h-5 w-5" />,
+      action: () => {
+        const details = `
+          App Name: ${app.name}
+          ID: ${app.id}
+          Identity Key: ${app.identityKey}
+          Created At: ${new Date(app.createdAt).toLocaleString()}
+          SSE Enabled: ${app.sseEnabled ? 'Yes' : 'No'}
+          Members: ${app.members.map((m: any) => m.email).join(', ')}
+        `;
+        alert(details);
+      },
+    },
+    {
+      id: `${app.id}-logs`,
+      name: `${app.name} Logs`,
+      description: `View logs for ${app.name}`,
+      icon: <LightBulbIcon className="h-5 w-5" />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
+    },
+    ...(app.environments?.map((env: any) => ({
+      id: `${app.id}-${env.id}`,
+      name: `${app.name} > ${env.name} Environment`,
+      description: `Go to ${env.name} environment of ${app.name}`,
+      icon: <ArrowRightCircleIcon className="h-5 w-5" />,
+      action: () => {
+        const envDetails = `
+          Environment Name: ${env.name}
+          ID: ${env.id}
+          Type: ${env.envType}
+          Syncs: ${env.syncs.map((s: any) => s.serviceInfo.name).join(', ')}
+        `;
+        alert(envDetails);
+        handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`);
+      },
+    })) || []),
+  ]) || [];
+
+  const allCommands = [...baseCommands, ...appCommands];
+
+  const filteredCommands = allCommands.filter(command =>
+    command.name.toLowerCase().includes(query.toLowerCase()) ||
+    command.description.toLowerCase().includes(query.toLowerCase())
   );
 
   useEffect(() => {
@@ -64,9 +176,7 @@ const CommandPalette: React.FC = () => {
         </kbd>
       </button>
 
-      <Transition.Root show={isOpen} as={Fragment}
-        afterLeave={() => setQuery('')}
-      >
+      <Transition.Root show={isOpen} as={Fragment} afterLeave={() => setQuery('')}>
         <Dialog
           onClose={setIsOpen}
           className="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 md:p-20"
@@ -112,14 +222,19 @@ const CommandPalette: React.FC = () => {
                   {filteredCommands.map((item) => (
                     <li
                       key={item.id}
-                      className="cursor-default select-none px-4 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-700/50"
+                      className="flex cursor-default select-none items-center px-4 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-700/50"
                       onClick={() => {
                         item.action();
                         setIsOpen(false);
                       }}
                     >
-                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</div>
-                      <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{item.description}</div>
+                      <div className="flex h-6 w-6 items-center justify-center">
+                        {item.icon}
+                      </div>
+                      <div className="ml-3">
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</div>
+                        <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{item.description}</div>
+                      </div>
                     </li>
                   ))}
                 </ul>
