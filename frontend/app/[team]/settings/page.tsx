@@ -1,5 +1,6 @@
 'use client'
 
+import { useSearchParams } from 'next/navigation'
 import { Avatar } from '@/components/common/Avatar'
 import { ModeToggle } from '@/components/common/ModeToggle'
 import { TrustedDeviceManager } from '@/components/settings/account/TrustedDeviceManager'
@@ -16,21 +17,29 @@ import { FaMoon, FaSun } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'
 
 export default function Settings({ params }: { params: { team: string } }) {
+  const searchParams = useSearchParams()
+  const initialTabName = searchParams?.get('tab') ?? 'organisation'
+
   const { activeOrganisation } = useContext(organisationContext)
 
   const { data: session } = useSession()
 
   const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
 
-  const tabList = () => [
+  const tabList = [
     ...(activeUserIsAdmin ? [{ name: 'Organisation' }] : []),
-    ...[{ name: 'Account' }, { name: 'App' }],
+    { name: 'Account' },
+    { name: 'App' },
   ]
+
+  const initialTabIndex = tabList.findIndex(
+    tab => tab.name.toLowerCase() === initialTabName.toLowerCase()
+  )
 
   if (!activeOrganisation)
     return (
       <div className="flex items-center justify-center py-40">
-        <Spinner size="md" />{' '}
+        <Spinner size="md" />
       </div>
     )
 
@@ -39,9 +48,9 @@ export default function Settings({ params }: { params: { team: string } }) {
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
-        <Tab.Group>
+        <Tab.Group defaultIndex={initialTabIndex !== -1 ? initialTabIndex : 0}>
           <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
-            {tabList().map((tab) => (
+            {tabList.map((tab) => (
               <Tab key={tab.name} as={Fragment}>
                 {({ selected }) => (
                   <div
@@ -49,7 +58,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                       'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold'
-                        : ' border-transparent cursor-pointer'
+                        : 'border-transparent cursor-pointer'
                     )}
                   >
                     {tab.name}
@@ -63,7 +72,7 @@ export default function Settings({ params }: { params: { team: string } }) {
             <div className="max-h-[80vh] overflow-y-auto px-4">
               {activeUserIsAdmin && (
                 <Tab.Panel>
-                  <div className="space-y-10  py-4">
+                  <div className="space-y-10 py-4">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-semibold">Organisation</h2>
                       <p className="text-neutral-500">Organisation info and settings</p>
