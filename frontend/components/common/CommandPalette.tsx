@@ -295,7 +295,7 @@ const CommandPalette: React.FC = () => {
                     aria-hidden="true"
                   />
                   <p className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">
-                    No results found for "<strong className="font-semibold">{query}</strong>". Please try again.
+                    No results found for &quot;<strong className="font-semibold">{query}</strong>&quot;. Please try again.
                   </p>
                 </div>
               )}
