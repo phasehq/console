@@ -188,7 +188,7 @@ const CommandPalette: React.FC = () => {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="w-full max-w-xl h-9 flex items-center gap-2 rounded-full bg-white pl-4 pr-3 text-sm text-zinc-500 ring-1 ring-zinc-900/10 transition hover:ring-zinc-900/20 ui-not-focus-visible:outline-none dark:bg-white/5 dark:text-zinc-400 dark:ring-inset dark:ring-white/10 dark:hover:ring-white/20"
+        className="w-full max-w-xl h-9 flex items-center gap-2 rounded-full bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm pl-4 pr-3 text-sm text-zinc-500 dark:text-zinc-400 ring-1 ring-zinc-900/10 dark:ring-white/10 transition hover:ring-zinc-900/20 dark:hover:ring-white/20 ui-not-focus-visible:outline-none"
       >
         <div className="pl-2">
           <FaSearch className="h-4 w-4 flex-shrink-0" />
@@ -211,7 +211,7 @@ const CommandPalette: React.FC = () => {
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <Dialog.Overlay className="fixed inset-0 bg-zinc-400/25 backdrop-blur-sm dark:bg-black/40" />
+            <Dialog.Overlay className="fixed inset-0 bg-zinc-400/25 dark:bg-black/40 backdrop-blur-sm" />
           </Transition.Child>
 
           <Transition.Child
@@ -225,7 +225,7 @@ const CommandPalette: React.FC = () => {
           >
             <Combobox
               as="div"
-              className="mx-auto max-w-xl transform overflow-hidden rounded-xl bg-zinc-50 shadow-2xl ring-1 ring-black ring-opacity-5 backdrop-blur backdrop-filter transition-all dark:bg-zinc-900 dark:ring-zinc-800"
+              className="mx-auto max-w-xl transform divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden rounded-xl bg-white/80 dark:bg-zinc-800/80 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 backdrop-blur-sm backdrop-saturate-150 transition-all"
               onChange={(item: CommandItem) => {
                 item.action();
                 setIsOpen(false);
@@ -237,7 +237,7 @@ const CommandPalette: React.FC = () => {
                   aria-hidden="true"
                 />
                 <Combobox.Input
-                  className="h-14 w-full border-0 bg-transparent pl-14 pr-4 text-zinc-900 focus:ring-0 sm:text-sm dark:text-white"
+                  className="h-14 w-full border-0 bg-transparent pl-14 pr-4 text-zinc-900 dark:text-white placeholder:text-zinc-500 dark:placeholder:text-zinc-400 focus:ring-0 sm:text-sm"
                   placeholder="Type a command or search..."
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -253,11 +253,11 @@ const CommandPalette: React.FC = () => {
                     if (filteredGroupCommands.length === 0) return null;
 
                     return (
-                      <div key={group.name}>
+                      <div key={group.name} className="px-4 py-2">
                         {groupIndex > 0 && (
-                          <div className="border-t border-zinc-200 dark:border-zinc-700 my-2"></div>
+                          <div className="border-t border-gray-100 dark:border-gray-800 my-2"></div>
                         )}
-                        <div className="px-4 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 flex items-center">
+                        <div className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 flex items-center">
                           <span className="mr-2">{group.icon}</span>
                           {group.name}
                         </div>
@@ -266,8 +266,8 @@ const CommandPalette: React.FC = () => {
                             <Combobox.Option key={item.id} value={item} as={Fragment}>
                               {({ active }) => (
                                 <li
-                                  className={`flex cursor-default select-none items-center px-4 py-2 ${
-                                    active ? 'bg-zinc-200 dark:bg-zinc-700/50' : ''
+                                  className={`flex cursor-default select-none items-center rounded-md px-3 py-2 ${
+                                    active ? 'bg-zinc-200/50 dark:bg-zinc-700/50' : ''
                                   }`}
                                 >
                                   <div className="flex h-6 w-6 items-center justify-center text-zinc-900 dark:text-zinc-100">
@@ -291,7 +291,7 @@ const CommandPalette: React.FC = () => {
               {query !== '' && filteredCommands.length === 0 && (
                 <div className="py-14 px-6 text-center sm:px-14">
                   <FaSearch
-                    className="mx-auto h-6 w-5 text-zinc-500 dark:text-zinc-400"
+                    className="mx-auto h-6 w-6 text-zinc-500 dark:text-zinc-400"
                     aria-hidden="true"
                   />
                   <p className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">
