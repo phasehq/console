@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ZXCVBNResult } from 'zxcvbn'
 import { FaCheck, FaEye, FaEyeSlash, FaInfo, FaShieldAlt } from 'react-icons/fa'
 import clsx from 'clsx'
@@ -23,10 +23,10 @@ export const AccountPassword = (props: AccountPasswordProps) => {
     const zxcvbn = require('zxcvbn')
     const strength = zxcvbn(pw)
     setPwStrength(strength)
-  }, [pw, setPwStrength])
+  }, [pw])
 
   /**
-   * Returns a color name based on the current password stength score
+   * Returns a color name based on the current password strength score
    *
    * @returns {string}
    */
@@ -50,17 +50,14 @@ export const AccountPassword = (props: AccountPasswordProps) => {
         color = 'bg-red-500'
         break
     }
-
     return color
   }
 
   const pwStrengthPercent = (): string => {
-    let score = '0%'
-    if (pw) score = `${(pwStrength.score / 4) * 100}%`
-    return score
+    return pw ? `${(pwStrength.score / 4) * 100}%` : '0%'
   }
 
-  const passwordIsStrong = pwStrength?.feedback?.suggestions?.length == 0 || false
+  const passwordIsStrong = pwStrength?.feedback?.suggestions?.length === 0
 
   return (
     <div className="space-y-4 max-w-md mx-auto">
@@ -124,17 +121,28 @@ export const AccountPassword = (props: AccountPasswordProps) => {
             }}
           ></div>
         </div>
-        <div className="flex w-full items-center gap-4 p-3 bg-zinc-200 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-black/50 dark:text-white/50">
-          {passwordIsStrong ? <FaCheck /> : <FaInfo />}
-          {passwordIsStrong ? 'Strong password' : pwStrength?.feedback?.suggestions}
+        <div className="flex w-full items-start gap-6 p-3 bg-zinc-200 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-black/50 dark:text-white/50 text-sm">
+          <div className="mt-1">
+            {passwordIsStrong ? <FaCheck /> : <FaInfo />}
+          </div>
+          <div className="flex-grow">
+            {passwordIsStrong ? (
+              'Strong password'
+            ) : (
+              <ul className="list-disc pl-4">
+                {pwStrength?.feedback?.suggestions?.map((suggestion, index) => (
+                  <li key={index}>{suggestion}</li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between gap-2 py-2">
         <div className="flex items-center gap-2">
-          {' '}
           <FaShieldAlt className="text-emerald-500" />
-          <span className="text-neutral-500 text-sm">Remember password on this device </span>
+          <span className="text-neutral-500 text-sm">Remember password on this device</span>
         </div>
         <ToggleSwitch value={savePassword} onToggle={() => setSavePassword(!savePassword)} />
       </div>
