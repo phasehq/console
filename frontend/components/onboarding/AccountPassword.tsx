@@ -121,7 +121,7 @@ export const AccountPassword = (props: AccountPasswordProps) => {
             }}
           ></div>
         </div>
-        <div className="flex w-full items-start gap-4 p-3 bg-zinc-200 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-black/50 dark:text-white/50">
+        <div className="flex w-full items-start gap-6 p-3 bg-zinc-200 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-black/50 dark:text-white/50 text-sm">
           <div className="mt-1">
             {passwordIsStrong ? <FaCheck /> : <FaInfo />}
           </div>
@@ -129,7 +129,7 @@ export const AccountPassword = (props: AccountPasswordProps) => {
             {passwordIsStrong ? (
               'Strong password'
             ) : (
-              <ul className="list-disc pl-5 space-y-1">
+              <ul className="list-disc pl-4">
                 {pwStrength?.feedback?.suggestions?.map((suggestion, index) => (
                   <li key={index}>{suggestion}</li>
                 ))}
