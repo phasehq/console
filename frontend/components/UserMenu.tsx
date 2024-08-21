@@ -79,7 +79,7 @@ export default function UserMenu() {
               <div className="flex items-center justify-between p-2">
                 <div>
                   {activeOrganisation && (
-                    <Link href={`/${activeOrganisation.name}/settings`}>
+                    <Link href={`/${activeOrganisation.name}/settings?tab=account`}>
                       <Button variant="outline">
                         <div className="flex items-center gap-1 text-xs">
                           <FaCog />
