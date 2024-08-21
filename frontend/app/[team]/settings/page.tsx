@@ -1,6 +1,6 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Avatar } from '@/components/common/Avatar'
 import { ModeToggle } from '@/components/common/ModeToggle'
 import { TrustedDeviceManager } from '@/components/settings/account/TrustedDeviceManager'
@@ -12,13 +12,14 @@ import { userIsAdmin } from '@/utils/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
-import { Fragment, useContext } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaMoon, FaSun } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'
 
 export default function Settings({ params }: { params: { team: string } }) {
   const searchParams = useSearchParams()
-  const initialTabName = searchParams?.get('tab') ?? 'organisation'
+  const router = useRouter()
+  const pathname = usePathname()
 
   const { activeOrganisation } = useContext(organisationContext)
 
@@ -26,15 +27,30 @@ export default function Settings({ params }: { params: { team: string } }) {
 
   const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
 
+  const [tabIndex, setTabIndex] = useState(0)
+
   const tabList = [
     ...(activeUserIsAdmin ? [{ name: 'Organisation' }] : []),
     { name: 'Account' },
     { name: 'App' },
   ]
 
-  const initialTabIndex = tabList.findIndex(
-    tab => tab.name.toLowerCase() === initialTabName.toLowerCase()
-  )
+  useEffect(() => {
+    const initialTabName = searchParams?.get('tab') ?? 'organisation'
+    const initialTabIndex = tabList.findIndex(
+      (tab) => tab.name.toLowerCase() === initialTabName.toLowerCase()
+    )
+
+    if (initialTabIndex !== -1) setTabIndex(initialTabIndex)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeUserIsAdmin, searchParams])
+
+  const updateTab = (index: number) => {
+    const tab = tabList[index]
+    const params = new URLSearchParams(searchParams?.toString())
+    params.set('tab', tab.name)
+    router.push(`${pathname}?${params.toString()}`)
+  }
 
   if (!activeOrganisation)
     return (
@@ -48,7 +64,7 @@ export default function Settings({ params }: { params: { team: string } }) {
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
-        <Tab.Group defaultIndex={initialTabIndex !== -1 ? initialTabIndex : 0}>
+        <Tab.Group selectedIndex={tabIndex} onChange={(index) => updateTab(index)}>
           <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
             {tabList.map((tab) => (
               <Tab key={tab.name} as={Fragment}>
