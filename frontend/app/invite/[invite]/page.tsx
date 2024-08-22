@@ -89,7 +89,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
       icon: <MdOutlinePassword />,
       title: 'Set a sudo password',
       description:
-        'This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks.',
+        'This will be used to encrypt your account keys. You may need to enter this password to perform administrative tasks.',
     },
     {
       index: 1,
