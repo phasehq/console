@@ -1,12 +1,14 @@
-import React, { useState, useEffect, Fragment, useContext } from 'react'
+import React, { useState, useEffect, Fragment, useContext, useRef } from 'react'
 import { Combobox, Dialog, Transition } from '@headlessui/react'
 import {
   FaBolt,
+  FaBook,
   FaCog,
   FaCompass,
   FaCube,
   FaCubes,
   FaExchangeAlt,
+  FaGithub,
   FaHome,
   FaKey,
   FaMoon,
@@ -15,6 +17,7 @@ import {
   FaSearch,
   FaSun,
   FaUserPlus,
+  FaUsers,
   FaUsersCog,
 } from 'react-icons/fa'
 import { useRouter } from 'next/navigation'
@@ -23,7 +26,7 @@ import { GetApps } from '@/graphql/queries/getApps.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ThemeContext } from '@/contexts/themeContext'
 import { BsListColumnsReverse } from 'react-icons/bs'
-import { FaListCheck } from 'react-icons/fa6'
+import { FaArrowsRotate, FaCodeMerge, FaListCheck } from 'react-icons/fa6'
 
 type CommandItem = {
   id: string
@@ -42,6 +45,7 @@ type CommandGroup = {
 const CommandPalette: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [selectedCommand, setSelectedCommand] = useState<CommandItem | null>(null)
   const [modifierKey, setModifierKey] = useState('')
   const router = useRouter()
   const { activeOrganisation, organisations } = useContext(organisationContext)
@@ -67,7 +71,7 @@ const CommandPalette: React.FC = () => {
     },
     {
       id: 'go-all-apps',
-      name: 'Go to All Apps',
+      name: 'Go to Apps',
       description: 'View all applications',
       icon: <FaCubes />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/apps`),
@@ -137,11 +141,42 @@ const CommandPalette: React.FC = () => {
     },
   ]
 
+  const externalResources: CommandItem[] = [
+    {
+      id: 'open-docs',
+      name: 'Open Documentation',
+      description: 'View the Phase documentation',
+      icon: <FaBook />,
+      action: () => window.open('https://docs.phase.dev', '_blank'),
+    },
+    {
+      id: 'open-github',
+      name: 'View Phase on GitHub',
+      description: 'View the Phase GitHub',
+      icon: <FaGithub />,
+      action: () => window.open('https://github.com/phasehq/console', '_blank'),
+    },
+    {
+      id: 'open-changelog',
+      name: 'Read the changelog',
+      description: 'View the latest features and updates to Phase',
+      icon: <FaCodeMerge />,
+      action: () => window.open('https://phase.dev/changelog', '_blank'),
+    },
+  ]
+
   const appCommands: CommandGroup[] =
     appsData?.apps?.map((app: any) => ({
       name: app.name,
       icon: <FaCube />,
       items: [
+        {
+          id: `${app.id}-home`,
+          name: `Home`,
+          description: `Go to ${app.name}`,
+          icon: <FaCube />,
+          action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}`),
+        },
         ...(app.environments?.map((env: any) => ({
           id: `${app.id}-${env.id}`,
           name: `${env.name}`,
@@ -151,8 +186,29 @@ const CommandPalette: React.FC = () => {
             handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
         })) || []),
         {
+          id: `${app.id}-tokens`,
+          name: `Service tokens`,
+          description: `Manage service tokens for ${app.name}`,
+          icon: <FaKey />,
+          action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/tokens`),
+        },
+        {
+          id: `${app.id}-members`,
+          name: `Members`,
+          description: `Manage members in ${app.name}`,
+          icon: <FaUsers />,
+          action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/members`),
+        },
+        {
+          id: `${app.id}-syncing`,
+          name: `Syncing`,
+          description: `Manage syncing and integrations for ${app.name}`,
+          icon: <FaArrowsRotate />,
+          action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/syncing`),
+        },
+        {
           id: `${app.id}-logs`,
-          name: `Go to Logs`,
+          name: `Logs`,
           description: `View logs for ${app.name}`,
           icon: <FaListCheck />,
           action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
@@ -172,6 +228,11 @@ const CommandPalette: React.FC = () => {
       items: navigationCommands,
     },
     ...(appCommands.length > 0 ? appCommands : []),
+    {
+      name: 'Resources',
+      icon: <FaBook />,
+      items: externalResources,
+    },
   ]
 
   const flattenedCommands = allCommands.flatMap((group) => group.items)
@@ -213,6 +274,46 @@ const CommandPalette: React.FC = () => {
     document.addEventListener('keydown', down)
     return () => document.removeEventListener('keydown', down)
   }, [])
+
+  const isOpenRef = useRef(isOpen)
+
+  useEffect(() => {
+    isOpenRef.current = isOpen
+  }, [isOpen])
+
+  // /**
+  //  * Handles the selection of a command item from the Command Palette.
+  //  *
+  //  * This function defers the execution of the selected command's action until the next
+  //  * animation frame to ensure that the dialog's open state has been updated.
+  //  * This approach prevents accidental triggering of the action when the dialog is
+  //  * closing due to a click outside the palette.
+  //  *
+  //  * The use of `requestAnimationFrame` ensures the state is accurately evaluated in the next render cycle
+  //  *
+  //  * @param {CommandItem} item - The selected command item.
+  //  */
+  // const handleOptionSelection = (item: CommandItem) => {
+  //   setSelectedCommand(item)
+  //   requestAnimationFrame(() => {
+  //     if (isOpenRef.current) {
+  //       item.action()
+  //       setIsOpen(false)
+  //       setSelectedCommand(null)
+  //     }
+  //   })
+  // }
+
+  const handleOptionSelection = (item: CommandItem) => {
+    setSelectedCommand(item)
+    setTimeout(() => {
+      if (isOpenRef.current) {
+        item.action()
+        setIsOpen(false)
+        setSelectedCommand(null)
+      }
+    }, 100)
+  }
 
   return (
     <>
@@ -259,10 +360,7 @@ const CommandPalette: React.FC = () => {
             <Combobox
               as="div"
               className="mx-auto max-w-xl transform divide-y divide-neutral-500/40 overflow-hidden rounded-xl bg-white/80 dark:bg-zinc-800/80 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 backdrop-blur-sm backdrop-saturate-150 transition-all"
-              onChange={(item: CommandItem) => {
-                item.action()
-                setIsOpen(false)
-              }}
+              onChange={handleOptionSelection}
             >
               <div className="relative flex items-center rounded-xl">
                 <FaSearch
@@ -278,8 +376,8 @@ const CommandPalette: React.FC = () => {
 
               {filteredCommands.length > 0 && (
                 <Combobox.Options
-                  static
                   className="max-h-[42rem] overflow-y-auto divide-y divide-neutral-500/20"
+                  static
                 >
                   {allCommands.map((group, groupIndex) => {
                     const filteredGroupCommands = group.items.filter((command) =>
@@ -300,7 +398,7 @@ const CommandPalette: React.FC = () => {
                             {({ active }) => (
                               <li
                                 className={`flex cursor-default select-none items-center gap-4 px-3 py-2 ${
-                                  active ? 'bg-zinc-200/50 dark:bg-zinc-700/50' : ''
+                                  active ? 'bg-zinc-300/50 dark:bg-zinc-700/50' : ''
                                 }`}
                               >
                                 <div className="flex h-6 w-6 items-center justify-center text-zinc-900 dark:text-zinc-100">
