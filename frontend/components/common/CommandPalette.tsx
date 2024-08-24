@@ -144,7 +144,7 @@ const CommandPalette: React.FC = () => {
   const externalResources: CommandItem[] = [
     {
       id: 'open-docs',
-      name: 'Open Documentation',
+      name: 'Open Docs',
       description: 'View the Phase documentation',
       icon: <FaBook />,
       action: () => window.open('https://docs.phase.dev', '_blank'),
@@ -172,7 +172,7 @@ const CommandPalette: React.FC = () => {
       items: [
         {
           id: `${app.id}-home`,
-          name: `Home`,
+          name: `${app.name} Home`,
           description: `Go to ${app.name}`,
           icon: <FaCube />,
           action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}`),
@@ -180,7 +180,7 @@ const CommandPalette: React.FC = () => {
         ...(app.environments?.map((env: any) => ({
           id: `${app.id}-${env.id}`,
           name: `${env.name}`,
-          description: `Explore ${env.name} environment of ${app.name}`,
+          description: `Explore the ${env.name} environment of ${app.name}`,
           icon: <BsListColumnsReverse />,
           action: () =>
             handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
@@ -359,7 +359,7 @@ const CommandPalette: React.FC = () => {
           >
             <Combobox
               as="div"
-              className="mx-auto max-w-xl transform divide-y divide-neutral-500/40 overflow-hidden rounded-xl bg-white/80 dark:bg-zinc-800/80 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 backdrop-blur-sm backdrop-saturate-150 transition-all"
+              className="mx-auto max-w-xl transform divide-y divide-neutral-500/30 overflow-hidden rounded-xl bg-white/80 dark:bg-zinc-800/80 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 backdrop-blur-sm backdrop-saturate-150 transition-all"
               onChange={handleOptionSelection}
             >
               <div className="relative flex items-center rounded-xl">
@@ -387,7 +387,7 @@ const CommandPalette: React.FC = () => {
                     if (filteredGroupCommands.length === 0) return null
 
                     return (
-                      <div key={group.name}>
+                      <div key={`${group.name}${groupIndex}`}>
                         <div className="text-xs font-semibold text-zinc-400 dark:text-zinc-600 flex items-center gap-2 p-2">
                           <div>{group.icon}</div>
                           {group.name}
@@ -397,18 +397,27 @@ const CommandPalette: React.FC = () => {
                           <Combobox.Option key={item.id} value={item} as={Fragment}>
                             {({ active }) => (
                               <li
-                                className={`flex cursor-default select-none items-center gap-4 px-3 py-2 ${
+                                className={`flex cursor-default select-none items-center gap-4 justify-between px-3 py-2 ${
                                   active ? 'bg-zinc-300/50 dark:bg-zinc-700/50' : ''
                                 }`}
                               >
-                                <div className="flex h-6 w-6 items-center justify-center text-zinc-900 dark:text-zinc-100">
-                                  {item.icon}
+                                <div className="flex items-center gap-4">
+                                  <div className="flex h-6 w-6 items-center justify-center text-zinc-900 dark:text-zinc-100">
+                                    {item.icon}
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm">
+                                      {item.name}
+                                    </div>
+                                    <div className="text-zinc-500 text-xs">{item.description}</div>
+                                  </div>
                                 </div>
                                 <div>
-                                  <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm">
-                                    {item.name}
-                                  </div>
-                                  <div className="text-zinc-500 text-xs">{item.description}</div>
+                                  {active && (
+                                    <kbd className="text-2xs text-zinc-400 dark:text-zinc-500">
+                                      Enter
+                                    </kbd>
+                                  )}
                                 </div>
                               </li>
                             )}

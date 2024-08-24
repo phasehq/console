@@ -20,7 +20,6 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   useEffect(() => {
     if (searchParams?.get('new')) {
-      console.log('search param good')
       if (dialogRef.current) {
         dialogRef.current.openModal()
       }
