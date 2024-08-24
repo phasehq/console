@@ -45,7 +45,6 @@ type CommandGroup = {
 const CommandPalette: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [selectedCommand, setSelectedCommand] = useState<CommandItem | null>(null)
   const [modifierKey, setModifierKey] = useState('')
   const router = useRouter()
   const { activeOrganisation, organisations } = useContext(organisationContext)
@@ -281,36 +280,11 @@ const CommandPalette: React.FC = () => {
     isOpenRef.current = isOpen
   }, [isOpen])
 
-  // /**
-  //  * Handles the selection of a command item from the Command Palette.
-  //  *
-  //  * This function defers the execution of the selected command's action until the next
-  //  * animation frame to ensure that the dialog's open state has been updated.
-  //  * This approach prevents accidental triggering of the action when the dialog is
-  //  * closing due to a click outside the palette.
-  //  *
-  //  * The use of `requestAnimationFrame` ensures the state is accurately evaluated in the next render cycle
-  //  *
-  //  * @param {CommandItem} item - The selected command item.
-  //  */
-  // const handleOptionSelection = (item: CommandItem) => {
-  //   setSelectedCommand(item)
-  //   requestAnimationFrame(() => {
-  //     if (isOpenRef.current) {
-  //       item.action()
-  //       setIsOpen(false)
-  //       setSelectedCommand(null)
-  //     }
-  //   })
-  // }
-
   const handleOptionSelection = (item: CommandItem) => {
-    setSelectedCommand(item)
     setTimeout(() => {
       if (isOpenRef.current) {
         item.action()
         setIsOpen(false)
-        setSelectedCommand(null)
       }
     }, 100)
   }
