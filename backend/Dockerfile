@@ -5,12 +5,13 @@ ADD constraints.txt /app/constraints.txt
 
 ENV PIP_CONSTRAINT=/app/constraints.txt
 
-RUN set -ex \
-    && apk add --no-cache --virtual .build-deps postgresql-dev build-base gcc musl-dev jpeg-dev zlib-dev libffi-dev cairo-dev pango-dev gdk-pixbuf-dev mariadb-dev python3-dev  \
-    && python -m venv /env \
+RUN apk add --no-cache --virtual .build-deps postgresql-dev build-base gcc musl-dev jpeg-dev zlib-dev libffi-dev cairo-dev pango-dev gdk-pixbuf-dev mariadb-dev python3-dev
+
+RUN python -m venv /env \
     && /env/bin/pip install --upgrade pip \
-    && /env/bin/pip install --no-cache-dir -r /app/requirements.txt \
-    && runDeps="$(scanelf --needed --nobanner --recursive /env \
+    && /env/bin/pip install --no-cache-dir -r /app/requirements.txt
+
+RUN runDeps="$(scanelf --needed --nobanner --recursive /env \
     | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
     | sort -u \
     | xargs -r apk info --installed \
@@ -30,4 +31,4 @@ ENV PATH /env/bin:$PATH
 
 EXPOSE 8000
 
-CMD sh -c "python manage.py migrate && gunicorn --bind :8000 --workers 3 backend.wsgi:application"
+CMD ["sh", "-c", "python manage.py migrate && gunicorn --bind :8000 --workers 3 backend.wsgi:application"]
