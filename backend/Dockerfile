@@ -1,4 +1,4 @@
-FROM python:3.12.1-alpine3.19@sha256:28230397c48cf4e2619822beb834ae7e46ebcd255b8f7cef58eff932fd75d2ce
+FROM python:3.12.1-alpine3.19
 
 ADD requirements.txt /app/requirements.txt
 ADD constraints.txt /app/constraints.txt
