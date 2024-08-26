@@ -1,12 +1,5 @@
 # Stage 1: Build dependencies
-FROM python:3.12.1-alpine3.19 AS builder
-
-WORKDIR /app
-
-# Install Python and build dependencies
-RUN apk add --no-cache python3 py3-pip \
-    postgresql-dev build-base gcc musl-dev jpeg-dev zlib-dev \
-    libffi-dev cairo-dev pango-dev gdk-pixbuf-dev mariadb-dev python3-dev
+FROM python:3.12.1-alpine3.19
 
 ADD requirements.txt /app/requirements.txt
 ADD constraints.txt /app/constraints.txt
@@ -14,38 +7,27 @@ ADD constraints.txt /app/constraints.txt
 ENV PIP_CONSTRAINT=/app/constraints.txt
 
 RUN set -ex \
-    && python3 -m venv /env \
+    && apk add --no-cache --virtual .build-deps postgresql-dev build-base gcc musl-dev jpeg-dev zlib-dev libffi-dev cairo-dev pango-dev gdk-pixbuf-dev mariadb-dev python3-dev  \
+    && python -m venv /env \
     && /env/bin/pip install --upgrade pip \
     && /env/bin/pip install --no-cache-dir -r /app/requirements.txt \
     && runDeps="$(scanelf --needed --nobanner --recursive /env \
-        | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
-        | sort -u \
-        | xargs -r apk info --installed \
-        | sort -u)" \
-    && apk add --virtual rundeps $runDeps
+    | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
+    | sort -u \
+    | xargs -r apk info --installed \
+    | sort -u)" \
+    && apk add --virtual rundeps $runDeps \
+    && apk del .build-deps
 
-# Stage 2: Final image
-FROM python:3.12.1-alpine3.19@sha256:28230397c48cf4e2619822beb834ae7e46ebcd255b8f7cef58eff932fd75d2ce
-
+RUN apk add --no-cache curl
+RUN addgroup -S app && adduser -S app -G app
+ADD . /app
 WORKDIR /app
-
-# Copy the virtual environment from the builder stage
-COPY --from=builder /env /env
-COPY --from=builder /usr/lib/python3.11/site-packages /usr/local/lib/python3.12/site-packages
-
-# Install runtime dependencies
-RUN apk add --no-cache curl \
-    && addgroup -S app && adduser -S app -G app
-
-# Copy the application code
-COPY . /app
 RUN chown -R app:app /app
-
 USER app
 
-ENV VIRTUAL_ENV=/env
-ENV PATH=/env/bin:$PATH
+ENV VIRTUAL_ENV /env
+ENV PATH /env/bin:$PATH
 
 EXPOSE 8000
-
 CMD ["sh", "-c", "python manage.py migrate && gunicorn --bind :8000 --workers 3 backend.wsgi:application"]
