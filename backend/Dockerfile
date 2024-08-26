@@ -5,7 +5,21 @@ ADD constraints.txt /app/constraints.txt
 
 ENV PIP_CONSTRAINT=/app/constraints.txt
 
-RUN apk add --no-cache --virtual .build-deps postgresql-dev build-base gcc musl-dev jpeg-dev zlib-dev libffi-dev cairo-dev pango-dev gdk-pixbuf-dev mariadb-dev python3-dev
+RUN uname -a && \
+    apk update && \
+    apk add --no-cache --virtual .build-deps \
+        postgresql-dev \
+        build-base \
+        gcc \
+        musl-dev \
+        jpeg-dev \
+        zlib-dev \
+        libffi-dev \
+        cairo-dev \
+        pango-dev \
+        gdk-pixbuf-dev \
+        mariadb-dev \
+        python3-dev
 
 RUN python -m venv /env \
     && /env/bin/pip install --upgrade pip \
