@@ -60,7 +60,7 @@ const Sidebar = () => {
   const OrgsMenu = () => {
     const OrgLabel = () => (
       <div className="p-2 text-neutral-500 flex items-center justify-between w-full bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10 rounded-lg">
-        <div className="flex flex-col gap-0.5 min-w-0">
+        <div className="flex flex-col gap-0.5 min-w-0 items-start">
           <div>
             <PlanLabel plan={activeOrganisation?.plan!} />
           </div>
