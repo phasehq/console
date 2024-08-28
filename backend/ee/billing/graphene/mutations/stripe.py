@@ -53,7 +53,6 @@ class CreateProUpgradeCheckoutSession(Mutation):
         except Organisation.DoesNotExist:
             raise GraphQLError("Organisation not found.")
         except Exception as e:
-            print(e)
             raise GraphQLError(
                 f"Something went wrong during checkout. Please try again."
             )
