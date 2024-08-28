@@ -11,9 +11,7 @@ import { Button } from '../common/Button'
 import { Input } from '../common/Input'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { toast } from 'react-toastify'
-import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import Spinner from '../common/Spinner'
-import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 
@@ -36,10 +34,10 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
 
   const isLoading = orgAdminsDataLoading || appDataLoading
 
-  const allowNewEnv = organisation
-    ? !organisation.planDetail!.maxEnvsPerApp ||
-      organisation.planDetail!.maxEnvsPerApp! > appData?.appEnvironments.length
-    : false
+  const allowNewEnv = () => {
+    if (!organisation?.planDetail?.maxEnvsPerApp) return true
+    return appData?.appEnvironments.length < organisation.planDetail?.maxEnvsPerApp
+  }
 
   const planDisplay = () => {
     if (organisation?.plan === ApiOrganisationPlanChoices.Fr)
@@ -103,7 +101,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       </div>
     )
 
-  if (!allowNewEnv)
+  if (!allowNewEnv())
     return (
       <UpsellDialog
         title="Upgrade to Pro to create custom environments"
@@ -118,7 +116,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
 
   return (
     <GenericDialog
-      title={allowNewEnv ? 'Create a new Environment' : planDisplay()?.dialogTitle || ''}
+      title={allowNewEnv() ? 'Create a new Environment' : planDisplay()?.dialogTitle || ''}
       ref={dialogRef}
       onClose={() => {}}
       buttonVariant={'outline'}

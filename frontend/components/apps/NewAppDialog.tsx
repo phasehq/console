@@ -9,7 +9,6 @@ import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcess
 import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import {
   ApiEnvironmentEnvTypeChoices,
@@ -61,13 +60,6 @@ const NewAppDialog = forwardRef(
     const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
 
     const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
-      variables: {
-        organisationId: organisation?.id,
-      },
-      skip: !organisation,
-    })
-
-    const { data: orgPlanData } = useQuery(GetOrganisationPlan, {
       variables: {
         organisationId: organisation?.id,
       },
@@ -397,14 +389,8 @@ const NewAppDialog = forwardRef(
     }
 
     const allowNewApp = () => {
-      if (
-        organisation.plan === ApiOrganisationPlanChoices.Fr ||
-        organisation.plan === ApiOrganisationPlanChoices.Pr
-      ) {
-        return appCount < orgPlanData?.organisationPlan.maxApps
-      } else if (organisation.plan === ApiOrganisationPlanChoices.En) {
-        return true
-      }
+      if (!organisation.planDetail?.maxApps) return true
+      return appCount < organisation.planDetail?.maxApps
     }
 
     const planDisplay = () => {
@@ -412,13 +398,13 @@ const NewAppDialog = forwardRef(
         return {
           planName: 'Free',
           dialogTitle: 'Upgrade to Pro',
-          description: `The Free plan is limited to ${orgPlanData?.organisationPlan.maxApps} Apps. To create more Apps, please upgrade to Pro.`,
+          description: `The Free plan is limited to ${organisation.planDetail?.maxApps} Apps. To create more Apps, please upgrade to Pro.`,
         }
       else if (organisation.plan === ApiOrganisationPlanChoices.Pr)
         return {
           planName: 'Pro',
           dialogTitle: 'Upgrade to Enterprise',
-          description: `The Pro plan is limited to ${orgPlanData?.organisationPlan.maxApps} Apps. To create more Apps, please upgrade to Enterprise.`,
+          description: `The Pro plan is limited to ${organisation.planDetail?.maxApps} Apps. To create more Apps, please upgrade to Enterprise.`,
         }
     }
 
