@@ -43,6 +43,9 @@ class CreateProUpgradeCheckoutSession(Mutation):
                 ],
                 customer=organisation.stripe_customer_id,
                 payment_method_types=["card"],
+                subscription_data={
+                    "trial_period_days": 30,
+                },
                 return_url=f"{settings.OAUTH_REDIRECT_URI}/{organisation.name}/settings?stripe_session_id={{CHECKOUT_SESSION_ID}}",
             )
             return CreateProUpgradeCheckoutSession(client_secret=session.client_secret)
@@ -50,6 +53,7 @@ class CreateProUpgradeCheckoutSession(Mutation):
         except Organisation.DoesNotExist:
             raise GraphQLError("Organisation not found.")
         except Exception as e:
+            print(e)
             raise GraphQLError(
                 f"Something went wrong during checkout. Please try again."
             )
