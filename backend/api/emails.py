@@ -123,3 +123,22 @@ def send_user_joined_email(invite, new_member):
         "api/user_joined_org.html",
         context,
     )
+
+def send_welcome_email(new_member):
+    organisation = new_member.organisation.name
+    org_home_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}"
+
+    name = get_org_member_name(new_member)
+
+    context = {
+        "name": name,
+        "organisation": organisation,
+        "org_home_link": org_home_link,
+    }
+
+    send_email(
+        f"Welcome to Phase!",
+        [new_member.user.email],
+        "api/welcome.html",
+        context,
+    )
