@@ -12,7 +12,7 @@ import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRo
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import {
   OrganisationMemberInviteType,
   OrganisationMemberType,
@@ -41,6 +41,7 @@ import CopyButton from '@/components/common/CopyButton'
 import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { useSearchParams } from 'next/navigation'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -226,6 +227,8 @@ const InviteDialog = (props: { organisationId: string }) => {
 
   const { activeOrganisation } = useContext(organisationContext)
 
+  const searchParams = useSearchParams()
+
   const { data } = useQuery(GetOrganisationPlan, {
     variables: { organisationId },
     fetchPolicy: 'cache-and-network',
@@ -239,8 +242,9 @@ const InviteDialog = (props: { organisationId: string }) => {
   const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
-
   const [email, setEmail] = useState<string>('')
+
+  const emailInputRef = useRef(null)
 
   const [inviteLink, setInviteLink] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string>('')
@@ -263,6 +267,12 @@ const InviteDialog = (props: { organisationId: string }) => {
   const handleClose = () => {
     closeModal()
   }
+
+  useEffect(() => {
+    if (searchParams?.get('invite')) {
+      openModal()
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (error) setErrorMessage(error.message)
@@ -311,7 +321,7 @@ const InviteDialog = (props: { organisationId: string }) => {
       </div>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal}>
+        <Dialog as="div" className="relative z-10" onClose={closeModal} initialFocus={emailInputRef}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -377,6 +387,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                               type="email"
                               required
                               autoFocus
+                              ref={emailInputRef}
                             />
                           </div>
 

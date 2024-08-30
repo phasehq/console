@@ -40,7 +40,12 @@
   --card-rgb: 180, 185, 188;
   --card-border-rgb: 131, 134, 135;
 
-  --toastify-color-success: rgb(16 185 129) !important;
+  --toastify-color-info: #0ea5e9!important;
+  --toastify-color-success: #34d399!important;
+  --toastify-color-warning: #f59e0b!important;
+  --toastify-color-error: #ef4444!important;
+  --toastify-color-light: #f4f4f5!important;
+  --toastify-color-dark: #27272a!important;
 }
 
 @media (prefers-color-scheme: dark) {

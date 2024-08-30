@@ -11,6 +11,7 @@ import { StatusIndicator } from '../common/StatusIndicator'
 import { organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
 import { LogoMark } from '../common/LogoMark'
+import CommandPalette from '../common/CommandPalette'
 
 export const NavBar = (props: { team: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -43,7 +44,7 @@ export const NavBar = (props: { team: string }) => {
   const activeEnv = activeApp ? envs.find((env) => env.id === envId) : undefined
 
   return (
-    <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 flex gap-4 items-center justify-between text-neutral-500 font-medium bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
+    <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
       <div className="flex items-center gap-2">
         <Link href="/">
           <LogoMark className="w-10 fill-black dark:fill-white" />
@@ -80,6 +81,11 @@ export const NavBar = (props: { team: string }) => {
 
         {activeEnv && <span className="text-black dark:text-white">{activeEnv.name}</span>}
       </div>
+
+      <div className="flex justify-center w-full">
+        <CommandPalette />
+      </div>
+
       <div className="flex gap-4 items-center justify-end">
         <StatusIndicator />
 

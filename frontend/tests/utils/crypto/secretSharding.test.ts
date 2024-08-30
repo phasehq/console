@@ -37,10 +37,13 @@ describe('Split Secret Tests', () => {
 
   test('cannot reconstruct secret with a corrupted share', async () => {
     const shares = await splitSecret(secret)
-    // Corrupt one share
-    const corruptedShare = shares[0].substring(0, shares[0].length - 1) + '0'
+    // Corrupt one share by changing a single bit
+    const corruptedShareBytes = _sodium.from_hex(shares[0])
+    corruptedShareBytes[0] ^= 1  // Flip the least significant bit of the first byte
+    const corruptedShare = _sodium.to_hex(corruptedShareBytes)
     const recombined = xorUint8Arrays(_sodium.from_hex(corruptedShare), _sodium.from_hex(shares[1]))
-    expect(_sodium.to_hex(recombined)).not.toBe(secret)
+    const reconstructedSecret = _sodium.to_hex(recombined)
+    expect(reconstructedSecret).not.toBe(secret)
   })
 
   test('cannot reconstruct secret with only one share', async () => {
