@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 from api.utils.rest import encode_string_to_base64, get_client_ip
 from api.models import OrganisationMember
-
+from django.utils import timezone
 
 def get_org_member_name(org_member):
     social_acc = org_member.user.socialaccount_set.first()
@@ -38,14 +38,20 @@ def send_email(subject, recipient_list, template_name, context):
     )
 
 
-def send_login_email(request, email, provider):
+def send_login_email(request, email, full_name, provider):
     user_agent = request.META.get("HTTP_USER_AGENT", "Unknown")
     ip_address = get_client_ip(request)
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Get the current time in the current timezone
+    current_time = timezone.now()
+    
+    # Format the timestamp with timezone information
+    timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S %Z (%z)")
 
     # Creating context dictionary
     context = {
         "auth": provider,
+        "full_name": full_name,
         "email": email,
         "ip": ip_address,
         "user_agent": user_agent,
@@ -55,7 +61,7 @@ def send_login_email(request, email, provider):
     send_email(
         "New Login Alert - Phase Console",
         [email],
-        "backend/api/email_templates/login.html",
+        "api/login.html",
         context,
     )
 
@@ -78,13 +84,14 @@ def send_invite_email(invite):
     send_email(
         f"Invite - {organisation} on Phase",
         [invite.invitee_email],
-        "backend/api/email_templates/invite.html",
+        "api/invite.html",
         context,
     )
 
 
 def send_user_joined_email(invite, new_member):
     organisation = invite.organisation.name
+    members_page_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}/members"
 
     owner = OrganisationMember.objects.get(
         organisation=invite.organisation, role=OrganisationMember.OWNER, deleted_at=None
@@ -103,14 +110,16 @@ def send_user_joined_email(invite, new_member):
         invited_by_name = invite.invited_by.user.email
 
     context = {
+        "recipient_name": owner_name,
         "organisation": organisation,
         "invited_by": invited_by_name,
         "new_user": new_user_name,
+        "members_page_link": members_page_link
     }
 
     send_email(
         f"A new user has joined {organisation} on Phase",
         [owner.user.email],
-        "backend/api/email_templates/user_joined_org.html",
+        "api/user_joined_org.html",
         context,
     )
