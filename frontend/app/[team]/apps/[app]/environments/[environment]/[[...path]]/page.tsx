@@ -36,7 +36,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Dialog, Menu, Transition } from '@headlessui/react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Alert } from '@/components/common/Alert'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { Input } from '@/components/common/Input'
 import { SplitButton } from '@/components/common/SplitButton'
@@ -55,6 +54,8 @@ import {
 import { EmptyState } from '@/components/common/EmptyState'
 import { SortOption, sortSecrets } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
+
+import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 
 export default function EnvironmentPath({
   params,
@@ -798,12 +799,13 @@ export default function EnvironmentPath({
               <FolderBreadcrumbLinks path={params.path} />
             </div>
             {unsavedChanges && (
-              <Alert variant="warning" icon={true} size="sm">
-                You have undeployed changes to this environment.
-              </Alert>
-            )}
+              <DeployPreview 
+                clientSecrets={clientSecrets}
+                serverSecrets={serverSecrets}
+                secretsToDelete={secretsToDelete}
+              />
+          )}
           </div>
-
           <div className="space-y-0 sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
             <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
               <div className="flex items-center gap-4">
