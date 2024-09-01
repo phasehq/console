@@ -6,7 +6,8 @@ import clsx from 'clsx'
 
 interface GenericDialogProps {
   title: string
-  onClose: () => void
+  onClose?: () => void
+  onOpen?: () => void
   children: ReactNode
   buttonVariant: 'primary' | 'secondary' | 'danger' | 'outline' | ''
   buttonContent: ReactNode
@@ -14,15 +15,19 @@ interface GenericDialogProps {
 }
 
 const GenericDialog = forwardRef(
-  ({ title, onClose, children, buttonVariant, buttonContent, size }: GenericDialogProps, ref) => {
+  (
+    { title, onClose, onOpen, children, buttonVariant, buttonContent, size }: GenericDialogProps,
+    ref
+  ) => {
     const [isOpen, setIsOpen] = useState<boolean>(false)
 
     const closeModal = () => {
-      onClose()
+      if (onClose) onClose()
       setIsOpen(false)
     }
 
     const openModal = () => {
+      if (onOpen) onOpen()
       setIsOpen(true)
     }
 
