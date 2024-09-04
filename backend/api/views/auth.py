@@ -121,17 +121,18 @@ class CustomGoogleOAuth2Adapter(GoogleOAuth2Adapter):
         except jwt.PyJWTError as e:
             raise OAuth2Error("Invalid id_token") from e
         login = self.get_provider().sociallogin_from_response(request, identity_data)
-        email = login.email_addresses[0]
+        email = identity_data.get("email")
+        full_name = identity_data.get("name")  # Get the full name from the id_token 
 
         if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
             try:
                 # Notify Slack
-                notify_slack(f"New user signup: {email}")
+                notify_slack(f"New user signup: {full_name} - {email}")
             except Exception as e:
                 print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email, "Google")
+            send_login_email(request, email, full_name, "Google")
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -160,11 +161,13 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
         resp.raise_for_status()
         extra_data = resp.json()
         if app_settings.QUERY_EMAIL and not extra_data.get("email"):
-            extra_data["email"] = self.get_email(headers)
+            extra_data["email"] = self.get_email(headers) 
 
         email = extra_data["email"]
 
         if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
+            
+            
             try:
                 # Notify Slack
                 notify_slack(f"New user signup: {email}")
@@ -172,7 +175,8 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
                 print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email, "GitHub")
+            full_name = extra_data.get("name", email.split('@')[0])
+            send_login_email(request, email, full_name, "GitHub")
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -207,7 +211,8 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
                     print(f"Error notifying Slack: {e}")
 
         try:
-            send_login_email(request, email, "GitLab")
+            full_name = data.get("name", "")
+            send_login_email(request, email, full_name, "GitLab")
         except Exception as e:
             print(f"Error sending email: {e}")
 

@@ -1,4 +1,4 @@
-from api.emails import send_invite_email, send_user_joined_email
+from api.emails import send_invite_email, send_user_joined_email, send_welcome_email
 from api.utils.permissions import user_is_admin, user_is_org_member
 
 import graphene
@@ -37,10 +37,10 @@ class CreateOrganisationMutation(graphene.Mutation):
         if Organisation.objects.filter(name__iexact=name).exists():
             raise GraphQLError("This organisation name is not available.")
 
-        owner = CustomUser.objects.get(userId=info.context.user.userId)
+        user = CustomUser.objects.get(userId=info.context.user.userId)
         org = Organisation.objects.create(id=id, name=name, identity_key=identity_key)
-        OrganisationMember.objects.create(
-            user=owner,
+        owner = OrganisationMember.objects.create(
+            user=user,
             organisation=org,
             role=OrganisationMember.OWNER,
             identity_key=identity_key,
@@ -48,10 +48,15 @@ class CreateOrganisationMutation(graphene.Mutation):
             wrapped_recovery=wrapped_recovery,
         )
 
+        try:
+            send_welcome_email(owner)
+        except Exception as e:
+            print(f"Error sending new user welcome email: {e}")
+
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import create_stripe_customer
 
-            create_stripe_customer(org, owner.email)
+            create_stripe_customer(org, user.email)
 
         if settings.PHASE_LICENSE:
             from ee.licensing.utils import activate_license
@@ -214,6 +219,7 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
 
             try:
                 send_user_joined_email(invite, org_member)
+                send_welcome_email(org_member)
             except Exception as e:
                 print(f"Error sending new user joined email: {e}")
 
