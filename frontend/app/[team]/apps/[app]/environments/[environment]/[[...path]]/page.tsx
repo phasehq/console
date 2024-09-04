@@ -28,6 +28,7 @@ import {
   FaEye,
   FaEyeSlash,
   FaMagic,
+  FaCloudUploadAlt,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -740,71 +741,75 @@ export default function EnvironmentPath({
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
         <div className="flex flex-col py-4 bg-zinc-200 dark:bg-zinc-900">
-          <div className="flex items-center gap-8">
-            {envLinks.length > 1 ? (
-              <Menu as="div" className="relative group">
-                {({ open }) => (
-                  <>
-                    <Menu.Button as={Fragment}>
-                      <div className="cursor-pointer flex items-center gap-2">
-                        <h3 className="font-semibold text-xl">{environment.name}</h3>
-                        <FaChevronDown
-                          className={clsx(
-                            'transition transform ease',
-                            open
-                              ? 'rotate-180 text-black dark:text-white'
-                              : 'rotate-0 text-neutral-500 group-hover:text-black group-hover:dark:text-white'
-                          )}
-                        />
-                      </div>
-                    </Menu.Button>
-                    <Transition
-                      enter="transition duration-100 ease-out"
-                      enterFrom="transform scale-95 opacity-0"
-                      enterTo="transform scale-100 opacity-100"
-                      leave="transition duration-75 ease-out"
-                      leaveFrom="transform scale-100 opacity-100"
-                      leaveTo="transform scale-95 opacity-0"
-                      as="div"
-                      className="absolute z-20 left-0 origin-bottom-left mt-2"
-                    >
-                      <Menu.Items as={Fragment}>
-                        <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                          {envLinks.map((link: { label: string; href: string }) => (
-                            <Menu.Item key={link.href} as={Fragment}>
-                              {({ active }) => (
-                                <Link
-                                  href={link.href}
-                                  className={clsx(
-                                    'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
-                                    active && 'bg-zinc-200 dark:bg-zinc-700'
-                                  )}
-                                >
-                                  <div className="text-lg">{link.label}</div>
-                                  <FaExchangeAlt className="text-neutral-500" />
-                                </Link>
-                              )}
-                            </Menu.Item>
-                          ))}
+          <div className="flex items-center gap-8 justify-between w-full">
+            <div className="flex items-center gap-8">
+              {envLinks.length > 1 ? (
+                <Menu as="div" className="relative group">
+                  {({ open }) => (
+                    <>
+                      <Menu.Button as={Fragment}>
+                        <div className="cursor-pointer flex items-center gap-2">
+                          <h3 className="font-semibold text-xl">{environment.name}</h3>
+                          <FaChevronDown
+                            className={clsx(
+                              'transition transform ease',
+                              open
+                                ? 'rotate-180 text-black dark:text-white'
+                                : 'rotate-0 text-neutral-500 group-hover:text-black group-hover:dark:text-white'
+                            )}
+                          />
                         </div>
-                      </Menu.Items>
-                    </Transition>
-                  </>
-                )}
-              </Menu>
-            ) : (
-              <h3 className="font-semibold text-2xl">{environment.name}</h3>
-            )}
-            <div className="flex items-center gap-2">
-              <FolderBreadcrumbLinks path={params.path} />
+                      </Menu.Button>
+                      <Transition
+                        enter="transition duration-100 ease-out"
+                        enterFrom="transform scale-95 opacity-0"
+                        enterTo="transform scale-100 opacity-100"
+                        leave="transition duration-75 ease-out"
+                        leaveFrom="transform scale-100 opacity-100"
+                        leaveTo="transform scale-95 opacity-0"
+                        as="div"
+                        className="absolute z-20 left-0 origin-bottom-left mt-2"
+                      >
+                        <Menu.Items as={Fragment}>
+                          <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                            {envLinks.map((link: { label: string; href: string }) => (
+                              <Menu.Item key={link.href} as={Fragment}>
+                                {({ active }) => (
+                                  <Link
+                                    href={link.href}
+                                    className={clsx(
+                                      'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
+                                      active && 'bg-zinc-200 dark:bg-zinc-700'
+                                    )}
+                                  >
+                                    <div className="text-lg">{link.label}</div>
+                                    <FaExchangeAlt className="text-neutral-500" />
+                                  </Link>
+                                )}
+                              </Menu.Item>
+                            ))}
+                          </div>
+                        </Menu.Items>
+                      </Transition>
+                    </>
+                  )}
+                </Menu>
+              ) : (
+                <h3 className="font-semibold text-2xl">{environment.name}</h3>
+              )}
+              <div className="flex items-center gap-2">
+                <FolderBreadcrumbLinks path={params.path} />
+              </div>
             </div>
-            {unsavedChanges && (
-              <DeployPreview 
-                clientSecrets={clientSecrets}
-                serverSecrets={serverSecrets}
-                secretsToDelete={secretsToDelete}
-              />
-          )}
+            <div>
+              {unsavedChanges && (
+                <DeployPreview
+                  clientSecrets={clientSecrets}
+                  serverSecrets={serverSecrets}
+                  secretsToDelete={secretsToDelete}
+                />
+              )}
+            </div>
           </div>
           <div className="space-y-0 sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
             <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
@@ -852,14 +857,19 @@ export default function EnvironmentPath({
                 )}
 
                 <Button
-                  variant={unsavedChanges ? 'warning' : 'primary'}
+                  variant={unsavedChanges ? 'primary' : 'secondary'}
                   disabled={!unsavedChanges || savingAndFetching}
                   isLoading={savingAndFetching}
                   onClick={handleSaveChanges}
                 >
-                  <div className="flex items-center gap-2">
-                    {!unsavedChanges && <FaCheckCircle className="text-emerald-500" />}
-                    <span className="text-lg">{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
+                  <div className="flex items-center gap-2 text-lg">
+                    {!savingAndFetching &&
+                      (unsavedChanges ? (
+                        <FaCloudUploadAlt className="text-emerald-500 shrink-0" />
+                      ) : (
+                        <FaCheckCircle className="text-emerald-500 shrink-0" />
+                      ))}
+                    <span>{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
                   </div>
                 </Button>
               </div>
