@@ -71,7 +71,7 @@ from .graphene.mutations.syncing import (
     UpdateProviderCredentials,
     UpdateSyncAuthentication,
 )
-from api.utils.permissions import (
+from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
     user_is_admin,

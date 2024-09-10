@@ -1,5 +1,4 @@
 from django.db import models
-from django.contrib.postgres.fields import ArrayField
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
@@ -160,6 +159,27 @@ class App(models.Model):
         return self.name
 
 
+class Role(models.Model):
+    """Represents a role with specific permissions for an organization."""
+
+    name = models.CharField(max_length=255)  # Role name, e.g., Owner, Admin, Developer
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="roles"
+    )
+    description = models.TextField(null=True, blank=True)
+
+    # Store permissions as JSON
+    permissions = models.JSONField(default=dict)
+
+    is_default = models.BooleanField(
+        default=False
+    )  # Indicates if the role is a default role
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.organisation.name})"
+
+
 class OrganisationMember(models.Model):
     OWNER = "owner"
     ADMIN = "admin"
@@ -174,10 +194,12 @@ class OrganisationMember(models.Model):
     organisation = models.ForeignKey(
         Organisation, related_name="users", on_delete=models.CASCADE
     )
-    role = models.CharField(
-        max_length=5,
-        choices=USER_ROLES,
-        default=DEVELOPER,
+    organisation_role = models.ForeignKey(
+        Role,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="organisation_members",
     )
     apps = models.ManyToManyField(App, related_name="members")
     identity_key = models.CharField(max_length=256, null=True, blank=True)

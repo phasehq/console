@@ -20,6 +20,7 @@ from api.models import (
     OrganisationMemberInvite,
     PersonalSecret,
     ProviderCredentials,
+    Role,
     Secret,
     SecretEvent,
     SecretFolder,
@@ -67,7 +68,7 @@ class OrganisationType(DjangoObjectType):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self, deleted_at=None
         )
-        return org_member.role
+        return org_member.organisation_role
 
     def resolve_member_id(self, info):
         org_member = OrganisationMember.objects.get(
@@ -128,7 +129,7 @@ class OrganisationMemberType(DjangoObjectType):
             "username",
             "full_name",
             "avatar_url",
-            "role",
+            "organisation_role",
             "identity_key",
             "wrapped_keyring",
             "created_at",
@@ -169,7 +170,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
             "valid",
             "organisation",
             "apps",
-            "role",
+            "organisation_role",
             "created_at",
             "updated_at",
             "expires_at",
@@ -633,9 +634,13 @@ class PhaseLicenseType(graphene.ObjectType):
         if ActivatedPhaseLicense.objects.filter(id=self.id).exists():
             activated_license = ActivatedPhaseLicense.objects.get(id=self.id)
 
+            owner_role = Role.objects.get(
+                organisation=activated_license.organisation, name__iexact="owner"
+            )
+
             return OrganisationMember.objects.get(
                 organisation=activated_license.organisation,
-                role=OrganisationMember.OWNER,
+                role=owner_role,
             )
 
 

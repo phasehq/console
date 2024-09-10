@@ -10,7 +10,7 @@ from api.models import (
 )
 from backend.api.notifier import notify_slack
 from api.utils.syncing.cloudflare.pages import list_cloudflare_pages
-from api.utils.permissions import (
+from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
     user_is_org_member,

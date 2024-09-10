@@ -1,6 +1,10 @@
 from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import EnvironmentKeyInput
-from api.utils.permissions import user_can_access_app, user_is_admin, user_is_org_member
+from api.utils.access.permissions import (
+    user_can_access_app,
+    user_is_admin,
+    user_is_org_member,
+)
 import graphene
 from graphql import GraphQLError
 from api.models import App, EnvironmentKey, Organisation, OrganisationMember

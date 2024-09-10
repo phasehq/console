@@ -3,7 +3,7 @@ from api.utils.secrets import normalize_path_string
 
 import graphene
 from graphql import GraphQLError
-from api.utils.permissions import (
+from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
     user_is_org_member,

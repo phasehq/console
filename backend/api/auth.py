@@ -5,7 +5,7 @@ from api.utils.rest import (
     token_is_expired_or_deleted,
 )
 from api.models import Environment
-from api.utils.permissions import user_can_access_environment
+from api.utils.access.permissions import user_can_access_environment
 from rest_framework import authentication, exceptions
 
 

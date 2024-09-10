@@ -1,7 +1,7 @@
 from django.conf import settings
 from api.models import ActivatedPhaseLicense
 from graphql import GraphQLError
-from api.utils.permissions import user_is_org_member
+from api.utils.access.permissions import user_is_org_member
 
 
 def resolve_license(root, info):

@@ -1,7 +1,7 @@
 from django.utils import timezone
 from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
-from api.utils.permissions import (
+from api.utils.access.permissions import (
     member_can_access_org,
     user_can_access_app,
     user_can_access_environment,

@@ -1,4 +1,4 @@
-from api.utils.permissions import user_is_org_member
+from api.utils.access.permissions import user_is_org_member
 from api.models import App, Organisation, OrganisationMember, OrganisationMemberInvite
 from backend.quotas import PLAN_CONFIG
 from django.utils import timezone

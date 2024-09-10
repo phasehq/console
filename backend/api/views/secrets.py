@@ -17,7 +17,7 @@ from api.utils.secrets import (
     compute_key_digest,
     get_environment_keys,
 )
-from api.utils.permissions import user_can_access_environment
+from api.utils.access.permissions import user_can_access_environment
 from api.utils.audit_logging import log_secret_event
 
 from api.utils.crypto import encrypt_asymmetric, validate_encrypted_string

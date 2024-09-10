@@ -1,5 +1,5 @@
 from api.emails import send_invite_email, send_user_joined_email, send_welcome_email
-from api.utils.permissions import user_is_admin, user_is_org_member
+from api.utils.access.permissions import user_is_admin, user_is_org_member
 
 import graphene
 from graphql import GraphQLError
