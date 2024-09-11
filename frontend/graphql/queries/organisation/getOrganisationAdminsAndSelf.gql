@@ -1,7 +1,10 @@
 query GetOrganisationAdminsAndSelf($organisationId: ID!) {
   organisationAdminsAndSelf(organisationId: $organisationId) {
     id
-    role
+    role {
+      name
+      permissions
+    }
     identityKey
     self
   }
