@@ -32,6 +32,7 @@ from api.models import (
 from logs.dynamodb_models import KMSLog
 from allauth.socialaccount.models import SocialAccount
 from django.utils import timezone
+from api.utils.access.roles import default_roles
 
 
 class OrganisationPlanType(ObjectType):
@@ -43,8 +44,23 @@ class OrganisationPlanType(ObjectType):
     app_count = graphene.Int()
 
 
+class RoleType(DjangoObjectType):
+    name = graphene.String()
+    description = graphene.String()
+    permissions = graphene.JSONString()
+
+    class Meta:
+        model = Role
+        fields = ("name", "description")
+
+    def resolve_permissions(self, info):
+        if self.is_default:
+            return default_roles.get(self.name, {})
+        return self.permissions
+
+
 class OrganisationType(DjangoObjectType):
-    role = graphene.String()
+    role = graphene.Field(RoleType)
     member_id = graphene.ID()
     keyring = graphene.String()
     recovery = graphene.String()
@@ -68,7 +84,7 @@ class OrganisationType(DjangoObjectType):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self, deleted_at=None
         )
-        return org_member.organisation_role
+        return org_member.role
 
     def resolve_member_id(self, info):
         org_member = OrganisationMember.objects.get(
@@ -119,6 +135,7 @@ class OrganisationMemberType(DjangoObjectType):
     username = graphene.String()
     full_name = graphene.String()
     avatar_url = graphene.String()
+    role = graphene.Field(RoleType)
     self = graphene.Boolean()
 
     class Meta:
@@ -129,7 +146,7 @@ class OrganisationMemberType(DjangoObjectType):
             "username",
             "full_name",
             "avatar_url",
-            "organisation_role",
+            "role",
             "identity_key",
             "wrapped_keyring",
             "created_at",
@@ -170,7 +187,6 @@ class OrganisationMemberInviteType(DjangoObjectType):
             "valid",
             "organisation",
             "apps",
-            "organisation_role",
             "created_at",
             "updated_at",
             "expires_at",
