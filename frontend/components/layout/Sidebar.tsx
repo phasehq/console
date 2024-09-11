@@ -55,7 +55,7 @@ const Sidebar = () => {
 
   const showOrgsMenu = organisations && organisations.length > 1
 
-  const isOwner = organisations?.some((org) => org.role?.toLowerCase() === 'owner')
+  const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
 
   const OrgsMenu = () => {
     const OrgLabel = () => (

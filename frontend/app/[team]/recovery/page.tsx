@@ -170,7 +170,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-semibold text-black dark:text-white">{org.name}</h2>
                   <span className="text-neutral-500">
-                    <RoleLabel role={org.role!} />
+                    <RoleLabel role={org.role!.name!} />
                   </span>
                 </div>
               </div>

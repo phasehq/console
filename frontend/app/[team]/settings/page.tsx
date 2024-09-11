@@ -8,7 +8,7 @@ import { ViewRecoveryDialog } from '@/components/settings/account/ViewRecoveryDi
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { PlanInfo } from '@/components/settings/organisation/PlanInfo'
-import { userIsAdmin } from '@/utils/permissions'
+import { userIsAdmin } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from 'next-auth/react'

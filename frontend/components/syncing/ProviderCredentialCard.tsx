@@ -7,7 +7,7 @@ import { Button } from '../common/Button'
 import { relativeTimeFromDates } from '@/utils/time'
 import { organisationContext } from '@/contexts/organisationContext'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
-import { userIsAdmin } from '@/utils/permissions'
+import { userIsAdmin } from '@/utils/access/permissions'
 import { ProviderIcon } from './ProviderIcon'
 
 export const ProviderCredentialCard = (props: { credential: ProviderCredentialsType }) => {

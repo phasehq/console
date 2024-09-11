@@ -39,7 +39,7 @@ import clsx from 'clsx'
 import { Disclosure, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
-import { userIsAdmin } from '@/utils/permissions'
+import { userIsAdmin } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import { Card } from '@/components/common/Card'
 import { BsListColumnsReverse } from 'react-icons/bs'
@@ -191,7 +191,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const { keyring } = useContext(KeyringContext)
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
 
   const filteredSecrets =
     searchQuery === ''

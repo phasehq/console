@@ -17,8 +17,6 @@ import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
 import {
   FaCheckSquare,
   FaChevronDown,
-  FaEye,
-  FaEyeSlash,
   FaPlus,
   FaSquare,
   FaTimes,
@@ -30,7 +28,7 @@ import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userIsAdmin } from '@/utils/permissions'
+import { userIsAdmin } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
@@ -42,7 +40,7 @@ export default function Members({ params }: { params: { team: string; app: strin
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
@@ -515,7 +513,7 @@ export default function Members({ params }: { params: { team: string; app: strin
     const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
     const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
 
-    const memberIsAdmin = userIsAdmin(props.member.role) || false
+    const memberIsAdmin = userIsAdmin(props.member.role!.name!) || false
 
     const closeModal = () => {
       setIsOpen(false)
@@ -808,7 +806,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-medium">{member.fullName || member.email}</span>
-                      <RoleLabel role={member.role} />
+                      <RoleLabel role={member.role!.name!} />
                     </div>
                     {member.fullName && (
                       <span className="text-neutral-500 text-sm">{member.email}</span>
@@ -822,7 +820,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                 {activeUserIsAdmin && (
                   <td className="px-6 py-4">
                     {member.email !== session?.user?.email &&
-                      member.role.toLowerCase() !== 'owner' && (
+                      member.role!.name!.toLowerCase() !== 'owner' && (
                         <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
                           <ManageUserAccessDialog member={member} />
                           <RemoveMemberConfirmDialog member={member} />

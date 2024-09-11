@@ -71,8 +71,8 @@ export default function Home() {
                 >
                   <h2 className="text-3xl font-bold text-black dark:text-white">{org.name}</h2>
                   <div className="text-neutral-500">
-                    You are {org.role!.toLowerCase() === 'dev' ? 'a' : 'an'}{' '}
-                    <RoleLabel role={org.role!} /> in this organisation
+                    You are {org.role!.name!.toLowerCase() === 'dev' ? 'a' : 'an'}{' '}
+                    <RoleLabel role={org.role!.name!} /> in this organisation
                   </div>
                   <div className="pt-4">
                     <Button variant="primary" onClick={() => handleRouteToOrg(org)}>

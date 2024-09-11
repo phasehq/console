@@ -257,7 +257,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
               >
                 Secrets
               </div>
-              {organisation?.role?.toLowerCase() === 'owner' && (
+              {organisation?.role!.name!.toLowerCase() === 'owner' && (
                 <div
                   role="button"
                   onClick={() => setActivePanel('kms')}

@@ -11,15 +11,16 @@ import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
+import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import {
   OrganisationMemberInviteType,
   OrganisationMemberType,
   AppType,
-  ApiOrganisationMemberRoleChoices,
   EnvironmentType,
   ApiOrganisationPlanChoices,
+  RoleType,
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -31,7 +32,7 @@ import clsx from 'clsx'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
-import { userIsAdmin } from '@/utils/permissions'
+import { userIsAdmin } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 
@@ -42,6 +43,7 @@ import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { useSearchParams } from 'next/navigation'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -61,16 +63,20 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
     variables: { organisationId: organisation!.id },
   })
+
+  const { data: roleData, loading: roleDataPending } = useQuery(GetRoles, {
+    variables: { orgId: organisation!.id },
+  })
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
   const [updateRole] = useMutation(UpdateMemberRole)
   const [addMemberToApp] = useMutation(AddMemberToApp)
 
-  const [role, setRole] = useState<string>(member.role)
+  const [role, setRole] = useState<string>(member.role!.name!)
 
   const isOwner = role.toLowerCase() === 'owner'
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
 
   /**
    * Handles the upgrade of a user from 'dev' to 'admin'.
@@ -166,11 +172,11 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
     }
   }
 
-  const roleOptions = Object.keys(ApiOrganisationMemberRoleChoices).filter(
-    (option) => option !== 'Owner'
-  )
+  const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner')
 
   const disabled = isOwner || !activeUserIsAdmin || member.self!
+
+  if (roleDataPending) return <></>
 
   return disabled ? (
     <RoleLabel role={role} />
@@ -199,8 +205,8 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
             </Listbox.Button>
             <Listbox.Options>
               <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
-                {roleOptions.map((role: string) => (
-                  <Listbox.Option key={role} value={role} as={Fragment}>
+                {roleOptions.map((role: RoleType) => (
+                  <Listbox.Option key={role.name} value={role} as={Fragment}>
                     {({ active, selected }) => (
                       <div
                         className={clsx(
@@ -208,7 +214,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
                           active && 'bg-zinc-400 dark:bg-zinc-700'
                         )}
                       >
-                        <RoleLabel role={role} />
+                        <RoleLabel role={role.name!} />
                       </div>
                     )}
                   </Listbox.Option>
@@ -321,7 +327,12 @@ const InviteDialog = (props: { organisationId: string }) => {
       </div>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal} initialFocus={emailInputRef}>
+        <Dialog
+          as="div"
+          className="relative z-10"
+          onClose={closeModal}
+          initialFocus={emailInputRef}
+        >
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -465,6 +476,10 @@ export default function Members({ params }: { params: { team: string } }) {
 
   const [deleteInvite] = useMutation(DeleteOrgInvite)
 
+  const activeUserCanDeleteUsers = organisation?.role?.permissions
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'delete', false)
+    : false
+
   const sortedInvites: OrganisationMemberInviteType[] =
     invitesData?.organisationInvites
       ?.slice() // Create a shallow copy of the array to avoid modifying the original
@@ -473,7 +488,7 @@ export default function Members({ params }: { params: { team: string } }) {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       }) || []
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  //const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const DeleteInviteConfirmDialog = (props: { inviteId: string }) => {
     const { inviteId } = props
@@ -576,6 +591,8 @@ export default function Members({ params }: { params: { team: string } }) {
   const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberType }) => {
     const { member } = props
 
+    const { activeOrganisation: organisation } = useContext(organisationContext)
+
     const [removeMember] = useMutation(RemoveMember)
 
     const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -600,7 +617,8 @@ export default function Members({ params }: { params: { team: string } }) {
       })
     }
 
-    const allowDelete = !member.self! && activeUserIsAdmin && member.role.toLowerCase() !== 'owner'
+    const allowDelete =
+      !member.self! && activeUserCanDeleteUsers && member.role!.name!.toLowerCase() !== 'owner'
 
     return (
       <>
@@ -610,7 +628,7 @@ export default function Members({ params }: { params: { team: string } }) {
               variant="danger"
               onClick={openModal}
               title="Remove member"
-              disabled={member.role.toLowerCase() === 'owner'}
+              disabled={member.role!.name!.toLowerCase() === 'owner'}
             >
               <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
                 <FaTrashAlt />
@@ -704,7 +722,7 @@ export default function Members({ params }: { params: { team: string } }) {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Joined
                 </th>
-                {activeUserIsAdmin && <th className="px-6 py-3"></th>}
+                {activeUserCanDeleteUsers && <th className="px-6 py-3"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-500/40">
@@ -729,8 +747,8 @@ export default function Members({ params }: { params: { team: string } }) {
                   </td>
                   <td className="px-6 py-4 flex items-center justify-end gap-2">
                     {!member.self! &&
-                      activeUserIsAdmin &&
-                      member.role.toLowerCase() !== 'owner' && (
+                      activeUserCanDeleteUsers &&
+                      member.role!.name!.toLowerCase() !== 'owner' && (
                         <DeleteMemberConfirmDialog member={member} />
                       )}
                   </td>

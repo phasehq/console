@@ -4,7 +4,7 @@ export const RoleLabel = (props: { role: string }) => {
   const role = props.role.toLowerCase()
 
   const roleStyle = () => {
-    if (role === 'dev')
+    if (role === 'developer')
       return 'ring-neutral-500/40 bg-neutral-500/40 text-black dark:bg-zinc-800 dark:text-neutral-500'
     if (role === 'admin')
       return 'ring-emerald-400/10 bg-emerald-400 text-black dark:bg-zinc-800 dark:text-emerald-400'

@@ -19,7 +19,7 @@ import { Menu, Transition } from '@headlessui/react'
 import { FaArrowRight, FaCubes, FaPlus } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { useSearchParams } from 'next/navigation'
 import { FrameworkIntegrations } from '@/components/syncing/FrameworkIntegrations'
 import { ProviderCard } from '@/components/syncing/CreateProviderCredentials'
@@ -46,7 +46,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
   const apps = data?.apps ?? []
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const userCanCreateIntegrations = organisation
+    ? userHasPermission(organisation.role?.permissions, 'Integrations', 'create', true)
+    : false
 
   const noCredentials = data?.savedCredentials.length === 0
 
@@ -114,7 +116,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage syncs</p>
         </div>
 
-        {!noSyncs && activeUserIsAdmin && (
+        {!noSyncs && userCanCreateIntegrations && (
           <div className="flex justify-end">
             <NewSyncMenu />
           </div>
@@ -179,14 +181,14 @@ export default function Integrations({ params }: { params: { team: string } }) {
                 No service credentials
               </div>
               <div className="text-neutral-500">
-                {activeUserIsAdmin
+                {userCanCreateIntegrations
                   ? 'Set up a new authentication method to start syncing with third party services.'
                   : 'Contact your organisation admin or owner to create credentials.'}
               </div>
             </div>
           )}
 
-          {activeUserIsAdmin && (
+          {userCanCreateIntegrations && (
             <>
               <div className="flex justify-end">
                 <CreateProviderCredentialsDialog

@@ -19,7 +19,7 @@ import { ProviderCredentialPicker } from './ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
 import { Switch } from '@headlessui/react'
-import { userIsAdmin } from '@/utils/permissions'
+import { userIsAdmin } from '@/utils/access/permissions'
 import { usePathname } from 'next/navigation'
 import { ServiceInfo } from './ServiceInfo'
 
