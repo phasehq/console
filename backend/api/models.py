@@ -181,11 +181,6 @@ class Role(models.Model):
 
 
 class OrganisationMember(models.Model):
-    OWNER = "owner"
-    ADMIN = "admin"
-    DEVELOPER = "dev"
-
-    USER_ROLES = [(OWNER, "Owner"), (ADMIN, "Admin"), (DEVELOPER, "Developer")]
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     user = models.ForeignKey(
@@ -194,7 +189,7 @@ class OrganisationMember(models.Model):
     organisation = models.ForeignKey(
         Organisation, related_name="users", on_delete=models.CASCADE
     )
-    organisation_role = models.ForeignKey(
+    role = models.ForeignKey(
         Role,
         on_delete=models.SET_NULL,
         null=True,
@@ -231,11 +226,6 @@ class OrganisationMemberInvite(models.Model):
         Organisation, related_name="invites", on_delete=models.CASCADE
     )
     apps = models.ManyToManyField(App)
-    role = models.CharField(
-        max_length=5,
-        choices=OrganisationMember.USER_ROLES,
-        default=OrganisationMember.DEVELOPER,
-    )
     invited_by = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE)
     invitee_email = models.EmailField()
     valid = models.BooleanField(default=True)
