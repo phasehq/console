@@ -11,12 +11,11 @@ def create_default_roles(apps, schema_editor):
 
     # Create default roles for each organisation
     for organisation in Organisation.objects.all():
-        for role_name, role_data in default_roles.items():
-            role, created = Role.objects.get_or_create(
+        for role_name, _ in default_roles.items():
+            Role.objects.get_or_create(
                 name=role_name,
                 organisation=organisation,
                 is_default=True,
-                defaults={"permissions": role_data["permissions"]},
             )
 
     # Update existing organisation members with the new role references
