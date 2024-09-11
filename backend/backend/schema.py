@@ -1,9 +1,8 @@
 from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
-from api.utils.syncing.vault.main import VaultMountType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
-from api.utils.syncing.railway.main import RailwayEnvironmentType, RailwayProjectType
+from api.utils.syncing.railway.main import RailwayProjectType
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     resolve_stripe_checkout_details,
@@ -27,6 +26,7 @@ from .graphene.queries.syncing import (
     resolve_test_nomad_creds,
     resolve_railway_projects,
 )
+from .graphene.queries.access import resolve_roles
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
@@ -74,7 +74,6 @@ from .graphene.mutations.syncing import (
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
-    user_is_admin,
     user_is_org_member,
 )
 from .graphene.mutations.app import (
@@ -101,7 +100,6 @@ from .graphene.types import (
     EnvironmentSyncType,
     EnvironmentTokenType,
     EnvironmentType,
-    KMSLogType,
     LogsResponseType,
     OrganisationMemberInviteType,
     OrganisationMemberType,
@@ -110,6 +108,7 @@ from .graphene.types import (
     PhaseLicenseType,
     ProviderCredentialsType,
     ProviderType,
+    RoleType,
     SecretEventType,
     SecretFolderType,
     SecretTagType,
@@ -124,12 +123,12 @@ from graphql import GraphQLError
 from api.models import (
     Environment,
     EnvironmentKey,
-    EnvironmentSync,
     EnvironmentToken,
     Organisation,
     App,
     OrganisationMember,
     OrganisationMemberInvite,
+    Role,
     Secret,
     SecretEvent,
     SecretFolder,
@@ -143,12 +142,15 @@ from django.conf import settings
 from logs.models import KMSDBLog
 from itertools import chain
 from django.utils import timezone
+from django.db.models import Q
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
+
+    roles = graphene.List(RoleType, org_id=graphene.ID())
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
@@ -309,6 +311,8 @@ class Query(graphene.ObjectType):
 
         return [membership.organisation for membership in memberships]
 
+    resolve_roles = resolve_roles
+
     resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_name_available(root, info, name):
@@ -333,10 +337,13 @@ class Query(graphene.ObjectType):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
 
-        roles = ["owner", "admin"]
+        admin_roles = Role.objects.filter(
+            Q(organisation_id=organisation_id)
+            & (Q(name__iexact="owner") | Q(name__iexact="admin"))
+        )
 
         members = OrganisationMember.objects.filter(
-            organisation_id=organisation_id, role__in=roles, deleted_at=None
+            organisation_id=organisation_id, role__in=admin_roles, deleted_at=None
         )
 
         if not info.context.user.userId in [member.user_id for member in members]:
