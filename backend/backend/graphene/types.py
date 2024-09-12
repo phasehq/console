@@ -51,7 +51,7 @@ class RoleType(DjangoObjectType):
 
     class Meta:
         model = Role
-        fields = ("name", "description")
+        fields = ("id", "name", "description")
 
     def resolve_permissions(self, info):
         if self.is_default:
