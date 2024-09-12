@@ -13,7 +13,7 @@ def user_is_admin(user_id, org_id):
     member = OrganisationMember.objects.get(
         user_id=user_id, organisation_id=org_id, deleted_at=None
     )
-    return member.role in admin_roles
+    return member.role.name in admin_roles
 
 
 def user_is_org_member(user_id, org_id):
