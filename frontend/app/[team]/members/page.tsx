@@ -72,9 +72,9 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const [updateRole] = useMutation(UpdateMemberRole)
   const [addMemberToApp] = useMutation(AddMemberToApp)
 
-  const [role, setRole] = useState<string>(member.role!.name!)
+  const [role, setRole] = useState<RoleType>(member.role!)
 
-  const isOwner = role.toLowerCase() === 'owner'
+  const isOwner = role.name!.toLowerCase() === 'owner'
 
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
 
@@ -144,10 +144,13 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
       processAppsSequentially()
         .then(async () => {
           // All apps have been processed
+          const adminRole = roleOptions.find(
+            (option: RoleType) => option.name?.toLowerCase() === 'admin'
+          )
           await updateRole({
             variables: {
               memberId: member.id,
-              role: 'admin',
+              roleId: adminRole.id,
             },
           })
           toast.success('Updated member role', { autoClose: 2000 })
@@ -158,14 +161,14 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
     }
   }
 
-  const handleUpdateRole = async (newRole: string) => {
+  const handleUpdateRole = async (newRole: RoleType) => {
     setRole(newRole)
-    if (newRole.toLowerCase() === 'admin') upgradeDevToAdmin()
+    if (newRole.name!.toLowerCase() === 'admin') upgradeDevToAdmin()
     else {
       await updateRole({
         variables: {
           memberId: member.id,
-          role: newRole,
+          roleId: newRole.id,
         },
       })
       toast.success('Updated member role', { autoClose: 2000 })
@@ -203,23 +206,21 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
                 )}
               </div>
             </Listbox.Button>
-            <Listbox.Options>
-              <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
-                {roleOptions.map((role: RoleType) => (
-                  <Listbox.Option key={role.name} value={role} as={Fragment}>
-                    {({ active, selected }) => (
-                      <div
-                        className={clsx(
-                          'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                          active && 'bg-zinc-400 dark:bg-zinc-700'
-                        )}
-                      >
-                        <RoleLabel role={role.name!} />
-                      </div>
-                    )}
-                  </Listbox.Option>
-                ))}
-              </div>
+            <Listbox.Options className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full focus:outline-none">
+              {roleOptions.map((role: RoleType) => (
+                <Listbox.Option key={role.name} value={role} as={Fragment}>
+                  {({ active, selected }) => (
+                    <div
+                      className={clsx(
+                        'flex items-center gap-2 p-2 cursor-pointer rounded-full',
+                        active && 'bg-zinc-400 dark:bg-zinc-700'
+                      )}
+                    >
+                      <RoleLabel role={role} />
+                    </div>
+                  )}
+                </Listbox.Option>
+              ))}
             </Listbox.Options>
           </>
         )}
@@ -698,7 +699,7 @@ export default function Members({ params }: { params: { team: string } }) {
   }
 
   return (
-    <section className="overflow-y-auto">
+    <section className="overflow-y-auto h-full">
       <div className="w-full space-y-10 p-8 text-black dark:text-white">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold">{params.team} Members</h1>

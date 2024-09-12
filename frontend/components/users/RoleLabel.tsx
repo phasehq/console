@@ -1,15 +1,14 @@
+import { RoleType } from '@/apollo/graphql'
 import clsx from 'clsx'
 
-export const RoleLabel = (props: { role: string }) => {
-  const role = props.role.toLowerCase()
-
+export const RoleLabel = ({ role }: { role: RoleType }) => {
   const roleStyle = () => {
-    if (role === 'developer')
-      return 'ring-neutral-500/40 bg-neutral-500/40 text-black dark:bg-zinc-800 dark:text-neutral-500'
-    if (role === 'admin')
+    if (role.name!.toLowerCase() === 'admin')
       return 'ring-emerald-400/10 bg-emerald-400 text-black dark:bg-zinc-800 dark:text-emerald-400'
-    if (role === 'owner')
+    else if (role.name!.toLowerCase() === 'owner')
       return 'ring-amber-400/10 bg-amber-400 text-black dark:bg-zinc-800 dark:text-amber-400'
+    else
+      return 'ring-neutral-500/40 bg-neutral-500/40 text-black dark:bg-zinc-800 dark:text-neutral-500'
   }
 
   return (
@@ -19,7 +18,7 @@ export const RoleLabel = (props: { role: string }) => {
         roleStyle()
       )}
     >
-      {role}
+      {role.name}
     </span>
   )
 }

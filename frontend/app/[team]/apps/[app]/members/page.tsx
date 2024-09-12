@@ -745,9 +745,9 @@ export default function Members({ params }: { params: { team: string; app: strin
                       {memberIsAdmin && (
                         <Alert variant="info" icon={true}>
                           <p>
-                            This user is an <RoleLabel role="admin" />, and has access to all
-                            environments in this App. To restrict their access, change their role to{' '}
-                            <RoleLabel role="dev" /> from the{' '}
+                            This user is an <RoleLabel role={props.member.role!} />, and has access
+                            to all environments in this App. To restrict their access, change their
+                            role to from the{' '}
                             <Link
                               className="font-semibold hover:underline"
                               href={`/${params.team}/members`}
@@ -806,7 +806,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-medium">{member.fullName || member.email}</span>
-                      <RoleLabel role={member.role!.name!} />
+                      <RoleLabel role={member.role!} />
                     </div>
                     {member.fullName && (
                       <span className="text-neutral-500 text-sm">{member.email}</span>

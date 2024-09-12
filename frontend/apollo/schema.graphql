@@ -74,6 +74,7 @@ enum ApiOrganisationPlanChoices {
 }
 
 type RoleType {
+  id: String!
   name: String
   description: String
   permissions: JSONString
@@ -171,7 +172,6 @@ type OrganisationMemberInviteType {
   id: String!
   organisation: OrganisationType!
   apps: [AppType!]!
-  role: ApiOrganisationMemberInviteRoleChoices!
   invitedBy: OrganisationMemberType!
   inviteeEmail: String!
   valid: Boolean!
@@ -305,17 +305,6 @@ enum ApiEnvironmentSyncEventStatusChoices {
 
   """Failed"""
   FAILED
-}
-
-enum ApiOrganisationMemberInviteRoleChoices {
-  """Owner"""
-  OWNER
-
-  """Admin"""
-  ADMIN
-
-  """Developer"""
-  DEV
 }
 
 type LogsResponseType {
@@ -598,10 +587,10 @@ type StripeCheckoutDetails {
 
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
-  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
+  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!): InviteOrganisationMemberMutation
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
-  updateOrganisationMemberRole(memberId: ID!, role: String!): UpdateOrganisationMemberRole
+  updateOrganisationMemberRole(memberId: ID!, roleId: ID!): UpdateOrganisationMemberRole
   updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
