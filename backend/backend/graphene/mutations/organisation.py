@@ -273,7 +273,7 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
     org_member = graphene.Field(OrganisationMemberType)
 
     @classmethod
-    def mutate(cls, root, info, member_id, role):
+    def mutate(cls, root, info, member_id, role_id):
         org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
 
         role = Role.objects.get(organisation=org_member.organisation, id=role_id)
