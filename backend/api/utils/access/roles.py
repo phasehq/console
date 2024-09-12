@@ -7,6 +7,7 @@ default_roles = {
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
+            "IntegrationCredentials": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -26,6 +27,7 @@ default_roles = {
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
+            "IntegrationCredentials": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -44,7 +46,12 @@ default_roles = {
             "Apps": ["read"],
             "Members": ["read"],
             "ServiceAccounts": [],
-            "Roles": [],
+            "Roles": ["read"],
+            "IntegrationCredentials": [
+                "create",
+                "read",
+                "update",
+            ],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
