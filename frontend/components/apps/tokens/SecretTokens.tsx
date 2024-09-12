@@ -10,7 +10,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
 import { clsx } from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userIsAdmin } from '@/utils/access/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { Avatar } from '@/components/common/Avatar'
 import { CreateServiceTokenDialog } from './CreateServiceTokenDialog'
 import { MdKey } from 'react-icons/md'
@@ -142,9 +142,11 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
 
     const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
 
-    const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+    const useCanDeleteTokens = organisation
+      ? userHasPermission(organisation.role?.permissions, 'Tokens', 'delete', true)
+      : false
 
-    const allowDelete = activeUserIsAdmin || token.createdBy!.self
+    const allowDelete = useCanDeleteTokens || token.createdBy!.self
 
     const identityKeys = token.keys.map((key) => key.identityKey)
 

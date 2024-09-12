@@ -8,7 +8,7 @@ import { ViewRecoveryDialog } from '@/components/settings/account/ViewRecoveryDi
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { PlanInfo } from '@/components/settings/organisation/PlanInfo'
-import { userIsAdmin } from '@/utils/access/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
@@ -25,12 +25,15 @@ export default function Settings({ params }: { params: { team: string } }) {
 
   const { data: session } = useSession()
 
-  const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
+  const useCanManageOrg = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Organisation', 'update') ||
+      userHasPermission(activeOrganisation.role?.permissions, 'Organisation', 'delete')
+    : false
 
   const [tabIndex, setTabIndex] = useState(0)
 
   const tabList = [
-    ...(activeUserIsAdmin ? [{ name: 'Organisation' }] : []),
+    ...(useCanManageOrg ? [{ name: 'Organisation' }] : []),
     { name: 'Account' },
     { name: 'App' },
   ]
@@ -43,7 +46,7 @@ export default function Settings({ params }: { params: { team: string } }) {
 
     if (initialTabIndex !== -1) setTabIndex(initialTabIndex)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeUserIsAdmin, searchParams])
+  }, [useCanManageOrg, searchParams])
 
   const updateTab = (index: number) => {
     const tab = tabList[index]
@@ -86,7 +89,7 @@ export default function Settings({ params }: { params: { team: string } }) {
 
           <Tab.Panels>
             <div className="max-h-[80vh] overflow-y-auto px-4">
-              {activeUserIsAdmin && (
+              {useCanManageOrg && (
                 <Tab.Panel>
                   <div className="space-y-10 py-4">
                     <div className="space-y-1">

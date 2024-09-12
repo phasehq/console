@@ -7,7 +7,7 @@ import { Button } from '../common/Button'
 import { relativeTimeFromDates } from '@/utils/time'
 import { organisationContext } from '@/contexts/organisationContext'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
-import { userIsAdmin } from '@/utils/access/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { ProviderIcon } from './ProviderIcon'
 
 export const ProviderCredentialCard = (props: { credential: ProviderCredentialsType }) => {
@@ -25,7 +25,19 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
     setIsOpen(true)
   }
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const userCanUpdateCredentials = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'update'
+  )
+  const userCanDeleteCredentials = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'delete'
+  )
+  const activeUserIsAdmin = organisation
+    ? userCanUpdateCredentials || userCanDeleteCredentials
+    : false
 
   return (
     <div className="grid grid-cols-5 gap-4 justify-between p-2 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium">

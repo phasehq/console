@@ -19,7 +19,7 @@ import { ProviderCredentialPicker } from './ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
 import { Switch } from '@headlessui/react'
-import { userIsAdmin } from '@/utils/access/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { usePathname } from 'next/navigation'
 import { ServiceInfo } from './ServiceInfo'
 
@@ -85,7 +85,18 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
 
   const isSyncing = sync.status === ApiEnvironmentSyncStatusChoices.InProgress
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const userCanUpdateSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'update',
+    true
+  )
+  const userCanDeleteSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'delete',
+    true
+  )
 
   return (
     <div className="space-y-4 py-4">
@@ -117,7 +128,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           ></div>
           {sync.isActive ? 'Active' : 'Paused'}
 
-          {activeUserIsAdmin && (
+          {userCanUpdateSyncs && (
             <Switch
               id="toggle-sync"
               checked={isActive}
@@ -156,7 +167,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           <div
             className="w-full grow"
             title={
-              activeUserIsAdmin
+              userCanUpdateSyncs
                 ? 'Update Sync authentication'
                 : "You don't have permission to update sync authentication"
             }
@@ -165,7 +176,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
               credential={credential}
               setCredential={(cred) => handleUpdateAuth(cred)}
               orgId={organisation!.id}
-              disabled={!activeUserIsAdmin}
+              disabled={!userCanUpdateSyncs}
               newCredentialCallback={closeModal}
               providerFilter={sync.serviceInfo?.provider?.id}
             />
@@ -184,7 +195,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           <Button variant="primary" onClick={handleSync} disabled={isSyncing}>
             <FaSync className={isSyncing ? 'animate-spin' : ''} /> Sync now
           </Button>
-          {activeUserIsAdmin && <DeleteSyncDialog sync={sync} />}
+          {userCanDeleteSyncs && <DeleteSyncDialog sync={sync} />}
         </div>
       </div>
     </div>

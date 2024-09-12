@@ -372,8 +372,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       be added to specific Apps to get access to Secrets.
                     </li>
                     <li>
-                      Team members can be given either the <RoleLabel role="dev" /> or{' '}
-                      <RoleLabel role="admin" /> role.
+                      Team members can be given a role based on the actions and resources they
+                      require.
                     </li>
                   </ul>
 

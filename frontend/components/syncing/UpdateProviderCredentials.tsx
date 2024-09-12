@@ -10,7 +10,7 @@ import { toast } from 'react-toastify'
 import { Input } from '@/components/common/Input'
 import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/general'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userIsAdmin } from '@/utils/access/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
@@ -67,9 +67,11 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
     toast.success('Saved credentials')
   }
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
-
-  const allowEdit = activeUserIsAdmin
+  const allowEdit = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'update'
+  )
 
   return (
     <div className="space-y-4 w-full pt-4">
