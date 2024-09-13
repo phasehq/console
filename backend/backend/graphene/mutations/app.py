@@ -7,9 +7,10 @@ from api.utils.access.permissions import (
 )
 import graphene
 from graphql import GraphQLError
-from api.models import App, EnvironmentKey, Organisation, OrganisationMember
+from api.models import App, EnvironmentKey, Organisation, OrganisationMember, Role
 from backend.graphene.types import AppType
 from django.conf import settings
+from django.db.models import Q
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -65,7 +66,10 @@ class CreateAppMutation(graphene.Mutation):
         )
         org_member.apps.add(app)
 
-        admin_roles = [OrganisationMember.ADMIN, OrganisationMember.OWNER]
+        admin_roles = Role.objects.filter(
+            Q(organisation_id=organisation_id)
+            & (Q(name__iexact="owner") | Q(name__iexact="admin"))
+        )
 
         org_admins = org.users.filter(role__in=admin_roles)
         for admin in org_admins:

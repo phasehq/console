@@ -279,6 +279,7 @@ class EnvironmentType(DjangoObjectType):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self.app.organisation, deleted_at=None
         )
+
         user_env_key = EnvironmentKey.objects.get(
             environment=self, user=org_member, deleted_at=None
         )

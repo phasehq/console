@@ -138,7 +138,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
 
         org_owner = OrganisationMember.objects.get(
             organisation=environment.app.organisation,
-            role=OrganisationMember.OWNER,
+            role__name="Owner",
             deleted_at=None,
         )
 

@@ -404,7 +404,7 @@ export const createNewEnv = async (
   const ownerWrappedEnv = await wrapEnvSecretsForUser({ seed, salt }, owner!)
   const adminWrappedEnvSecrets = await Promise.all(
     ownerAndAdmins
-      .filter((user) => user.role!.name?.toLowerCase() === "owner")
+      .filter((user) => user.role!.name?.toLowerCase() !== "owner")
       .map(async (admin) => {
         const adminWrappedEnvSecret = await wrapEnvSecretsForUser({ seed, salt }, admin)
         return adminWrappedEnvSecret

@@ -107,7 +107,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
     invite = graphene.Field(OrganisationMemberInviteType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, email, apps, role):
+    def mutate(cls, root, info, org_id, email, apps):
 
         org = Organisation.objects.get(id=org_id)
 

@@ -73,6 +73,12 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
     'update'
   )
 
+  const allowDelete = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'delete'
+  )
+
   return (
     <div className="space-y-4 w-full pt-4">
       <div className="text-black dark:text-white font-semibold text-xl flex justify-between">
@@ -123,7 +129,11 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
         <AWSRegionPicker onChange={(region) => handleCredentialChange('region', region)} />
       )}
       <div className="flex justify-between pt-6">
-        <DeleteProviderCredentialDialog credential={credential} orgId={organisation!.id} />
+        <div>
+          {allowDelete && (
+            <DeleteProviderCredentialDialog credential={credential} orgId={organisation!.id} />
+          )}
+        </div>
         <Button
           disabled={!credentialsUpdated}
           variant="primary"
