@@ -3,7 +3,7 @@
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
-import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
@@ -172,7 +172,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     },
     fetchPolicy: 'cache-and-network',
   })
-  const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
+  const { data: orgAdminsData } = useQuery(GetGlobalAccessUsers, {
     variables: {
       organisationId: organisation?.id,
     },
@@ -281,19 +281,19 @@ export default function Secrets({ params }: { params: { team: string; app: strin
         params.app,
         'Development',
         ApiEnvironmentEnvTypeChoices.Dev,
-        orgAdminsData.organisationAdminsAndSelf
+        orgAdminsData.organisationGlobalAccessUsers
       ),
       stagingEnv: await createNewEnv(
         params.app,
         'Staging',
         ApiEnvironmentEnvTypeChoices.Staging,
-        orgAdminsData.organisationAdminsAndSelf
+        orgAdminsData.organisationGlobalAccessUsers
       ),
       prodEnv: await createNewEnv(
         params.app,
         'Production',
         ApiEnvironmentEnvTypeChoices.Prod,
-        orgAdminsData.organisationAdminsAndSelf
+        orgAdminsData.organisationGlobalAccessUsers
       ),
     }
 

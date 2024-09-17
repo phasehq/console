@@ -169,7 +169,7 @@ class Query(graphene.ObjectType):
         user_id=graphene.ID(),
         role=graphene.List(graphene.String),
     )
-    organisation_admins_and_self = graphene.List(
+    organisation_global_access_users = graphene.List(
         OrganisationMemberType, organisation_id=graphene.ID()
     )
     organisation_invites = graphene.List(
@@ -333,17 +333,20 @@ class Query(graphene.ObjectType):
 
         return OrganisationMember.objects.filter(**filter)
 
-    def resolve_organisation_admins_and_self(root, info, organisation_id):
+    def resolve_organisation_global_access_users(root, info, organisation_id):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
 
-        admin_roles = Role.objects.filter(
+        global_access_roles = Role.objects.filter(
             Q(organisation_id=organisation_id)
             & (Q(name__iexact="owner") | Q(name__iexact="admin"))
+            | Q(permissions__global_access=True)
         )
 
         members = OrganisationMember.objects.filter(
-            organisation_id=organisation_id, role__in=admin_roles, deleted_at=None
+            organisation_id=organisation_id,
+            role__in=global_access_roles,
+            deleted_at=None,
         )
 
         if not info.context.user.userId in [member.user_id for member in members]:

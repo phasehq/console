@@ -18,6 +18,7 @@ default_roles = {
             "Integrations": ["create", "read", "update", "delete"],
             "EncryptionMode": ["read", "update"],
         },
+        "global_access": True,
     },
     "Admin": {
         "permissions": {
@@ -38,6 +39,7 @@ default_roles = {
             "Integrations": ["create", "read", "update", "delete"],
             "EncryptionMode": ["read", "update"],
         },
+        "global_access": True,
     },
     "Developer": {
         "permissions": {
@@ -62,5 +64,6 @@ default_roles = {
             "Integrations": ["create", "read", "update", "delete"],
             "EncryptionMode": ["read", "update"],
         },
+        "global_access": False,
     },
 }

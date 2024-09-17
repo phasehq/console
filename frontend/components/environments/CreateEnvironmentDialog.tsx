@@ -1,6 +1,6 @@
 import { FaPlus } from 'react-icons/fa'
 import GenericDialog from '../common/GenericDialog'
-import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
 import { ApiEnvironmentEnvTypeChoices, ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { useContext, useRef, useState } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -18,15 +18,12 @@ import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const { data: orgAdminsData, loading: orgAdminsDataLoading } = useQuery(
-    GetOrganisationAdminsAndSelf,
-    {
-      variables: {
-        organisationId: organisation?.id,
-      },
-      skip: !organisation,
-    }
-  )
+  const { data: orgAdminsData, loading: orgAdminsDataLoading } = useQuery(GetGlobalAccessUsers, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation,
+  })
 
   const { data: appData, loading: appDataLoading } = useQuery(GetAppEnvironments, {
     variables: { appId: props.appId },
@@ -65,7 +62,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       props.appId,
       name,
       ApiEnvironmentEnvTypeChoices.Custom,
-      orgAdminsData.organisationAdminsAndSelf,
+      orgAdminsData.organisationGlobalAccessUsers,
       appData.sseEnabled ? appData.serverPublicKey : null
     )
 

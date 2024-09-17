@@ -75,11 +75,11 @@ const documents = {
     "query CheckOrganisationNameAvailability($name: String!) {\n  organisationNameAvailable(name: $name)\n}": types.CheckOrganisationNameAvailabilityDocument,
     "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n  }\n}": types.GetInvitesDocument,
     "query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n    organisationOwner {\n      fullName\n      email\n    }\n  }\n}": types.GetLicenseDataDocument,
-    "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role {\n      name\n      permissions\n    }\n    identityKey\n    self\n  }\n}": types.GetOrganisationAdminsAndSelfDocument,
+    "query GetGlobalAccessUsers($organisationId: ID!) {\n  organisationGlobalAccessUsers(organisationId: $organisationId) {\n    id\n    role {\n      name\n      permissions\n    }\n    identityKey\n    self\n  }\n}": types.GetGlobalAccessUsersDocument,
     "query GetOrgLicense($organisationId: ID!) {\n  organisationLicense(organisationId: $organisationId) {\n    id\n    customerName\n    issuedAt\n    expiresAt\n    activatedAt\n    plan\n    seats\n    tokens\n  }\n}": types.GetOrgLicenseDocument,
     "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role {\n      name\n    }\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    self\n  }\n}": types.GetOrganisationMembersDocument,
     "query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    userCount\n    appCount\n  }\n}": types.GetOrganisationPlanDocument,
-    "query GetRoles($orgId: ID!) {\n  roles(orgId: $orgId) {\n    name\n    description\n    permissions\n  }\n}": types.GetRolesDocument,
+    "query GetRoles($orgId: ID!) {\n  roles(orgId: $orgId) {\n    id\n    name\n    description\n    permissions\n  }\n}": types.GetRolesDocument,
     "query VerifyInvite($inviteId: ID!) {\n  validateInvite(inviteId: $inviteId) {\n    id\n    organisation {\n      id\n      name\n    }\n    inviteeEmail\n    invitedBy {\n      email\n    }\n    apps {\n      id\n      name\n    }\n  }\n}": types.VerifyInviteDocument,
     "query GetAppEnvironments($appId: ID!, $memberId: ID) {\n  appEnvironments(appId: $appId, environmentId: null, memberId: $memberId) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n      id\n    }\n    secretCount\n    folderCount\n    index\n    members {\n      email\n      fullName\n      avatarUrl\n    }\n  }\n  sseEnabled(appId: $appId)\n  serverPublicKey\n}": types.GetAppEnvironmentsDocument,
     "query GetAppSecretsLogs($appId: ID!, $start: BigInt, $end: BigInt) {\n  logs(appId: $appId, start: $start, end: $end) {\n    secrets {\n      id\n      path\n      key\n      value\n      tags {\n        id\n        name\n        color\n      }\n      version\n      comment\n      timestamp\n      ipAddress\n      userAgent\n      user {\n        email\n        username\n        fullName\n        avatarUrl\n      }\n      serviceToken {\n        id\n        name\n      }\n      eventType\n      environment {\n        id\n        envType\n        name\n      }\n      secret {\n        id\n        path\n      }\n    }\n  }\n  secretsLogsCount(appId: $appId)\n  environmentKeys(appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    environment {\n      id\n    }\n  }\n}": types.GetAppSecretsLogsDocument,
@@ -371,7 +371,7 @@ export function graphql(source: "query GetLicenseData {\n  license {\n    id\n  
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role {\n      name\n      permissions\n    }\n    identityKey\n    self\n  }\n}"): (typeof documents)["query GetOrganisationAdminsAndSelf($organisationId: ID!) {\n  organisationAdminsAndSelf(organisationId: $organisationId) {\n    id\n    role {\n      name\n      permissions\n    }\n    identityKey\n    self\n  }\n}"];
+export function graphql(source: "query GetGlobalAccessUsers($organisationId: ID!) {\n  organisationGlobalAccessUsers(organisationId: $organisationId) {\n    id\n    role {\n      name\n      permissions\n    }\n    identityKey\n    self\n  }\n}"): (typeof documents)["query GetGlobalAccessUsers($organisationId: ID!) {\n  organisationGlobalAccessUsers(organisationId: $organisationId) {\n    id\n    role {\n      name\n      permissions\n    }\n    identityKey\n    self\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -387,7 +387,7 @@ export function graphql(source: "query GetOrganisationPlan($organisationId: ID!)
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetRoles($orgId: ID!) {\n  roles(orgId: $orgId) {\n    name\n    description\n    permissions\n  }\n}"): (typeof documents)["query GetRoles($orgId: ID!) {\n  roles(orgId: $orgId) {\n    name\n    description\n    permissions\n  }\n}"];
+export function graphql(source: "query GetRoles($orgId: ID!) {\n  roles(orgId: $orgId) {\n    id\n    name\n    description\n    permissions\n  }\n}"): (typeof documents)["query GetRoles($orgId: ID!) {\n  roles(orgId: $orgId) {\n    id\n    name\n    description\n    permissions\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

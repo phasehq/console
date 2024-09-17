@@ -6,7 +6,7 @@ import { Button } from '../common/Button'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
-import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
@@ -59,7 +59,7 @@ const NewAppDialog = forwardRef(
     const [getApps] = useLazyQuery(GetApps)
     const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
 
-    const { data: orgAdminsData } = useQuery(GetOrganisationAdminsAndSelf, {
+    const { data: orgAdminsData } = useQuery(GetGlobalAccessUsers, {
       variables: {
         organisationId: organisation?.id,
       },
@@ -290,19 +290,19 @@ const NewAppDialog = forwardRef(
             appId,
             'Development',
             ApiEnvironmentEnvTypeChoices.Dev,
-            orgAdminsData.organisationAdminsAndSelf
+            orgAdminsData.organisationGlobalAccessUsers
           ),
           stagingEnv: await createNewEnv(
             appId,
             'Staging',
             ApiEnvironmentEnvTypeChoices.Staging,
-            orgAdminsData.organisationAdminsAndSelf
+            orgAdminsData.organisationGlobalAccessUsers
           ),
           prodEnv: await createNewEnv(
             appId,
             'Production',
             ApiEnvironmentEnvTypeChoices.Prod,
-            orgAdminsData.organisationAdminsAndSelf
+            orgAdminsData.organisationGlobalAccessUsers
           ),
         }
 
