@@ -19,7 +19,6 @@ import { Fragment, useContext } from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
-import { VersionLabel } from '../VersionLabel'
 import { ReleaseInfo } from '../ReleaseInfo'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 
