@@ -63,7 +63,7 @@ export const ReleaseInfo = () => {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="font-medium">Phase Console release:</span>
+      <span className="font-medium">Console version:</span>
       <Popover className="relative inline-block text-left">
         {({ open }) => (
           <>
