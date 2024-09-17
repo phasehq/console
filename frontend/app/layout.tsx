@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <link rel="icon" type="image/svg+xml" href={`favicon.svg`} key="favicon" />
+        <link rel="icon" type="image/svg+xml" href={`/favicon.svg`} key="favicon" />
         <link
           rel="mask-icon"
           type="image/svg+xml"
@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <NextTopLoader color="#10B981" showSpinner={false} height={1} />
           <ToastContainer
             position="bottom-right"
-            autoClose={5000}
+            autoClose={4000}
             hideProgressBar={false}
             newestOnTop={false}
             closeOnClick
@@ -55,8 +55,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             pauseOnFocusLoss
             draggable
             pauseOnHover
-            theme="colored"
+            theme={'dark'}
+            stacked
+            bodyClassName="text-xs"
           />
+
           {children}
         </body>
       </Providers>

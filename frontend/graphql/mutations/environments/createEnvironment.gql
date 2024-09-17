@@ -1,6 +1,15 @@
-
-mutation CreateEnv($input: EnvironmentInput!) {
-  createEnvironment(environmentData: $input) {
+mutation CreateEnv(
+  $envInput: EnvironmentInput!
+  $adminKeys: [EnvironmentKeyInput]
+  $wrappedSeed: String
+  $wrappedSalt: String
+) {
+  createEnvironment(
+    environmentData: $envInput
+    adminKeys: $adminKeys
+    wrappedSeed: $wrappedSeed
+    wrappedSalt: $wrappedSalt
+  ) {
     environment {
       id
       name

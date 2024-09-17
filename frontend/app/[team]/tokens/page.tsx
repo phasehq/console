@@ -179,7 +179,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
 
   return (
     <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
-      <section className="h-screen overflow-y-auto max-w-screen-xl">
+      <section className="overflow-y-auto max-w-screen-xl">
         <div className="w-full space-y-8 p-8 text-black dark:text-white">
           <div className="space-y-1">
             <h1 className="text-3xl font-semibold">Personal Access Tokens</h1>

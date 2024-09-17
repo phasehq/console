@@ -38,6 +38,7 @@ type Query {
   railwayProjects(credentialId: ID): [RailwayProjectType]
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
+  stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
 }
 
 type OrganisationType {
@@ -50,6 +51,7 @@ type OrganisationType {
   memberId: ID
   keyring: String
   recovery: String
+  planDetail: OrganisationPlanType
 }
 
 """
@@ -69,6 +71,15 @@ enum ApiOrganisationPlanChoices {
 
   """Enterprise"""
   EN
+}
+
+type OrganisationPlanType {
+  name: String
+  maxUsers: Int
+  maxApps: Int
+  maxEnvsPerApp: Int
+  userCount: Int
+  appCount: Int
 }
 
 type PhaseLicenseType {
@@ -131,8 +142,8 @@ type ActivatedPhaseLicenseType {
   customerName: String!
   organisation: OrganisationType!
   plan: ApiActivatedPhaseLicensePlanChoices!
-  seats: Int!
-  tokens: Int!
+  seats: Int
+  tokens: Int
   metadata: JSONString!
   environment: String!
   licenseType: String!
@@ -163,15 +174,6 @@ schema (one of the key benefits of GraphQL).
 """
 scalar JSONString
 
-type OrganisationPlanType {
-  name: String
-  maxUsers: Int
-  maxApps: Int
-  maxEnvsPerApp: Int
-  userCount: Int
-  appCount: Int
-}
-
 type OrganisationMemberInviteType {
   id: String!
   organisation: OrganisationType!
@@ -195,6 +197,124 @@ type AppType {
   wrappedKeyShare: String!
   createdAt: DateTime
   sseEnabled: Boolean
+  environments: [EnvironmentType]!
+  members: [OrganisationMemberType]!
+}
+
+type EnvironmentType {
+  id: String!
+  app: AppType!
+  name: String!
+  envType: ApiEnvironmentEnvTypeChoices!
+  index: Int!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  folderCount: Int
+  secretCount: Int
+  members: [OrganisationMemberType]!
+  syncs: [EnvironmentSyncType]!
+}
+
+"""An enumeration."""
+enum ApiEnvironmentEnvTypeChoices {
+  """Development"""
+  DEV
+
+  """Staging"""
+  STAGING
+
+  """Production"""
+  PROD
+
+  """Custom"""
+  CUSTOM
+}
+
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  options: JSONString!
+  authentication: ProviderCredentialsType
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
+  serviceInfo: ServiceType
+  history: [EnvironmentSyncEventType!]!
+}
+
+type ProviderCredentialsType {
+  id: String!
+  name: String!
+  provider: ProviderType
+  credentials: JSONString!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  syncCount: Int
+}
+
+type ProviderType {
+  id: String!
+  name: String!
+  expectedCredentials: [String!]!
+  optionalCredentials: [String!]!
+  authScheme: String
+}
+
+"""An enumeration."""
+enum ApiEnvironmentSyncStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """cancelled"""
+  CANCELLED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
+}
+
+type ServiceType {
+  id: String
+  name: String
+  resourceType: String
+  provider: ProviderType
+}
+
+type EnvironmentSyncEventType {
+  meta: JSONString
+  id: String!
+  envSync: EnvironmentSyncType!
+  status: ApiEnvironmentSyncEventStatusChoices!
+  createdAt: DateTime
+  completedAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiEnvironmentSyncEventStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """cancelled"""
+  CANCELLED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
 }
 
 """An enumeration."""
@@ -276,32 +396,6 @@ type SecretType {
   updatedAt: DateTime!
   history: [SecretEventType]
   override: PersonalSecretType
-}
-
-type EnvironmentType {
-  id: String!
-  app: AppType!
-  name: String!
-  envType: ApiEnvironmentEnvTypeChoices!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  folderCount: Int
-  secretCount: Int
-}
-
-"""An enumeration."""
-enum ApiEnvironmentEnvTypeChoices {
-  """Development"""
-  DEV
-
-  """Staging"""
-  STAGING
-
-  """Production"""
-  PROD
 }
 
 type SecretFolderType {
@@ -416,90 +510,6 @@ type UserTokenType {
   expiresAt: DateTime
 }
 
-type ProviderType {
-  id: String!
-  name: String!
-  expectedCredentials: [String!]!
-  optionalCredentials: [String!]!
-  authScheme: String
-}
-
-type ServiceType {
-  id: String
-  name: String
-  resourceType: String
-  provider: ProviderType
-}
-
-type ProviderCredentialsType {
-  id: String!
-  name: String!
-  provider: ProviderType
-  credentials: JSONString!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  syncCount: Int
-}
-
-type EnvironmentSyncType {
-  id: String!
-  environment: EnvironmentType!
-  path: String!
-  options: JSONString!
-  authentication: ProviderCredentialsType
-  isActive: Boolean!
-  createdAt: DateTime
-  lastSync: DateTime
-  status: ApiEnvironmentSyncStatusChoices!
-  serviceInfo: ServiceType
-  history: [EnvironmentSyncEventType!]!
-}
-
-"""An enumeration."""
-enum ApiEnvironmentSyncStatusChoices {
-  """In progress"""
-  IN_PROGRESS
-
-  """Completed"""
-  COMPLETED
-
-  """cancelled"""
-  CANCELLED
-
-  """Timed out"""
-  TIMED_OUT
-
-  """Failed"""
-  FAILED
-}
-
-type EnvironmentSyncEventType {
-  meta: JSONString
-  id: String!
-  envSync: EnvironmentSyncType!
-  status: ApiEnvironmentSyncEventStatusChoices!
-  createdAt: DateTime
-  completedAt: DateTime
-}
-
-"""An enumeration."""
-enum ApiEnvironmentSyncEventStatusChoices {
-  """In progress"""
-  IN_PROGRESS
-
-  """Completed"""
-  COMPLETED
-
-  """cancelled"""
-  CANCELLED
-
-  """Timed out"""
-  TIMED_OUT
-
-  """Failed"""
-  FAILED
-}
-
 type CloudFlarePagesType {
   name: String
   deploymentId: String
@@ -590,6 +600,15 @@ type RailwayServiceType {
   name: String!
 }
 
+type StripeCheckoutDetails {
+  paymentStatus: String
+  customerEmail: String
+  billingStartDate: String
+  billingEndDate: String
+  subscriptionId: String
+  planName: String
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
@@ -604,7 +623,10 @@ type Mutation {
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): AddAppMemberMutation
   removeAppMember(appId: ID, memberId: ID): RemoveAppMemberMutation
   updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): UpdateMemberEnvScopeMutation
-  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!): CreateEnvironmentMutation
+  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
+  deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
+  renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
+  swapEnvironmentOrder(environment1Id: ID!, environment2Id: ID!): SwapEnvironmentOrderMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
@@ -633,9 +655,13 @@ type Mutation {
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
   deleteSecret(id: ID!): DeleteSecretMutation
   readSecret(ids: [ID]): ReadSecretMutation
+  createSecrets(secretsData: [SecretInput]!): BulkCreateSecretMutation
+  editSecrets(secretsData: [SecretInput]!): BulkEditSecretMutation
+  deleteSecrets(ids: [ID]!): BulkDeleteSecretMutation
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation
+  createProUpgradeCheckoutSession(billingPeriod: String, organisationId: ID!): CreateProUpgradeCheckoutSession
 }
 
 type CreateOrganisationMutation {
@@ -709,6 +735,18 @@ input EnvironmentInput {
   wrappedSeed: String!
   wrappedSalt: String!
   identityKey: String!
+}
+
+type DeleteEnvironmentMutation {
+  ok: Boolean
+}
+
+type RenameEnvironmentMutation {
+  environment: EnvironmentType
+}
+
+type SwapEnvironmentOrderMutation {
+  ok: Boolean
 }
 
 type CreateEnvironmentKeyMutation {
@@ -818,6 +856,7 @@ type CreateSecretMutation {
 }
 
 input SecretInput {
+  id: ID
   envId: ID
   path: String
   key: String!
@@ -837,6 +876,18 @@ type DeleteSecretMutation {
 
 type ReadSecretMutation {
   ok: Boolean
+}
+
+type BulkCreateSecretMutation {
+  secrets: [SecretType]
+}
+
+type BulkEditSecretMutation {
+  secrets: [SecretType]
+}
+
+type BulkDeleteSecretMutation {
+  secrets: [SecretType]
 }
 
 type CreatePersonalSecretMutation {
@@ -870,4 +921,8 @@ input LockboxInput {
   data: JSONString
   allowedViews: Int
   expiry: BigInt
+}
+
+type CreateProUpgradeCheckoutSession {
+  clientSecret: String
 }

@@ -4,6 +4,11 @@ from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.vault.main import VaultMountType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayEnvironmentType, RailwayProjectType
+from ee.billing.graphene.queries.stripe import (
+    StripeCheckoutDetails,
+    resolve_stripe_checkout_details,
+)
+from ee.billing.graphene.mutations.stripe import CreateProUpgradeCheckoutSession
 from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
@@ -25,6 +30,9 @@ from .graphene.queries.syncing import (
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
+    BulkCreateSecretMutation,
+    BulkDeleteSecretMutation,
+    BulkEditSecretMutation,
     CreateEnvironmentKeyMutation,
     CreateEnvironmentMutation,
     CreateEnvironmentTokenMutation,
@@ -34,6 +42,7 @@ from .graphene.mutations.environment import (
     CreateSecretTagMutation,
     CreateServiceTokenMutation,
     CreateUserTokenMutation,
+    DeleteEnvironmentMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
     DeleteSecretMutation,
@@ -41,6 +50,8 @@ from .graphene.mutations.environment import (
     DeleteUserTokenMutation,
     EditSecretMutation,
     ReadSecretMutation,
+    RenameEnvironmentMutation,
+    SwapEnvironmentOrderMutation,
     UpdateMemberEnvScopeMutation,
 )
 from .graphene.mutations.syncing import (
@@ -256,6 +267,10 @@ class Query(graphene.ObjectType):
 
     test_nomad_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
+    stripe_checkout_details = graphene.Field(
+        StripeCheckoutDetails, stripe_session_id=graphene.String(required=True)
+    )
+
     # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
@@ -379,9 +394,6 @@ class Query(graphene.ObjectType):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
-        # Define a custom sort order
-        env_sort_order = {"DEV": 1, "STAGING": 2, "PROD": 3}
-
         app = App.objects.get(id=app_id)
 
         if member_id is not None:
@@ -398,15 +410,11 @@ class Query(graphene.ObjectType):
         if environment_id:
             filter["id"] = environment_id
 
-        app_environments = Environment.objects.filter(**filter)
-
-        sorted_environments = sorted(
-            app_environments, key=lambda env: env_sort_order.get(env.env_type, 4)
-        )
+        app_environments = Environment.objects.filter(**filter).order_by("index")
 
         return [
             app_env
-            for app_env in sorted_environments
+            for app_env in app_environments
             if EnvironmentKey.objects.filter(
                 user=org_member, environment_id=app_env.id
             ).exists()
@@ -428,7 +436,7 @@ class Query(graphene.ObjectType):
         if path:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("created_at")
+        return Secret.objects.filter(**filter).order_by("-created_at")
 
     def resolve_folders(root, info, env_id, path=None):
         if not user_can_access_environment(info.context.user.userId, env_id):
@@ -677,6 +685,8 @@ class Query(graphene.ObjectType):
 
         return time_series_logs
 
+    resolve_stripe_checkout_details = resolve_stripe_checkout_details
+
 
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
@@ -696,6 +706,9 @@ class Mutation(graphene.ObjectType):
     update_member_environment_scope = UpdateMemberEnvScopeMutation.Field()
 
     create_environment = CreateEnvironmentMutation.Field()
+    delete_environment = DeleteEnvironmentMutation.Field()
+    rename_environment = RenameEnvironmentMutation.Field()
+    swap_environment_order = SwapEnvironmentOrderMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
 
@@ -746,11 +759,18 @@ class Mutation(graphene.ObjectType):
     delete_secret = DeleteSecretMutation.Field()
     read_secret = ReadSecretMutation.Field()
 
+    create_secrets = BulkCreateSecretMutation.Field()
+    edit_secrets = BulkEditSecretMutation.Field()
+    delete_secrets = BulkDeleteSecretMutation.Field()
+
     create_override = CreatePersonalSecretMutation.Field()
     remove_override = DeletePersonalSecretMutation.Field()
 
     # Lockbox
     create_lockbox = CreateLockboxMutation.Field()
+
+    # Billing
+    create_pro_upgrade_checkout_session = CreateProUpgradeCheckoutSession.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

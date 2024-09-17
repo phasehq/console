@@ -79,7 +79,7 @@ export function Card({ pattern, children }: CardProps) {
   return (
     <div
       onMouseMove={onMouseMove}
-      className="group  relative flex rounded-2xl bg-zinc-100 ring-1 ring-inset ring-neutral-500/20 transition-shadow hover:shadow-md hover:shadow-zinc-900/5 dark:bg-white/2.5 dark:hover:shadow-black/5"
+      className="group relative flex w-full h-full rounded-2xl bg-zinc-100 ring-1 ring-inset ring-neutral-500/20 transition-shadow hover:shadow-md hover:shadow-zinc-900/5 dark:bg-white/2.5 dark:hover:shadow-black/5"
     >
       <CardPattern squares={defaultPattern.squares} mouseX={mouseX} mouseY={mouseY} />
       <div className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-zinc-900/7.5 group-hover:ring-zinc-900/10 dark:ring-white/10 dark:group-hover:ring-white/20" />

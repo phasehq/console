@@ -1,0 +1,10 @@
+query GetCheckoutDetails($stripeSessionId: String!) {
+  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {
+    paymentStatus
+    customerEmail
+    billingStartDate
+    billingEndDate
+    subscriptionId
+    planName
+  }
+}

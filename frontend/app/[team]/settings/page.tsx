@@ -1,5 +1,6 @@
 'use client'
 
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Avatar } from '@/components/common/Avatar'
 import { ModeToggle } from '@/components/common/ModeToggle'
 import { TrustedDeviceManager } from '@/components/settings/account/TrustedDeviceManager'
@@ -11,29 +12,61 @@ import { userIsAdmin } from '@/utils/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
-import { Fragment, useContext } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaMoon, FaSun } from 'react-icons/fa'
+import Spinner from '@/components/common/Spinner'
 
 export default function Settings({ params }: { params: { team: string } }) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
   const { activeOrganisation } = useContext(organisationContext)
 
   const { data: session } = useSession()
 
   const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
 
-  const tabList = () => [
+  const [tabIndex, setTabIndex] = useState(0)
+
+  const tabList = [
     ...(activeUserIsAdmin ? [{ name: 'Organisation' }] : []),
-    ...[{ name: 'Account' }, { name: 'App' }],
+    { name: 'Account' },
+    { name: 'App' },
   ]
 
+  useEffect(() => {
+    const initialTabName = searchParams?.get('tab') ?? 'organisation'
+    const initialTabIndex = tabList.findIndex(
+      (tab) => tab.name.toLowerCase() === initialTabName.toLowerCase()
+    )
+
+    if (initialTabIndex !== -1) setTabIndex(initialTabIndex)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeUserIsAdmin, searchParams])
+
+  const updateTab = (index: number) => {
+    const tab = tabList[index]
+    const params = new URLSearchParams(searchParams?.toString())
+    params.set('tab', tab.name)
+    router.push(`${pathname}?${params.toString()}`)
+  }
+
+  if (!activeOrganisation)
+    return (
+      <div className="flex items-center justify-center py-40">
+        <Spinner size="md" />
+      </div>
+    )
+
   return (
-    <section className="w-full max-w-screen-lg mx-auto py-4 text-black dark:text-white">
+    <section className="w-full max-w-screen-lg mx-auto py-8 text-black dark:text-white">
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
-        <Tab.Group>
+        <Tab.Group selectedIndex={tabIndex} onChange={(index) => updateTab(index)}>
           <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
-            {tabList().map((tab) => (
+            {tabList.map((tab) => (
               <Tab key={tab.name} as={Fragment}>
                 {({ selected }) => (
                   <div
@@ -41,7 +74,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                       'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold'
-                        : ' border-transparent cursor-pointer'
+                        : 'border-transparent cursor-pointer'
                     )}
                   >
                     {tab.name}
@@ -55,7 +88,7 @@ export default function Settings({ params }: { params: { team: string } }) {
             <div className="max-h-[80vh] overflow-y-auto px-4">
               {activeUserIsAdmin && (
                 <Tab.Panel>
-                  <div className="space-y-10  py-4">
+                  <div className="space-y-10 py-4">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-semibold">Organisation</h2>
                       <p className="text-neutral-500">Organisation info and settings</p>

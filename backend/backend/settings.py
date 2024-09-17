@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import timedelta
 import logging.config
 
-from ee.license.verifier import check_license
+from ee.licensing.verifier import check_license
 
 # Clear prev config
 LOGGING_CONFIG = None
@@ -298,3 +298,17 @@ RQ_QUEUES = {
 }
 
 PHASE_LICENSE = check_license(os.getenv("PHASE_LICENSE_OFFLINE"))
+
+
+STRIPE = {}
+try:
+    STRIPE["secret_key"] = os.getenv("STRIPE_SECRET_KEY")
+    STRIPE["public_key"] = os.getenv("STRIPE_PUBLIC_KEY")
+    STRIPE["webhook_secret"] = os.getenv("STRIPE_WEBHOOK_SECRET")
+    STRIPE["prices"] = {
+        "free": os.getenv("STRIPE_FREE"),
+        "pro_monthly": os.getenv("STRIPE_PRO_MONTHLY"),
+        "pro_yearly": os.getenv("STRIPE_PRO_YEARLY"),
+    }
+except:
+    pass

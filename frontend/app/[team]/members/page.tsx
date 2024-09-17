@@ -10,14 +10,16 @@ import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
 import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
+import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import {
   OrganisationMemberInviteType,
   OrganisationMemberType,
   AppType,
   ApiOrganisationMemberRoleChoices,
   EnvironmentType,
+  ApiOrganisationPlanChoices,
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -37,6 +39,9 @@ import { Alert } from '@/components/common/Alert'
 import { Input } from '@/components/common/Input'
 import CopyButton from '@/components/common/CopyButton'
 import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
+import { isCloudHosted } from '@/utils/appConfig'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { useSearchParams } from 'next/navigation'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -220,11 +225,26 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
 const InviteDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
 
+  const { activeOrganisation } = useContext(organisationContext)
+
+  const searchParams = useSearchParams()
+
+  const { data } = useQuery(GetOrganisationPlan, {
+    variables: { organisationId },
+    fetchPolicy: 'cache-and-network',
+  })
+
+  const upsell =
+    isCloudHosted() &&
+    activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
+    data?.organisationPlan.userCount === data?.organisationPlan.maxUsers
+
   const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
-
   const [email, setEmail] = useState<string>('')
+
+  const emailInputRef = useRef(null)
 
   const [inviteLink, setInviteLink] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string>('')
@@ -247,6 +267,12 @@ const InviteDialog = (props: { organisationId: string }) => {
   const handleClose = () => {
     closeModal()
   }
+
+  useEffect(() => {
+    if (searchParams?.get('invite')) {
+      openModal()
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (error) setErrorMessage(error.message)
@@ -275,6 +301,17 @@ const InviteDialog = (props: { organisationId: string }) => {
     setInviteLink(getInviteLink(data?.inviteOrganisationMember.invite.id))
   }
 
+  if (upsell)
+    return (
+      <UpsellDialog
+        buttonLabel={
+          <>
+            <FaPlus /> Add a member
+          </>
+        }
+      />
+    )
+
   return (
     <>
       <div className="flex items-center justify-center">
@@ -284,7 +321,7 @@ const InviteDialog = (props: { organisationId: string }) => {
       </div>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal}>
+        <Dialog as="div" className="relative z-10" onClose={closeModal} initialFocus={emailInputRef}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -350,6 +387,7 @@ const InviteDialog = (props: { organisationId: string }) => {
                               type="email"
                               required
                               autoFocus
+                              ref={emailInputRef}
                             />
                           </div>
 
@@ -642,7 +680,7 @@ export default function Members({ params }: { params: { team: string } }) {
   }
 
   return (
-    <section className="h-screen overflow-y-auto">
+    <section className="overflow-y-auto">
       <div className="w-full space-y-10 p-8 text-black dark:text-white">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold">{params.team} Members</h1>
