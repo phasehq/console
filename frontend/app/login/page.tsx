@@ -11,7 +11,7 @@ export default async function Login() {
           <SignInButtons />
         </div>
 
-        <div className="flex justify-end">
+        <div className="absolute bottom-4 right-4 md:bottom-8 md:right-8">
           <VersionLabel />
         </div>
       </div>
