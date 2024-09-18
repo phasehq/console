@@ -842,7 +842,6 @@ export default function EnvironmentPath({
                     clientSecrets={clientSecrets}
                     serverSecrets={serverSecrets}
                     secretsToDelete={secretsToDelete}
-                    envSyncs={data.envSyncs}
                   />
                 </div>
               </div>
