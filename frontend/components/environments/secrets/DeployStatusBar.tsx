@@ -24,33 +24,25 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
   secretsToDelete,
 }) => {
   return (
-    <div className={clsx(
-      "flex items-center gap-2",
-      "transition-all duration-300 ease-in-out",
-      unsavedChanges ? [
-        "w-full",
-        "rounded-full shadow-lg px-2.5 py-2.5",
-        "bg-white dark:bg-neutral-800"
-      ] : "w-full",
-      "mr-6"
-    )}>
+    <>
       {unsavedChanges ? (
         <>
-          <div className="flex-grow">
-            <DeployPreview
-              clientSecrets={clientSecrets}
-              serverSecrets={serverSecrets}
-              secretsToDelete={secretsToDelete}
-              onDiscard={onDiscard}
-              isLoading={isLoading}
-            />
-          </div>
+          <DeployPreview
+            clientSecrets={clientSecrets}
+            serverSecrets={serverSecrets}
+            secretsToDelete={secretsToDelete}
+            onDiscard={onDiscard}
+            isLoading={isLoading}
+          />
           <Button
-            variant={unsavedChanges ? 'warning' : 'primary'}
+            variant="warning"
             onClick={onDeploy}
             disabled={isLoading}
             isLoading={isLoading}
-            className="whitespace-nowrap"
+            className={clsx(
+              "whitespace-nowrap",
+              "transition-all duration-300 ease-in-out"
+            )}
           >
             {isLoading ? 'Deploying...' : 'Deploy changes'}
           </Button>
@@ -67,7 +59,7 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
           <span>Deployed</span>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
