@@ -43,7 +43,7 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
             />
           </div>
           <Button
-            variant="primary"
+            variant={unsavedChanges ? 'warning' : 'primary'}
             onClick={onDeploy}
             disabled={isLoading}
             isLoading={isLoading}
@@ -54,7 +54,6 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
         </>
       ) : (
         <div className="flex items-center text-emerald-500">
-          <FaCheckCircle className="mr-2" />
           <span>Deployed</span>
         </div>
       )}
