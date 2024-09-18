@@ -4,6 +4,8 @@ import { Tag } from '../Tag'
 import { Alert } from '@/components/common/Alert'
 import GenericDialog from '@/components/common/GenericDialog'
 import { GoDotFill } from 'react-icons/go'
+import { FaTrashAlt } from 'react-icons/fa';
+import { Button } from '@/components/common/Button'
 import clsx from 'clsx'
 type ChangeDetail = {
   old: string | SecretTagType[]
@@ -23,12 +25,16 @@ type DeployPreviewProps = {
   clientSecrets: SecretType[]
   serverSecrets: SecretType[]
   secretsToDelete: string[]
+  onDiscard: () => void
+  isLoading: boolean
 }
 
 export const DeployPreview: React.FC<DeployPreviewProps> = ({
   clientSecrets,
   serverSecrets,
   secretsToDelete,
+  onDiscard,
+  isLoading
 }) => {
   const getChanges = (): Record<string, SecretChange> => {
     const changes: Record<string, SecretChange> = {}
@@ -259,6 +265,12 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
               </div>
             )
           })}
+            <div className="mt-4">
+              <Button variant="danger" onClick={onDiscard} disabled={isLoading}>
+                <FaTrashAlt className="mr-1" />
+                Discard changes
+              </Button>
+            </div>
         </div>
       </GenericDialog>
     </div>
