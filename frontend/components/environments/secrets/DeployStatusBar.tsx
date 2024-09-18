@@ -57,12 +57,13 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
         </>
       ) : (
         <div className={clsx(
-          "flex items-center",
-          "text-emerald-500 bg-emerald-500/10",
-          "px-4 py-2.5 rounded-full",
+          "flex items-center gap-2",
+          "rounded-full py-1 px-3",
+          "text-emerald-500",
+          "ring-1 ring-inset ring-emerald-500/20",
           "transition-all duration-300 ease-in-out",
         )}>
-          <FaCheckCircle className="mr-2 text-lg" />
+          <FaCheckCircle className="shrink-0" />
           <span>Deployed</span>
         </div>
       )}
