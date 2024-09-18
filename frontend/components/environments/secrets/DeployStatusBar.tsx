@@ -26,9 +26,13 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
   return (
     <div className={clsx(
       "flex items-center gap-2",
-
       "transition-all duration-300 ease-in-out",
-      unsavedChanges ? "w-full" : "w-auto"
+      unsavedChanges ? [
+        "w-full",
+        "rounded-full shadow-lg px-2 py-2",
+        "bg-white dark:bg-neutral-800"
+      ] : "w-full",
+      "mr-6"
     )}>
       {unsavedChanges ? (
         <>
