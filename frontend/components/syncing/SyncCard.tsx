@@ -34,7 +34,7 @@ export const SyncCard = (props: {
 
       <div
         className={clsx(
-          'flex items-center  gap-4',
+          'flex items-center gap-4',
           showManageButton ? 'col-span-3 sm:gap-16' : 'col-span-2 sm:gap-8'
         )}
       >
@@ -58,7 +58,7 @@ export const SyncCard = (props: {
         <div>
           <FaAngleDoubleRight className="text-neutral-500 text-xl justify-self-end" />
         </div>
-
+        
         <div>
           <div className="flex gap-2 items-center">
             <ProviderIcon providerId={sync.serviceInfo?.id!} />
@@ -69,20 +69,17 @@ export const SyncCard = (props: {
         </div>
       </div>
 
-      <div>
+      <div className="flex flex-col items-start">
         <div className="flex items-center gap-2">
           <div>{sync.status && <SyncStatusIndicator status={sync.status} showLabel />}</div>
-
-          {sync.status === ApiEnvironmentSyncStatusChoices.InProgress ? (
-            <div></div>
-          ) : (
-            <div className="text-neutral-500">
-              {sync.lastSync ? relativeTimeFromDates(new Date(sync.lastSync)) : 'never'}
-            </div>
-          )}
         </div>
+        {sync.status !== ApiEnvironmentSyncStatusChoices.InProgress && (
+          <div className="text-neutral-500 text-xs mt-1 break-words max-w-[120px]">
+            {sync.lastSync ? relativeTimeFromDates(new Date(sync.lastSync)) : 'never'}
+          </div>
+        )}
       </div>
-
+      
       {showManageButton && (
         <div className="flex justify-end items-center gap-4">
           {sync.authentication === null && (
