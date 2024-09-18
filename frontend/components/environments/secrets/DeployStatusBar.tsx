@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/common/Button';
-import { FaUndo, FaCheckCircle } from 'react-icons/fa';
+import { FaCheckCircle } from 'react-icons/fa';
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview';
 import clsx from 'clsx';
 
@@ -25,15 +25,14 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
 }) => {
   return (
     <div className={clsx(
-      "fixed bottom-4 right-4",
-      "flex items-center gap-2 rounded-full shadow-lg px-4 py-3",
-      "bg-white dark:bg-neutral-800",
+      "flex items-center gap-2",
+
       "transition-all duration-300 ease-in-out",
-      unsavedChanges ? "h-14" : "h-12"
+      unsavedChanges ? "w-full" : "w-auto"
     )}>
       {unsavedChanges ? (
         <>
-          <div className="relative">
+          <div className="flex-grow">
             <DeployPreview
               clientSecrets={clientSecrets}
               serverSecrets={serverSecrets}
@@ -47,13 +46,13 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
             onClick={onDeploy}
             disabled={isLoading}
             isLoading={isLoading}
-            className="h-10"
+            className="whitespace-nowrap"
           >
             {isLoading ? 'Deploying...' : 'Deploy changes'}
           </Button>
         </>
       ) : (
-        <div className="flex items-center text-emerald-500">
+        <div className="flex items-center text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-full">
           <span>Deployed</span>
         </div>
       )}
