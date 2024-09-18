@@ -9,7 +9,7 @@ import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
-
+import DeployStatusBar from '@/components/environments/secrets/DeployStatusBar';
 import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -801,15 +801,6 @@ export default function EnvironmentPath({
                 <FolderBreadcrumbLinks path={params.path} />
               </div>
             </div>
-            <div>
-              {unsavedChanges && (
-                <DeployPreview
-                  clientSecrets={clientSecrets}
-                  serverSecrets={serverSecrets}
-                  secretsToDelete={secretsToDelete}
-                />
-              )}
-            </div>
           </div>
           <div className="space-y-0 sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
             <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
@@ -839,41 +830,22 @@ export default function EnvironmentPath({
                   <SortMenu sort={sort} setSort={setSort} />
                 </div>
               </div>
-
-              <div className="flex gap-2 items-center">
-                {unsavedChanges && (
-                  <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-                    <span className="px-2 py-1">
-                      <FaUndo className="text-lg" />
-                    </span>
-                    <span>Discard changes</span>
-                  </Button>
-                )}
-
-                {data.envSyncs && (
-                  <div>
+              <div className="flex items-center gap-4">
+                  {data.envSyncs && (
                     <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
-                  </div>
-                )}
-
-                <Button
-                  variant={unsavedChanges ? 'primary' : 'secondary'}
-                  disabled={!unsavedChanges || savingAndFetching}
-                  isLoading={savingAndFetching}
-                  onClick={handleSaveChanges}
-                >
-                  <div className="flex items-center gap-2 text-lg">
-                    {!savingAndFetching &&
-                      (unsavedChanges ? (
-                        <FaCloudUploadAlt className="text-emerald-500 shrink-0" />
-                      ) : (
-                        <FaCheckCircle className="text-emerald-500 shrink-0" />
-                      ))}
-                    <span>{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
-                  </div>
-                </Button>
+                  )}
+                  <DeployStatusBar
+                    unsavedChanges={unsavedChanges}
+                    isLoading={savingAndFetching}
+                    onDiscard={handleDiscardChanges}
+                    onDeploy={handleSaveChanges}
+                    clientSecrets={clientSecrets}
+                    serverSecrets={serverSecrets}
+                    secretsToDelete={secretsToDelete}
+                    envSyncs={data.envSyncs}
+                  />
+                </div>
               </div>
-            </div>
 
             {(clientSecrets.length > 0 || folders.length > 0) && (
               <div className="flex items-center w-full">
