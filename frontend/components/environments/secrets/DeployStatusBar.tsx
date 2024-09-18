@@ -29,7 +29,7 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
       "transition-all duration-300 ease-in-out",
       unsavedChanges ? [
         "w-full",
-        "rounded-full shadow-lg px-2 py-2",
+        "rounded-full shadow-lg px-2.5 py-2.5",
         "bg-white dark:bg-neutral-800"
       ] : "w-full",
       "mr-6"
@@ -56,7 +56,7 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
           </Button>
         </>
       ) : (
-        <div className="flex items-center text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-full">
+        <div className="flex items-center text-emerald-500 bg-emerald-500/10 px-4 py-2.5 rounded-full">
           <span>Deployed</span>
         </div>
       )}
