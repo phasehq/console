@@ -216,9 +216,17 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
         buttonVariant=""
         title="Preview undeployed changes"
         buttonContent={
-          <Alert variant="info" size="sm" icon={true}>
-            <span>{changeCount()} undeployed changes. Click to preview</span>
-          </Alert>
+          <div style={{ borderRadius: '100px', overflow: 'hidden' }}>
+            <Alert 
+              variant="info" 
+              size="sm" 
+              icon={true}
+            >
+              <span>
+                {changeCount()} {changeCount() === 1 ? 'change' : 'changes'}. Click to preview
+              </span>
+            </Alert>
+          </div>
         }
       >
         <div className="flex flex-col space-y-2 max-h-[85vh] overflow-auto ph-no-capture">
