@@ -35,7 +35,7 @@
     "jspdf": "^2.5.1",
     "libsodium-wrappers-sumo": "^0.7.13",
     "lodash": "^4.17.21",
-    "next": "^14.2.3",
+    "next": "^14.2.12",
     "next-auth": "^4.24.5",
     "nextjs-toploader": "^1.6.4",
     "npm": "^10.4.0",
