@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Button } from '@/components/common/Button';
 import { FaUndo, FaCheckCircle } from 'react-icons/fa';
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview';
@@ -23,10 +23,6 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
   serverSecrets,
   secretsToDelete
 }) => {
-  const [showPreview, setShowPreview] = useState(false);
-
-  const togglePreview = () => setShowPreview(!showPreview);
-
   return (
     <div className={clsx(
       "fixed bottom-4 right-4",
@@ -37,16 +33,15 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
     )}>
       {unsavedChanges ? (
         <>
-          <button
-            onClick={togglePreview}
-            className="text-sm text-gray-600 dark:text-gray-300 hover:underline focus:outline-none"
-          >
-            1 change to publish
-          </button>
-          <Button variant="text" onClick={onDiscard} disabled={isLoading}>
-            <FaUndo className="mr-1" />
-            Discard
-          </Button>
+          <div className="relative">
+            <DeployPreview
+              clientSecrets={clientSecrets}
+              serverSecrets={serverSecrets}
+              secretsToDelete={secretsToDelete}
+              onDiscard={onDiscard}
+              isLoading={isLoading}
+            />
+          </div>
           <Button
             variant="primary"
             onClick={onDeploy}
@@ -61,15 +56,6 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
         <div className="flex items-center text-emerald-500">
           <FaCheckCircle className="mr-2" />
           <span>Deployed</span>
-        </div>
-      )}
-      {showPreview && (
-        <div className="absolute bottom-full left-0 mb-2 w-full">
-      <DeployPreview
-        clientSecrets={clientSecrets}
-        serverSecrets={serverSecrets}
-        secretsToDelete={secretsToDelete}
-      />
         </div>
       )}
     </div>
