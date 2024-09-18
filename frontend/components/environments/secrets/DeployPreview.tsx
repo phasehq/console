@@ -273,6 +273,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
               </div>
             )
           })}
+          <hr className="border-t border-zinc-700 my-4" />
             <div className="mt-4">
               <Button variant="danger" onClick={onDiscard} disabled={isLoading}>
                 <FaTrashAlt className="mr-1" />
