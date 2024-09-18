@@ -12,6 +12,7 @@ interface DeployStatusBarProps {
   clientSecrets: any[];
   serverSecrets: any[];
   secretsToDelete: string[];
+  envSyncs?: any;
 }
 
 const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
@@ -21,7 +22,8 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
   onDeploy,
   clientSecrets,
   serverSecrets,
-  secretsToDelete
+  secretsToDelete,
+  envSyncs
 }) => {
   return (
     <div className={clsx(
@@ -57,6 +59,7 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
         </>
       ) : (
         <div className="flex items-center text-emerald-500 bg-emerald-500/10 px-4 py-2.5 rounded-full">
+          {(!envSyncs || envSyncs.length === 0) && <FaCheckCircle className="mr-2" />}
           <span>Deployed</span>
         </div>
       )}
