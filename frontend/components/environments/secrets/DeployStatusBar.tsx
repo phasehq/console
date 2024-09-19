@@ -40,15 +40,16 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
             className={clsx(
               "flex items-center gap-2",
               "rounded-full py-2 px-4",
-              "text-amber-500 text-base",
-              "ring-1 ring-inset ring-amber-500/20",
+              "text-base font-medium",
               "transition-all duration-300 ease-in-out",
               "cursor-pointer",
-              { "opacity-50 cursor-not-allowed": isLoading }
+              isLoading
+                ? "bg-zinc-100 text-zinc-400 ring-1 ring-inset ring-zinc-300 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/20 opacity-50 cursor-not-allowed"
+                : "bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-1 dark:ring-inset dark:ring-amber-400/20 dark:hover:bg-amber-400/10 dark:hover:text-amber-300"
             )}
           >
             <IoCloudUploadSharp className="shrink-0" />
-            <span>{isLoading ? 'Deploying...' : 'Deploy changes'}</span>
+            <span>{isLoading ? 'Deploying...' : 'Deploy'}</span>
           </div>
         </>
       ) : (
