@@ -44,7 +44,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
   )
 
   const roleChanged =
-    arePoliciesEqual(rolePolicy, parsePermissions(role.permissions)!) || name !== role.name
+    !arePoliciesEqual(rolePolicy, parsePermissions(role.permissions)!) || name !== role.name
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
