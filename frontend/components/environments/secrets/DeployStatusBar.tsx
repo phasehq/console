@@ -24,7 +24,7 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
   secretsToDelete,
 }) => {
   return (
-    <>
+    <div className="mr-2 flex items-center gap-2">
       {unsavedChanges ? (
         <>
           <DeployPreview
@@ -59,7 +59,7 @@ const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
           <span>Deployed</span>
         </div>
       )}
-    </>
+    </div>
   );
 };
 
