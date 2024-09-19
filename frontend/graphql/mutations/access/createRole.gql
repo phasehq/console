@@ -1,0 +1,17 @@
+mutation CreateRole(
+  $name: String!
+  $description: String!
+  $permissions: JSONString!
+  $organisationId: ID!
+) {
+  createCustomRole(
+    name: $name
+    description: $description
+    permissions: $permissions
+    organisationId: $organisationId
+  ) {
+    role {
+      id
+    }
+  }
+}

@@ -4,5 +4,6 @@ query GetRoles($orgId: ID!) {
     name
     description
     permissions
+    isDefault
   }
 }

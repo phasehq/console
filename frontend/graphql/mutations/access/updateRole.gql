@@ -1,0 +1,7 @@
+mutation UpdateRole($id: ID!, $name: String!, $description: String!, $permissions: JSONString!) {
+  updateCustomRole(id: $id, name: $name, description: $description, permissions: $permissions) {
+    role {
+      id
+    }
+  }
+}

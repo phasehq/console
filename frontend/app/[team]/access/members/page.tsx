@@ -700,9 +700,9 @@ export default function Members({ params }: { params: { team: string } }) {
 
   return (
     <section className="overflow-y-auto h-full">
-      <div className="w-full space-y-10 p-8 text-black dark:text-white">
+      <div className="w-full space-y-10 py-8 text-black dark:text-white">
         <div className="space-y-1">
-          <h1 className="text-3xl font-semibold">{params.team} Members</h1>
+          <h2 className="text-xl font-semibold">{params.team} Members</h2>
           <p className="text-neutral-500">Manage organisation members and roles.</p>
         </div>
         <div className="Space-y-4">

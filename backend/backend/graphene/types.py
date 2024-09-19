@@ -48,6 +48,7 @@ class RoleType(DjangoObjectType):
     name = graphene.String()
     description = graphene.String()
     permissions = graphene.JSONString()
+    is_default = graphene.Boolean()
 
     class Meta:
         model = Role

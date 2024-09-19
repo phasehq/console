@@ -1,8 +1,9 @@
 
 
-type PermissionPolicy = {
+export type PermissionPolicy = {
   permissions: Record<string, string[]>; // A dictionary mapping resources to actions
   app_permissions: Record<string, string[]>; // A dictionary mapping app resources to actions
+  global_access: boolean
 };
 
 /**
@@ -10,7 +11,7 @@ type PermissionPolicy = {
  * @param {string} permissionsJson - The JSON string representing permissions.
  * @returns {PermissionPolicy | null} The parsed PermissionPolicy object, or null if the JSON is invalid.
  */
-const parsePermissions = (permissionsJson: string): PermissionPolicy | null => {
+export const parsePermissions = (permissionsJson: string): PermissionPolicy | null => {
   try {
     return JSON.parse(permissionsJson) as PermissionPolicy;
   } catch (error) {
@@ -53,3 +54,66 @@ export const userHasPermission = (
 export const userIsAdmin = (role: string): boolean =>
   ['admin', 'owner'].includes(role.toLowerCase());
 
+/**
+ * Compare two PermissionPolicy objects to check if they are equal.
+ * 
+ * @param policy1 - The first PermissionPolicy object.
+ * @param policy2 - The second PermissionPolicy object.
+ * @returns A boolean indicating whether the two policies are equal.
+ */
+export const arePoliciesEqual = (
+  policy1: PermissionPolicy,
+  policy2: PermissionPolicy
+): boolean => {
+  // Check if global_access is the same
+  if (policy1.global_access !== policy2.global_access) {
+    return false;
+  }
+
+  // Helper function to compare two Record<string, string[]>
+  const comparePermissions = (
+    perms1: Record<string, string[]>,
+    perms2: Record<string, string[]>
+  ): boolean => {
+    const keys1 = Object.keys(perms1);
+    const keys2 = Object.keys(perms2);
+
+    // Check if both have the same number of keys
+    if (keys1.length !== keys2.length) {
+      return false;
+    }
+
+    for (const key of keys1) {
+      // Check if both records have the same keys
+      if (!(key in perms2)) {
+        return false;
+      }
+
+      // Check if the arrays of actions are equal
+      const actions1 = perms1[key];
+      const actions2 = perms2[key];
+
+      if (actions1.length !== actions2.length) {
+        return false;
+      }
+
+      // Sort and compare the arrays of actions
+      const sortedActions1 = [...actions1].sort();
+      const sortedActions2 = [...actions2].sort();
+
+      for (let i = 0; i < sortedActions1.length; i++) {
+        if (sortedActions1[i] !== sortedActions2[i]) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  };
+
+  // Compare both permissions and app_permissions
+  return (
+    comparePermissions(policy1.permissions, policy2.permissions) &&
+    comparePermissions(policy1.app_permissions, policy2.app_permissions)
+  );
+};
