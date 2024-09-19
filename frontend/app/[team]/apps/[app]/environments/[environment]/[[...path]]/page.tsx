@@ -830,7 +830,7 @@ export default function EnvironmentPath({
                   <SortMenu sort={sort} setSort={setSort} />
                 </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 mr-4">
                   {data.envSyncs && (
                     <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
                   )}
