@@ -276,7 +276,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
             <div className="mt-4">
               <Button variant="danger" onClick={onDiscard} disabled={isLoading}>
                 <FaTrashAlt className="mr-1" />
-                Discard changes
+                Discard
               </Button>
             </div>
         </div>
