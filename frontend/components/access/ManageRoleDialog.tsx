@@ -4,6 +4,7 @@ import {
   arePoliciesEqual,
   parsePermissions,
   PermissionPolicy,
+  updatePolicy,
   userHasPermission,
 } from '@/utils/access/permissions'
 import { ToggleSwitch } from '../common/ToggleSwitch'
@@ -56,35 +57,13 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
   const allowEdit =
     !role.isDefault && userHasPermission(organisation?.role?.permissions, 'Roles', 'update')
 
-  /**
-   * Handles the addition or removal of a specific action for a given resource.
-   *
-   * @param {string} resource - The resource name (e.g., "Roles", "Secrets").
-   * @param {string} action - The action to add or remove (e.g., "create", "update").
-   * @param {boolean} [isAppResource=false] - Whether the resource is an app resource.
-   */
   const handleUpdateResourceAction = (
     resource: string,
     action: string,
     isAppResource: boolean = false
   ) => {
     setRolePolicy((prevPolicy) => {
-      const updatedPolicy = structuredClone(prevPolicy)!
-      const permissions = isAppResource ? updatedPolicy.app_permissions : updatedPolicy.permissions
-
-      if (!permissions[resource]) {
-        permissions[resource] = []
-      }
-
-      const actionIndex = permissions[resource].indexOf(action)
-
-      if (actionIndex > -1) {
-        permissions[resource] = permissions[resource].filter(
-          (resourceAction) => resourceAction !== action
-        )
-      } else {
-        permissions[resource] = [...permissions[resource], action]
-      }
+      const updatedPolicy = updatePolicy(prevPolicy, { resource, action, isAppResource })
 
       return updatedPolicy
     })
@@ -92,9 +71,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
 
   const handleToggleGlobalAccess = () => {
     setRolePolicy((prevPolicy) => {
-      const updatedPolicy = structuredClone(prevPolicy)!
-
-      updatedPolicy.global_access = !prevPolicy?.global_access
+      const updatedPolicy = updatePolicy(prevPolicy, { toggleGlobalAccess: true })
 
       return updatedPolicy
     })

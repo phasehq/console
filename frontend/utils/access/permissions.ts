@@ -117,3 +117,65 @@ export const arePoliciesEqual = (
     comparePermissions(policy1.app_permissions, policy2.app_permissions)
   );
 };
+
+/**
+ * Updates a given PermissionPolicy by either toggling global access or adding/removing an action for a specific resource.
+ *
+ * @param {PermissionPolicy} policy - The current permission policy to be updated.
+ * @param {Object} options - The options to determine the type of update.
+ * @param {string} [options.resource] - The name of the resource to update (e.g., "Roles", "Secrets").
+ * @param {string} [options.action] - The action to add or remove from the resource (e.g., "create", "update").
+ * @param {boolean} [options.isAppResource=false] - Whether the resource is an app-level resource.
+ * @param {boolean} [options.toggleGlobalAccess=false] - Whether to toggle the global access setting.
+ * @returns {PermissionPolicy} - The updated permission policy object.
+ *
+ * @example
+ * // Toggle global access
+ * const updatedPolicy = updatePolicy(currentPolicy, { toggleGlobalAccess: true });
+ *
+ * @example
+ * // Add or remove an action for a resource
+ * const updatedPolicy = updatePolicy(currentPolicy, { 
+ *   resource: "Roles", 
+ *   action: "create", 
+ *   isAppResource: false 
+ * });
+ */
+export const updatePolicy = (
+  policy: PermissionPolicy,
+  options: {
+    resource?: string;
+    action?: string;
+    isAppResource?: boolean;
+    toggleGlobalAccess?: boolean;
+  }
+): PermissionPolicy => {
+  const updatedPolicy = structuredClone(policy)!;
+
+  // Handle global access toggle
+  if (options.toggleGlobalAccess) {
+    updatedPolicy.global_access = !policy.global_access;
+  }
+
+  // Handle resource action update
+  if (options.resource && options.action) {
+    const { resource, action, isAppResource = false } = options;
+    const permissions = isAppResource ? updatedPolicy.app_permissions : updatedPolicy.permissions;
+
+    if (!permissions[resource]) {
+      permissions[resource] = [];
+    }
+
+    const actionIndex = permissions[resource].indexOf(action);
+
+    if (actionIndex > -1) {
+      permissions[resource] = permissions[resource].filter(
+        (resourceAction) => resourceAction !== action
+      );
+    } else {
+      permissions[resource] = [...permissions[resource], action];
+    }
+  }
+
+  return updatedPolicy;
+};
