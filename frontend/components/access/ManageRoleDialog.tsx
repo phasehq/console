@@ -109,7 +109,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
     >
       <form onSubmit={handleUpdateRole}>
         <div className="divide-y divide-neutral-500/40 space-y-6 max-h-[85vh] overflow-y-auto">
-          {!allowEdit && (
+          {role.isDefault && (
             <div className="pt-3">
               <Alert size="sm" variant="info" icon={true}>
                 This is a default role and cannot edited
@@ -117,7 +117,14 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
             </div>
           )}
           <div className="w-full max-w-sm">
-            <Input value={name} setValue={setName} label="Role name" required maxLength={32} />
+            <Input
+              value={name}
+              setValue={setName}
+              disabled={!allowEdit}
+              label="Role name"
+              required
+              maxLength={32}
+            />
           </div>
 
           <div>
@@ -255,7 +262,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
               isLoading={updateIsPending}
               disabled={!roleChanged}
             >
-              Save Role
+              Save
             </Button>
           </div>
         )}
