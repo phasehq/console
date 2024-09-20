@@ -191,7 +191,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
             <Listbox.Button as={Fragment} aria-required>
               <div
                 className={clsx(
-                  'p-2 flex items-center justify-between  rounded-md h-10',
+                  'py-2 flex items-center justify-between  rounded-md h-10',
                   disabled ? 'cursor-not-allowed' : 'cursor-pointer'
                 )}
               >
@@ -206,14 +206,14 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
                 )}
               </div>
             </Listbox.Button>
-            <Listbox.Options className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full focus:outline-none">
+            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full focus:outline-none">
               {roleOptions.map((role: RoleType) => (
                 <Listbox.Option key={role.name} value={role} as={Fragment}>
                   {({ active, selected }) => (
                     <div
                       className={clsx(
                         'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                        active && 'bg-zinc-400 dark:bg-zinc-700'
+                        active && 'bg-zinc-300 dark:bg-zinc-700'
                       )}
                     >
                       <RoleLabel role={role} />
@@ -700,7 +700,7 @@ export default function Members({ params }: { params: { team: string } }) {
 
   return (
     <section className="overflow-y-auto h-full">
-      <div className="w-full space-y-10 py-8 text-black dark:text-white">
+      <div className="w-full space-y-6 text-black dark:text-white">
         <div className="space-y-1">
           <h2 className="text-xl font-semibold">{params.team} Members</h2>
           <p className="text-neutral-500">Manage organisation members and roles.</p>
@@ -710,7 +710,7 @@ export default function Members({ params }: { params: { team: string } }) {
             {organisation && <InviteDialog organisationId={organisation.id} />}
           </div>
 
-          <table className="table-auto min-w-full divide-y divide-zinc-500/40">
+          <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
             <thead>
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

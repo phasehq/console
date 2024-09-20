@@ -27,8 +27,8 @@ export default function Roles({ params }: { params: { team: string } }) {
     : false
 
   return (
-    <section className="overflow-y-auto h-full">
-      <div className="w-full space-y-10 py-8 text-black dark:text-white">
+    <section className="overflow-y-auto">
+      <div className="w-full space-y-4 text-black dark:text-white">
         <div className="space-y-1">
           <h2 className="text-xl font-semibold">{params.team} Roles</h2>
           <p className="text-neutral-500">Manage organisation roles.</p>
@@ -38,7 +38,7 @@ export default function Roles({ params }: { params: { team: string } }) {
             <CreateRoleDialog />
           </div>
 
-          <table className="table-auto min-w-full divide-y divide-zinc-500/40">
+          <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
             <thead>
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -47,12 +47,12 @@ export default function Roles({ params }: { params: { team: string } }) {
                 <th></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-500/40">
+            <tbody className="divide-y divide-zinc-500/20">
               {roleData?.roles.map((role: RoleType) => (
                 <tr key={role.id}>
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
-                      <div className="text-lg font-medium flex items-center gap-2">
+                      <div className="font-semibold flex items-center gap-2">
                         {role.name} {role.isDefault && <FaLock className="text-neutral-500" />}
                       </div>
                       <span className="text-neutral-500 text-sm">{role.description}</span>

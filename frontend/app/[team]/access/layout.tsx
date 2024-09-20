@@ -50,7 +50,7 @@ export default function AccessLayout({
       style={{ height: 'calc(100vh - 64px)' }}
     >
       <div className="flex items-center gap-2 pb-8">
-        <h1 className="text-3xl font-bold">{params.team} Access</h1>
+        <h1 className="text-3xl font-bold">Access</h1>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
@@ -71,7 +71,7 @@ export default function AccessLayout({
             </Tab>
           ))}
         </Tab.List>
-        {children}
+        <div className="py-6 h-full">{children}</div>
       </Tab.Group>
     </div>
   )
