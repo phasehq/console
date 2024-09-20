@@ -159,7 +159,7 @@ const Sidebar = () => {
     },
     {
       name: 'Access',
-      href: `/${team}/access`,
+      href: `/${team}/access/members`,
       icon: <FaUsersCog size="20" />,
       active: usePathname()?.split('/')[2] === `access`,
     },
