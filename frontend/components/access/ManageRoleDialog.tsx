@@ -9,7 +9,7 @@ import {
 } from '@/utils/access/permissions'
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { Alert } from '../common/Alert'
-import { FaCog } from 'react-icons/fa'
+import { FaChevronRight, FaCog } from 'react-icons/fa'
 import { camelCaseToSpaces } from '@/utils/copy'
 import { useContext, useRef, useState } from 'react'
 import { Button } from '../common/Button'
@@ -19,6 +19,8 @@ import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { UpdateRole } from '@/graphql/mutations/access/updateRole.gql'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
+import { Disclosure, Transition } from '@headlessui/react'
+import clsx from 'clsx'
 
 const PermissionToggle = ({
   isActive,
@@ -106,152 +108,230 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
       }
       buttonVariant="secondary"
       size="lg"
+      ref={dialogRef}
     >
       <form onSubmit={handleUpdateRole}>
-        <div className="divide-y divide-neutral-500/40 space-y-6 max-h-[85vh] overflow-y-auto">
+        <div className="divide-y divide-neutral-500/40 max-h-[85vh] overflow-y-auto">
           {role.isDefault && (
-            <div className="pt-3">
+            <div className="py-3">
               <Alert size="sm" variant="info" icon={true}>
                 This is a default role and cannot edited
               </Alert>
             </div>
           )}
-          <div className="w-full max-w-sm">
-            <Input
-              value={name}
-              setValue={setName}
-              disabled={!allowEdit}
-              label="Role name"
-              required
-              maxLength={32}
-            />
+          <div className="w-full py-4">
+            <div className="max-w-sm">
+              <Input
+                value={name}
+                setValue={setName}
+                disabled={!allowEdit}
+                label="Role name"
+                required
+                maxLength={32}
+              />
+            </div>
           </div>
 
           <div>
-            <div className="py-4 text-sm">
-              <div className="text-zinc-900 dark:text-zinc-100 font-medium">
-                Organisation permissions
-              </div>
-              <div className="text-neutral-500">
-                Manage access to resources and actions across the Organisation
-              </div>
-            </div>
-            <table className="table-auto min-w-full divide-y divide-zinc-500/40">
-              <thead>
-                <tr>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Resource
-                  </th>
+            <Disclosure
+              as="div"
+              defaultOpen={false}
+              className="flex flex-col divide-y divide-neutral-500/30 w-full"
+            >
+              {({ open }) => (
+                <>
+                  <Disclosure.Button>
+                    <div
+                      className={clsx(
+                        'p-2 flex justify-between items-center gap-8 transition ease w-full'
+                      )}
+                    >
+                      <div className="py-4 text-sm text-left">
+                        <div className="text-zinc-900 dark:text-zinc-100 font-medium">
+                          Organisation permissions
+                        </div>
+                        <div className="text-neutral-500">
+                          Manage access to resources and actions across the Organisation
+                        </div>
+                      </div>
+                      <FaChevronRight
+                        className={clsx(
+                          'transform transition ease text-neutral-500',
+                          open ? 'rotate-90' : 'rotate-0'
+                        )}
+                      />
+                    </div>
+                  </Disclosure.Button>
 
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Read
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Create
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Update
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Delete
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-500/20">
-                {Object.entries(rolePolicy?.permissions!).map(([resource, actions]) => (
-                  <tr key={resource}>
-                    <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
-                      {camelCaseToSpaces(resource)}
-                    </td>
-                    {['read', 'create', 'update', 'delete'].map((action) =>
-                      actionIsValid(resource, action) ? (
-                        <PermissionToggle
-                          key={action}
-                          isActive={actions.includes(action)}
-                          onToggle={() => handleUpdateResourceAction(resource, action)}
-                          disabled={!allowEdit}
-                        />
-                      ) : (
-                        <td key={action} className="text-center"></td>
-                      )
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  <Transition
+                    enter="transition-all duration-300 ease-out"
+                    enterFrom="max-h-0 opacity-0"
+                    enterTo="max-h-screen opacity-100"
+                    leave="transition-all duration-200 ease-out"
+                    leaveFrom="max-h-screen opacity-100"
+                    leaveTo="max-h-0 opacity-0"
+                  >
+                    <Disclosure.Panel>
+                      <table className="table-auto min-w-full divide-y divide-zinc-500/40">
+                        <thead>
+                          <tr>
+                            <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Resource
+                            </th>
+
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Read
+                            </th>
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Create
+                            </th>
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Update
+                            </th>
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Delete
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-500/20">
+                          {Object.entries(rolePolicy?.permissions!).map(([resource, actions]) => (
+                            <tr key={resource}>
+                              <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
+                                {camelCaseToSpaces(resource)}
+                              </td>
+                              {['read', 'create', 'update', 'delete'].map((action) =>
+                                actionIsValid(resource, action) ? (
+                                  <PermissionToggle
+                                    key={action}
+                                    isActive={actions.includes(action)}
+                                    onToggle={() => handleUpdateResourceAction(resource, action)}
+                                    disabled={!allowEdit}
+                                  />
+                                ) : (
+                                  <td key={action} className="text-center"></td>
+                                )
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </Disclosure.Panel>
+                  </Transition>
+                </>
+              )}
+            </Disclosure>
           </div>
 
           <div>
-            <div className="py-4 text-sm">
-              <div className="text-zinc-900 dark:text-zinc-100 font-medium">App permissions</div>
-              <div className="text-neutral-500">
-                Manage access to resources and actions within Apps
-              </div>
-            </div>
-            <table className="table-auto min-w-full divide-y divide-zinc-500/40">
-              <thead>
-                <tr>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Resource
-                  </th>
+            <Disclosure
+              as="div"
+              defaultOpen={false}
+              className="flex flex-col divide-y divide-neutral-500/30 w-full"
+            >
+              {({ open }) => (
+                <>
+                  <Disclosure.Button>
+                    <div
+                      className={clsx(
+                        'p-2 flex justify-between items-center gap-8 transition ease w-full'
+                      )}
+                    >
+                      <div className="py-4 text-sm text-left">
+                        <div className="text-zinc-900 dark:text-zinc-100 font-medium">
+                          App permissions
+                        </div>
+                        <div className="text-neutral-500">
+                          Manage access to resources and actions within Apps
+                        </div>
+                      </div>
+                      <FaChevronRight
+                        className={clsx(
+                          'transform transition ease text-neutral-500',
+                          open ? 'rotate-90' : 'rotate-0'
+                        )}
+                      />
+                    </div>
+                  </Disclosure.Button>
 
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Read
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Create
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Update
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Delete
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-500/20">
-                {Object.entries(rolePolicy?.app_permissions!).map(([resource, actions]) => (
-                  <tr key={resource}>
-                    <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
-                      {camelCaseToSpaces(resource)}
-                    </td>
-                    {['read', 'create', 'update', 'delete'].map((action) =>
-                      actionIsValid(resource, action, true) ? (
-                        <PermissionToggle
-                          key={action}
-                          isActive={actions.includes(action)}
-                          onToggle={() => handleUpdateResourceAction(resource, action, true)}
-                          disabled={!allowEdit}
-                        />
-                      ) : (
-                        <td key={action} className="text-center"></td>
-                      )
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  <Transition
+                    enter="transition-all duration-300 ease-out"
+                    enterFrom="max-h-0 opacity-0"
+                    enterTo="max-h-screen opacity-100"
+                    leave="transition-all duration-300 ease-out"
+                    leaveFrom="max-h-screen opacity-100"
+                    leaveTo="max-h-0 opacity-0"
+                  >
+                    <Disclosure.Panel>
+                      <table className="table-auto min-w-full divide-y divide-zinc-500/40">
+                        <thead>
+                          <tr>
+                            <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Resource
+                            </th>
+
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Read
+                            </th>
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Create
+                            </th>
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Update
+                            </th>
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Delete
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-500/20">
+                          {Object.entries(rolePolicy?.app_permissions!).map(
+                            ([resource, actions]) => (
+                              <tr key={resource}>
+                                <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
+                                  {camelCaseToSpaces(resource)}
+                                </td>
+                                {['read', 'create', 'update', 'delete'].map((action) =>
+                                  actionIsValid(resource, action, true) ? (
+                                    <PermissionToggle
+                                      key={action}
+                                      isActive={actions.includes(action)}
+                                      onToggle={() =>
+                                        handleUpdateResourceAction(resource, action, true)
+                                      }
+                                      disabled={!allowEdit}
+                                    />
+                                  ) : (
+                                    <td key={action} className="text-center"></td>
+                                  )
+                                )}
+                              </tr>
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </Disclosure.Panel>
+                  </Transition>
+                </>
+              )}
+            </Disclosure>
           </div>
 
-          <div className="pt-4 flex items-center justify-between">
+          <div className="px-2 pt-4 flex items-center gap-10 justify-between">
             <div>
               <div className="text-zinc-900 dark:text-zinc-100 font-medium">Global Access</div>
               <div className="text-neutral-500">
-                Global access will give this role access to all Apps within the organisation.
+                Grant implicit access to all Apps and Environments within the organisation. Useful
+                for &quot;Admin&quot; type roles
               </div>
             </div>
             <div className="flex justify-start items-center gap-2 pt-4">
-              <ToggleSwitch
-                value={rolePolicy.global_access}
-                onToggle={handleToggleGlobalAccess}
-                disabled={!allowEdit}
-              />
+              <ToggleSwitch value={rolePolicy.global_access} onToggle={handleToggleGlobalAccess} />
             </div>
           </div>
         </div>
 
         {allowEdit && (
-          <div className="flex justify-end items-center gap-2 pt-4">
+          <div className="flex justify-end items-center gap-2 pt-8">
             <Button
               type="submit"
               variant="primary"

@@ -22,6 +22,10 @@ export default function Roles({ params }: { params: { team: string } }) {
 
   const ownerRole = roleData?.roles.find((role: RoleType) => role.name === 'Owner')
 
+  const userCanCreateRoles = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Roles', 'create')
+    : false
+
   const userCanDeleteRoles = organisation
     ? userHasPermission(organisation?.role?.permissions, 'Roles', 'delete')
     : false
@@ -34,9 +38,11 @@ export default function Roles({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage organisation roles.</p>
         </div>
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <CreateRoleDialog />
-          </div>
+          {userCanCreateRoles && (
+            <div className="flex justify-end">
+              <CreateRoleDialog />
+            </div>
+          )}
 
           <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
             <thead>
