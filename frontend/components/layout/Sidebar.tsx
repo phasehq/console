@@ -158,16 +158,16 @@ const Sidebar = () => {
       active: usePathname()?.split('/')[2] === 'apps',
     },
     {
-      name: 'Access',
-      href: `/${team}/access/members`,
-      icon: <FaUsersCog size="20" />,
-      active: usePathname()?.split('/')[2] === `access`,
-    },
-    {
       name: 'Integrations',
       href: `/${team}/integrations`,
       icon: <FaProjectDiagram size="20" />,
       active: usePathname() === `/${team}/integrations`,
+    },
+    {
+      name: 'Access',
+      href: `/${team}/access/members`,
+      icon: <FaUsersCog size="20" />,
+      active: usePathname()?.split('/')[2] === `access`,
     },
     {
       name: 'Settings',
