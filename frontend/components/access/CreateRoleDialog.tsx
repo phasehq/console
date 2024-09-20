@@ -174,9 +174,7 @@ export const CreateRoleDialog = () => {
                           onToggle={() => handleUpdateResourceAction(resource, action)}
                         />
                       ) : (
-                        <td key={action} className="text-center">
-                          —
-                        </td>
+                        <td key={action} className="text-center"></td>
                       )
                     )}
                   </tr>
@@ -227,9 +225,7 @@ export const CreateRoleDialog = () => {
                           onToggle={() => handleUpdateResourceAction(resource, action, true)}
                         />
                       ) : (
-                        <td key={action} className="text-center">
-                          —
-                        </td>
+                        <td key={action} className="text-center"></td>
                       )
                     )}
                   </tr>

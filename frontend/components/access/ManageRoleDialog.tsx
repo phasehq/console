@@ -172,9 +172,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                           disabled={!allowEdit}
                         />
                       ) : (
-                        <td key={action} className="text-center">
-                          —
-                        </td>
+                        <td key={action} className="text-center"></td>
                       )
                     )}
                   </tr>
@@ -226,9 +224,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                           disabled={!allowEdit}
                         />
                       ) : (
-                        <td key={action} className="text-center">
-                          —
-                        </td>
+                        <td key={action} className="text-center"></td>
                       )
                     )}
                   </tr>
