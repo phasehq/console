@@ -41,6 +41,12 @@ class InitEnvSync(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
+        for env in Environment.objects.filter(app=app):
+            if not user_can_access_environment(info.context.user.userId, env.id):
+                raise GraphQLError(
+                    "You cannot enable SSE as you don't have access to all environments in this App"
+                )
+
         else:
             # set new server env keys
             for key in env_keys:
