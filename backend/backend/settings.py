@@ -42,6 +42,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 ADMIN_ENABLED = os.getenv("ADMIN_ENABLED")
 
+
+def get_version():
+    version_file = os.path.join(BASE_DIR, "version.txt")
+    with open(version_file, "r") as f:
+        version = f.read().strip()
+    return version
+
+
+VERSION = get_version()
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 

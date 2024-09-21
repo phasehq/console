@@ -15,6 +15,7 @@ import { useSession } from 'next-auth/react'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaMoon, FaSun } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'
+import { ReleaseInfo } from '@/components/ReleaseInfo'
 
 export default function Settings({ params }: { params: { team: string } }) {
   const searchParams = useSearchParams()
@@ -94,26 +95,23 @@ export default function Settings({ params }: { params: { team: string } }) {
                   <div className="space-y-10 py-4">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-semibold">Organisation</h2>
-                      <p className="text-neutral-500">Organisation info and settings</p>
-                    </div>
-
-                    <div>
-                      <PlanInfo />
-                    </div>
+                    <p className="text-neutral-500">Organisation info and settings</p>
                   </div>
-                </Tab.Panel>
-              )}
+                  <PlanInfo />
+                </div>
+              </Tab.Panel>
+            )}
 
-              <Tab.Panel>
+            <Tab.Panel>
                 <div className="space-y-10 divide-y divide-neutral-500/40">
-                  {activeOrganisation && (
+                {activeOrganisation && (
                     <div className="space-y-6 py-4">
                       <div className="space-y-1">
                         <h2 className="text-2xl font-semibold">Account</h2>
-                        <p className="text-neutral-500">Account information and recovery.</p>
-                      </div>
+                      <p className="text-neutral-500">Account information and recovery.</p>
+                    </div>
                       <div className="py-4 whitespace-nowrap flex items-center gap-2">
-                        <Avatar imagePath={session?.user?.image} size="xl" />
+                      <Avatar imagePath={session?.user?.image} size="xl" />
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-col">
                             <span className="text-lg font-medium">{session?.user?.name}</span>
@@ -121,54 +119,53 @@ export default function Settings({ params }: { params: { team: string } }) {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <RoleLabel role={activeOrganisation?.role!} />
-                            <span>at {activeOrganisation?.name}</span>
-                          </div>
+                          <RoleLabel role={activeOrganisation?.role!} />
+                          <span>at {activeOrganisation?.name}</span>
                         </div>
                       </div>
+                    </div>
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
                         <div className="text-lg font-medium">Recovery</div>
-                        <ViewRecoveryDialog />
-                      </div>
-
-                      <TrustedDeviceManager />
+                      <ViewRecoveryDialog />
+                    </div>
+                    <TrustedDeviceManager />
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
                         <div className="text-lg font-medium">Public key</div>
                         <code className="font-mono text-neutral-500 bg-zinc-300 dark:bg-zinc-800 p-4 rounded-md">
-                          {activeOrganisation?.identityKey}
-                        </code>
-                      </div>
+                        {activeOrganisation?.identityKey}
+                      </code>
                     </div>
-                  )}
-                </div>
-              </Tab.Panel>
+                    </div>
+                )}
+              </div>
+            </Tab.Panel>
 
-              <Tab.Panel>
+            <Tab.Panel>
+              <div className="space-y-8">
                 <div>
-                  <div className="space-y-6 py-4">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-semibold">App</h2>
-                      <p className="text-neutral-500">
-                        Control the behavior and appearance of UI elements.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-8">
-                      <div className="font-semibold">Theme</div>
-                      <div className="flex items-center gap-2 text-neutral-500">
-                        <FaSun />
-                        <ModeToggle />
-                        <FaMoon />
-                      </div>
-                    </div>
+                  <h2 className="text-2xl font-semibold mb-2">App</h2>
+                  <p className="text-neutral-500">
+                    Control application-wide settings and view app information.
+                  </p>
+                </div>
+                <div className="flex items-center gap-8">
+                  <div className="font-semibold">Theme</div>
+                  <div className="flex items-center gap-2 text-neutral-500">
+                    <FaSun />
+                    <ModeToggle />
+                    <FaMoon />
                   </div>
                 </div>
-              </Tab.Panel>
-            </div>
-          </Tab.Panels>
-        </Tab.Group>
-      </div>
+                <div>
+                  <ReleaseInfo />
+                </div>
+              </div>
+            </Tab.Panel>
+          </div>
+        </Tab.Panels>
+      </Tab.Group>
     </section>
   )
 }
