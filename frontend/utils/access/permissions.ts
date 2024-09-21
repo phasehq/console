@@ -46,6 +46,15 @@ export const userHasPermission = (
   return resourcePermissions.includes(action);
 };
 
+export const userHasGlobalAccess = (permissionsJson: string) => {
+  const permissionsData = parsePermissions(permissionsJson);
+  if (!permissionsData) {
+    return false;
+  }
+
+  return permissionsData.global_access
+}
+
 /**
  * Determines if a user is an admin based on their role.
  * @param {string} role - The user's role.
