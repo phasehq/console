@@ -79,6 +79,7 @@ from .graphene.mutations.syncing import (
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_has_permission,
     user_is_org_member,
 )
 from .graphene.mutations.app import (
@@ -394,6 +395,11 @@ class Query(graphene.ObjectType):
             user_id=info.context.user.userId,
             deleted_at=None,
         )
+
+        if not user_has_permission(
+            info.context.user, "read", "Apps", org_member.organisation
+        ):
+            raise GraphQLError("You don't have access to read this resource")
 
         filter = {
             "organisation_id": organisation_id,
