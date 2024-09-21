@@ -248,7 +248,7 @@ def logout_view(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request):
-    return JsonResponse({"status": "alive"})
+    return JsonResponse({"status": "alive", "version": settings.VERSION})
 
 
 def user_token_kms(request):
