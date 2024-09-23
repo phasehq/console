@@ -168,6 +168,7 @@ class Role(models.Model):
         Organisation, on_delete=models.CASCADE, related_name="roles"
     )
     description = models.TextField(null=True, blank=True)
+    color = models.CharField(max_length=7, blank=True, default="")
 
     # Store permissions as JSON
     permissions = models.JSONField(default=dict)
