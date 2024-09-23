@@ -513,9 +513,8 @@ export default function Members({ params }: { params: { team: string; app: strin
     const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
     const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
 
-    const memberHasGlobalAccess = organisation
-      ? userHasGlobalAccess(organisation.role?.permissions)
-      : false
+    const memberHasGlobalAccess = (user: OrganisationMemberType) =>
+      userHasGlobalAccess(user.role?.permissions)
 
     const closeModal = () => {
       setIsOpen(false)
@@ -658,7 +657,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                     </Dialog.Title>
 
                     <form className="space-y-6 py-4" onSubmit={handleUpdateScope}>
-                      {memberHasGlobalAccess && (
+                      {memberHasGlobalAccess(props.member) && (
                         <Alert variant="info" icon={true} size="sm">
                           <p>
                             This user&apos;s role grants them access to all environments in this
@@ -686,7 +685,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                           onChange={setEnvScope}
                           multiple
                           name="environments"
-                          disabled={memberHasGlobalAccess}
+                          disabled={memberHasGlobalAccess(props.member)}
                         >
                           {({ open }) => (
                             <>
@@ -702,7 +701,9 @@ export default function Members({ params }: { params: { team: string; app: strin
                                 <div
                                   className={clsx(
                                     'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md h-10',
-                                    memberHasGlobalAccess ? 'cursor-not-allowed' : 'cursor-pointer'
+                                    memberHasGlobalAccess(props.member)
+                                      ? 'cursor-not-allowed'
+                                      : 'cursor-pointer'
                                   )}
                                 >
                                   <span className="text-black dark:text-white">
@@ -761,7 +762,11 @@ export default function Members({ params }: { params: { team: string; app: strin
                         <Button variant="secondary" type="button" onClick={closeModal}>
                           Cancel
                         </Button>
-                        <Button variant="primary" type="submit" disabled={memberHasGlobalAccess}>
+                        <Button
+                          variant="primary"
+                          type="submit"
+                          disabled={memberHasGlobalAccess(props.member)}
+                        >
                           Save
                         </Button>
                       </div>
