@@ -77,6 +77,7 @@ type RoleType {
   id: String!
   name: String
   description: String
+  color: String
   permissions: JSONString
   isDefault: Boolean
 }
@@ -606,8 +607,8 @@ type Mutation {
   swapEnvironmentOrder(environment1Id: ID!, environment2Id: ID!): SwapEnvironmentOrderMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
-  createCustomRole(description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
-  updateCustomRole(description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
+  createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
+  updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
   deleteCustomRole(id: ID!): DeleteCustomRoleMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
@@ -746,7 +747,7 @@ type UpdateCustomRoleMutation {
 }
 
 type DeleteCustomRoleMutation {
-  role: RoleType
+  ok: Boolean
 }
 
 type InitEnvSync {

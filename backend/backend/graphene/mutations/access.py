@@ -8,6 +8,7 @@ from graphql import GraphQLError
 class CreateCustomRoleMutation(graphene.Mutation):
     class Arguments:
         name = graphene.String()
+        color = graphene.String()
         description = graphene.String()
         permissions = graphene.JSONString()
         organisation_id = graphene.ID(required=True)
@@ -15,7 +16,7 @@ class CreateCustomRoleMutation(graphene.Mutation):
     role = graphene.Field(RoleType)
 
     @classmethod
-    def mutate(cls, root, info, name, description, permissions, organisation_id):
+    def mutate(cls, root, info, name, description, color, permissions, organisation_id):
         user = info.context.user
         org = Organisation.objects.get(id=organisation_id)
 
@@ -31,6 +32,7 @@ class CreateCustomRoleMutation(graphene.Mutation):
             organisation=org,
             name=name,
             description=description,
+            color=color,
             permissions=permissions,
         )
 
@@ -42,12 +44,13 @@ class UpdateCustomRoleMutation(graphene.Mutation):
         id = graphene.ID(required=True)
         name = graphene.String()
         description = graphene.String()
+        color = graphene.String()
         permissions = graphene.JSONString()
 
     role = graphene.Field(RoleType)
 
     @classmethod
-    def mutate(cls, root, info, id, name, description, permissions):
+    def mutate(cls, root, info, id, name, description, color, permissions):
         user = info.context.user
         role = Role.objects.get(id=id)
 
@@ -65,6 +68,7 @@ class UpdateCustomRoleMutation(graphene.Mutation):
 
         role.name = name
         role.description = description
+        role.color = color
         role.permissions = permissions
         role.save()
 
