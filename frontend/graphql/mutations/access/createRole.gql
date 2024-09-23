@@ -1,12 +1,14 @@
 mutation CreateRole(
   $name: String!
   $description: String!
+  $color: String!
   $permissions: JSONString!
   $organisationId: ID!
 ) {
   createCustomRole(
     name: $name
     description: $description
+    color: $color
     permissions: $permissions
     organisationId: $organisationId
   ) {
