@@ -16,6 +16,7 @@ query GetOrganisations {
     role {
       name
       description
+      color
       permissions
     }
     memberId
