@@ -7,8 +7,8 @@ import {
   userHasPermission,
 } from '@/utils/access/permissions'
 import { ToggleSwitch } from '../common/ToggleSwitch'
-import { FaChevronRight, FaPlus } from 'react-icons/fa'
-import { camelCaseToSpaces } from '@/utils/copy'
+import { FaBrush, FaChevronRight, FaPaintBrush, FaPalette, FaPlus } from 'react-icons/fa'
+import { camelCaseToSpaces, generateRandomHexColor, getContrastingTextColor } from '@/utils/copy'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { CreateRole } from '@/graphql/mutations/access/createRole.gql'
 import { useContext, useEffect, useRef, useState } from 'react'
@@ -19,6 +19,8 @@ import { Button } from '../common/Button'
 import { toast } from 'react-toastify'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
+import { RoleLabel } from '../users/RoleLabel'
+import { Textarea } from '../common/TextArea'
 
 const PermissionToggle = ({ isActive, onToggle }: { isActive: boolean; onToggle: () => void }) => {
   return (
@@ -39,10 +41,13 @@ export const CreateRoleDialog = () => {
   const [createRole, { loading: createIsPending }] = useMutation(CreateRole)
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const colorInputRef = useRef<HTMLInputElement>(null)
 
   const ownerRole = roleData?.roles.find((role: RoleType) => role.name === 'Owner')
 
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [color, setColor] = useState(generateRandomHexColor())
   const [rolePolicy, setRolePolicy] = useState<PermissionPolicy | null>(null)
 
   const setEmptyPolicy = () => {
@@ -85,6 +90,10 @@ export const CreateRoleDialog = () => {
     })
   }
 
+  const handleTriggerClick = () => {
+    colorInputRef.current?.click()
+  }
+
   const handleToggleGlobalAccess = () => {
     setRolePolicy((prevPolicy) => {
       const updatedPolicy = updatePolicy(prevPolicy!, { toggleGlobalAccess: true })
@@ -98,7 +107,8 @@ export const CreateRoleDialog = () => {
     const created = await createRole({
       variables: {
         name,
-        description: '',
+        description,
+        color,
         permissions: JSON.stringify(rolePolicy),
         organisationId: organisation!.id,
       },
@@ -128,8 +138,62 @@ export const CreateRoleDialog = () => {
     >
       <form onSubmit={handleCreateRole}>
         <div className="divide-y divide-neutral-500/40 max-h-[85vh] overflow-y-auto">
-          <div className="w-full max-w-sm py-4">
-            <Input value={name} setValue={setName} label="Role name" required maxLength={32} />
+          <div className="flex items-start justify-between w-full py-4 ">
+            <div className="w-full">
+              <div className="flex items-center gap-4">
+                <div className="w-full max-w-xs">
+                  <Input
+                    value={name}
+                    setValue={setName}
+                    label="Role name"
+                    required
+                    maxLength={32}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-neutral-500 text-sm mb-2" htmlFor="colorpicker">
+                    Color
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      id="colorpicker"
+                      className="size-7 rounded-full flex items-center justify-center ring-1 ring-inset ring-neutral-500"
+                      style={{ backgroundColor: `${color}` }}
+                      onClick={handleTriggerClick}
+                      type="button"
+                      title="Role label color"
+                    >
+                      {/* <FaPaintBrush
+                      className="text-2xs"
+                      style={{ color: getContrastingTextColor(color) }}
+                    /> */}
+                    </button>
+
+                    <input
+                      type="color"
+                      ref={colorInputRef}
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="w-full py-4">
+                <Textarea
+                  value={description}
+                  setValue={setDescription}
+                  label="Description"
+                  maxLength={128}
+                />
+              </div>
+            </div>
+            {name && (
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <div className="text-sm text-neutral-500">This role will appear as:</div>
+                <RoleLabel role={{ name, color, id: '' }} />
+              </div>
+            )}
           </div>
 
           <div>
@@ -316,8 +380,10 @@ export const CreateRoleDialog = () => {
 
           <div className="px-2 pt-4 flex items-center gap-10 justify-between">
             <div>
-              <div className="text-zinc-900 dark:text-zinc-100 font-medium">Global Access</div>
-              <div className="text-neutral-500">
+              <div className="text-zinc-900 dark:text-zinc-100 font-medium text-sm">
+                Global Access
+              </div>
+              <div className="text-neutral-500 text-sm">
                 Grant implicit access to all Apps and Environments within the organisation. Useful
                 for &quot;Admin&quot; type roles
               </div>
