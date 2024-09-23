@@ -51,3 +51,15 @@ export const getContrastingTextColor = (hexColor: string): string => {
   // Return black or white depending on luminance
   return luminance > 0.5 ? 'black' : 'white';
 };
+
+/**
+* Generates a random hexadecimal color string.
+*
+* @returns {string} A string representing a random hex color in the format "#RRGGBB".
+*/
+export const generateRandomHexColor = (): string => {
+ // Generate a random number between 0 and 0xFFFFFF, then convert to a hexadecimal string
+ const randomColor = Math.floor(Math.random() * 0xffffff).toString(16)
+ // Pad the string with leading zeros if necessary to ensure it has a length of 6 characters
+ return '#' + randomColor.padStart(6, '0')
+}
