@@ -5,12 +5,13 @@ import { CreateRoleDialog } from '@/components/access/CreateRoleDialog'
 import { DeleteRoleDialog } from '@/components/access/DeleteRoleDialog'
 import { ManageRoleDialog } from '@/components/access/ManageRoleDialog'
 import { Button } from '@/components/common/Button'
+import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import { useContext } from 'react'
-import { FaLock } from 'react-icons/fa'
+import { FaLock, FaTrash } from 'react-icons/fa'
 
 export default function Roles({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -57,17 +58,25 @@ export default function Roles({ params }: { params: { team: string } }) {
               {roleData?.roles.map((role: RoleType) => (
                 <tr key={role.id}>
                   <td className="px-6 py-4">
-                    <div className="flex flex-col">
+                    <div className="space-y-1">
                       <div className="font-semibold flex items-center gap-2">
-                        {role.name} {role.isDefault && <FaLock className="text-neutral-500" />}
+                        {role.name} <RoleLabel role={role} />{' '}
+                        {role.isDefault && <FaLock className="text-neutral-500" />}
                       </div>
-                      <span className="text-neutral-500 text-sm">{role.description}</span>
+
+                      <div className="text-neutral-500 text-sm">{role.description}</div>
                     </div>
                   </td>
 
                   <td className="px-6 py-4 flex items-center justify-end gap-2">
                     <ManageRoleDialog role={role} ownerRole={ownerRole} />
-                    {!role.isDefault && userCanDeleteRoles && <DeleteRoleDialog role={role} />}
+                    {!role.isDefault && userCanDeleteRoles ? (
+                      <DeleteRoleDialog role={role} />
+                    ) : (
+                      <Button variant="danger" disabled>
+                        <FaTrash /> Delete
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
