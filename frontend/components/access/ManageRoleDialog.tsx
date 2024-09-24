@@ -25,6 +25,7 @@ import { RoleLabel } from '../users/RoleLabel'
 import { Textarea } from '../common/TextArea'
 import { PermissionToggle } from './PermissionToggle'
 import { AccessTemplateSelector } from './AccessTemplateSelector'
+import { ColorPicker } from '../common/ColorPicker'
 
 export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRole: RoleType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -43,7 +44,6 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
     color !== role.color
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
-  const colorInputRef = useRef<HTMLInputElement>(null)
 
   const [updateRole, { loading: updateIsPending }] = useMutation(UpdateRole)
 
@@ -67,10 +67,6 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
 
       return updatedPolicy
     })
-  }
-
-  const handleTriggerClick = () => {
-    colorInputRef.current?.click()
   }
 
   const handleToggleGlobalAccess = () => {
@@ -137,36 +133,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                     disabled={!allowEdit}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-neutral-500 text-sm mb-2" htmlFor="colorpicker">
-                    Color
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      id="colorpicker"
-                      className="size-7 rounded-full flex items-center justify-center ring-1 ring-inset ring-neutral-500"
-                      style={{ backgroundColor: `${color}` }}
-                      onClick={handleTriggerClick}
-                      type="button"
-                      title="Role label color"
-                      disabled={!allowEdit}
-                    >
-                      {/* <FaPaintBrush
-                      className="text-2xs"
-                      style={{ color: getContrastingTextColor(color) }}
-                    /> */}
-                    </button>
-
-                    <input
-                      type="color"
-                      ref={colorInputRef}
-                      value={color!}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="hidden"
-                      disabled={!allowEdit}
-                    />
-                  </div>
-                </div>
+                <ColorPicker color={color!} setColor={setColor} />
               </div>
               <div className="w-full py-4">
                 <Textarea

@@ -23,6 +23,7 @@ import { RoleLabel } from '../users/RoleLabel'
 import { Textarea } from '../common/TextArea'
 import { AccessTemplateSelector } from './AccessTemplateSelector'
 import { PermissionToggle } from './PermissionToggle'
+import { ColorPicker } from '../common/ColorPicker'
 
 export const CreateRoleDialog = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -35,7 +36,6 @@ export const CreateRoleDialog = () => {
   const [createRole, { loading: createIsPending }] = useMutation(CreateRole)
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
-  const colorInputRef = useRef<HTMLInputElement>(null)
 
   const ownerRole = roleData?.roles.find((role: RoleType) => role.name === 'Owner')
 
@@ -86,10 +86,6 @@ export const CreateRoleDialog = () => {
 
       return updatedPolicy
     })
-  }
-
-  const handleTriggerClick = () => {
-    colorInputRef.current?.click()
   }
 
   const handleToggleGlobalAccess = () => {
@@ -150,29 +146,7 @@ export const CreateRoleDialog = () => {
                     maxLength={32}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-neutral-500 text-sm mb-2" htmlFor="colorpicker">
-                    Label color
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      id="colorpicker"
-                      className="size-7 rounded-full flex items-center justify-center ring-1 ring-inset ring-neutral-500"
-                      style={{ backgroundColor: `${color}` }}
-                      onClick={handleTriggerClick}
-                      type="button"
-                      title="Role label color"
-                    ></button>
-
-                    <input
-                      type="color"
-                      ref={colorInputRef}
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="hidden"
-                    />
-                  </div>
-                </div>
+                <ColorPicker color={color!} setColor={setColor} />
               </div>
               <div className="w-full py-4">
                 <Textarea
