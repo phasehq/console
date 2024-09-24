@@ -3,12 +3,12 @@ import GenericDialog from '../common/GenericDialog'
 import {
   parsePermissions,
   PermissionPolicy,
-  updatePolicy,
+  togglePolicyResourcePermission,
   userHasPermission,
 } from '@/utils/access/permissions'
 import { ToggleSwitch } from '../common/ToggleSwitch'
-import { FaBrush, FaChevronRight, FaPaintBrush, FaPalette, FaPlus } from 'react-icons/fa'
-import { camelCaseToSpaces, generateRandomHexColor, getContrastingTextColor } from '@/utils/copy'
+import { FaChevronRight, FaPlus } from 'react-icons/fa'
+import { camelCaseToSpaces, generateRandomHexColor } from '@/utils/copy'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { CreateRole } from '@/graphql/mutations/access/createRole.gql'
 import { useContext, useEffect, useRef, useState } from 'react'
@@ -21,14 +21,8 @@ import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { RoleLabel } from '../users/RoleLabel'
 import { Textarea } from '../common/TextArea'
-
-const PermissionToggle = ({ isActive, onToggle }: { isActive: boolean; onToggle: () => void }) => {
-  return (
-    <td className="text-center">
-      <ToggleSwitch value={isActive} onToggle={onToggle} />
-    </td>
-  )
-}
+import { AccessTemplateSelector } from './AccessTemplateSelector'
+import { PermissionToggle } from './PermissionToggle'
 
 export const CreateRoleDialog = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -78,13 +72,17 @@ export const CreateRoleDialog = () => {
   const actionIsValid = (resource: string, action: string, isAppResource?: boolean) =>
     userHasPermission(ownerRole.permissions, resource, action, isAppResource)
 
-  const handleUpdateResourceAction = (
+  const handleUpdateResourcePermission = (
     resource: string,
     action: string,
     isAppResource: boolean = false
   ) => {
     setRolePolicy((prevPolicy) => {
-      const updatedPolicy = updatePolicy(prevPolicy!, { resource, action, isAppResource })
+      const updatedPolicy = togglePolicyResourcePermission(prevPolicy!, {
+        resource,
+        action,
+        isAppResource,
+      })
 
       return updatedPolicy
     })
@@ -96,7 +94,9 @@ export const CreateRoleDialog = () => {
 
   const handleToggleGlobalAccess = () => {
     setRolePolicy((prevPolicy) => {
-      const updatedPolicy = updatePolicy(prevPolicy!, { toggleGlobalAccess: true })
+      const updatedPolicy = togglePolicyResourcePermission(prevPolicy!, {
+        toggleGlobalAccess: true,
+      })
 
       return updatedPolicy
     })
@@ -152,7 +152,7 @@ export const CreateRoleDialog = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="block text-neutral-500 text-sm mb-2" htmlFor="colorpicker">
-                    Color
+                    Label color
                   </label>
                   <div className="flex items-center gap-2">
                     <button
@@ -162,12 +162,7 @@ export const CreateRoleDialog = () => {
                       onClick={handleTriggerClick}
                       type="button"
                       title="Role label color"
-                    >
-                      {/* <FaPaintBrush
-                      className="text-2xs"
-                      style={{ color: getContrastingTextColor(color) }}
-                    /> */}
-                    </button>
+                    ></button>
 
                     <input
                       type="color"
@@ -242,6 +237,9 @@ export const CreateRoleDialog = () => {
                             <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Resource
                             </th>
+                            <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Access
+                            </th>
 
                             <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Read
@@ -263,12 +261,24 @@ export const CreateRoleDialog = () => {
                               <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
                                 {camelCaseToSpaces(resource)}
                               </td>
+
+                              <td className="relative">
+                                <AccessTemplateSelector
+                                  rolePolicy={rolePolicy}
+                                  setRolePolicy={setRolePolicy}
+                                  resource={resource}
+                                  isAppResource={false}
+                                />
+                              </td>
+
                               {['read', 'create', 'update', 'delete'].map((action) =>
                                 actionIsValid(resource, action) ? (
                                   <PermissionToggle
                                     key={action}
                                     isActive={actions.includes(action)}
-                                    onToggle={() => handleUpdateResourceAction(resource, action)}
+                                    onToggle={() =>
+                                      handleUpdateResourcePermission(resource, action)
+                                    }
                                   />
                                 ) : (
                                   <td key={action} className="text-center"></td>
@@ -331,7 +341,9 @@ export const CreateRoleDialog = () => {
                             <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Resource
                             </th>
-
+                            <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Access
+                            </th>
                             <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Read
                             </th>
@@ -353,13 +365,21 @@ export const CreateRoleDialog = () => {
                                 <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
                                   {camelCaseToSpaces(resource)}
                                 </td>
+                                <td>
+                                  <AccessTemplateSelector
+                                    rolePolicy={rolePolicy}
+                                    setRolePolicy={setRolePolicy}
+                                    resource={resource}
+                                    isAppResource={true}
+                                  />
+                                </td>
                                 {['read', 'create', 'update', 'delete'].map((action) =>
                                   actionIsValid(resource, action, true) ? (
                                     <PermissionToggle
                                       key={action}
                                       isActive={actions.includes(action)}
                                       onToggle={() =>
-                                        handleUpdateResourceAction(resource, action, true)
+                                        handleUpdateResourcePermission(resource, action, true)
                                       }
                                     />
                                   ) : (

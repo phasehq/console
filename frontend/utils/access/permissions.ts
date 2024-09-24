@@ -140,17 +140,17 @@ export const arePoliciesEqual = (
  *
  * @example
  * // Toggle global access
- * const updatedPolicy = updatePolicy(currentPolicy, { toggleGlobalAccess: true });
+ * const updatedPolicy = togglePolicyResourcePermission(currentPolicy, { toggleGlobalAccess: true });
  *
  * @example
  * // Add or remove an action for a resource
- * const updatedPolicy = updatePolicy(currentPolicy, { 
+ * const updatedPolicy = togglePolicyResourcePermission(currentPolicy, { 
  *   resource: "Roles", 
  *   action: "create", 
  *   isAppResource: false 
  * });
  */
-export const updatePolicy = (
+export const togglePolicyResourcePermission = (
   policy: PermissionPolicy,
   options: {
     resource?: string;
@@ -187,4 +187,56 @@ export const updatePolicy = (
   }
 
   return updatedPolicy;
+};
+
+
+/**
+* Updates a given PermissionPolicy by either toggling global access or setting a list of actions for a specific resource.
+*
+* @param {PermissionPolicy} policy - The current permission policy to be updated.
+* @param {Object} options - The options to determine the type of update.
+* @param {string} [options.resource] - The name of the resource to update (e.g., "Roles", "Secrets").
+* @param {string[]} [options.actions] - The array of actions to set for the resource (e.g., ["create", "update"]).
+* @param {boolean} [options.isAppResource=false] - Whether the resource is an app-level resource.
+* @param {boolean} [options.toggleGlobalAccess=false] - Whether to toggle the global access setting.
+* @returns {PermissionPolicy} - The updated permission policy object.
+*
+* @example
+* // Toggle global access
+* const updatedPolicy = updatePolicyResourcePermissions(currentPolicy, { toggleGlobalAccess: true });
+*
+* @example
+* // Set actions for a resource, replacing existing ones
+* const updatedPolicy = updatePolicyResourcePermissions(currentPolicy, { 
+*   resource: "Roles", 
+*   actions: ["create", "update"], 
+*   isAppResource: false 
+* });
+*/
+export const updatePolicyResourcePermissions = (
+ policy: PermissionPolicy,
+ options: {
+   resource?: string;
+   actions?: string[];
+   isAppResource?: boolean;
+   toggleGlobalAccess?: boolean;
+ }
+): PermissionPolicy => {
+ const updatedPolicy = structuredClone(policy)!;
+
+ // Handle global access toggle
+ if (options.toggleGlobalAccess) {
+   updatedPolicy.global_access = !policy.global_access;
+ }
+
+ // Handle resource actions update by replacing existing actions
+ if (options.resource && options.actions) {
+   const { resource, actions, isAppResource = false } = options;
+   const permissions = isAppResource ? updatedPolicy.app_permissions : updatedPolicy.permissions;
+
+   // Replace the current actions with the provided actions array
+   permissions[resource] = [...actions];
+ }
+
+ return updatedPolicy;
 };

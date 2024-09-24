@@ -4,13 +4,13 @@ import {
   arePoliciesEqual,
   parsePermissions,
   PermissionPolicy,
-  updatePolicy,
+  togglePolicyResourcePermission,
   userHasPermission,
 } from '@/utils/access/permissions'
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { Alert } from '../common/Alert'
-import { FaChevronRight, FaCog, FaEye, FaPalette } from 'react-icons/fa'
-import { camelCaseToSpaces, getContrastingTextColor, stringToHexColor } from '@/utils/copy'
+import { FaChevronRight, FaCog, FaEye } from 'react-icons/fa'
+import { camelCaseToSpaces } from '@/utils/copy'
 import { useContext, useRef, useState } from 'react'
 import { Button } from '../common/Button'
 import { Input } from '../common/Input'
@@ -23,22 +23,8 @@ import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { RoleLabel } from '../users/RoleLabel'
 import { Textarea } from '../common/TextArea'
-
-const PermissionToggle = ({
-  isActive,
-  onToggle,
-  disabled,
-}: {
-  isActive: boolean
-  onToggle: () => void
-  disabled?: boolean
-}) => {
-  return (
-    <td className="text-center">
-      <ToggleSwitch value={isActive} onToggle={onToggle} disabled={disabled} />
-    </td>
-  )
-}
+import { PermissionToggle } from './PermissionToggle'
+import { AccessTemplateSelector } from './AccessTemplateSelector'
 
 export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRole: RoleType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -46,12 +32,12 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
   const [name, setName] = useState(role.name!)
   const [description, setDescription] = useState(role.description || '')
   const [color, setColor] = useState(role.color)
-  const [rolePolicy, setRolePolicy] = useState<PermissionPolicy>(
+  const [rolePolicy, setRolePolicy] = useState<PermissionPolicy | null>(
     parsePermissions(role.permissions)!
   )
 
   const roleChanged =
-    !arePoliciesEqual(rolePolicy, parsePermissions(role.permissions)!) ||
+    !arePoliciesEqual(rolePolicy!, parsePermissions(role.permissions)!) ||
     name !== role.name ||
     description !== role.description ||
     color !== role.color
@@ -73,7 +59,11 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
     isAppResource: boolean = false
   ) => {
     setRolePolicy((prevPolicy) => {
-      const updatedPolicy = updatePolicy(prevPolicy, { resource, action, isAppResource })
+      const updatedPolicy = togglePolicyResourcePermission(prevPolicy!, {
+        resource,
+        action,
+        isAppResource,
+      })
 
       return updatedPolicy
     })
@@ -85,7 +75,9 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
 
   const handleToggleGlobalAccess = () => {
     setRolePolicy((prevPolicy) => {
-      const updatedPolicy = updatePolicy(prevPolicy, { toggleGlobalAccess: true })
+      const updatedPolicy = togglePolicyResourcePermission(prevPolicy!, {
+        toggleGlobalAccess: true,
+      })
 
       return updatedPolicy
     })
@@ -241,6 +233,10 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                               Resource
                             </th>
 
+                            <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Access
+                            </th>
+
                             <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Read
                             </th>
@@ -261,6 +257,16 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                               <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
                                 {camelCaseToSpaces(resource)}
                               </td>
+
+                              <td>
+                                <AccessTemplateSelector
+                                  rolePolicy={rolePolicy!}
+                                  setRolePolicy={setRolePolicy}
+                                  resource={resource}
+                                  isAppResource={false}
+                                />
+                              </td>
+
                               {['read', 'create', 'update', 'delete'].map((action) =>
                                 actionIsValid(resource, action) ? (
                                   <PermissionToggle
@@ -331,6 +337,10 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                               Resource
                             </th>
 
+                            <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Access
+                            </th>
+
                             <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Read
                             </th>
@@ -352,6 +362,15 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                                 <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
                                   {camelCaseToSpaces(resource)}
                                 </td>
+                                <td>
+                                  <AccessTemplateSelector
+                                    rolePolicy={rolePolicy!}
+                                    setRolePolicy={setRolePolicy}
+                                    resource={resource}
+                                    isAppResource={true}
+                                  />
+                                </td>
+
                                 {['read', 'create', 'update', 'delete'].map((action) =>
                                   actionIsValid(resource, action, true) ? (
                                     <PermissionToggle
@@ -387,7 +406,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
               </div>
             </div>
             <div className="flex justify-start items-center gap-2 pt-4">
-              <ToggleSwitch value={rolePolicy.global_access} onToggle={handleToggleGlobalAccess} />
+              <ToggleSwitch value={rolePolicy!.global_access} onToggle={handleToggleGlobalAccess} />
             </div>
           </div>
         </div>

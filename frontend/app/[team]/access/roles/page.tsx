@@ -52,16 +52,21 @@ export default function Roles({ params }: { params: { team: string } }) {
                   Role
                 </th>
                 <th></th>
+
+                <th></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-500/20">
               {roleData?.roles.map((role: RoleType) => (
                 <tr key={role.id}>
+                  <td>
+                    <RoleLabel role={role} size="md" />
+                  </td>
+
                   <td className="px-6 py-4">
                     <div className="space-y-1">
                       <div className="font-semibold flex items-center gap-2">
-                        {role.name} <RoleLabel role={role} />{' '}
-                        {role.isDefault && <FaLock className="text-neutral-500" />}
+                        {role.name} {role.isDefault && <FaLock className="text-neutral-500" />}
                       </div>
 
                       <div className="text-neutral-500 text-sm">{role.description}</div>
