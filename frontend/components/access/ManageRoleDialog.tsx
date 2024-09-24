@@ -133,7 +133,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                     disabled={!allowEdit}
                   />
                 </div>
-                <ColorPicker color={color!} setColor={setColor} />
+                <ColorPicker color={color!} setColor={setColor} disabled={!allowEdit} />
               </div>
               <div className="w-full py-4">
                 <Textarea
