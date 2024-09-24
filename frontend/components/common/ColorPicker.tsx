@@ -1,41 +1,24 @@
+import { colors, getContrastingTextColor } from '@/utils/copy'
 import { Menu, Transition } from '@headlessui/react'
 import { Fragment, useRef } from 'react'
+import { FaCheck } from 'react-icons/fa'
 
 export const ColorPicker = ({
   color,
   setColor,
   allowCustomColors,
+  disabled,
 }: {
   color: string
   setColor: (value: string) => void
   allowCustomColors?: boolean
+  disabled?: boolean
 }) => {
   const colorInputRef = useRef<HTMLInputElement>(null)
 
   const handleTriggerClick = () => {
     colorInputRef.current?.click()
   }
-
-  const colors = [
-    '#f4f4f5', //white
-    '#71717a', //gray
-    '#18181b', //black
-    '#ef4444', //red
-    '#f97316', //orange
-    '#f59e0b', //amber
-    '#eab308', //yellow
-    '#84cc16', //lime
-    '#22c55e', //green
-    '#14b8a6', //teal
-    '#06b6d4', //cyan
-    '#0ea5e9', //sky
-    '#3b82f6', //blue
-    '#6366f1', //indigo
-    '#8b5cf6', //violet
-    '#a855f7', //purple
-    '#d946ef', //fuchsia
-    '#ec4899', //pink
-  ]
 
   return (
     <div className="space-y-2">
@@ -65,7 +48,7 @@ export const ColorPicker = ({
         <Menu as="div" className="relative inline-block text-left w-full">
           {({ open }) => (
             <>
-              <Menu.Button>
+              <Menu.Button disabled={disabled}>
                 <div
                   className="size-7 rounded-full ring-1 ring-inset ring-neutral-500/40"
                   style={{ backgroundColor: `${color}` }}
@@ -86,10 +69,17 @@ export const ColorPicker = ({
                       <Menu.Item key={colorOption}>
                         <button
                           type="button"
-                          className="size-7 rounded-full"
+                          className="size-7 rounded-full relative flex items-center justify-center"
                           style={{ backgroundColor: `${colorOption}` }}
                           onClick={() => setColor(colorOption)}
-                        ></button>
+                        >
+                          {color === colorOption && (
+                            <FaCheck
+                              className="text-xs"
+                              style={{ color: getContrastingTextColor(color) }}
+                            />
+                          )}
+                        </button>
                       </Menu.Item>
                     ))}
                   </div>
