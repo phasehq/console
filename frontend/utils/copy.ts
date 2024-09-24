@@ -1,3 +1,24 @@
+export const colors = [
+  '#f4f4f5', //white
+  '#71717a', //gray
+  '#18181b', //black
+  '#ef4444', //red
+  '#f97316', //orange
+  '#f59e0b', //amber
+  '#eab308', //yellow
+  '#84cc16', //lime
+  '#22c55e', //green
+  '#14b8a6', //teal
+  '#06b6d4', //cyan
+  '#0ea5e9', //sky
+  '#3b82f6', //blue
+  '#6366f1', //indigo
+  '#8b5cf6', //violet
+  '#a855f7', //purple
+  '#d946ef', //fuchsia
+  '#ec4899', //pink
+]
+
 /**
  * Converts a camelCase string into a space-separated string.
  * For example, "FooBar" becomes "Foo Bar", and "fooBar" becomes "foo Bar".
@@ -63,3 +84,13 @@ export const generateRandomHexColor = (): string => {
  // Pad the string with leading zeros if necessary to ensure it has a length of 6 characters
  return '#' + randomColor.padStart(6, '0')
 }
+
+/**
+ * Returns a random color from a curated list of colors.
+ *
+ * @returns {string} A random color in hex format.
+ */
+export const getRandomCuratedColor = (): string => {
+  const randomIndex = Math.floor(Math.random() * colors.length);
+  return colors[randomIndex];
+};
