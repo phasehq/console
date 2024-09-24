@@ -116,7 +116,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
           {role.isDefault && (
             <div className="py-3">
               <Alert size="sm" variant="info" icon={true}>
-                This is a default role and cannot edited
+                This role is managed by Phase and cannot be edited
               </Alert>
             </div>
           )}
