@@ -8,7 +8,7 @@ import {
 } from '@/utils/access/permissions'
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { FaChevronRight, FaPlus } from 'react-icons/fa'
-import { camelCaseToSpaces, generateRandomHexColor } from '@/utils/copy'
+import { camelCaseToSpaces, getRandomCuratedColor } from '@/utils/copy'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { CreateRole } from '@/graphql/mutations/access/createRole.gql'
 import { useContext, useEffect, useRef, useState } from 'react'
@@ -41,7 +41,7 @@ export const CreateRoleDialog = () => {
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [color, setColor] = useState(generateRandomHexColor())
+  const [color, setColor] = useState(getRandomCuratedColor())
   const [rolePolicy, setRolePolicy] = useState<PermissionPolicy | null>(null)
 
   const setEmptyPolicy = () => {
