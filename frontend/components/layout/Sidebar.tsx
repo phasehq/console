@@ -164,7 +164,7 @@ const Sidebar = () => {
       active: usePathname() === `/${team}/integrations`,
     },
     {
-      name: 'Access',
+      name: 'Access Control',
       href: `/${team}/access/members`,
       icon: <FaUsersCog size="20" />,
       active: usePathname()?.split('/')[2] === `access`,
