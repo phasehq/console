@@ -95,23 +95,23 @@ export default function Settings({ params }: { params: { team: string } }) {
                   <div className="space-y-10 py-4">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-semibold">Organisation</h2>
-                    <p className="text-neutral-500">Organisation info and settings</p>
+                      <p className="text-neutral-500">Organisation info and settings</p>
+                    </div>
+                    <PlanInfo />
                   </div>
-                  <PlanInfo />
-                </div>
-              </Tab.Panel>
-            )}
+                </Tab.Panel>
+              )}
 
-            <Tab.Panel>
+              <Tab.Panel>
                 <div className="space-y-10 divide-y divide-neutral-500/40">
-                {activeOrganisation && (
+                  {activeOrganisation && (
                     <div className="space-y-6 py-4">
                       <div className="space-y-1">
                         <h2 className="text-2xl font-semibold">Account</h2>
-                      <p className="text-neutral-500">Account information and recovery.</p>
-                    </div>
+                        <p className="text-neutral-500">Account information and recovery.</p>
+                      </div>
                       <div className="py-4 whitespace-nowrap flex items-center gap-2">
-                      <Avatar imagePath={session?.user?.image} size="xl" />
+                        <Avatar imagePath={session?.user?.image} size="xl" />
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-col">
                             <span className="text-lg font-medium">{session?.user?.name}</span>
@@ -119,53 +119,54 @@ export default function Settings({ params }: { params: { team: string } }) {
                           </div>
 
                           <div className="flex items-center gap-2">
-                          <RoleLabel role={activeOrganisation?.role!} />
-                          <span>at {activeOrganisation?.name}</span>
+                            <RoleLabel role={activeOrganisation?.role!} />
+                            <span>at {activeOrganisation?.name}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
                         <div className="text-lg font-medium">Recovery</div>
-                      <ViewRecoveryDialog />
-                    </div>
-                    <TrustedDeviceManager />
+                        <ViewRecoveryDialog />
+                      </div>
+                      <TrustedDeviceManager />
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
                         <div className="text-lg font-medium">Public key</div>
                         <code className="font-mono text-neutral-500 bg-zinc-300 dark:bg-zinc-800 p-4 rounded-md">
-                        {activeOrganisation?.identityKey}
-                      </code>
+                          {activeOrganisation?.identityKey}
+                        </code>
+                      </div>
                     </div>
-                    </div>
-                )}
-              </div>
-            </Tab.Panel>
-
-            <Tab.Panel>
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-2xl font-semibold mb-2">App</h2>
-                  <p className="text-neutral-500">
-                    Control application-wide settings and view app information.
-                  </p>
+                  )}
                 </div>
-                <div className="flex items-center gap-8">
-                  <div className="font-semibold">Theme</div>
-                  <div className="flex items-center gap-2 text-neutral-500">
-                    <FaSun />
-                    <ModeToggle />
-                    <FaMoon />
+              </Tab.Panel>
+
+              <Tab.Panel>
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-semibold mb-2">App</h2>
+                    <p className="text-neutral-500">
+                      Control application-wide settings and view app information.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-8">
+                    <div className="font-semibold">Theme</div>
+                    <div className="flex items-center gap-2 text-neutral-500">
+                      <FaSun />
+                      <ModeToggle />
+                      <FaMoon />
+                    </div>
+                  </div>
+                  <div>
+                    <ReleaseInfo />
                   </div>
                 </div>
-                <div>
-                  <ReleaseInfo />
-                </div>
-              </div>
-            </Tab.Panel>
-          </div>
-        </Tab.Panels>
-      </Tab.Group>
+              </Tab.Panel>
+            </div>
+          </Tab.Panels>
+        </Tab.Group>
+      </div>
     </section>
   )
 }
