@@ -143,7 +143,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                   <label className="block text-neutral-500 text-sm mb-2" htmlFor="colorpicker">
                     Label color
                   </label>{' '}
-                  <ColorPicker color={color!} setColor={setColor} />
+                  <ColorPicker color={color!} setColor={setColor} disabled={!allowEdit} />
                 </div>
               </div>
               <div className="w-full py-4">
