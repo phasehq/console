@@ -10,9 +10,13 @@ import Spinner from '@/components/common/Spinner'
 import { AppCard } from '@/components/apps/AppCard'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useSearchParams } from 'next/navigation'
+import { userHasPermission } from '@/utils/access/permissions'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanViewApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
+  const userCanCreateApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'create')
 
   const dialogRef = useRef<{ openModal: () => void }>(null)
 
@@ -30,7 +34,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
     variables: {
       organisationId: organisation?.id,
     },
-    skip: !organisation,
+    skip: !organisation || !userCanViewApps,
   })
 
   const apps = data?.apps as AppType[]
@@ -47,7 +51,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
             <AppCard app={app} />
           </Link>
         ))}
-        {organisation && apps && (
+        {organisation && apps && userCanCreateApps && (
           <div className="bg-zinc-100 dark:bg-neutral-800 opacity-80 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl flex flex-col gap-y-20 min-h-60">
             <NewAppDialog organisation={organisation} appCount={apps.length} ref={dialogRef} />
           </div>

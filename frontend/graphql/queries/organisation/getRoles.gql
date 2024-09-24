@@ -3,6 +3,8 @@ query GetRoles($orgId: ID!) {
     id
     name
     description
+    color
     permissions
+    isDefault
   }
 }

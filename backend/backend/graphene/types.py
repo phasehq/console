@@ -47,7 +47,9 @@ class OrganisationPlanType(ObjectType):
 class RoleType(DjangoObjectType):
     name = graphene.String()
     description = graphene.String()
+    color = graphene.String()
     permissions = graphene.JSONString()
+    is_default = graphene.Boolean()
 
     class Meta:
         model = Role
@@ -57,6 +59,11 @@ class RoleType(DjangoObjectType):
         if self.is_default:
             return default_roles.get(self.name, {})
         return self.permissions
+
+    def resolve_description(self, info):
+        if self.is_default:
+            return default_roles.get(self.name, {})["meta"]["description"]
+        return self.description
 
 
 class OrganisationType(DjangoObjectType):

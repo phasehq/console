@@ -28,7 +28,7 @@ import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userIsAdmin } from '@/utils/access/permissions'
+import { userHasGlobalAccess, userIsAdmin } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
@@ -513,7 +513,8 @@ export default function Members({ params }: { params: { team: string; app: strin
     const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
     const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
 
-    const memberIsAdmin = userIsAdmin(props.member.role!.name!) || false
+    const memberHasGlobalAccess = (user: OrganisationMemberType) =>
+      userHasGlobalAccess(user.role?.permissions)
 
     const closeModal = () => {
       setIsOpen(false)
@@ -655,10 +656,23 @@ export default function Members({ params }: { params: { team: string; app: strin
                       </Button>
                     </Dialog.Title>
 
-                    <form
-                      className={clsx('space-y-6 p-4', memberIsAdmin && 'opacity-60')}
-                      onSubmit={handleUpdateScope}
-                    >
+                    <form className="space-y-6 py-4" onSubmit={handleUpdateScope}>
+                      {memberHasGlobalAccess(props.member) && (
+                        <Alert variant="info" icon={true} size="sm">
+                          <p>
+                            This user&apos;s role grants them access to all environments in this
+                            App. To restrict their access, change their role from the{' '}
+                            <Link
+                              className="font-semibold hover:underline"
+                              href={`/${params.team}/access/members`}
+                            >
+                              organisation members
+                            </Link>{' '}
+                            page.
+                          </p>
+                        </Alert>
+                      )}
+
                       <div className="space-y-1 w-full relative">
                         {envScope.length === 0 && showEnvHint && (
                           <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
@@ -671,7 +685,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                           onChange={setEnvScope}
                           multiple
                           name="environments"
-                          disabled={memberIsAdmin}
+                          disabled={memberHasGlobalAccess(props.member)}
                         >
                           {({ open }) => (
                             <>
@@ -687,7 +701,9 @@ export default function Members({ params }: { params: { team: string; app: strin
                                 <div
                                   className={clsx(
                                     'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md h-10',
-                                    memberIsAdmin ? 'cursor-not-allowed' : 'cursor-pointer'
+                                    memberHasGlobalAccess(props.member)
+                                      ? 'cursor-not-allowed'
+                                      : 'cursor-pointer'
                                   )}
                                 >
                                   <span className="text-black dark:text-white">
@@ -742,28 +758,15 @@ export default function Members({ params }: { params: { team: string; app: strin
                         </Listbox>
                       </div>
 
-                      {memberIsAdmin && (
-                        <Alert variant="info" icon={true}>
-                          <p>
-                            This user is an <RoleLabel role={props.member.role!} />, and has access
-                            to all environments in this App. To restrict their access, change their
-                            role to from the{' '}
-                            <Link
-                              className="font-semibold hover:underline"
-                              href={`/${params.team}/members`}
-                            >
-                              organisation members
-                            </Link>{' '}
-                            page.
-                          </p>
-                        </Alert>
-                      )}
-
                       <div className="flex items-center gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>
                           Cancel
                         </Button>
-                        <Button variant="primary" type="submit" disabled={memberIsAdmin}>
+                        <Button
+                          variant="primary"
+                          type="submit"
+                          disabled={memberHasGlobalAccess(props.member)}
+                        >
                           Save
                         </Button>
                       </div>

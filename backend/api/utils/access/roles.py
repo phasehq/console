@@ -1,5 +1,9 @@
 default_roles = {
     "Owner": {
+        "meta": {
+            "version": 1,
+            "description": "The organisation owner. This role is unique to a single user, and grants access to all resources and actions.",
+        },
         "permissions": {
             "Organisation": ["create", "read", "update", "delete"],
             "Billing": ["create", "read", "update", "delete"],
@@ -21,6 +25,10 @@ default_roles = {
         "global_access": True,
     },
     "Admin": {
+        "meta": {
+            "version": 1,
+            "description": "Admin users have access to most resources and permissions, and have global access to all Apps and Environments.",
+        },
         "permissions": {
             "Organisation": ["read", "update"],
             "Billing": ["create", "read", "update", "delete"],
@@ -42,6 +50,10 @@ default_roles = {
         "global_access": True,
     },
     "Developer": {
+        "meta": {
+            "version": 1,
+            "description": "Developers have limited permissions to at the organisation level, and must be given explicit access to Apps and Environments.",
+        },
         "permissions": {
             "Organisation": [],
             "Billing": [],

@@ -91,10 +91,10 @@ const CommandPalette: React.FC = () => {
     },
     {
       id: 'go-pat',
-      name: 'Go to Access',
-      description: 'Navigate to personal access tokens',
+      name: 'Go to Access Control',
+      description: 'Navigate to access control',
       icon: <FaKey />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/tokens`),
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
       id: 'go-settings',

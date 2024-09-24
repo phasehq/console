@@ -3,6 +3,11 @@ from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
+from .graphene.mutations.access import (
+    CreateCustomRoleMutation,
+    DeleteCustomRoleMutation,
+    UpdateCustomRoleMutation,
+)
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     resolve_stripe_checkout_details,
@@ -74,6 +79,7 @@ from .graphene.mutations.syncing import (
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_has_permission,
     user_is_org_member,
 )
 from .graphene.mutations.app import (
@@ -389,6 +395,11 @@ class Query(graphene.ObjectType):
             user_id=info.context.user.userId,
             deleted_at=None,
         )
+
+        if not user_has_permission(
+            info.context.user, "read", "Apps", org_member.organisation
+        ):
+            raise GraphQLError("You don't have access to read this resource")
 
         filter = {
             "organisation_id": organisation_id,
@@ -721,6 +732,11 @@ class Mutation(graphene.ObjectType):
     swap_environment_order = SwapEnvironmentOrderMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
+
+    # Access
+    create_custom_role = CreateCustomRoleMutation.Field()
+    update_custom_role = UpdateCustomRoleMutation.Field()
+    delete_custom_role = DeleteCustomRoleMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
     delete_env_sync = DeleteSync.Field()
