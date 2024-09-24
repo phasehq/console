@@ -8,7 +8,7 @@ import {
 } from '@/utils/access/permissions'
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { FaChevronRight, FaPlus } from 'react-icons/fa'
-import { camelCaseToSpaces, getRandomCuratedColor } from '@/utils/copy'
+import { camelCaseToSpaces, getRandomCuratedColor, stringContainsCharacters } from '@/utils/copy'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { CreateRole } from '@/graphql/mutations/access/createRole.gql'
 import { useContext, useEffect, useRef, useState } from 'react'
@@ -60,6 +60,7 @@ export const CreateRoleDialog = () => {
   const reset = () => {
     setEmptyPolicy()
     setName('')
+    setDescription('')
   }
 
   useEffect(() => {
@@ -100,6 +101,12 @@ export const CreateRoleDialog = () => {
 
   const handleCreateRole = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
+
+    if (!stringContainsCharacters(name)) {
+      toast.error('Role name must contain at least one non-space character!')
+      return false
+    }
+
     const created = await createRole({
       variables: {
         name,

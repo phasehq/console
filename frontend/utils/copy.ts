@@ -94,3 +94,18 @@ export const getRandomCuratedColor = (): string => {
   const randomIndex = Math.floor(Math.random() * colors.length);
   return colors[randomIndex];
 };
+
+
+
+/**
+ * Checks if a string contains at least one non-space character
+ * 
+ * @param {string} value 
+ * @returns {boolean}
+ */
+export const stringContainsCharacters = (value: string) => {
+  const trimmedValue = value.trim(); // Trim leading and trailing spaces
+  const isValid = /^(?!\s*$).+/.test(trimmedValue); // Validate using the regex
+
+  return isValid
+};

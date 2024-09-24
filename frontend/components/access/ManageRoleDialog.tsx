@@ -10,7 +10,7 @@ import {
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { Alert } from '../common/Alert'
 import { FaChevronRight, FaCog, FaEye } from 'react-icons/fa'
-import { camelCaseToSpaces } from '@/utils/copy'
+import { camelCaseToSpaces, stringContainsCharacters } from '@/utils/copy'
 import { useContext, useRef, useState } from 'react'
 import { Button } from '../common/Button'
 import { Input } from '../common/Input'
@@ -81,6 +81,12 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
 
   const handleUpdateRole = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
+
+    if (!stringContainsCharacters(name)) {
+      toast.error('Role name must contain at least one non-space character!')
+      return false
+    }
+
     const updated = await updateRole({
       variables: {
         id: role.id,
