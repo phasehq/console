@@ -4,14 +4,13 @@ import { RoleType } from '@/apollo/graphql'
 import { CreateRoleDialog } from '@/components/access/CreateRoleDialog'
 import { DeleteRoleDialog } from '@/components/access/DeleteRoleDialog'
 import { ManageRoleDialog } from '@/components/access/ManageRoleDialog'
-import { Button } from '@/components/common/Button'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import { useContext } from 'react'
-import { FaLock, FaTrash } from 'react-icons/fa'
+import { FaLock } from 'react-icons/fa'
 
 export default function Roles({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -58,7 +57,7 @@ export default function Roles({ params }: { params: { team: string } }) {
             </thead>
             <tbody className="divide-y divide-zinc-500/20">
               {roleData?.roles.map((role: RoleType) => (
-                <tr key={role.id}>
+                <tr key={role.id} className="group">
                   <td>
                     <RoleLabel role={role} size="md" />
                   </td>
@@ -66,22 +65,22 @@ export default function Roles({ params }: { params: { team: string } }) {
                   <td className="px-6 py-4">
                     <div className="space-y-1">
                       <div className="font-semibold flex items-center gap-2">
-                        {role.name} {role.isDefault && <FaLock className="text-neutral-500" />}
+                        {role.name}{' '}
+                        {role.isDefault && (
+                          <FaLock
+                            title="This role is managed by Phase and cannot be edited"
+                            className="text-neutral-500"
+                          />
+                        )}
                       </div>
 
                       <div className="text-neutral-500 text-sm">{role.description}</div>
                     </div>
                   </td>
 
-                  <td className="px-6 py-4 flex items-center justify-end gap-2">
+                  <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
                     <ManageRoleDialog role={role} ownerRole={ownerRole} />
-                    {!role.isDefault && userCanDeleteRoles ? (
-                      <DeleteRoleDialog role={role} />
-                    ) : (
-                      <Button variant="danger" disabled>
-                        <FaTrash /> Delete
-                      </Button>
-                    )}
+                    {!role.isDefault && userCanDeleteRoles && <DeleteRoleDialog role={role} />}
                   </td>
                 </tr>
               ))}
