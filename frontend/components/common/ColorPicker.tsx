@@ -21,10 +21,7 @@ export const ColorPicker = ({
   }
 
   return (
-    <div className="space-y-2">
-      <label className="block text-neutral-500 text-sm mb-2" htmlFor="colorpicker">
-        Label color
-      </label>
+    <div>
       {allowCustomColors ? (
         <div className="flex items-center gap-2">
           <button

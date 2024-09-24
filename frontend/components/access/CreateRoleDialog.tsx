@@ -146,7 +146,12 @@ export const CreateRoleDialog = () => {
                     maxLength={32}
                   />
                 </div>
-                <ColorPicker color={color!} setColor={setColor} />
+                <div className="space-y-2">
+                  <label className="block text-neutral-500 text-sm mb-2" htmlFor="colorpicker">
+                    Label color
+                  </label>{' '}
+                  <ColorPicker color={color!} setColor={setColor} />
+                </div>
               </div>
               <div className="w-full py-4">
                 <Textarea
