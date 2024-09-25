@@ -30,6 +30,8 @@ import { ColorPicker } from '../common/ColorPicker'
 export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRole: RoleType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const ownerRolePolicy = parsePermissions(ownerRole.permissions)
+
   const [name, setName] = useState(role.name!)
   const [description, setDescription] = useState(role.description || '')
   const [color, setColor] = useState(role.color)
@@ -52,6 +54,11 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
 
   const allowEdit =
     !role.isDefault && userHasPermission(organisation?.role?.permissions, 'Roles', 'update')
+
+  const resourcePermissions = (resource: string, isAppResource?: boolean) => {
+    const permissionKey = isAppResource ? 'app_permissions' : 'permissions'
+    return rolePolicy![permissionKey]?.[resource] ?? []
+  }
 
   const handleUpdateResourceAction = (
     resource: string,
@@ -230,35 +237,37 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-500/20">
-                          {Object.entries(rolePolicy?.permissions!).map(([resource, actions]) => (
-                            <tr key={resource}>
-                              <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
-                                {camelCaseToSpaces(resource)}
-                              </td>
+                          {Object.entries(ownerRolePolicy?.permissions!).map(
+                            ([resource, actions]) => (
+                              <tr key={resource}>
+                                <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
+                                  {camelCaseToSpaces(resource)}
+                                </td>
 
-                              <td>
-                                <AccessTemplateSelector
-                                  rolePolicy={rolePolicy!}
-                                  setRolePolicy={setRolePolicy}
-                                  resource={resource}
-                                  isAppResource={false}
-                                />
-                              </td>
-
-                              {['read', 'create', 'update', 'delete'].map((action) =>
-                                actionIsValid(resource, action) ? (
-                                  <PermissionToggle
-                                    key={action}
-                                    isActive={actions.includes(action)}
-                                    onToggle={() => handleUpdateResourceAction(resource, action)}
-                                    disabled={!allowEdit}
+                                <td>
+                                  <AccessTemplateSelector
+                                    rolePolicy={rolePolicy!}
+                                    setRolePolicy={setRolePolicy}
+                                    resource={resource}
+                                    isAppResource={false}
                                   />
-                                ) : (
-                                  <td key={action} className="text-center"></td>
-                                )
-                              )}
-                            </tr>
-                          ))}
+                                </td>
+
+                                {['read', 'create', 'update', 'delete'].map((action) =>
+                                  actionIsValid(resource, action) ? (
+                                    <PermissionToggle
+                                      key={action}
+                                      isActive={resourcePermissions(resource).includes(action)}
+                                      onToggle={() => handleUpdateResourceAction(resource, action)}
+                                      disabled={!allowEdit}
+                                    />
+                                  ) : (
+                                    <td key={action} className="text-center"></td>
+                                  )
+                                )}
+                              </tr>
+                            )
+                          )}
                         </tbody>
                       </table>
                     </Disclosure.Panel>
@@ -334,7 +343,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-500/20">
-                          {Object.entries(rolePolicy?.app_permissions!).map(
+                          {Object.entries(ownerRolePolicy?.app_permissions!).map(
                             ([resource, actions]) => (
                               <tr key={resource}>
                                 <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
@@ -353,7 +362,9 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                                   actionIsValid(resource, action, true) ? (
                                     <PermissionToggle
                                       key={action}
-                                      isActive={actions.includes(action)}
+                                      isActive={resourcePermissions(resource, true).includes(
+                                        action
+                                      )}
                                       onToggle={() =>
                                         handleUpdateResourceAction(resource, action, true)
                                       }

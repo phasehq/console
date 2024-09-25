@@ -16,6 +16,7 @@ default_roles = {
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
             "Secrets": ["create", "read", "update", "delete"],
+            "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["create", "read", "update", "delete"],
             "Tokens": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
@@ -41,6 +42,7 @@ default_roles = {
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
             "Secrets": ["create", "read", "update", "delete"],
+            "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["create", "read", "update", "delete"],
             "Tokens": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
@@ -70,6 +72,7 @@ default_roles = {
         "app_permissions": {
             "Environments": ["read", "create", "update"],
             "Secrets": ["create", "read", "update", "delete"],
+            "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["read"],
             "Tokens": ["read", "create"],
             "Members": ["read"],
