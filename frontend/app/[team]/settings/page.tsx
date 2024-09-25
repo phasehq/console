@@ -26,15 +26,16 @@ export default function Settings({ params }: { params: { team: string } }) {
 
   const { data: session } = useSession()
 
-  const useCanManageOrg = activeOrganisation
-    ? userHasPermission(activeOrganisation.role?.permissions, 'Organisation', 'update') ||
-      userHasPermission(activeOrganisation.role?.permissions, 'Organisation', 'delete')
+  const useCanManageBilling = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'read') ||
+      userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'update') ||
+      userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'delete')
     : false
 
   const [tabIndex, setTabIndex] = useState(0)
 
   const tabList = [
-    ...(useCanManageOrg ? [{ name: 'Organisation' }] : []),
+    ...(useCanManageBilling ? [{ name: 'Organisation' }] : []),
     { name: 'Account' },
     { name: 'App' },
   ]
@@ -47,7 +48,7 @@ export default function Settings({ params }: { params: { team: string } }) {
 
     if (initialTabIndex !== -1) setTabIndex(initialTabIndex)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useCanManageOrg, searchParams])
+  }, [useCanManageBilling, searchParams])
 
   const updateTab = (index: number) => {
     const tab = tabList[index]
@@ -90,7 +91,7 @@ export default function Settings({ params }: { params: { team: string } }) {
 
           <Tab.Panels>
             <div className="max-h-[80vh] overflow-y-auto px-4">
-              {useCanManageOrg && (
+              {useCanManageBilling && (
                 <Tab.Panel>
                   <div className="space-y-10 py-4">
                     <div className="space-y-1">

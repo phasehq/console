@@ -399,7 +399,7 @@ class Query(graphene.ObjectType):
         if not user_has_permission(
             info.context.user, "read", "Apps", org_member.organisation
         ):
-            raise GraphQLError("You don't have access to read this resource")
+            raise GraphQLError("You don't have permission to read Apps")
 
         filter = {
             "organisation_id": organisation_id,
