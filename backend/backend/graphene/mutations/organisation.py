@@ -1,5 +1,9 @@
 from api.emails import send_invite_email, send_user_joined_email, send_welcome_email
-from api.utils.access.permissions import user_is_admin, user_is_org_member
+from api.utils.access.permissions import (
+    user_has_permission,
+    user_is_admin,
+    user_is_org_member,
+)
 from api.utils.access.roles import default_roles
 import graphene
 from graphql import GraphQLError
@@ -111,6 +115,9 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
 
         org = Organisation.objects.get(id=org_id)
 
+        if not user_has_permission(info.context.user, "create", "Members", org):
+            raise GraphQLError("You dont have permission to invite members")
+
         if user_is_org_member(info.context.user, org_id):
             user_already_exists = OrganisationMember.objects.filter(
                 organisation_id=org_id, user__email=email, deleted_at=None
@@ -164,6 +171,11 @@ class DeleteInviteMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, rooot, info, invite_id):
         invite = OrganisationMemberInvite.objects.get(id=invite_id)
+
+        if not user_has_permission(
+            info.context.user, "delete", "Members", invite.organisation
+        ):
+            raise GraphQLError("You dont have permission to delete invites")
 
         if user_is_org_member(info.context.user, invite.organisation.id):
             invite.delete()
@@ -249,6 +261,11 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
     def mutate(cls, root, info, member_id):
         org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
 
+        if not user_has_permission(
+            info.context.user, "delete", "Members", org_member.organisation
+        ):
+            raise GraphQLError("You dont have permission to remove members")
+
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
@@ -276,15 +293,17 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
     def mutate(cls, root, info, member_id, role_id):
         org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
 
+        if not user_has_permission(
+            info.context.user, "update", "Members", org_member.organisation
+        ):
+            raise GraphQLError("You dont have permission to change member roles")
+
         role = Role.objects.get(organisation=org_member.organisation, id=role_id)
 
-        if user_is_admin(info.context.user.userId, org_member.organisation.id):
-            if role.name.lower() == "owner":
-                raise GraphQLError("You cannot set this user as the organisation owner")
+        if role.name.lower() == "owner":
+            raise GraphQLError("You cannot set this user as the organisation owner")
 
-            org_member.role = role
-            org_member.save()
+        org_member.role = role
+        org_member.save()
 
-            return UpdateOrganisationMemberRole(org_member=org_member)
-        else:
-            raise GraphQLError("You don't have permission to perform this action")
+        return UpdateOrganisationMemberRole(org_member=org_member)

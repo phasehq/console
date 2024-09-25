@@ -26,7 +26,15 @@ import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, Transition } from '@headlessui/react'
-import { FaChevronDown, FaCopy, FaPlus, FaTimes, FaTrashAlt, FaUserAlt } from 'react-icons/fa'
+import {
+  FaBan,
+  FaChevronDown,
+  FaCopy,
+  FaPlus,
+  FaTimes,
+  FaTrashAlt,
+  FaUserAlt,
+} from 'react-icons/fa'
 import clsx from 'clsx'
 
 import { copyToClipBoard } from '@/utils/clipboard'
@@ -44,6 +52,8 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
+import { EmptyState } from '@/components/common/EmptyState'
+import Spinner from '@/components/common/Spinner'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -60,12 +70,18 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
 
+  const userCanUpdateMemberRoles = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Members', 'update') &&
+      userHasPermission(organisation.role!.permissions, 'Roles', 'read')
+    : false
+
   const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
     variables: { organisationId: organisation!.id },
   })
 
   const { data: roleData, loading: roleDataPending } = useQuery(GetRoles, {
     variables: { orgId: organisation!.id },
+    skip: !userCanUpdateMemberRoles,
   })
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
@@ -75,8 +91,6 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const [role, setRole] = useState<RoleType>(member.role!)
 
   const isOwner = role.name!.toLowerCase() === 'owner'
-
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
 
   /**
    * Handles the upgrade of a user from 'dev' to 'admin'.
@@ -175,9 +189,9 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
     }
   }
 
-  const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner')
+  const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner') || []
 
-  const disabled = isOwner || !activeUserIsAdmin || member.self!
+  const disabled = isOwner || !userCanUpdateMemberRoles || member.self!
 
   if (roleDataPending) return <></>
 
@@ -458,13 +472,21 @@ const InviteDialog = (props: { organisationId: string }) => {
 export default function Members({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const userCanInviteMembers = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Members', 'create')
+    : false
+
+  const userCanReadMembers = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Members', 'read')
+    : false
+
   const { data: membersData } = useQuery(GetOrganisationMembers, {
     variables: {
       organisationId: organisation?.id,
       role: null,
     },
     pollInterval: 5000,
-    skip: !organisation,
+    skip: !organisation || !userCanReadMembers,
   })
 
   const { data: invitesData } = useQuery(GetInvites, {
@@ -698,6 +720,13 @@ export default function Members({ params }: { params: { team: string } }) {
     )
   }
 
+  if (!organisation)
+    return (
+      <div className="flex items-center justify-center p-10">
+        <Spinner size="md" />
+      </div>
+    )
+
   return (
     <section className="overflow-y-auto h-full">
       <div className="w-full space-y-6 text-black dark:text-white">
@@ -706,103 +735,121 @@ export default function Members({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage organisation members and roles.</p>
         </div>
         <div className="Space-y-4">
-          <div className="flex justify-end">
-            {organisation && <InviteDialog organisationId={organisation.id} />}
-          </div>
+          {userCanInviteMembers && (
+            <div className="flex justify-end">
+              <InviteDialog organisationId={organisation!.id} />
+            </div>
+          )}
 
-          <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
-            <thead>
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  User
-                </th>
+          {userCanReadMembers ? (
+            <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+              <thead>
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    User
+                  </th>
 
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Joined
-                </th>
-                {activeUserCanDeleteUsers && <th className="px-6 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-500/40">
-              {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
-                <tr key={member.id}>
-                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                    <Avatar imagePath={member.avatarUrl!} size="lg" />
-                    <div className="flex flex-col">
-                      <span className="text-lg font-medium">{member.fullName || member.email}</span>
-                      {member.fullName && (
-                        <span className="text-neutral-500 text-sm">{member.email}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <RoleSelector member={member} />
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap capitalize">
-                    {relativeTimeFromDates(new Date(member.createdAt))}
-                  </td>
-                  <td className="px-6 py-4 flex items-center justify-end gap-2">
-                    {!member.self! &&
-                      activeUserCanDeleteUsers &&
-                      member.role!.name!.toLowerCase() !== 'owner' && (
-                        <DeleteMemberConfirmDialog member={member} />
-                      )}
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Joined
+                  </th>
+                  {activeUserCanDeleteUsers && <th className="px-6 py-3"></th>}
                 </tr>
-              ))}
-              {sortedInvites.map((invite: OrganisationMemberInviteType) => (
-                <tr key={invite.id} className="opacity-60">
-                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                    <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
-                      <FaUserAlt />
-                    </div>
-                    <div className="flex flex-col">
-                      <div className="text-base font-medium">
-                        {invite.inviteeEmail}{' '}
-                        <span className="text-neutral-500 text-sm">
-                          (invited by{' '}
-                          {invite.invitedBy.self
-                            ? 'You'
-                            : invite.invitedBy.fullName || invite.invitedBy.email}
-                          )
+              </thead>
+              <tbody className="divide-y divide-zinc-500/40">
+                {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
+                  <tr key={member.id}>
+                    <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                      <Avatar imagePath={member.avatarUrl!} size="lg" />
+                      <div className="flex flex-col">
+                        <span className="text-lg font-medium">
+                          {member.fullName || member.email}
                         </span>
+                        {member.fullName && (
+                          <span className="text-neutral-500 text-sm">{member.email}</span>
+                        )}
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap"></td>
-                  <td
-                    className={clsx(
-                      'px-6 py-4 whitespace-nowrap',
-                      inviteIsExpired(invite) && 'text-red-500'
-                    )}
-                  >
-                    {inviteIsExpired(invite)
-                      ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
-                      : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
-                  </td>
-                  <td className="px-6 py-4 flex items-center justify-end gap-2">
-                    {!inviteIsExpired(invite) && (
-                      <Button
-                        variant="outline"
-                        title="Copy invite link"
-                        onClick={() => handleCopy(getInviteLink(invite.id))}
-                      >
-                        <div className="p-1">
-                          <FaCopy />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <RoleSelector member={member} />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap capitalize">
+                      {relativeTimeFromDates(new Date(member.createdAt))}
+                    </td>
+                    <td className="px-6 py-4 flex items-center justify-end gap-2">
+                      {!member.self! &&
+                        activeUserCanDeleteUsers &&
+                        member.role!.name!.toLowerCase() !== 'owner' && (
+                          <DeleteMemberConfirmDialog member={member} />
+                        )}
+                    </td>
+                  </tr>
+                ))}
+                {sortedInvites.map((invite: OrganisationMemberInviteType) => (
+                  <tr key={invite.id} className="opacity-60">
+                    <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                      <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
+                        <FaUserAlt />
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="text-base font-medium">
+                          {invite.inviteeEmail}{' '}
+                          <span className="text-neutral-500 text-sm">
+                            (invited by{' '}
+                            {invite.invitedBy.self
+                              ? 'You'
+                              : invite.invitedBy.fullName || invite.invitedBy.email}
+                            )
+                          </span>
                         </div>
-                      </Button>
-                    )}
-                    <DeleteInviteConfirmDialog inviteId={invite.id} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap"></td>
+                    <td
+                      className={clsx(
+                        'px-6 py-4 whitespace-nowrap',
+                        inviteIsExpired(invite) && 'text-red-500'
+                      )}
+                    >
+                      {inviteIsExpired(invite)
+                        ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
+                        : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
+                    </td>
+                    <td className="px-6 py-4 flex items-center justify-end gap-2">
+                      {!inviteIsExpired(invite) && (
+                        <Button
+                          variant="outline"
+                          title="Copy invite link"
+                          onClick={() => handleCopy(getInviteLink(invite.id))}
+                        >
+                          <div className="p-1">
+                            <FaCopy />
+                          </div>
+                        </Button>
+                      )}
+                      <DeleteInviteConfirmDialog inviteId={invite.id} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState
+              title="Access restricted"
+              subtitle="You don't have the permissions required to view members in this organisation."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaBan />
+                </div>
+              }
+            >
+              <></>
+            </EmptyState>
+          )}
         </div>
       </div>
     </section>
