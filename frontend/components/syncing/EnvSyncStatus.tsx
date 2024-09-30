@@ -55,7 +55,7 @@ export const EnvSyncStatus = (props: {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="text-black dark:text-white font-medium text-lg flex items-center gap-2">
-                        <FaSync />
+                        <FaSync size={14} />
                         Syncs
                       </div>
                       <Link href={`/${team}/apps/${app}/syncing`}>
