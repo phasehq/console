@@ -86,7 +86,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   }, [keyring, pathname])
 
   useEffect(() => {
-    if (organisation) reset()
+    if (organisation.id) reset()
 
     const devicePassword = getDevicePassword(organisation.memberId!)
 
@@ -96,7 +96,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
       decryptKeyring(devicePassword)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisation])
+  }, [organisation.id])
 
   const closeModal = () => {
     setIsOpen(false)
@@ -123,7 +123,6 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
         autoClose: 2000,
       },
     })
-    decryptKeyring(password)
   }
 
   return (

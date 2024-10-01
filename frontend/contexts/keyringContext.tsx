@@ -23,7 +23,7 @@ export const KeyringProvider: React.FC<KeyringProviderProps> = ({ children }) =>
 
   useEffect(() => {
     setKeyring(null)
-  }, [activeOrganisation])
+  }, [activeOrganisation?.id])
 
   return (
     <KeyringContext.Provider value={{ keyring, setKeyring }}>{children}</KeyringContext.Provider>
