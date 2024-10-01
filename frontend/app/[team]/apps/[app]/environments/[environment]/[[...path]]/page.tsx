@@ -98,6 +98,12 @@ export default function EnvironmentPath({
     'read',
     true
   )
+  const userCanReadSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'read',
+    true
+  )
 
   const [readSecrets] = useMutation(LogSecretReads)
 
@@ -737,25 +743,35 @@ export default function EnvironmentPath({
     )
   }
 
-  const NewSecretMenu = () => (
-    <SplitButton
-      variant="primary"
-      onClick={() => handleAddSecret(true)}
-      menuContent={
-        <div className="w-max">
-          <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
-            <div className="flex items-center gap-2">
-              <FaFolderPlus /> New Folder
-            </div>
-          </Button>
-        </div>
-      }
-    >
-      <FaPlus /> New Secret
-    </SplitButton>
-  )
+  const NewSecretMenu = () => {
+    const userCanCreateSecrets = userHasPermission(
+      organisation?.role?.permissions,
+      'Secrets',
+      'create',
+      true
+    )
 
-  if (loading)
+    if (!userCanCreateSecrets) return <></>
+    return (
+      <SplitButton
+        variant="primary"
+        onClick={() => handleAddSecret(true)}
+        menuContent={
+          <div className="w-max">
+            <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
+              <div className="flex items-center gap-2">
+                <FaFolderPlus /> New Folder
+              </div>
+            </Button>
+          </div>
+        }
+      >
+        <FaPlus /> New Secret
+      </SplitButton>
+    )
+  }
+
+  if (loading || !organisation)
     return (
       <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
         <Spinner size="md" />
@@ -892,7 +908,7 @@ export default function EnvironmentPath({
                   </Button>
                 )}
 
-                {data.envSyncs && (
+                {data.envSyncs && userCanReadSyncs && (
                   <div>
                     <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
                   </div>
