@@ -449,6 +449,15 @@ class Query(graphene.ObjectType):
         return app.members.filter(deleted_at=None)
 
     def resolve_secrets(root, info, env_id, path=None):
+
+        org = Environment.objects.get(id=env_id).app.organisation
+        if not user_has_permission(
+            info.context.user, "read", "Secrets", org, True
+        ) or not user_has_permission(
+            info.context.user, "read", "Environments", org, True
+        ):
+            raise GraphQLError("You don't have access to read secrets")
+
         if not user_can_access_environment(info.context.user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
 

@@ -21,11 +21,20 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const allowRename = organisation?.plan !== ApiOrganisationPlanChoices.Fr
+  const userCanUpdateEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'update',
+    true
+  )
+
+  const allowRename =
+    organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
 
   const [name, setName] = useState(props.environment?.name || '')
 
@@ -51,7 +60,9 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
       <Alert variant="info" size="sm">
         {allowRename
           ? 'Changing the name of this Environment will affect how you construct references to secrets.'
-          : 'Upgrade to Pro to rename Environments'}
+          : ApiOrganisationPlanChoices.Fr
+            ? 'Upgrade to Pro to rename Environments'
+            : "You don't have the permissions required to rename this Environment"}
       </Alert>
       <Input
         value={name}
@@ -74,6 +85,13 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
 const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const userCanDeleteEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'delete',
+    true
+  )
+
   const planDisplay = {
     planName: 'Free',
     dialogTitle: 'Upgrade to Pro',
@@ -91,7 +109,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     setIsOpen(true)
   }
 
-  const allowDelete = organisation?.plan !== ApiOrganisationPlanChoices.Fr
+  const allowedByPlan = organisation?.plan !== ApiOrganisationPlanChoices.Fr
 
   const [deleteEnvironment, { loading }] = useMutation(DeleteEnv)
 
@@ -108,7 +126,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     closeModal()
   }
 
-  if (!allowDelete)
+  if (!allowedByPlan)
     return (
       <div className="flex justify-end pt-4">
         <UpsellDialog
@@ -122,6 +140,9 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
         />
       </div>
     )
+
+  if (!userCanDeleteEnvironments) return <></>
+
   return (
     <div className="space-y-4 pt-4">
       <div>

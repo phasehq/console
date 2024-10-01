@@ -19,6 +19,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 
 import {
   FaArrowRight,
+  FaBan,
   FaCheckCircle,
   FaChevronRight,
   FaCircle,
@@ -39,7 +40,7 @@ import clsx from 'clsx'
 import { Disclosure, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
-import { userIsAdmin } from '@/utils/access/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import { Card } from '@/components/common/Card'
 import { BsListColumnsReverse } from 'react-icons/bs'
@@ -47,6 +48,7 @@ import { unwrapEnvSecretsForUser, decryptEnvSecretKVs, createNewEnv } from '@/ut
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
 import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
 import { SwapEnvOrder } from '@/graphql/mutations/environments/swapEnvironmentOrder.gql'
+import { EmptyState } from '@/components/common/EmptyState'
 
 type EnvSecrets = {
   env: EnvironmentType
@@ -77,7 +79,22 @@ type AppFolder = {
 const Environments = (props: { environments: EnvironmentType[]; appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const allowReordering = organisation?.plan !== ApiOrganisationPlanChoices.Fr
+  const userCanCreateEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'create',
+    true
+  )
+
+  const userCanUpdateEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'update',
+    true
+  )
+
+  const allowReordering =
+    organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
 
   const { environments, appId } = props
 
@@ -152,13 +169,15 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
           </div>
         </Card>
       ))}
-      <Card>
-        <div className="flex flex-col w-full h-full">
-          <div className="mx-auto my-auto">
-            <CreateEnvironmentDialog appId={appId} />
+      {userCanCreateEnvironments && (
+        <Card>
+          <div className="flex flex-col w-full h-full">
+            <div className="mx-auto my-auto">
+              <CreateEnvironmentDialog appId={appId} />
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
     </div>
   )
 }
@@ -166,18 +185,35 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const userCanReadEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'read',
+    true
+  )
+  const userCanReadSecrets = userHasPermission(
+    organisation?.role?.permissions,
+    'Secrets',
+    'read',
+    true
+  )
+  const userCanReadMembers = userHasPermission(organisation?.role?.permissions, 'Members', 'read')
+
   const { data } = useQuery(GetAppEnvironments, {
     variables: {
       appId: params.app,
     },
     fetchPolicy: 'cache-and-network',
+    skip: !userCanReadEnvironments,
   })
+
   const { data: orgAdminsData } = useQuery(GetGlobalAccessUsers, {
     variables: {
       organisationId: organisation?.id,
     },
-    skip: !organisation,
+    skip: !organisation || !userCanReadMembers,
   })
+
   const pathname = usePathname()
 
   const [getEnvSecrets] = useLazyQuery(GetEnvSecretsKV)
@@ -187,7 +223,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   const { keyring } = useContext(KeyringContext)
 
@@ -211,6 +247,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   useEffect(() => {
     const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {
+      setLoading(true)
       const envSecrets = [] as EnvSecrets[]
       const envFolders = [] as EnvFolders[]
 
@@ -271,7 +308,8 @@ export default function Secrets({ params }: { params: { team: string; app: strin
       setLoading(false)
     }
 
-    if (keyring !== null && data?.appEnvironments) fetchAndDecryptAppEnvs(data?.appEnvironments)
+    if (keyring !== null && data?.appEnvironments && userCanReadSecrets)
+      fetchAndDecryptAppEnvs(data?.appEnvironments)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.appEnvironments, keyring])
 
@@ -654,9 +692,23 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             <div className="space-y-2">
               <div className="space-y-1">
                 <h1 className="h3 font-semibold text-2xl">Environments</h1>
-                <p className="text-neutral-500">
-                  You have access to {data?.appEnvironments.length} Environments in this App.
-                </p>
+                {userCanReadEnvironments ? (
+                  <p className="text-neutral-500">
+                    You have access to {data?.appEnvironments.length} Environments in this App.
+                  </p>
+                ) : (
+                  <EmptyState
+                    title="Access restricted"
+                    subtitle="You don't have the permissions required to view Environments in this app."
+                    graphic={
+                      <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                        <FaBan />
+                      </div>
+                    }
+                  >
+                    <></>
+                  </EmptyState>
+                )}
               </div>
             </div>
 
@@ -754,7 +806,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               <div className="w-full flex justify-center py-80">
                 <Spinner size="xl" />
               </div>
-            ) : (
+            ) : userCanReadEnvironments && userCanReadSecrets ? (
               <div className="flex flex-col items-center py-40 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
                 <div className="font-semibold text-black dark:text-white text-2xl">No Secrets</div>
                 <div className="text-neutral-500">
@@ -776,6 +828,18 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                   ))}
                 </div>
               </div>
+            ) : (
+              <EmptyState
+                title="Access restricted"
+                subtitle="You don't have the permissions required to view Secrets in this app."
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <FaBan />
+                  </div>
+                }
+              >
+                <></>
+              </EmptyState>
             )}
           </section>
         ))}
