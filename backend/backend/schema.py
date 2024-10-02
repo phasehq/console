@@ -596,9 +596,14 @@ class Query(graphene.ObjectType):
         start_dt = datetime.fromtimestamp(start / 1000)
         end_dt = datetime.fromtimestamp(end / 1000)
 
-        secret_events = SecretEvent.objects.filter(
-            environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
-        ).order_by("-timestamp")[:25]
+        if user_has_permission(
+            info.context.user, "read", "Logs", app.organisation, True
+        ):
+            secret_events = SecretEvent.objects.filter(
+                environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
+            ).order_by("-timestamp")[:25]
+        else:
+            secret_events = []
 
         return LogsResponseType(kms=kms_logs, secrets=secret_events)
 
