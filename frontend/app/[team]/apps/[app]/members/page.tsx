@@ -60,8 +60,6 @@ export default function Members({ params }: { params: { team: string; app: strin
       userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
     : false
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
-
   const { data, loading } = useQuery(GetAppMembers, {
     variables: { appId: params.app },
     skip: !userCanReadAppMembers,

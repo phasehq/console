@@ -442,6 +442,8 @@ class Query(graphene.ObjectType):
         ]
 
     def resolve_app_users(root, info, app_id):
+        app = App.objects.get(id=app_id)
+
         if not user_has_permission(
             info.context.user, "read", "Members", app.organisation, True
         ):
@@ -450,7 +452,6 @@ class Query(graphene.ObjectType):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
-        app = App.objects.get(id=app_id)
         return app.members.filter(deleted_at=None)
 
     def resolve_secrets(root, info, env_id, path=None):

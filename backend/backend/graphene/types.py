@@ -1,5 +1,6 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import get_credentials
+from api.utils.access.permissions import user_has_permission
 from backend.quotas import PLAN_CONFIG
 import graphene
 from enum import Enum
@@ -508,6 +509,23 @@ class SecretEventType(DjangoObjectType):
             "environment",
             "path",
         )
+
+    def resolve_user(self, info):
+        # Resolve if the user has either Org or App member read permissions
+        if user_has_permission(
+            info.context.user,
+            "read",
+            "Members",
+            self.secret.environment.app.organisation,
+            True,
+        ) or user_has_permission(
+            info.context.user,
+            "read",
+            "Members",
+            self.secret.environment.app.organisation,
+            False,
+        ):
+            return self.user
 
 
 class PersonalSecretType(DjangoObjectType):
