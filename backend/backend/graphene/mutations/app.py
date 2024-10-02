@@ -166,6 +166,11 @@ class AddAppMemberMutation(graphene.Mutation):
         user = info.context.user
         app = App.objects.get(id=app_id)
 
+        if not user_has_permission(
+            info.context.user, "create", "Members", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to add members to this App")
+
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
@@ -199,6 +204,13 @@ class RemoveAppMemberMutation(graphene.Mutation):
     def mutate(cls, root, info, member_id, app_id):
         user = info.context.user
         app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "delete", "Members", app.organisation, True
+        ):
+            raise GraphQLError(
+                "You don't have permission to remove members from this App"
+            )
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")

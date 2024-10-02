@@ -442,6 +442,11 @@ class Query(graphene.ObjectType):
         ]
 
     def resolve_app_users(root, info, app_id):
+        if not user_has_permission(
+            info.context.user, "read", "Members", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to read members of this App")
+
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 

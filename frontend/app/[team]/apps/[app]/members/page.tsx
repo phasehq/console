@@ -15,6 +15,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
 import {
+  FaBan,
   FaCheckSquare,
   FaChevronDown,
   FaPlus,
@@ -28,19 +29,43 @@ import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasGlobalAccess, userIsAdmin } from '@/utils/access/permissions'
+import { userHasGlobalAccess, userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
+import { EmptyState } from '@/components/common/EmptyState'
+import Spinner from '@/components/common/Spinner'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
-  const { data } = useQuery(GetAppMembers, { variables: { appId: params.app } })
-
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  // Permissions
+  const userCanReadAppMembers = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'read', true)
+    : false
+
+  // AppMembers:create + OrgMembers: read
+  const userCanAddAppMembers = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'create', true) &&
+      userHasPermission(organisation?.role?.permissions, 'Members', 'read')
+    : false
+  const userCanRemoveAppMembers = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'delete', true)
+    : false
+  // AppMembers:update + Environments:read
+  const userCanUpdateMemberAccess = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'update', true) &&
+      userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
+    : false
+
   const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
+
+  const { data, loading } = useQuery(GetAppMembers, {
+    variables: { appId: params.app },
+    skip: !userCanReadAppMembers,
+  })
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
@@ -52,7 +77,7 @@ export default function Members({ params }: { params: { team: string; app: strin
         organisationId: organisation?.id,
         role: null,
       },
-      skip: !organisation,
+      skip: !organisation || !userCanAddAppMembers,
     })
 
     const memberOptions =
@@ -69,6 +94,7 @@ export default function Members({ params }: { params: { team: string; app: strin
       variables: {
         appId: params.app,
       },
+      skip: !userCanAddAppMembers,
     })
 
     const envOptions =
@@ -781,61 +807,92 @@ export default function Members({ params }: { params: { team: string; app: strin
     )
   }
 
+  if (!organisation || loading)
+    return (
+      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
+        <Spinner size="md" />
+      </div>
+    )
+
   return (
     <div className="w-full space-y-10 pt-8 text-black dark:text-white">
-      <div className="space-y-4">
-        <div className="flex justify-end">
-          <AddMemberDialog />
-        </div>
+      {userCanReadAppMembers ? (
+        <div className="space-y-4">
+          {userCanAddAppMembers && (
+            <div className="flex justify-end">
+              <AddMemberDialog />
+            </div>
+          )}
 
-        <table className="table-auto min-w-full divide-y divide-zinc-500/40">
-          <thead>
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                User
-              </th>
+          <table className="table-auto min-w-full divide-y divide-zinc-500/40">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  User
+                </th>
 
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Joined
-              </th>
-              {activeUserIsAdmin && <th className="px-6 py-3"></th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-500/40">
-            {data?.appUsers.map((member: OrganisationMemberType) => (
-              <tr className="group" key={member.id}>
-                <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                  <Avatar imagePath={member.avatarUrl!} size="lg" />
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg font-medium">{member.fullName || member.email}</span>
-                      <RoleLabel role={member.role!} />
-                    </div>
-                    {member.fullName && (
-                      <span className="text-neutral-500 text-sm">{member.email}</span>
-                    )}
-                  </div>
-                </td>
-
-                <td className="px-6 py-4 whitespace-nowrap capitalize">
-                  {relativeTimeFromDates(new Date(member.createdAt))}
-                </td>
-                {activeUserIsAdmin && (
-                  <td className="px-6 py-4">
-                    {member.email !== session?.user?.email &&
-                      member.role!.name!.toLowerCase() !== 'owner' && (
-                        <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
-                          <ManageUserAccessDialog member={member} />
-                          <RemoveMemberConfirmDialog member={member} />
-                        </div>
-                      )}
-                  </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Joined
+                </th>
+                {(userCanRemoveAppMembers || userCanUpdateMemberAccess) && (
+                  <th className="px-6 py-3"></th>
                 )}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-zinc-500/40">
+              {data?.appUsers.map((member: OrganisationMemberType) => (
+                <tr className="group" key={member.id}>
+                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                    <Avatar imagePath={member.avatarUrl!} size="lg" />
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-medium">
+                          {member.fullName || member.email}
+                        </span>
+                        <RoleLabel role={member.role!} />
+                      </div>
+                      {member.fullName && (
+                        <span className="text-neutral-500 text-sm">{member.email}</span>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-6 py-4 whitespace-nowrap capitalize">
+                    {relativeTimeFromDates(new Date(member.createdAt))}
+                  </td>
+                  {(userCanRemoveAppMembers || userCanUpdateMemberAccess) && (
+                    <td className="px-6 py-4">
+                      {member.email !== session?.user?.email &&
+                        member.role!.name!.toLowerCase() !== 'owner' && (
+                          <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
+                            {userCanUpdateMemberAccess && (
+                              <ManageUserAccessDialog member={member} />
+                            )}
+                            {userCanRemoveAppMembers && (
+                              <RemoveMemberConfirmDialog member={member} />
+                            )}
+                          </div>
+                        )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyState
+          title="Access restricted"
+          subtitle="You don't have the permissions required to view Members in this app."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBan />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
+      )}
     </div>
   )
 }
