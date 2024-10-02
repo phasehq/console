@@ -549,8 +549,10 @@ class Query(graphene.ObjectType):
 
     def resolve_service_tokens(root, info, app_id):
         app = App.objects.get(id=app_id)
-        if not user_is_org_member(info.context.user.userId, app.organisation.id):
-            raise GraphQLError("You don't have access to this organisation")
+        if not user_has_permission(
+            info.context.user, "read", "Tokens", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to view Tokens in this App")
 
         return ServiceToken.objects.filter(app=app, deleted_at=None)
 

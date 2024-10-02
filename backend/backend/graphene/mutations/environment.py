@@ -501,43 +501,47 @@ class CreateServiceTokenMutation(graphene.Mutation):
         user = info.context.user
         app = App.objects.get(id=app_id)
 
-        if user_is_org_member(user.userId, app.organisation.id):
-            org_member = OrganisationMember.objects.get(
-                organisation_id=app.organisation.id,
-                user_id=user.userId,
-                deleted_at=None,
-            )
+        if not user_has_permission(
+            info.context.user, "create", "Tokens", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to create Tokens in this App")
 
-            env_keys = EnvironmentKey.objects.bulk_create(
-                [
-                    EnvironmentKey(
-                        environment_id=key.env_id,
-                        identity_key=key.identity_key,
-                        wrapped_seed=key.wrapped_seed,
-                        wrapped_salt=key.wrapped_salt,
-                    )
-                    for key in environment_keys
-                ]
-            )
+        org_member = OrganisationMember.objects.get(
+            organisation_id=app.organisation.id,
+            user_id=user.userId,
+            deleted_at=None,
+        )
 
-            if expiry is not None:
-                expires_at = datetime.fromtimestamp(expiry / 1000)
-            else:
-                expires_at = None
+        env_keys = EnvironmentKey.objects.bulk_create(
+            [
+                EnvironmentKey(
+                    environment_id=key.env_id,
+                    identity_key=key.identity_key,
+                    wrapped_seed=key.wrapped_seed,
+                    wrapped_salt=key.wrapped_salt,
+                )
+                for key in environment_keys
+            ]
+        )
 
-            service_token = ServiceToken.objects.create(
-                app=app,
-                identity_key=identity_key,
-                token=token,
-                wrapped_key_share=wrapped_key_share,
-                name=name,
-                created_by=org_member,
-                expires_at=expires_at,
-            )
+        if expiry is not None:
+            expires_at = datetime.fromtimestamp(expiry / 1000)
+        else:
+            expires_at = None
 
-            service_token.keys.set(env_keys)
+        service_token = ServiceToken.objects.create(
+            app=app,
+            identity_key=identity_key,
+            token=token,
+            wrapped_key_share=wrapped_key_share,
+            name=name,
+            created_by=org_member,
+            expires_at=expires_at,
+        )
 
-            return CreateServiceTokenMutation(service_token=service_token)
+        service_token.keys.set(env_keys)
+
+        return CreateServiceTokenMutation(service_token=service_token)
 
 
 class DeleteServiceTokenMutation(graphene.Mutation):
@@ -552,13 +556,13 @@ class DeleteServiceTokenMutation(graphene.Mutation):
         token = ServiceToken.objects.get(id=token_id)
         org = token.app.organisation
 
-        if user_is_org_member(user.userId, org.id):
-            token.deleted_at = timezone.now()
-            token.save()
+        if not user_has_permission(info.context.user, "delete", "Tokens", org, True):
+            raise GraphQLError("You don't have permission to delete Tokens in this App")
 
-            return DeleteServiceTokenMutation(ok=True)
-        else:
-            raise GraphQLError("You don't have permission to perform this action")
+        token.deleted_at = timezone.now()
+        token.save()
+
+        return DeleteServiceTokenMutation(ok=True)
 
 
 class CreateSecretFolderMutation(graphene.Mutation):
