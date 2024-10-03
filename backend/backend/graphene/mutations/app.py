@@ -48,7 +48,7 @@ class CreateAppMutation(graphene.Mutation):
         if not user_is_org_member(user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
 
-        if not user_has_permission(info.context.user, "create", "Apps"):
+        if not user_has_permission(info.context.user, "create", "Apps", org):
             raise GraphQLError("You don't have permission to create Apps")
 
         if App.objects.filter(identity_key=identity_key).exists():
@@ -131,7 +131,9 @@ class DeleteAppMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        if not user_has_permission(info.context.user, "delete", "Apps"):
+        if not user_has_permission(
+            info.context.user, "delete", "Apps", app.organisation
+        ):
             raise GraphQLError("You don't have permission to delete Apps")
 
         if CLOUD_HOSTED:
