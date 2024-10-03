@@ -395,7 +395,11 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
               </div>
             </div>
             <div className="flex justify-start items-center gap-2 pt-4">
-              <ToggleSwitch value={rolePolicy!.global_access} onToggle={handleToggleGlobalAccess} />
+              <ToggleSwitch
+                value={rolePolicy!.global_access}
+                onToggle={handleToggleGlobalAccess}
+                disabled={!allowEdit}
+              />
             </div>
           </div>
         </div>
