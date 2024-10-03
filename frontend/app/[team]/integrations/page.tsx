@@ -32,11 +32,11 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
   // permissions
   const userCanReadIntegrationCredentials = organisation
-    ? userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'read', false)
+    ? userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'read')
     : false
 
   const userCanCreateIntegrationsCredentials = organisation
-    ? userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'create', false)
+    ? userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'create')
     : false
 
   const userCanReadIntegrations = organisation
@@ -45,6 +45,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
   const userCanCreateIntegrations = organisation
     ? userHasPermission(organisation.role?.permissions, 'Integrations', 'read', true)
+    : false
+  const userCanReadApps = organisation
+    ? userHasPermission(organisation.role?.permissions, 'Apps', 'read')
     : false
 
   const searchParams = useSearchParams()
@@ -60,7 +63,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
   const { data, loading } = useQuery(GetOrganisationSyncs, {
     variables: { orgId: organisation?.id },
     pollInterval: 10000,
-    skip: !organisation || (!userCanReadIntegrationCredentials && !userCanReadIntegrations),
+    skip:
+      !organisation ||
+      (!userCanReadIntegrationCredentials && !userCanReadIntegrations && !userCanReadApps),
   })
 
   const apps = data?.apps ?? []
