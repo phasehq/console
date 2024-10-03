@@ -27,17 +27,17 @@ export default function AppsHome({ params }: { params: { team: string } }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-8">
               {organisation && (
                 <Link href={`/${params.team}/apps`}>
-                  <AppsHomeCard organisationId={organisation.id} />
+                  <AppsHomeCard organisation={organisation} />
                 </Link>
               )}
               {organisation && (
                 <Link href={`/${params.team}/members`}>
-                  <MembersHomeCard organisationId={organisation.id} />
+                  <MembersHomeCard organisation={organisation} />
                 </Link>
               )}
               {organisation && (
                 <Link href={`/${params.team}/integrations`}>
-                  <IntegrationsHomeCard organisationId={organisation.id} />
+                  <IntegrationsHomeCard organisation={organisation} />
                 </Link>
               )}
             </div>

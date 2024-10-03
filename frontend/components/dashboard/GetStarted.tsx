@@ -1,6 +1,6 @@
-import { Disclosure, Menu, Transition } from '@headlessui/react'
+import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { Fragment, ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import {
   FaArrowRight,
   FaCheckCircle,
@@ -12,7 +12,6 @@ import {
   FaRegDotCircle,
   FaSlack,
 } from 'react-icons/fa'
-import { TbPackages } from 'react-icons/tb'
 import { PiMonitorDuotone, PiMagicWandFill, PiTerminalWindow } from 'react-icons/pi'
 import { GetDashboard } from '@/graphql/queries/getDashboard.gql'
 import { useQuery } from '@apollo/client'
@@ -22,9 +21,8 @@ import { Button } from '../common/Button'
 import { CliInstallCommands } from './CliInstallCommands'
 import Spinner from '../common/Spinner'
 import { Card } from '../common/Card'
-import { SiGithub, SiSlack, SiX } from 'react-icons/si'
-import { RoleLabel } from '../users/RoleLabel'
 import { CliCommand } from './CliCommand'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const TaskPanel = (props: {
   title: string
@@ -115,8 +113,26 @@ const TaskPanel = (props: {
 export const GetStarted = (props: { organisation: OrganisationType }) => {
   const { organisation } = props
 
+  // Permissions
+  const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
+  const userCanReadMembers = userHasPermission(organisation?.role?.permissions, 'Members', 'read')
+  const userCanReadCredentials = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'read'
+  )
+  const userCanReadSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'read'
+  )
+
+  const hasPermissionsForGuide =
+    userCanReadApps && userCanReadMembers && userCanReadCredentials && userCanReadSyncs
+
   const { data, loading } = useQuery(GetDashboard, {
     variables: { organisationId: organisation.id },
+    skip: !hasPermissionsForGuide,
   })
 
   const [showGuide, setShowGuide] = useState(true)
