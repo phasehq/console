@@ -31,7 +31,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                 </Link>
               )}
               {organisation && (
-                <Link href={`/${params.team}/members`}>
+                <Link href={`/${params.team}/access/members`}>
                   <MembersHomeCard organisation={organisation} />
                 </Link>
               )}
