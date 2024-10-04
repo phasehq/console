@@ -40,7 +40,7 @@ import clsx from 'clsx'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
-import { userIsAdmin } from '@/utils/access/permissions'
+import { userHasGlobalAccess, userIsAdmin } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 
@@ -70,13 +70,16 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
 
+  const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
+
   const userCanUpdateMemberRoles = organisation
     ? userHasPermission(organisation.role!.permissions, 'Members', 'update') &&
       userHasPermission(organisation.role!.permissions, 'Roles', 'read')
     : false
 
-  const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
+  const { data: appsData } = useQuery(GetApps, {
     variables: { organisationId: organisation!.id },
+    skip: !userCanReadApps,
   })
 
   const { data: roleData, loading: roleDataPending } = useQuery(GetRoles, {
@@ -93,23 +96,25 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const isOwner = role.name!.toLowerCase() === 'owner'
 
   /**
-   * Handles the upgrade of a user from 'dev' to 'admin'.
+   * Handles the assignment of a user to a global access role.
    * Env keys for all apps, are fetched and decrypted by the active user, then each key is re-encrypted for the new user and saved on the backend via the addMemberToApp mutation
    *
    * @returns {void}
    */
-  const upgradeDevToAdmin = () => {
+  const assignGlobalAccess = () => {
     if (appsData) {
       const apps = appsData.apps
 
       // Function to process an individual app
       const processApp = async (app: AppType) => {
-        //const keyring = await validateKeyring(password);
+        // fetch envs for the app
         const { data: appEnvsData } = await getAppEnvs({ variables: { appId: app.id } })
 
         const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
+        // construct promises to encrypt each env key for the target user
         const envKeyPromises = appEnvironments.map(async (env: EnvironmentType) => {
+          // fetch the current wrapped key for the environment
           const { data } = await getEnvKey({
             variables: {
               envId: env.id,
@@ -123,14 +128,17 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
             identityKey,
           } = data.environmentKeys[0]
 
+          // unwrap env keys for current logged in user
           const { seed, salt } = await unwrapEnvSecretsForUser(
             userWrappedSeed,
             userWrappedSalt,
             keyring!
           )
 
+          // re-encrypt the env key for the target user
           const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForUser({ seed, salt }, member)
 
+          // resolve the promise with the mutation payload
           return {
             envId: env.id,
             userId: member.id,
@@ -140,8 +148,10 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
           }
         })
 
+        // get mutation payloads with wrapped keys for each environment
         const envKeyInputs = await Promise.all(envKeyPromises)
 
+        // add the user to this app, with wrapped keys for each environment
         await addMemberToApp({
           variables: { memberId: member.id, appId: app.id, envKeys: envKeyInputs },
         })
@@ -176,8 +186,27 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   }
 
   const handleUpdateRole = async (newRole: RoleType) => {
+    const newRoleHasGlobalAccess = userHasGlobalAccess(newRole.permissions)
+    const currentUserHasGlobalAccess = userHasGlobalAccess(organisation?.role?.permissions)
+
+    if (newRoleHasGlobalAccess && !currentUserHasGlobalAccess) {
+      toast.error('You cannot assign users to this role as it requires global access!', {
+        autoClose: 5000,
+      })
+      return false
+    }
+
+    if (newRoleHasGlobalAccess && !userCanReadApps) {
+      toast.error(
+        'You are missing the required "Apps:read" permissions and cannot assign this user to a role with global access!',
+        { autoClose: 5000 }
+      )
+      return false
+    }
+
     setRole(newRole)
-    if (newRole.name!.toLowerCase() === 'admin') upgradeDevToAdmin()
+
+    if (newRoleHasGlobalAccess) assignGlobalAccess()
     else {
       await updateRole({
         variables: {
