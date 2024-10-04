@@ -227,7 +227,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   return disabled ? (
     <RoleLabel role={role} />
   ) : (
-    <div className="space-y-1 w-full relative">
+    <div className="space-y-1 w-full">
       <Listbox disabled={disabled} value={role} onChange={handleUpdateRole}>
         {({ open }) => (
           <>
@@ -249,7 +249,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
                 )}
               </div>
             </Listbox.Button>
-            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full focus:outline-none">
+            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none">
               {roleOptions.map((role: RoleType) => (
                 <Listbox.Option key={role.name} value={role} as={Fragment}>
                   {({ active, selected }) => (
