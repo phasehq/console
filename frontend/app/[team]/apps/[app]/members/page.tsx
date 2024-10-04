@@ -240,7 +240,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                             users from the{' '}
                             <Link
                               className="font-semibold hover:underline"
-                              href={`/${params.team}/members`}
+                              href={`/${params.team}/access/members`}
                             >
                               organisation members
                             </Link>{' '}
