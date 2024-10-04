@@ -65,7 +65,7 @@ export default function Settings({ params }: { params: { team: string } }) {
     )
 
   return (
-    <section className="w-full max-w-screen-lg mx-auto py-8 text-black dark:text-white">
+    <section className="w-full max-w-screen-lg mx-auto py-8 px-4 text-black dark:text-white">
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
