@@ -43,18 +43,12 @@ export default function SecretRow(props: {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // Permissions
-  const userCanUpdateSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'update',
-    true
-  )
-  const userCanDeleteSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'delete',
-    true
-  )
+  const userCanUpdateSecrets =
+    userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
+    !cannonicalSecret
+  const userCanDeleteSecrets =
+    userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
+    !cannonicalSecret
 
   const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
 
@@ -168,6 +162,7 @@ export default function SecretRow(props: {
               secretId={secret.id}
               tags={secret.tags}
               handlePropertyChange={handlePropertyChange}
+              disabled={!userCanUpdateSecrets}
             />
           </div>
         </div>
