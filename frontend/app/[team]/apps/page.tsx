@@ -11,6 +11,8 @@ import { AppCard } from '@/components/apps/AppCard'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
+import { EmptyState } from '@/components/common/EmptyState'
+import { FaBan } from 'react-icons/fa'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -45,18 +47,32 @@ export default function AppsHome({ params }: { params: { team: string } }) {
       style={{ height: 'calc(100vh - 64px)' }}
     >
       <h1 className="text-3xl font-bold capitalize col-span-4">Apps</h1>
-      <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-8">
-        {apps?.map((app) => (
-          <Link href={`/${params.team}/apps/${app.id}`} key={app.id}>
-            <AppCard app={app} />
-          </Link>
-        ))}
-        {organisation && apps && userCanCreateApps && (
-          <div className="bg-zinc-100 dark:bg-neutral-800 opacity-80 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl flex flex-col gap-y-20 min-h-60">
-            <NewAppDialog organisation={organisation} appCount={apps.length} ref={dialogRef} />
-          </div>
-        )}
-      </div>
+      {userCanViewApps ? (
+        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-8">
+          {apps?.map((app) => (
+            <Link href={`/${params.team}/apps/${app.id}`} key={app.id}>
+              <AppCard app={app} />
+            </Link>
+          ))}
+          {organisation && apps && userCanCreateApps && (
+            <div className="bg-zinc-100 dark:bg-neutral-800 opacity-80 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl flex flex-col gap-y-20 min-h-60">
+              <NewAppDialog organisation={organisation} appCount={apps.length} ref={dialogRef} />
+            </div>
+          )}
+        </div>
+      ) : (
+        <EmptyState
+          title="Access restricted"
+          subtitle="You don't have the permissions required to view Apps in this organisation."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBan />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
+      )}
       {loading && (
         <div className="mx-auto my-auto">
           <Spinner size="xl" />
