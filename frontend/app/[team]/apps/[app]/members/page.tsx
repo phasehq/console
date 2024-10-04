@@ -45,6 +45,9 @@ export default function Members({ params }: { params: { team: string; app: strin
   const userCanReadAppMembers = organisation
     ? userHasPermission(organisation?.role?.permissions, 'Members', 'read', true)
     : false
+  const userCanReadEnvironments = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
+    : false
 
   // AppMembers:create + OrgMembers: read
   const userCanAddAppMembers = organisation
@@ -92,7 +95,7 @@ export default function Members({ params }: { params: { team: string; app: strin
       variables: {
         appId: params.app,
       },
-      skip: !userCanAddAppMembers,
+      skip: !userCanReadEnvironments,
     })
 
     const envOptions =
@@ -317,88 +320,99 @@ export default function Members({ params }: { params: { team: string; app: strin
                           )}
                         </Combobox>
 
-                        <div className="space-y-1 w-full relative pb-8">
-                          {envScope.length === 0 && showEnvHint && (
-                            <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
-                              Select an environment scope
-                            </span>
-                          )}
-                          <Listbox
-                            value={envScope}
-                            by="id"
-                            onChange={setEnvScope}
-                            multiple
-                            name="environments"
-                          >
-                            {({ open }) => (
-                              <>
-                                <Listbox.Label as={Fragment}>
-                                  <label
-                                    className="block text-gray-700 text-sm font-bold mb-2"
-                                    htmlFor="name"
-                                  >
-                                    Environment scope
-                                  </label>
-                                </Listbox.Label>
-                                <Listbox.Button as={Fragment} aria-required>
-                                  <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
-                                    <span className="text-black dark:text-white">
-                                      {envScope
-                                        .map((env: Partial<EnvironmentType>) => env.name)
-                                        .join(' + ')}
-                                    </span>
-                                    <FaChevronDown
-                                      className={clsx(
-                                        'transition-transform ease duration-300 text-neutral-500',
-                                        open ? 'rotate-180' : 'rotate-0'
-                                      )}
-                                    />
-                                  </div>
-                                </Listbox.Button>
-                                <Transition
-                                  enter="transition duration-100 ease-out"
-                                  enterFrom="transform scale-95 opacity-0"
-                                  enterTo="transform scale-100 opacity-100"
-                                  leave="transition duration-75 ease-out"
-                                  leaveFrom="transform scale-100 opacity-100"
-                                  leaveTo="transform scale-95 opacity-0"
-                                >
-                                  <Listbox.Options>
-                                    <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
-                                      {envOptions.map((env: Partial<EnvironmentType>) => (
-                                        <Listbox.Option key={env.id} value={env} as={Fragment}>
-                                          {({ active, selected }) => (
-                                            <div
-                                              className={clsx(
-                                                'flex items-center gap-2 p-1 cursor-pointer',
-                                                active && 'font-semibold'
-                                              )}
-                                            >
-                                              {selected ? (
-                                                <FaCheckSquare className="text-emerald-500" />
-                                              ) : (
-                                                <FaSquare />
-                                              )}
-                                              <span className="text-black dark:text-white">
-                                                {env.name}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </Listbox.Option>
-                                      ))}
-                                    </div>
-                                  </Listbox.Options>
-                                </Transition>
-                              </>
+                        {userCanReadEnvironments ? (
+                          <div className="space-y-1 w-full relative pb-8">
+                            {envScope.length === 0 && showEnvHint && (
+                              <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
+                                Select an environment scope
+                              </span>
                             )}
-                          </Listbox>
-                        </div>
+                            <Listbox
+                              value={envScope}
+                              by="id"
+                              onChange={setEnvScope}
+                              multiple
+                              name="environments"
+                            >
+                              {({ open }) => (
+                                <>
+                                  <Listbox.Label as={Fragment}>
+                                    <label
+                                      className="block text-gray-700 text-sm font-bold mb-2"
+                                      htmlFor="name"
+                                    >
+                                      Environment scope
+                                    </label>
+                                  </Listbox.Label>
+                                  <Listbox.Button as={Fragment} aria-required>
+                                    <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
+                                      <span className="text-black dark:text-white">
+                                        {envScope
+                                          .map((env: Partial<EnvironmentType>) => env.name)
+                                          .join(' + ')}
+                                      </span>
+                                      <FaChevronDown
+                                        className={clsx(
+                                          'transition-transform ease duration-300 text-neutral-500',
+                                          open ? 'rotate-180' : 'rotate-0'
+                                        )}
+                                      />
+                                    </div>
+                                  </Listbox.Button>
+                                  <Transition
+                                    enter="transition duration-100 ease-out"
+                                    enterFrom="transform scale-95 opacity-0"
+                                    enterTo="transform scale-100 opacity-100"
+                                    leave="transition duration-75 ease-out"
+                                    leaveFrom="transform scale-100 opacity-100"
+                                    leaveTo="transform scale-95 opacity-0"
+                                  >
+                                    <Listbox.Options>
+                                      <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
+                                        {envOptions.map((env: Partial<EnvironmentType>) => (
+                                          <Listbox.Option key={env.id} value={env} as={Fragment}>
+                                            {({ active, selected }) => (
+                                              <div
+                                                className={clsx(
+                                                  'flex items-center gap-2 p-1 cursor-pointer',
+                                                  active && 'font-semibold'
+                                                )}
+                                              >
+                                                {selected ? (
+                                                  <FaCheckSquare className="text-emerald-500" />
+                                                ) : (
+                                                  <FaSquare />
+                                                )}
+                                                <span className="text-black dark:text-white">
+                                                  {env.name}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </Listbox.Option>
+                                        ))}
+                                      </div>
+                                    </Listbox.Options>
+                                  </Transition>
+                                </>
+                              )}
+                            </Listbox>
+                          </div>
+                        ) : (
+                          <Alert variant="danger" icon={true} size="sm">
+                            You don&apos;t have permission to read Environments. This permission is
+                            required to set an environment scope for users in this App.
+                          </Alert>
+                        )}
 
                         <div className="flex items-center gap-4">
                           <Button variant="secondary" type="button" onClick={closeModal}>
                             Cancel
                           </Button>
-                          <Button variant="primary" type="submit">
+                          <Button
+                            variant="primary"
+                            type="submit"
+                            disabled={envScope.length === 0 || selectedMember === null}
+                          >
                             Add
                           </Button>
                         </div>
