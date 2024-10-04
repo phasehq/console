@@ -1,4 +1,5 @@
 import { RoleType } from '@/apollo/graphql'
+import { userHasGlobalAccess } from '@/utils/access/permissions'
 import { getContrastingTextColor, stringToHexColor } from '@/utils/copy'
 import clsx from 'clsx'
 
@@ -19,6 +20,10 @@ export const RoleLabel = ({ role, size }: { role: RoleType; size?: 'sm' | 'md' |
     else return ''
   }
 
+  const roleHasGlobalAccess = userHasGlobalAccess(role.permissions)
+
+  const roleDescription = `${role.description} ${roleHasGlobalAccess ? 'This role grants global access to all apps and environments' : ''}`
+
   return (
     <span
       className={clsx(
@@ -34,7 +39,7 @@ export const RoleLabel = ({ role, size }: { role: RoleType; size?: 'sm' | 'md' |
             }
           : {}
       }
-      title={role.description || undefined}
+      title={roleDescription}
     >
       {role.name}
     </span>
