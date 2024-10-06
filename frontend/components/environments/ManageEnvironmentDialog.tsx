@@ -60,7 +60,7 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
       <Alert variant="info" size="sm">
         {allowRename
           ? 'Changing the name of this Environment will affect how you construct references to secrets.'
-          : ApiOrganisationPlanChoices.Fr
+          : organisation?.plan === ApiOrganisationPlanChoices.Fr
             ? 'Upgrade to Pro to rename Environments'
             : "You don't have the permissions required to rename this Environment"}
       </Alert>
