@@ -412,10 +412,16 @@ class Query(graphene.ObjectType):
         return App.objects.filter(**filter)
 
     def resolve_app_environments(root, info, app_id, environment_id, member_id=None):
-        if not user_can_access_app(info.context.user.userId, app_id):
-            raise GraphQLError("You don't have access to this app")
 
         app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "read", "Environments", app.organisation, True
+        ):
+            return []
+
+        if not user_can_access_app(info.context.user.userId, app_id):
+            raise GraphQLError("You don't have access to this app")
 
         if member_id is not None:
             org_member = OrganisationMember.objects.get(id=member_id)
