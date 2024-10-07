@@ -357,7 +357,7 @@ class PublicSecretsView(APIView):
         for secret in secrets:
             secret.pop("id", None)
             secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
-            secret["key"] = encrypt_asymmetric(secret["key"].upper(), env_pubkey)
+            secret["key"] = encrypt_asymmetric(secret["key"], env_pubkey)
             secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
 
             if "comment" in secret:
@@ -458,7 +458,7 @@ class PublicSecretsView(APIView):
             # if a secret key is being updated, encrypt the key, compute digest, and check for duplicates
             if "key" in secret:
                 secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
-                secret["key"] = encrypt_asymmetric(secret["key"].upper(), env_pubkey)
+                secret["key"] = encrypt_asymmetric(secret["key"], env_pubkey)
 
                 if check_for_duplicates_blind(secrets, env):
                     return JsonResponse({"error": "Duplicate secret found"}, status=409)
