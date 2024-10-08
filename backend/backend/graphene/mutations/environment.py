@@ -132,7 +132,10 @@ class CreateEnvironmentMutation(graphene.Mutation):
             max_index = Environment.objects.filter(app=app).aggregate(Max("index"))[
                 "index__max"
             ]
-            index = max_index + 1
+            if max_index:
+                index = max_index + 1
+            else:
+                index = 0
 
         environment = Environment.objects.create(
             app=app,

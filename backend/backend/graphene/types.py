@@ -317,7 +317,6 @@ class EnvironmentType(DjangoObjectType):
 
 
 class AppType(DjangoObjectType):
-    sse_enabled = graphene.Boolean()
     environments = graphene.NonNull(graphene.List(EnvironmentType))
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
 
@@ -332,11 +331,8 @@ class AppType(DjangoObjectType):
             "app_token",
             "app_seed",
             "app_version",
+            "sse_enabled",
         )
-
-    def resolve_sse_enabled(self, info):
-        app_envs = Environment.objects.filter(app=self).values_list("id")
-        return ServerEnvironmentKey.objects.filter(environment_id__in=app_envs).exists()
 
     def resolve_environments(self, info):
         org_member = OrganisationMember.objects.get(
