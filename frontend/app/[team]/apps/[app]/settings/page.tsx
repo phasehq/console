@@ -35,7 +35,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
     ? userHasPermission(organisation.role?.permissions, 'Apps', 'delete')
     : false
   const userCanUpdateSSE = organisation
-    ? userHasPermission(organisation.role?.permissions, 'EncryptionMode', 'update')
+    ? userHasPermission(organisation.role?.permissions, 'EncryptionMode', 'update', true)
     : false
 
   return (
