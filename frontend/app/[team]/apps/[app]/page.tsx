@@ -636,20 +636,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid gap-16 relative">
       {keyring !== null &&
-        (setupRequired ? (
-          <div className="flex flex-col gap-4 w-full items-center p-16">
-            <h2 className="text-white font-semibold text-xl">
-              {activeUserIsAdmin
-                ? "There aren't any environments for this app yet"
-                : "You don't have access to any environments for this app yet. Contact the organisation owner or admins to get access."}
-            </h2>
-            {activeUserIsAdmin && (
-              <Button variant="primary" onClick={initAppEnvs}>
-                Get started
-              </Button>
-            )}
-          </div>
-        ) : (
+        
           <section className="space-y-8 py-4">
             <div className="space-y-2">
               <div className="space-y-1">
@@ -778,7 +765,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               </div>
             )}
           </section>
-        ))}
+        }
     </div>
   )
 }
