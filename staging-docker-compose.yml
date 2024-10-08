@@ -41,8 +41,10 @@ services:
     container_name: phase-backend-staging
     restart: unless-stopped
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -87,6 +89,11 @@ services:
       - phase-postgres-data-dev:/var/lib/postgresql/data
     networks:
       - phase-net-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     container_name: phase-redis
