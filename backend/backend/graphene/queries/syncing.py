@@ -3,6 +3,7 @@ from api.utils.crypto import (
     get_server_keypair,
 )
 from api.models import (
+    App,
     Environment,
     EnvironmentSync,
     ProviderCredentials,
@@ -37,8 +38,7 @@ def resolve_sse_enabled(root, info, app_id):
     if not user_can_access_app(info.context.user.userId, app_id):
         raise GraphQLError("You don't have access to this app")
 
-    app_envs = Environment.objects.filter(app_id=app_id).values_list("id")
-    return ServerEnvironmentKey.objects.filter(environment_id__in=app_envs).exists()
+    return App.objects.get(id=app_id).sse_enabled
 
 
 def resolve_providers(self, info):

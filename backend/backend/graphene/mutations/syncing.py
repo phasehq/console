@@ -48,6 +48,8 @@ class InitEnvSync(graphene.Mutation):
                 )
 
         else:
+            app.sse_enabled = True
+            app.save()
             # set new server env keys
             for key in env_keys:
                 ServerEnvironmentKey.objects.create(
@@ -151,7 +153,7 @@ class CreateCloudflarePagesSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -202,7 +204,7 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -253,7 +255,7 @@ class CreateGitHubActionsSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -299,7 +301,7 @@ class CreateVaultSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -347,7 +349,7 @@ class CreateNomadSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -408,7 +410,7 @@ class CreateGitLabCISync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -473,7 +475,7 @@ class CreateRailwaySync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):

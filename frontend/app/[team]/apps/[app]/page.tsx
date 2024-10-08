@@ -3,12 +3,10 @@
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
-import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
 import {
-  ApiEnvironmentEnvTypeChoices,
   ApiOrganisationPlanChoices,
   EnvironmentType,
   SecretFolderType,
@@ -39,11 +37,10 @@ import clsx from 'clsx'
 import { Disclosure, Transition } from '@headlessui/react'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
-import { userIsAdmin } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import { Card } from '@/components/common/Card'
 import { BsListColumnsReverse } from 'react-icons/bs'
-import { unwrapEnvSecretsForUser, decryptEnvSecretKVs, createNewEnv } from '@/utils/crypto'
+import { unwrapEnvSecretsForUser, decryptEnvSecretKVs } from '@/utils/crypto'
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
 import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
 import { SwapEnvOrder } from '@/graphql/mutations/environments/swapEnvironmentOrder.gql'
@@ -153,7 +150,7 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
         </Card>
       ))}
       <Card>
-        <div className="flex flex-col w-full h-full">
+        <div className="flex flex-col w-full h-full min-h-32">
           <div className="mx-auto my-auto">
             <CreateEnvironmentDialog appId={appId} />
           </div>
@@ -172,12 +169,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     },
     fetchPolicy: 'cache-and-network',
   })
-  const { data: orgAdminsData } = useQuery(GetGlobalAccessUsers, {
-    variables: {
-      organisationId: organisation?.id,
-    },
-    skip: !organisation,
-  })
+  
   const pathname = usePathname()
 
   const [getEnvSecrets] = useLazyQuery(GetEnvSecretsKV)
@@ -190,8 +182,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const [loading, setLoading] = useState(true)
 
   const { keyring } = useContext(KeyringContext)
-
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
 
   const filteredSecrets =
     searchQuery === ''
@@ -275,49 +265,8 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.appEnvironments, keyring])
 
-  const initAppEnvs = async () => {
-    const mutationPayload = {
-      devEnv: await createNewEnv(
-        params.app,
-        'Development',
-        ApiEnvironmentEnvTypeChoices.Dev,
-        orgAdminsData.organisationGlobalAccessUsers
-      ),
-      stagingEnv: await createNewEnv(
-        params.app,
-        'Staging',
-        ApiEnvironmentEnvTypeChoices.Staging,
-        orgAdminsData.organisationGlobalAccessUsers
-      ),
-      prodEnv: await createNewEnv(
-        params.app,
-        'Production',
-        ApiEnvironmentEnvTypeChoices.Prod,
-        orgAdminsData.organisationGlobalAccessUsers
-      ),
-    }
+  
 
-    await initAppEnvironments({
-      variables: {
-        devEnv: mutationPayload.devEnv.createEnvPayload,
-        stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
-        prodEnv: mutationPayload.prodEnv.createEnvPayload,
-        devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
-        stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
-        prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
-      },
-      refetchQueries: [
-        {
-          query: GetAppEnvironments,
-          variables: {
-            appId: params.app,
-          },
-        },
-      ],
-    })
-  }
-
-  const setupRequired = data?.appEnvironments.length === 0 ?? true
 
   const EnvSecret = (props: {
     envSecret: {
@@ -636,20 +585,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid gap-16 relative">
       {keyring !== null &&
-        (setupRequired ? (
-          <div className="flex flex-col gap-4 w-full items-center p-16">
-            <h2 className="text-white font-semibold text-xl">
-              {activeUserIsAdmin
-                ? "There aren't any environments for this app yet"
-                : "You don't have access to any environments for this app yet. Contact the organisation owner or admins to get access."}
-            </h2>
-            {activeUserIsAdmin && (
-              <Button variant="primary" onClick={initAppEnvs}>
-                Get started
-              </Button>
-            )}
-          </div>
-        ) : (
+        
           <section className="space-y-8 py-4">
             <div className="space-y-2">
               <div className="space-y-1">
@@ -778,7 +714,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               </div>
             )}
           </section>
-        ))}
+        }
     </div>
   )
 }

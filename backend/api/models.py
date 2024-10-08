@@ -141,6 +141,7 @@ class App(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
+    sse_enabled = models.BooleanField(default=False)
 
     objects = AppManager()
 
