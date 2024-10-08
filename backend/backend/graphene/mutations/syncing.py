@@ -6,6 +6,7 @@ from graphql import GraphQLError
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_has_permission,
     user_is_org_member,
 )
 from backend.graphene.types import AppType, EnvironmentSyncType, ProviderCredentialsType
@@ -73,10 +74,15 @@ class CreateProviderCredentials(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, org_id, provider, name, credentials):
-        if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError("You don't have permission to perform this action")
 
         org = Organisation.objects.get(id=org_id)
+
+        if not user_has_permission(
+            info.context.user, "create", "IntegrationCredentials", org
+        ):
+            raise GraphQLError(
+                "You dont have permission to create Integration Credentials"
+            )
 
         credential = ProviderCredentials.objects.create(
             organisation=org, name=name, provider=provider, credentials=credentials
@@ -97,8 +103,15 @@ class UpdateProviderCredentials(graphene.Mutation):
     def mutate(cls, root, info, credential_id, name, credentials):
         credential = ProviderCredentials.objects.get(id=credential_id)
 
-        if not user_is_org_member(info.context.user.userId, credential.organisation.id):
-            raise GraphQLError("You don't have permission to perform this action")
+        if not user_has_permission(
+            info.context.user,
+            "update",
+            "IntegrationCredentials",
+            credential.organisation,
+        ):
+            raise GraphQLError(
+                "You dont have permission to update Integration Credentials"
+            )
 
         credential.name = name
         credential.credentials = credentials
@@ -117,8 +130,15 @@ class DeleteProviderCredentials(graphene.Mutation):
     def mutate(cls, root, info, credential_id):
         credential = ProviderCredentials.objects.get(id=credential_id)
 
-        if not user_is_org_member(info.context.user.userId, credential.organisation.id):
-            raise GraphQLError("You don't have permission to perform this action")
+        if not user_has_permission(
+            info.context.user,
+            "delete",
+            "IntegrationCredentials",
+            credential.organisation,
+        ):
+            raise GraphQLError(
+                "You dont have permission to delete Integration Credentials"
+            )
 
         credential.delete()
 

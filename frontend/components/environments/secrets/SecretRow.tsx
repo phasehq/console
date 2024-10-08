@@ -1,5 +1,5 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { FaEyeSlash, FaEye, FaUndo, FaTrashAlt } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 
@@ -15,6 +15,8 @@ import { TagsDialog } from './TagsDialog'
 import { ShareSecretDialog } from './ShareSecretDialog'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import { Switch } from '@headlessui/react'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userHasPermission } from '@/utils/access/permissions'
 
 export default function SecretRow(props: {
   orgId: string
@@ -37,6 +39,16 @@ export default function SecretRow(props: {
     globallyRevealed,
     stagedForDelete,
   } = props
+
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  // Permissions
+  const userCanUpdateSecrets =
+    userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
+    !cannonicalSecret
+  const userCanDeleteSecrets =
+    userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
+    !cannonicalSecret
 
   const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
 
@@ -121,7 +133,7 @@ export default function SecretRow(props: {
       <div className="w-1/3 relative">
         <input
           ref={keyInputRef}
-          disabled={stagedForDelete}
+          disabled={stagedForDelete || !userCanUpdateSecrets}
           className={clsx(
             INPUT_BASE_STYLE,
             'rounded-sm',
@@ -150,6 +162,7 @@ export default function SecretRow(props: {
               secretId={secret.id}
               tags={secret.tags}
               handlePropertyChange={handlePropertyChange}
+              disabled={!userCanUpdateSecrets}
             />
           </div>
         </div>
@@ -161,6 +174,7 @@ export default function SecretRow(props: {
               title="Toggle value"
               checked={booleanValue}
               onChange={handleToggleBoolean}
+              disabled={stagedForDelete || !userCanUpdateSecrets}
               className={`${
                 booleanValue
                   ? 'bg-emerald-400/10 ring-emerald-400/20'
@@ -179,7 +193,7 @@ export default function SecretRow(props: {
         <input
           className={clsx(INPUT_BASE_STYLE, inputTextColor(), 'w-full focus:outline-none p-2')}
           value={secret.value}
-          disabled={stagedForDelete}
+          disabled={stagedForDelete || !userCanUpdateSecrets}
           type={isRevealed ? 'text' : 'password'}
           onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
         />
@@ -245,16 +259,17 @@ export default function SecretRow(props: {
         </div>
       </div>
       <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-center">
-        {/* <DeleteConfirmDialog secretName={secret.key} secretId={secret.id} onDelete={handleDelete} /> */}
-        <Button
-          variant="danger"
-          onClick={() => handleDelete(secret.id)}
-          title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
-        >
-          <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-            {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
-          </div>
-        </Button>
+        {userCanDeleteSecrets && (
+          <Button
+            variant="danger"
+            onClick={() => handleDelete(secret.id)}
+            title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
+          >
+            <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
+              {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+            </div>
+          </Button>
+        )}
       </div>
     </div>
   )

@@ -6,6 +6,7 @@ from api.models import (
     App,
     Environment,
     EnvironmentSync,
+    Organisation,
     ProviderCredentials,
     ServerEnvironmentKey,
 )
@@ -14,6 +15,7 @@ from api.utils.syncing.cloudflare.pages import list_cloudflare_pages
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_has_permission,
     user_is_org_member,
 )
 from api.services import Providers, ServiceConfig
@@ -58,8 +60,13 @@ def resolve_services(self, info):
 
 
 def resolve_saved_credentials(root, info, org_id):
-    if not user_is_org_member(info.context.user.userId, org_id):
-        raise GraphQLError("You don't have permission to perform this action")
+
+    org = Organisation.objects.get(id=org_id)
+
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", org
+    ):
+        return []
 
     return ProviderCredentials.objects.filter(organisation_id=org_id, deleted_at=None)
 
@@ -157,8 +164,15 @@ def resolve_railway_projects(root, info, credential_id):
 
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
+
     # If both app_id and env_id are provided
     if app_id and env_id:
+        org = App.objects.get(id=app_id).organisation
+        if not user_has_permission(
+            info.context.user, "read", "Integrations", org, True
+        ):
+            return []
+
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
         if not user_can_access_environment(info.context.user.userId, env_id):
@@ -169,6 +183,13 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
 
     # If only app_id is provided
     elif app_id:
+
+        org = App.objects.get(id=app_id).organisation
+        if not user_has_permission(
+            info.context.user, "read", "Integrations", org, True
+        ):
+            return []
+
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
         return EnvironmentSync.objects.filter(
@@ -177,14 +198,26 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
 
     # If only env_id is provided
     elif env_id:
+
+        org = Environment.objects.get(id=env_id).app.organisation
+        if not user_has_permission(
+            info.context.user, "read", "Integrations", org, True
+        ):
+            return []
+
         if not user_can_access_environment(info.context.user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
         return EnvironmentSync.objects.filter(environment_id=env_id, deleted_at=None)
 
     # If only org_id is provided
     elif org_id:
-        if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError("You don't have access to this organisation")
+
+        org = Organisation.objects.get(id=org_id)
+        if not user_has_permission(
+            info.context.user, "read", "Integrations", org, True
+        ):
+            return []
+
         return [
             sync
             for sync in EnvironmentSync.objects.filter(

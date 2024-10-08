@@ -386,7 +386,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
             </Disclosure>
           </div>
 
-          <div className="px-2 pt-4 flex items-center gap-10 justify-between text-sm">
+          {/* <div className="px-2 pt-4 flex items-center gap-10 justify-between text-sm">
             <div>
               <div className="text-zinc-900 dark:text-zinc-100 font-medium">Global Access</div>
               <div className="text-neutral-500">
@@ -395,9 +395,13 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
               </div>
             </div>
             <div className="flex justify-start items-center gap-2 pt-4">
-              <ToggleSwitch value={rolePolicy!.global_access} onToggle={handleToggleGlobalAccess} />
+              <ToggleSwitch
+                value={rolePolicy!.global_access}
+                onToggle={handleToggleGlobalAccess}
+                disabled={!allowEdit}
+              />
             </div>
-          </div>
+          </div> */}
         </div>
 
         {allowEdit && (

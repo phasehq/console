@@ -19,6 +19,7 @@ import { FaKey } from 'react-icons/fa6'
 import { useSearchParams } from 'next/navigation'
 import { PostCheckoutScreen } from '@/ee/billing/PostCheckoutScreen'
 import { UpsellDialog } from './UpsellDialog'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const plansInfo = {
   FR: {
@@ -114,6 +115,10 @@ const PlanFeatureItem = (props: {
 export const PlanInfo = () => {
   const { activeOrganisation } = useContext(organisationContext)
 
+  const userCanUpdateBilling = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'update')
+    : false
+
   const searchParams = useSearchParams()
 
   const planInfo = activeOrganisation ? plansInfo[activeOrganisation.plan] : undefined
@@ -172,7 +177,7 @@ export const PlanInfo = () => {
                       <div className="whitespace-nowrap">Compare plans</div>
                     </Button>
                   </Link>
-                  <UpsellDialog />
+                  {userCanUpdateBilling && <UpsellDialog />}
                 </div>
               )}
             </div>

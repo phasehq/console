@@ -35,7 +35,7 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
     'IntegrationCredentials',
     'delete'
   )
-  const activeUserIsAdmin = organisation
+  const userCanManageCredentials = organisation
     ? userCanUpdateCredentials || userCanDeleteCredentials
     : false
 
@@ -57,21 +57,22 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
         Created {relativeTimeFromDates(new Date(credential.createdAt))}
       </div>
 
-      <div className="flex items-center justify-end">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={openModal}
-          title={
-            activeUserIsAdmin
-              ? 'Manage credential'
-              : "You don't have permission to manage credentials"
-          }
-          disabled={!activeUserIsAdmin}
-        >
-          <FaCog /> Manage
-        </Button>
-      </div>
+      {userCanManageCredentials && (
+        <div className="flex items-center justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={openModal}
+            title={
+              userCanManageCredentials
+                ? 'Manage credential'
+                : "You don't have permission to manage credentials"
+            }
+          >
+            <FaCog /> Manage
+          </Button>
+        </div>
+      )}
 
       <Transition appear show={isOpen} as={Fragment}>
         <Dialog as="div" className="relative z-10" onClose={closeModal}>

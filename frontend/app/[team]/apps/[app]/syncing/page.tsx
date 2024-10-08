@@ -23,8 +23,8 @@ export default function Syncing({ params }: { params: { team: string; app: strin
     pollInterval: 10000,
   })
 
-  const userCanManageSyncs = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Integrations', 'update', true)
+  const userCanCreateSyncs = organisation
+    ? userHasPermission(organisation.role?.permissions, 'Integrations', 'create', true)
     : false
 
   return (
@@ -44,7 +44,7 @@ export default function Syncing({ params }: { params: { team: string; app: strin
       )}
       {data?.sseEnabled === true && (
         <>
-          {userCanManageSyncs && (
+          {userCanCreateSyncs && (
             <SyncOptions
               appId={params.app}
               defaultOpen={openCreateSyncPanel || (data.syncs && data.syncs.length === 0)}

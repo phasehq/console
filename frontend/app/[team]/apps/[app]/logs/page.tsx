@@ -1,5 +1,6 @@
 'use client'
 
+import Spinner from '@/components/common/Spinner'
 import KMSLogs from '@/components/logs/KmsLogs'
 import SecretLogs from '@/components/logs/SecretLogs'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -24,6 +25,13 @@ export default function Logs({ params }: { params: { team: string; app: string }
       component: <KMSLogs app={params.app} />,
     },
   ]
+
+  if (!organisation)
+    return (
+      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
+        <Spinner size="md" />
+      </div>
+    )
 
   return (
     <div className="h-screen overflow-y-auto w-full text-black dark:text-white flex flex-col">

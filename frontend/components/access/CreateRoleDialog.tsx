@@ -384,7 +384,7 @@ export const CreateRoleDialog = () => {
             </Disclosure>
           </div>
 
-          <div className="px-2 pt-4 flex items-center gap-10 justify-between">
+          {/* <div className="px-2 pt-4 flex items-center gap-10 justify-between">
             <div>
               <div className="text-zinc-900 dark:text-zinc-100 font-medium text-sm">
                 Global Access
@@ -397,7 +397,7 @@ export const CreateRoleDialog = () => {
             <div className="flex justify-start items-center gap-2 pt-4">
               <ToggleSwitch value={rolePolicy.global_access} onToggle={handleToggleGlobalAccess} />
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div className="flex justify-end items-center gap-2 pt-8">

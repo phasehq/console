@@ -35,7 +35,9 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(sync.authentication!)
   const [isActive, setIsActive] = useState<boolean>(sync.isActive)
 
-  const isOnIntegrationsPage = usePathname() === `/${organisation?.name}/integrations`
+  const userCanTriggerSyncs =
+    userHasPermission(organisation?.role?.permissions, 'Integrations', 'create', true) ||
+    userHasPermission(organisation?.role?.permissions, 'Integrations', 'update', true)
 
   const handleSync = async () => {
     await triggerSync({
@@ -85,6 +87,11 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
 
   const isSyncing = sync.status === ApiEnvironmentSyncStatusChoices.InProgress
 
+  const userCanReadCredentials = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'read'
+  )
   const userCanUpdateSyncs = userHasPermission(
     organisation?.role?.permissions,
     'Integrations',
@@ -167,19 +174,21 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           <div
             className="w-full grow"
             title={
-              userCanUpdateSyncs
+              userCanUpdateSyncs && userCanReadCredentials
                 ? 'Update Sync authentication'
-                : "You don't have permission to update sync authentication"
+                : "You don't have the permissions required to update sync authentication"
             }
           >
-            <ProviderCredentialPicker
-              credential={credential}
-              setCredential={(cred) => handleUpdateAuth(cred)}
-              orgId={organisation!.id}
-              disabled={!userCanUpdateSyncs}
-              newCredentialCallback={closeModal}
-              providerFilter={sync.serviceInfo?.provider?.id}
-            />
+            {userCanUpdateSyncs && userCanReadCredentials && (
+              <ProviderCredentialPicker
+                credential={credential}
+                setCredential={(cred) => handleUpdateAuth(cred)}
+                orgId={organisation!.id}
+                disabled={!userCanUpdateSyncs || !userCanReadCredentials}
+                newCredentialCallback={closeModal}
+                providerFilter={sync.serviceInfo?.provider?.id}
+              />
+            )}
           </div>
           {credential === null && (
             <div className="py-3">
@@ -191,11 +200,15 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           )}
         </div>
 
-        <div className="col-span-2 flex items-center gap-4 justify-end pt-4 border-t border-neutral-500/40">
-          <Button variant="primary" onClick={handleSync} disabled={isSyncing}>
+        <div className="col-span-2 flex items-center justify-between gap-4 pt-4 border-t border-neutral-500/40">
+          <div>{userCanDeleteSyncs && <DeleteSyncDialog sync={sync} />}</div>
+          <Button
+            variant="primary"
+            onClick={handleSync}
+            disabled={!userCanTriggerSyncs || isSyncing}
+          >
             <FaSync className={isSyncing ? 'animate-spin' : ''} /> Sync now
           </Button>
-          {userCanDeleteSyncs && <DeleteSyncDialog sync={sync} />}
         </div>
       </div>
     </div>

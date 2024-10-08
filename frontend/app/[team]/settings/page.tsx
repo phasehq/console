@@ -26,15 +26,16 @@ export default function Settings({ params }: { params: { team: string } }) {
 
   const { data: session } = useSession()
 
-  const useCanManageOrg = activeOrganisation
-    ? userHasPermission(activeOrganisation.role?.permissions, 'Organisation', 'update') ||
-      userHasPermission(activeOrganisation.role?.permissions, 'Organisation', 'delete')
+  const userCanManageBilling = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'read') ||
+      userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'update') ||
+      userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'delete')
     : false
 
   const [tabIndex, setTabIndex] = useState(0)
 
   const tabList = [
-    ...(useCanManageOrg ? [{ name: 'Organisation' }] : []),
+    ...(userCanManageBilling ? [{ name: 'Organisation' }] : []),
     { name: 'Account' },
     { name: 'App' },
   ]
@@ -47,7 +48,7 @@ export default function Settings({ params }: { params: { team: string } }) {
 
     if (initialTabIndex !== -1) setTabIndex(initialTabIndex)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useCanManageOrg, searchParams])
+  }, [userCanManageBilling, searchParams])
 
   const updateTab = (index: number) => {
     const tab = tabList[index]
@@ -64,7 +65,7 @@ export default function Settings({ params }: { params: { team: string } }) {
     )
 
   return (
-    <section className="w-full max-w-screen-lg mx-auto py-8 text-black dark:text-white">
+    <section className="w-full max-w-screen-lg mx-auto py-8 px-4 text-black dark:text-white">
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
@@ -90,7 +91,7 @@ export default function Settings({ params }: { params: { team: string } }) {
 
           <Tab.Panels>
             <div className="max-h-[80vh] overflow-y-auto px-4">
-              {useCanManageOrg && (
+              {userCanManageBilling && (
                 <Tab.Panel>
                   <div className="space-y-10 py-4">
                     <div className="space-y-1">

@@ -27,6 +27,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { ThemeContext } from '@/contexts/themeContext'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { FaArrowsRotate, FaCodeMerge, FaListCheck } from 'react-icons/fa6'
+import { userHasPermission } from '@/utils/access/permissions'
 
 type CommandItem = {
   id: string
@@ -50,9 +51,22 @@ const CommandPalette: React.FC = () => {
   const { activeOrganisation, organisations } = useContext(organisationContext)
   const { theme, setTheme } = useContext(ThemeContext)
 
+  // Permission checks
+  const userCanReadApps = userHasPermission(activeOrganisation?.role?.permissions, 'Apps', 'read')
+  const userCanCreateApps = userHasPermission(
+    activeOrganisation?.role?.permissions,
+    'Apps',
+    'create'
+  )
+  const userCanInviteUsers = userHasPermission(
+    activeOrganisation?.role?.permissions,
+    'Members',
+    'create'
+  )
+
   const { data: appsData } = useQuery(GetApps, {
     variables: { organisationId: activeOrganisation?.id },
-    skip: !activeOrganisation?.id,
+    skip: !activeOrganisation?.id || !userCanReadApps,
   })
 
   const handleNavigation = (url: string) => {
@@ -124,21 +138,25 @@ const CommandPalette: React.FC = () => {
       icon: theme === 'dark' ? <FaSun /> : <FaMoon />,
       action: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
     },
-    {
+  ]
+
+  if (userCanCreateApps)
+    actionCommands.push({
       id: 'create-app',
       name: 'Create an App',
       description: 'Create a new application',
       icon: <FaPlus />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/apps/?new=true`),
-    },
-    {
+    })
+
+  if (userCanInviteUsers)
+    actionCommands.push({
       id: 'invite-user',
       name: 'Invite a User',
       description: 'Invite a new user to the organization',
       icon: <FaUserPlus />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/members?invite=true`),
-    },
-  ]
+    })
 
   const externalResources: CommandItem[] = [
     {

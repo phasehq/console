@@ -99,8 +99,9 @@ export const TagsDialog = (props: {
   secretName: string
   tags: Array<SecretTagType>
   handlePropertyChange: Function
+  disabled?: boolean
 }) => {
-  const { orgId, secretId, secretName, tags, handlePropertyChange } = props
+  const { orgId, secretId, secretName, tags, handlePropertyChange, disabled } = props
 
   const [getOrgTags, { data: orgTags }] = useLazyQuery(GetSecretTags)
 
@@ -164,14 +165,27 @@ export const TagsDialog = (props: {
   return (
     <>
       {tags.length > 0 ? (
-        <div className="flex items-center gap-1.5 cursor-pointer" role="button" onClick={openModal}>
+        <div
+          className={clsx(
+            'flex items-center gap-1.5',
+            disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+          )}
+          role="button"
+          onClick={disabled ? undefined : openModal}
+        >
           {tags.map((tag) => (
             <Tag key={tag.id} tag={tag} />
           ))}
         </div>
       ) : (
         <div className="flex items-center justify-center">
-          <Button variant="outline" onClick={openModal} title="Update tags" tabIndex={-1}>
+          <Button
+            variant="outline"
+            onClick={openModal}
+            title="Update tags"
+            tabIndex={-1}
+            disabled={disabled}
+          >
             <FaTags /> Tags
           </Button>
         </div>

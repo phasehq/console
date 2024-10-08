@@ -40,10 +40,25 @@ import {
   getWrappedKeyShare,
 } from '@/utils/crypto'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const NewAppDialog = forwardRef(
   (props: { appCount: number; organisation: OrganisationType }, ref) => {
     const { organisation, appCount } = props
+
+    const userCanCreateEnvs = userHasPermission(
+      organisation.role?.permissions,
+      'Environments',
+      'create',
+      true
+    )
+    const userCanCreateSecrets = userHasPermission(
+      organisation.role?.permissions,
+      'Secrets',
+      'create',
+      true
+    )
+
     const [isOpen, setIsOpen] = useState<boolean>(false)
     const [name, setName] = useState<string>('')
 
@@ -354,10 +369,12 @@ const NewAppDialog = forwardRef(
 
             const newAppId = data.createApp.app.id
 
-            await initAppEnvs(newAppId)
+            if (userCanCreateEnvs) {
+              await initAppEnvs(newAppId)
 
-            if (createStarters) {
-              await createExampleSecrets(newAppId)
+              if (userCanCreateSecrets && createStarters) {
+                await createExampleSecrets(newAppId)
+              }
             }
 
             await getApps({
@@ -506,33 +523,35 @@ const NewAppDialog = forwardRef(
                               />
                             </div>
 
-                            <div className="flex items-center gap-2">
-                              <label
-                                className="block text-neutral-500 text-sm font-bold mb-2"
-                                htmlFor="create-starters"
-                              >
-                                Create example secrets
-                              </label>
-                              <Switch
-                                id="create-starters"
-                                checked={createStarters}
-                                onChange={() => setCreateStarters(!createStarters)}
-                                className={`${
-                                  createStarters
-                                    ? 'bg-emerald-400/10 ring-emerald-400/20'
-                                    : 'bg-neutral-500/40 ring-neutral-500/30'
-                                } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
-                              >
-                                <span className="sr-only">Initialize with example secrets</span>
-                                <span
+                            {userCanCreateEnvs && userCanCreateSecrets && (
+                              <div className="flex items-center gap-2">
+                                <label
+                                  className="block text-neutral-500 text-sm font-bold mb-2"
+                                  htmlFor="create-starters"
+                                >
+                                  Create example secrets
+                                </label>
+                                <Switch
+                                  id="create-starters"
+                                  checked={createStarters}
+                                  onChange={() => setCreateStarters(!createStarters)}
                                   className={`${
                                     createStarters
-                                      ? 'translate-x-6 bg-emerald-400'
-                                      : 'translate-x-1 bg-black'
-                                  } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
-                                ></span>
-                              </Switch>
-                            </div>
+                                      ? 'bg-emerald-400/10 ring-emerald-400/20'
+                                      : 'bg-neutral-500/40 ring-neutral-500/30'
+                                  } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+                                >
+                                  <span className="sr-only">Initialize with example secrets</span>
+                                  <span
+                                    className={`${
+                                      createStarters
+                                        ? 'translate-x-6 bg-emerald-400'
+                                        : 'translate-x-1 bg-black'
+                                    } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+                                  ></span>
+                                </Switch>
+                              </div>
+                            )}
                           </div>
 
                           <div className="mt-8 flex items-center w-full justify-between">

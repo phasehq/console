@@ -399,7 +399,7 @@ class Query(graphene.ObjectType):
         if not user_has_permission(
             info.context.user, "read", "Apps", org_member.organisation
         ):
-            raise GraphQLError("You don't have access to read this resource")
+            return []
 
         filter = {
             "organisation_id": organisation_id,
@@ -412,10 +412,16 @@ class Query(graphene.ObjectType):
         return App.objects.filter(**filter)
 
     def resolve_app_environments(root, info, app_id, environment_id, member_id=None):
-        if not user_can_access_app(info.context.user.userId, app_id):
-            raise GraphQLError("You don't have access to this app")
 
         app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "read", "Environments", app.organisation, True
+        ):
+            return []
+
+        if not user_can_access_app(info.context.user.userId, app_id):
+            raise GraphQLError("You don't have access to this app")
 
         if member_id is not None:
             org_member = OrganisationMember.objects.get(id=member_id)
@@ -442,13 +448,28 @@ class Query(graphene.ObjectType):
         ]
 
     def resolve_app_users(root, info, app_id):
+        app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "read", "Members", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to read members of this App")
+
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
-        app = App.objects.get(id=app_id)
         return app.members.filter(deleted_at=None)
 
     def resolve_secrets(root, info, env_id, path=None):
+
+        org = Environment.objects.get(id=env_id).app.organisation
+        if not user_has_permission(
+            info.context.user, "read", "Secrets", org, True
+        ) or not user_has_permission(
+            info.context.user, "read", "Environments", org, True
+        ):
+            raise GraphQLError("You don't have access to read secrets")
+
         if not user_can_access_environment(info.context.user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
 
@@ -534,8 +555,10 @@ class Query(graphene.ObjectType):
 
     def resolve_service_tokens(root, info, app_id):
         app = App.objects.get(id=app_id)
-        if not user_is_org_member(info.context.user.userId, app.organisation.id):
-            raise GraphQLError("You don't have access to this organisation")
+        if not user_has_permission(
+            info.context.user, "read", "Tokens", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to view Tokens in this App")
 
         return ServiceToken.objects.filter(app=app, deleted_at=None)
 
@@ -581,9 +604,14 @@ class Query(graphene.ObjectType):
         start_dt = datetime.fromtimestamp(start / 1000)
         end_dt = datetime.fromtimestamp(end / 1000)
 
-        secret_events = SecretEvent.objects.filter(
-            environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
-        ).order_by("-timestamp")[:25]
+        if user_has_permission(
+            info.context.user, "read", "Logs", app.organisation, True
+        ):
+            secret_events = SecretEvent.objects.filter(
+                environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
+            ).order_by("-timestamp")[:25]
+        else:
+            secret_events = []
 
         return LogsResponseType(kms=kms_logs, secrets=secret_events)
 

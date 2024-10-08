@@ -1,13 +1,13 @@
 'use client'
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { EncryptionModeIndicator } from '@/components/apps/EncryptionModeIndicator'
-import loading from '@/app/loading'
-import app from 'next/app'
+import { userHasPermission } from '@/utils/access/permissions'
+import { organisationContext } from '@/contexts/organisationContext'
+import { useRouter } from 'next/router'
 
 export default function AccessLayout({
   params,
@@ -17,22 +17,29 @@ export default function AccessLayout({
   children: React.ReactNode
 }) {
   const path = usePathname()
+  //const router = useRouter()
+
+  const { activeOrganisation } = useContext(organisationContext)
+
   const [tabIndex, setTabIndex] = useState(0)
 
-  const [tabs, setTabs] = useState([
-    {
-      name: 'Members',
-      link: 'members',
-    },
-    {
-      name: 'Roles',
-      link: 'roles',
-    },
-    {
-      name: 'Authentication',
-      link: 'authentication',
-    },
-  ])
+  const tabs = useMemo(
+    () => [
+      {
+        name: 'Members',
+        link: 'members',
+      },
+      {
+        name: 'Roles',
+        link: 'roles',
+      },
+      {
+        name: 'Authentication',
+        link: 'authentication',
+      },
+    ],
+    []
+  )
 
   useEffect(() => {
     const activeTabIndex = () => {

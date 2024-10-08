@@ -6,16 +6,27 @@ export type PermissionPolicy = {
   global_access: boolean
 };
 
+
 /**
  * Parses a JSON string representing permissions into a PermissionPolicy object.
+ * Discards any extra keys not defined in PermissionPolicy.
  * @param {string} permissionsJson - The JSON string representing permissions.
- * @returns {PermissionPolicy | null} The parsed PermissionPolicy object, or null if the JSON is invalid.
+ * @returns {PermissionPolicy | null} The parsed and sanitized PermissionPolicy object, or null if the JSON is invalid.
  */
 export const parsePermissions = (permissionsJson: string): PermissionPolicy | null => {
   try {
-    return JSON.parse(permissionsJson) as PermissionPolicy;
+    const parsedJson = JSON.parse(permissionsJson);
+
+    // Explicitly pick the known keys from the parsed JSON
+    const filteredPolicy: Partial<PermissionPolicy> = {
+      permissions: Object.hasOwn(parsedJson, 'permissions') ? parsedJson.permissions : {},
+      app_permissions: Object.hasOwn(parsedJson, 'app_permissions') ? parsedJson.app_permissions : {},
+      global_access: Object.hasOwn(parsedJson, 'global_access') ? parsedJson.global_access : false,
+    };
+
+    // Return the object with only the valid keys
+    return filteredPolicy as PermissionPolicy;
   } catch (error) {
-    console.error("Invalid JSON string", error);
     return null;
   }
 };

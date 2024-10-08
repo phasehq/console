@@ -15,6 +15,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
 import {
+  FaBan,
   FaCheckSquare,
   FaChevronDown,
   FaPlus,
@@ -28,19 +29,44 @@ import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasGlobalAccess, userIsAdmin } from '@/utils/access/permissions'
+import { userHasGlobalAccess, userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
+import { EmptyState } from '@/components/common/EmptyState'
+import Spinner from '@/components/common/Spinner'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
-  const { data } = useQuery(GetAppMembers, { variables: { appId: params.app } })
-
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!.name!) : false
+  // Permissions
+  const userCanReadAppMembers = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'read', true)
+    : false
+  const userCanReadEnvironments = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
+    : false
+
+  // AppMembers:create + OrgMembers: read
+  const userCanAddAppMembers = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'create', true) &&
+      userHasPermission(organisation?.role?.permissions, 'Members', 'read')
+    : false
+  const userCanRemoveAppMembers = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'delete', true)
+    : false
+  // AppMembers:update + Environments:read
+  const userCanUpdateMemberAccess = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'update', true) &&
+      userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
+    : false
+
+  const { data, loading } = useQuery(GetAppMembers, {
+    variables: { appId: params.app },
+    skip: !userCanReadAppMembers,
+  })
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
@@ -52,7 +78,7 @@ export default function Members({ params }: { params: { team: string; app: strin
         organisationId: organisation?.id,
         role: null,
       },
-      skip: !organisation,
+      skip: !organisation || !userCanAddAppMembers,
     })
 
     const memberOptions =
@@ -69,6 +95,7 @@ export default function Members({ params }: { params: { team: string; app: strin
       variables: {
         appId: params.app,
       },
+      skip: !userCanReadEnvironments,
     })
 
     const envOptions =
@@ -216,7 +243,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                             users from the{' '}
                             <Link
                               className="font-semibold hover:underline"
-                              href={`/${params.team}/members`}
+                              href={`/${params.team}/access/members`}
                             >
                               organisation members
                             </Link>{' '}
@@ -293,88 +320,99 @@ export default function Members({ params }: { params: { team: string; app: strin
                           )}
                         </Combobox>
 
-                        <div className="space-y-1 w-full relative pb-8">
-                          {envScope.length === 0 && showEnvHint && (
-                            <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
-                              Select an environment scope
-                            </span>
-                          )}
-                          <Listbox
-                            value={envScope}
-                            by="id"
-                            onChange={setEnvScope}
-                            multiple
-                            name="environments"
-                          >
-                            {({ open }) => (
-                              <>
-                                <Listbox.Label as={Fragment}>
-                                  <label
-                                    className="block text-gray-700 text-sm font-bold mb-2"
-                                    htmlFor="name"
-                                  >
-                                    Environment scope
-                                  </label>
-                                </Listbox.Label>
-                                <Listbox.Button as={Fragment} aria-required>
-                                  <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
-                                    <span className="text-black dark:text-white">
-                                      {envScope
-                                        .map((env: Partial<EnvironmentType>) => env.name)
-                                        .join(' + ')}
-                                    </span>
-                                    <FaChevronDown
-                                      className={clsx(
-                                        'transition-transform ease duration-300 text-neutral-500',
-                                        open ? 'rotate-180' : 'rotate-0'
-                                      )}
-                                    />
-                                  </div>
-                                </Listbox.Button>
-                                <Transition
-                                  enter="transition duration-100 ease-out"
-                                  enterFrom="transform scale-95 opacity-0"
-                                  enterTo="transform scale-100 opacity-100"
-                                  leave="transition duration-75 ease-out"
-                                  leaveFrom="transform scale-100 opacity-100"
-                                  leaveTo="transform scale-95 opacity-0"
-                                >
-                                  <Listbox.Options>
-                                    <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
-                                      {envOptions.map((env: Partial<EnvironmentType>) => (
-                                        <Listbox.Option key={env.id} value={env} as={Fragment}>
-                                          {({ active, selected }) => (
-                                            <div
-                                              className={clsx(
-                                                'flex items-center gap-2 p-1 cursor-pointer',
-                                                active && 'font-semibold'
-                                              )}
-                                            >
-                                              {selected ? (
-                                                <FaCheckSquare className="text-emerald-500" />
-                                              ) : (
-                                                <FaSquare />
-                                              )}
-                                              <span className="text-black dark:text-white">
-                                                {env.name}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </Listbox.Option>
-                                      ))}
-                                    </div>
-                                  </Listbox.Options>
-                                </Transition>
-                              </>
+                        {userCanReadEnvironments ? (
+                          <div className="space-y-1 w-full relative pb-8">
+                            {envScope.length === 0 && showEnvHint && (
+                              <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
+                                Select an environment scope
+                              </span>
                             )}
-                          </Listbox>
-                        </div>
+                            <Listbox
+                              value={envScope}
+                              by="id"
+                              onChange={setEnvScope}
+                              multiple
+                              name="environments"
+                            >
+                              {({ open }) => (
+                                <>
+                                  <Listbox.Label as={Fragment}>
+                                    <label
+                                      className="block text-gray-700 text-sm font-bold mb-2"
+                                      htmlFor="name"
+                                    >
+                                      Environment scope
+                                    </label>
+                                  </Listbox.Label>
+                                  <Listbox.Button as={Fragment} aria-required>
+                                    <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
+                                      <span className="text-black dark:text-white">
+                                        {envScope
+                                          .map((env: Partial<EnvironmentType>) => env.name)
+                                          .join(' + ')}
+                                      </span>
+                                      <FaChevronDown
+                                        className={clsx(
+                                          'transition-transform ease duration-300 text-neutral-500',
+                                          open ? 'rotate-180' : 'rotate-0'
+                                        )}
+                                      />
+                                    </div>
+                                  </Listbox.Button>
+                                  <Transition
+                                    enter="transition duration-100 ease-out"
+                                    enterFrom="transform scale-95 opacity-0"
+                                    enterTo="transform scale-100 opacity-100"
+                                    leave="transition duration-75 ease-out"
+                                    leaveFrom="transform scale-100 opacity-100"
+                                    leaveTo="transform scale-95 opacity-0"
+                                  >
+                                    <Listbox.Options>
+                                      <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
+                                        {envOptions.map((env: Partial<EnvironmentType>) => (
+                                          <Listbox.Option key={env.id} value={env} as={Fragment}>
+                                            {({ active, selected }) => (
+                                              <div
+                                                className={clsx(
+                                                  'flex items-center gap-2 p-1 cursor-pointer',
+                                                  active && 'font-semibold'
+                                                )}
+                                              >
+                                                {selected ? (
+                                                  <FaCheckSquare className="text-emerald-500" />
+                                                ) : (
+                                                  <FaSquare />
+                                                )}
+                                                <span className="text-black dark:text-white">
+                                                  {env.name}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </Listbox.Option>
+                                        ))}
+                                      </div>
+                                    </Listbox.Options>
+                                  </Transition>
+                                </>
+                              )}
+                            </Listbox>
+                          </div>
+                        ) : (
+                          <Alert variant="danger" icon={true} size="sm">
+                            You don&apos;t have permission to read Environments. This permission is
+                            required to set an environment scope for users in this App.
+                          </Alert>
+                        )}
 
                         <div className="flex items-center gap-4">
                           <Button variant="secondary" type="button" onClick={closeModal}>
                             Cancel
                           </Button>
-                          <Button variant="primary" type="submit">
+                          <Button
+                            variant="primary"
+                            type="submit"
+                            disabled={envScope.length === 0 || selectedMember === null}
+                          >
                             Add
                           </Button>
                         </div>
@@ -781,61 +819,92 @@ export default function Members({ params }: { params: { team: string; app: strin
     )
   }
 
+  if (!organisation || loading)
+    return (
+      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
+        <Spinner size="md" />
+      </div>
+    )
+
   return (
     <div className="w-full space-y-10 pt-8 text-black dark:text-white">
-      <div className="space-y-4">
-        <div className="flex justify-end">
-          <AddMemberDialog />
-        </div>
+      {userCanReadAppMembers ? (
+        <div className="space-y-4">
+          {userCanAddAppMembers && (
+            <div className="flex justify-end">
+              <AddMemberDialog />
+            </div>
+          )}
 
-        <table className="table-auto min-w-full divide-y divide-zinc-500/40">
-          <thead>
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                User
-              </th>
+          <table className="table-auto min-w-full divide-y divide-zinc-500/40">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  User
+                </th>
 
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Joined
-              </th>
-              {activeUserIsAdmin && <th className="px-6 py-3"></th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-500/40">
-            {data?.appUsers.map((member: OrganisationMemberType) => (
-              <tr className="group" key={member.id}>
-                <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                  <Avatar imagePath={member.avatarUrl!} size="lg" />
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg font-medium">{member.fullName || member.email}</span>
-                      <RoleLabel role={member.role!} />
-                    </div>
-                    {member.fullName && (
-                      <span className="text-neutral-500 text-sm">{member.email}</span>
-                    )}
-                  </div>
-                </td>
-
-                <td className="px-6 py-4 whitespace-nowrap capitalize">
-                  {relativeTimeFromDates(new Date(member.createdAt))}
-                </td>
-                {activeUserIsAdmin && (
-                  <td className="px-6 py-4">
-                    {member.email !== session?.user?.email &&
-                      member.role!.name!.toLowerCase() !== 'owner' && (
-                        <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
-                          <ManageUserAccessDialog member={member} />
-                          <RemoveMemberConfirmDialog member={member} />
-                        </div>
-                      )}
-                  </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Joined
+                </th>
+                {(userCanRemoveAppMembers || userCanUpdateMemberAccess) && (
+                  <th className="px-6 py-3"></th>
                 )}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-zinc-500/40">
+              {data?.appUsers.map((member: OrganisationMemberType) => (
+                <tr className="group" key={member.id}>
+                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                    <Avatar imagePath={member.avatarUrl!} size="lg" />
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-medium">
+                          {member.fullName || member.email}
+                        </span>
+                        <RoleLabel role={member.role!} />
+                      </div>
+                      {member.fullName && (
+                        <span className="text-neutral-500 text-sm">{member.email}</span>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-6 py-4 whitespace-nowrap capitalize">
+                    {relativeTimeFromDates(new Date(member.createdAt))}
+                  </td>
+                  {(userCanRemoveAppMembers || userCanUpdateMemberAccess) && (
+                    <td className="px-6 py-4">
+                      {member.email !== session?.user?.email &&
+                        member.role!.name!.toLowerCase() !== 'owner' && (
+                          <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
+                            {userCanUpdateMemberAccess && (
+                              <ManageUserAccessDialog member={member} />
+                            )}
+                            {userCanRemoveAppMembers && (
+                              <RemoveMemberConfirmDialog member={member} />
+                            )}
+                          </div>
+                        )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyState
+          title="Access restricted"
+          subtitle="You don't have the permissions required to view Members in this app."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBan />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
+      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@ from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import EnvironmentKeyInput
 from api.utils.access.permissions import (
     user_can_access_app,
+    user_has_permission,
     user_is_admin,
     user_is_org_member,
 )
@@ -46,6 +47,9 @@ class CreateAppMutation(graphene.Mutation):
         org = Organisation.objects.get(id=organisation_id)
         if not user_is_org_member(user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
+
+        if not user_has_permission(info.context.user, "create", "Apps", org):
+            raise GraphQLError("You don't have permission to create Apps")
 
         if App.objects.filter(identity_key=identity_key).exists():
             raise GraphQLError("This app already exists")
@@ -126,8 +130,11 @@ class DeleteAppMutation(graphene.Mutation):
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
-        if not user_is_admin(user.userId, app.organisation.id):
-            raise GraphQLError("You don't have permission to perform that action.")
+
+        if not user_has_permission(
+            info.context.user, "delete", "Apps", app.organisation
+        ):
+            raise GraphQLError("You don't have permission to delete Apps")
 
         if CLOUD_HOSTED:
             # delete current keys from cloudflare KV
@@ -160,6 +167,11 @@ class AddAppMemberMutation(graphene.Mutation):
     def mutate(cls, root, info, member_id, app_id, env_keys):
         user = info.context.user
         app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "create", "Members", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to add members to this App")
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
@@ -194,6 +206,13 @@ class RemoveAppMemberMutation(graphene.Mutation):
     def mutate(cls, root, info, member_id, app_id):
         user = info.context.user
         app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "delete", "Members", app.organisation, True
+        ):
+            raise GraphQLError(
+                "You don't have permission to remove members from this App"
+            )
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")

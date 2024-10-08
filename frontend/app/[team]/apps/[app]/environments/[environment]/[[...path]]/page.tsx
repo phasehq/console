@@ -29,6 +29,7 @@ import {
   FaEyeSlash,
   FaMagic,
   FaCloudUploadAlt,
+  FaBan,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -57,6 +58,8 @@ import { SortOption, sortSecrets } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
+import { userHasPermission } from '@/utils/access/permissions'
+import Spinner from '@/components/common/Spinner'
 
 export default function EnvironmentPath({
   params,
@@ -82,6 +85,25 @@ export default function EnvironmentPath({
   const [sort, setSort] = useState<SortOption>('-created')
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanReadEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'read',
+    true
+  )
+  const userCanReadSecrets = userHasPermission(
+    organisation?.role?.permissions,
+    'Secrets',
+    'read',
+    true
+  )
+  const userCanReadSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'read',
+    true
+  )
 
   const [readSecrets] = useMutation(LogSecretReads)
 
@@ -130,6 +152,7 @@ export default function EnvironmentPath({
     variables: {
       appId: params.app,
     },
+    skip: !userCanReadEnvironments,
   })
 
   const { data, loading } = useQuery(GetSecrets, {
@@ -138,6 +161,7 @@ export default function EnvironmentPath({
       envId: params.environment,
       path: secretPath,
     },
+    skip: !userCanReadSecrets,
     pollInterval: unsavedChanges ? 0 : 5000,
   })
 
@@ -719,23 +743,57 @@ export default function EnvironmentPath({
     )
   }
 
-  const NewSecretMenu = () => (
-    <SplitButton
-      variant="primary"
-      onClick={() => handleAddSecret(true)}
-      menuContent={
-        <div className="w-max">
-          <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
-            <div className="flex items-center gap-2">
-              <FaFolderPlus /> New Folder
+  const NewSecretMenu = () => {
+    const userCanCreateSecrets = userHasPermission(
+      organisation?.role?.permissions,
+      'Secrets',
+      'create',
+      true
+    )
+
+    if (!userCanCreateSecrets) return <></>
+    return (
+      <SplitButton
+        variant="primary"
+        onClick={() => handleAddSecret(true)}
+        menuContent={
+          <div className="w-max">
+            <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
+              <div className="flex items-center gap-2">
+                <FaFolderPlus /> New Folder
+              </div>
+            </Button>
+          </div>
+        }
+      >
+        <FaPlus /> New Secret
+      </SplitButton>
+    )
+  }
+
+  if (loading || !organisation)
+    return (
+      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
+        <Spinner size="md" />
+      </div>
+    )
+
+  if (!userCanReadEnvironments || !userCanReadSecrets)
+    return (
+      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
+        <EmptyState
+          title="Access restricted"
+          subtitle="You don't have the permissions required to view Secrets in this app."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBan />
             </div>
-          </Button>
-        </div>
-      }
-    >
-      <FaPlus /> New Secret
-    </SplitButton>
-  )
+          }
+        >
+          <></>
+        </EmptyState>
+      </div>
+    )
 
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
@@ -850,7 +908,7 @@ export default function EnvironmentPath({
                   </Button>
                 )}
 
-                {data.envSyncs && (
+                {data.envSyncs && userCanReadSyncs && (
                   <div>
                     <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
                   </div>
