@@ -1,10 +1,24 @@
-mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {
-  createOrganisationMember(orgId: $orgId, identityKey: $identityKey, wrappedKeyring: $wrappedKeyring, wrappedRecovery: $wrappedRecovery, inviteId: $inviteId) {
-    orgMember{
+mutation AcceptOrganisationInvite(
+  $orgId: ID!
+  $identityKey: String!
+  $wrappedKeyring: String!
+  $wrappedRecovery: String!
+  $inviteId: ID!
+) {
+  createOrganisationMember(
+    orgId: $orgId
+    identityKey: $identityKey
+    wrappedKeyring: $wrappedKeyring
+    wrappedRecovery: $wrappedRecovery
+    inviteId: $inviteId
+  ) {
+    orgMember {
       id
       email
       createdAt
-      role
+      role {
+        name
+      }
     }
   }
 }

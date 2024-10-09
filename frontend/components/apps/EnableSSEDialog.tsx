@@ -16,7 +16,7 @@ import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { FaServer } from 'react-icons/fa6'
 import { organisationContext } from '@/contexts/organisationContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/crypto'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import Link from 'next/link'
 
 export const EnableSSEDialog = (props: { appId: string }) => {
@@ -29,7 +29,9 @@ export const EnableSSEDialog = (props: { appId: string }) => {
   const [enableSse, { loading }] = useMutation(InitAppSyncing)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const userCanEnableSSE = organisation
+    ? userHasPermission(organisation.role?.permissions, 'EncryptionMode', 'update', true)
+    : false
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
@@ -152,7 +154,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
                     </Button>
                   </Dialog.Title>
 
-                  {activeUserIsAdmin ? (
+                  {userCanEnableSSE ? (
                     <form className="space-y-6 py-4" onSubmit={handleEnableSse}>
                       <p className="text-neutral-500">
                         Enable server-side encryption (SSE) for this App if you want to:

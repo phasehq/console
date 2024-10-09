@@ -1,9 +1,13 @@
 from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
-from api.utils.syncing.vault.main import VaultMountType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
-from api.utils.syncing.railway.main import RailwayEnvironmentType, RailwayProjectType
+from api.utils.syncing.railway.main import RailwayProjectType
+from .graphene.mutations.access import (
+    CreateCustomRoleMutation,
+    DeleteCustomRoleMutation,
+    UpdateCustomRoleMutation,
+)
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     resolve_stripe_checkout_details,
@@ -27,6 +31,7 @@ from .graphene.queries.syncing import (
     resolve_test_nomad_creds,
     resolve_railway_projects,
 )
+from .graphene.queries.access import resolve_roles
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
@@ -71,10 +76,10 @@ from .graphene.mutations.syncing import (
     UpdateProviderCredentials,
     UpdateSyncAuthentication,
 )
-from api.utils.permissions import (
+from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
-    user_is_admin,
+    user_has_permission,
     user_is_org_member,
 )
 from .graphene.mutations.app import (
@@ -101,7 +106,6 @@ from .graphene.types import (
     EnvironmentSyncType,
     EnvironmentTokenType,
     EnvironmentType,
-    KMSLogType,
     LogsResponseType,
     OrganisationMemberInviteType,
     OrganisationMemberType,
@@ -110,6 +114,7 @@ from .graphene.types import (
     PhaseLicenseType,
     ProviderCredentialsType,
     ProviderType,
+    RoleType,
     SecretEventType,
     SecretFolderType,
     SecretTagType,
@@ -124,12 +129,12 @@ from graphql import GraphQLError
 from api.models import (
     Environment,
     EnvironmentKey,
-    EnvironmentSync,
     EnvironmentToken,
     Organisation,
     App,
     OrganisationMember,
     OrganisationMemberInvite,
+    Role,
     Secret,
     SecretEvent,
     SecretFolder,
@@ -143,12 +148,15 @@ from django.conf import settings
 from logs.models import KMSDBLog
 from itertools import chain
 from django.utils import timezone
+from django.db.models import Q
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 class Query(graphene.ObjectType):
     organisations = graphene.List(OrganisationType)
+
+    roles = graphene.List(RoleType, org_id=graphene.ID())
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
@@ -167,7 +175,7 @@ class Query(graphene.ObjectType):
         user_id=graphene.ID(),
         role=graphene.List(graphene.String),
     )
-    organisation_admins_and_self = graphene.List(
+    organisation_global_access_users = graphene.List(
         OrganisationMemberType, organisation_id=graphene.ID()
     )
     organisation_invites = graphene.List(
@@ -309,6 +317,8 @@ class Query(graphene.ObjectType):
 
         return [membership.organisation for membership in memberships]
 
+    resolve_roles = resolve_roles
+
     resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_name_available(root, info, name):
@@ -329,14 +339,20 @@ class Query(graphene.ObjectType):
 
         return OrganisationMember.objects.filter(**filter)
 
-    def resolve_organisation_admins_and_self(root, info, organisation_id):
+    def resolve_organisation_global_access_users(root, info, organisation_id):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
 
-        roles = ["owner", "admin"]
+        global_access_roles = Role.objects.filter(
+            Q(organisation_id=organisation_id)
+            & (Q(name__iexact="owner") | Q(name__iexact="admin"))
+            | Q(permissions__global_access=True)
+        )
 
         members = OrganisationMember.objects.filter(
-            organisation_id=organisation_id, role__in=roles, deleted_at=None
+            organisation_id=organisation_id,
+            role__in=global_access_roles,
+            deleted_at=None,
         )
 
         if not info.context.user.userId in [member.user_id for member in members]:
@@ -380,6 +396,11 @@ class Query(graphene.ObjectType):
             deleted_at=None,
         )
 
+        if not user_has_permission(
+            info.context.user, "read", "Apps", org_member.organisation
+        ):
+            return []
+
         filter = {
             "organisation_id": organisation_id,
             "id__in": org_member.apps.all(),
@@ -391,10 +412,16 @@ class Query(graphene.ObjectType):
         return App.objects.filter(**filter)
 
     def resolve_app_environments(root, info, app_id, environment_id, member_id=None):
-        if not user_can_access_app(info.context.user.userId, app_id):
-            raise GraphQLError("You don't have access to this app")
 
         app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "read", "Environments", app.organisation, True
+        ):
+            return []
+
+        if not user_can_access_app(info.context.user.userId, app_id):
+            raise GraphQLError("You don't have access to this app")
 
         if member_id is not None:
             org_member = OrganisationMember.objects.get(id=member_id)
@@ -421,13 +448,28 @@ class Query(graphene.ObjectType):
         ]
 
     def resolve_app_users(root, info, app_id):
+        app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "read", "Members", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to read members of this App")
+
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
-        app = App.objects.get(id=app_id)
         return app.members.filter(deleted_at=None)
 
     def resolve_secrets(root, info, env_id, path=None):
+
+        org = Environment.objects.get(id=env_id).app.organisation
+        if not user_has_permission(
+            info.context.user, "read", "Secrets", org, True
+        ) or not user_has_permission(
+            info.context.user, "read", "Environments", org, True
+        ):
+            raise GraphQLError("You don't have access to read secrets")
+
         if not user_can_access_environment(info.context.user.userId, env_id):
             raise GraphQLError("You don't have access to this environment")
 
@@ -513,8 +555,10 @@ class Query(graphene.ObjectType):
 
     def resolve_service_tokens(root, info, app_id):
         app = App.objects.get(id=app_id)
-        if not user_is_org_member(info.context.user.userId, app.organisation.id):
-            raise GraphQLError("You don't have access to this organisation")
+        if not user_has_permission(
+            info.context.user, "read", "Tokens", app.organisation, True
+        ):
+            raise GraphQLError("You don't have permission to view Tokens in this App")
 
         return ServiceToken.objects.filter(app=app, deleted_at=None)
 
@@ -560,9 +604,14 @@ class Query(graphene.ObjectType):
         start_dt = datetime.fromtimestamp(start / 1000)
         end_dt = datetime.fromtimestamp(end / 1000)
 
-        secret_events = SecretEvent.objects.filter(
-            environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
-        ).order_by("-timestamp")[:25]
+        if user_has_permission(
+            info.context.user, "read", "Logs", app.organisation, True
+        ):
+            secret_events = SecretEvent.objects.filter(
+                environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
+            ).order_by("-timestamp")[:25]
+        else:
+            secret_events = []
 
         return LogsResponseType(kms=kms_logs, secrets=secret_events)
 
@@ -711,6 +760,11 @@ class Mutation(graphene.ObjectType):
     swap_environment_order = SwapEnvironmentOrderMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
+
+    # Access
+    create_custom_role = CreateCustomRoleMutation.Field()
+    update_custom_role = UpdateCustomRoleMutation.Field()
+    delete_custom_role = DeleteCustomRoleMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
     delete_env_sync = DeleteSync.Field()

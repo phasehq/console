@@ -108,16 +108,11 @@ export const HistoryDialog = (props: { secret: SecretType; handlePropertyChange:
                               <div className="text-neutral-500 text-sm">
                                 {relativeTimeFromDates(new Date(historyItem!.timestamp))}
                               </div>{' '}
-                              <span className="text-sm text-neutral-500">by</span>
                               <div className="text-sm flex items-center gap-2 text-neutral-500">
-                                {historyItem!.user ? (
+                                {historyItem!.user && (
                                   <div className="flex items-center gap-1 text-sm">
-                                    <Avatar imagePath={historyItem!.user.avatarUrl!} size="sm" />
+                                    by <Avatar imagePath={historyItem!.user.avatarUrl!} size="sm" />
                                     {historyItem?.user.fullName || historyItem?.user.email}
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1 text-sm">
-                                    <FaKey /> Service token
                                   </div>
                                 )}
                               </div>

@@ -11,27 +11,36 @@ import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
+import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import {
   OrganisationMemberInviteType,
   OrganisationMemberType,
   AppType,
-  ApiOrganisationMemberRoleChoices,
   EnvironmentType,
   ApiOrganisationPlanChoices,
+  RoleType,
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, Transition } from '@headlessui/react'
-import { FaChevronDown, FaCopy, FaPlus, FaTimes, FaTrashAlt, FaUserAlt } from 'react-icons/fa'
+import {
+  FaBan,
+  FaChevronDown,
+  FaCopy,
+  FaPlus,
+  FaTimes,
+  FaTrashAlt,
+  FaUserAlt,
+} from 'react-icons/fa'
 import clsx from 'clsx'
 
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasGlobalAccess, userIsAdmin } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 
@@ -42,6 +51,9 @@ import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { useSearchParams } from 'next/navigation'
+import { userHasPermission } from '@/utils/access/permissions'
+import { EmptyState } from '@/components/common/EmptyState'
+import Spinner from '@/components/common/Spinner'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -58,38 +70,51 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
 
-  const { data: appsData, loading: appsLoading } = useQuery(GetApps, {
+  const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
+
+  const userCanUpdateMemberRoles = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Members', 'update') &&
+      userHasPermission(organisation.role!.permissions, 'Roles', 'read')
+    : false
+
+  const { data: appsData } = useQuery(GetApps, {
     variables: { organisationId: organisation!.id },
+    skip: !userCanReadApps,
+  })
+
+  const { data: roleData, loading: roleDataPending } = useQuery(GetRoles, {
+    variables: { orgId: organisation!.id },
+    skip: !userCanUpdateMemberRoles,
   })
   const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
   const [updateRole] = useMutation(UpdateMemberRole)
   const [addMemberToApp] = useMutation(AddMemberToApp)
 
-  const [role, setRole] = useState<string>(member.role)
+  const [role, setRole] = useState<RoleType>(member.role!)
 
-  const isOwner = role.toLowerCase() === 'owner'
-
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const isOwner = role.name!.toLowerCase() === 'owner'
 
   /**
-   * Handles the upgrade of a user from 'dev' to 'admin'.
+   * Handles the assignment of a user to a global access role.
    * Env keys for all apps, are fetched and decrypted by the active user, then each key is re-encrypted for the new user and saved on the backend via the addMemberToApp mutation
    *
    * @returns {void}
    */
-  const upgradeDevToAdmin = () => {
+  const assignGlobalAccess = () => {
     if (appsData) {
       const apps = appsData.apps
 
       // Function to process an individual app
       const processApp = async (app: AppType) => {
-        //const keyring = await validateKeyring(password);
+        // fetch envs for the app
         const { data: appEnvsData } = await getAppEnvs({ variables: { appId: app.id } })
 
         const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
+        // construct promises to encrypt each env key for the target user
         const envKeyPromises = appEnvironments.map(async (env: EnvironmentType) => {
+          // fetch the current wrapped key for the environment
           const { data } = await getEnvKey({
             variables: {
               envId: env.id,
@@ -103,14 +128,17 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
             identityKey,
           } = data.environmentKeys[0]
 
+          // unwrap env keys for current logged in user
           const { seed, salt } = await unwrapEnvSecretsForUser(
             userWrappedSeed,
             userWrappedSalt,
             keyring!
           )
 
+          // re-encrypt the env key for the target user
           const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForUser({ seed, salt }, member)
 
+          // resolve the promise with the mutation payload
           return {
             envId: env.id,
             userId: member.id,
@@ -120,8 +148,10 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
           }
         })
 
+        // get mutation payloads with wrapped keys for each environment
         const envKeyInputs = await Promise.all(envKeyPromises)
 
+        // add the user to this app, with wrapped keys for each environment
         await addMemberToApp({
           variables: { memberId: member.id, appId: app.id, envKeys: envKeyInputs },
         })
@@ -138,10 +168,13 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
       processAppsSequentially()
         .then(async () => {
           // All apps have been processed
+          const adminRole = roleOptions.find(
+            (option: RoleType) => option.name?.toLowerCase() === 'admin'
+          )
           await updateRole({
             variables: {
               memberId: member.id,
-              role: 'admin',
+              roleId: adminRole.id,
             },
           })
           toast.success('Updated member role', { autoClose: 2000 })
@@ -152,37 +185,56 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
     }
   }
 
-  const handleUpdateRole = async (newRole: string) => {
+  const handleUpdateRole = async (newRole: RoleType) => {
+    const newRoleHasGlobalAccess = userHasGlobalAccess(newRole.permissions)
+    const currentUserHasGlobalAccess = userHasGlobalAccess(organisation?.role?.permissions)
+
+    if (newRoleHasGlobalAccess && !currentUserHasGlobalAccess) {
+      toast.error('You cannot assign users to this role as it requires global access!', {
+        autoClose: 5000,
+      })
+      return false
+    }
+
+    if (newRoleHasGlobalAccess && !userCanReadApps) {
+      toast.error(
+        'You are missing the required "Apps:read" permissions and cannot assign this user to a role with global access!',
+        { autoClose: 5000 }
+      )
+      return false
+    }
+
     setRole(newRole)
-    if (newRole.toLowerCase() === 'admin') upgradeDevToAdmin()
+
+    if (newRoleHasGlobalAccess) assignGlobalAccess()
     else {
       await updateRole({
         variables: {
           memberId: member.id,
-          role: newRole,
+          roleId: newRole.id,
         },
       })
       toast.success('Updated member role', { autoClose: 2000 })
     }
   }
 
-  const roleOptions = Object.keys(ApiOrganisationMemberRoleChoices).filter(
-    (option) => option !== 'Owner'
-  )
+  const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner') || []
 
-  const disabled = isOwner || !activeUserIsAdmin || member.self!
+  const disabled = isOwner || !userCanUpdateMemberRoles || member.self!
+
+  if (roleDataPending) return <></>
 
   return disabled ? (
     <RoleLabel role={role} />
   ) : (
-    <div className="space-y-1 w-full relative">
+    <div className="space-y-1 w-full">
       <Listbox disabled={disabled} value={role} onChange={handleUpdateRole}>
         {({ open }) => (
           <>
             <Listbox.Button as={Fragment} aria-required>
               <div
                 className={clsx(
-                  'p-2 flex items-center justify-between  rounded-md h-10',
+                  'py-2 flex items-center justify-between  rounded-md h-10',
                   disabled ? 'cursor-not-allowed' : 'cursor-pointer'
                 )}
               >
@@ -197,23 +249,21 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
                 )}
               </div>
             </Listbox.Button>
-            <Listbox.Options>
-              <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full">
-                {roleOptions.map((role: string) => (
-                  <Listbox.Option key={role} value={role} as={Fragment}>
-                    {({ active, selected }) => (
-                      <div
-                        className={clsx(
-                          'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                          active && 'bg-zinc-400 dark:bg-zinc-700'
-                        )}
-                      >
-                        <RoleLabel role={role} />
-                      </div>
-                    )}
-                  </Listbox.Option>
-                ))}
-              </div>
+            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none">
+              {roleOptions.map((role: RoleType) => (
+                <Listbox.Option key={role.name} value={role} as={Fragment}>
+                  {({ active, selected }) => (
+                    <div
+                      className={clsx(
+                        'flex items-center gap-2 p-2 cursor-pointer rounded-full',
+                        active && 'bg-zinc-300 dark:bg-zinc-700'
+                      )}
+                    >
+                      <RoleLabel role={role} />
+                    </div>
+                  )}
+                </Listbox.Option>
+              ))}
             </Listbox.Options>
           </>
         )}
@@ -321,7 +371,12 @@ const InviteDialog = (props: { organisationId: string }) => {
       </div>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal} initialFocus={emailInputRef}>
+        <Dialog
+          as="div"
+          className="relative z-10"
+          onClose={closeModal}
+          initialFocus={emailInputRef}
+        >
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -446,13 +501,21 @@ const InviteDialog = (props: { organisationId: string }) => {
 export default function Members({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const userCanInviteMembers = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Members', 'create')
+    : false
+
+  const userCanReadMembers = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Members', 'read')
+    : false
+
   const { data: membersData } = useQuery(GetOrganisationMembers, {
     variables: {
       organisationId: organisation?.id,
       role: null,
     },
     pollInterval: 5000,
-    skip: !organisation,
+    skip: !organisation || !userCanReadMembers,
   })
 
   const { data: invitesData } = useQuery(GetInvites, {
@@ -465,6 +528,10 @@ export default function Members({ params }: { params: { team: string } }) {
 
   const [deleteInvite] = useMutation(DeleteOrgInvite)
 
+  const activeUserCanDeleteUsers = organisation?.role?.permissions
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'delete', false)
+    : false
+
   const sortedInvites: OrganisationMemberInviteType[] =
     invitesData?.organisationInvites
       ?.slice() // Create a shallow copy of the array to avoid modifying the original
@@ -473,7 +540,7 @@ export default function Members({ params }: { params: { team: string } }) {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       }) || []
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  //const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
   const DeleteInviteConfirmDialog = (props: { inviteId: string }) => {
     const { inviteId } = props
@@ -576,6 +643,8 @@ export default function Members({ params }: { params: { team: string } }) {
   const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberType }) => {
     const { member } = props
 
+    const { activeOrganisation: organisation } = useContext(organisationContext)
+
     const [removeMember] = useMutation(RemoveMember)
 
     const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -600,7 +669,8 @@ export default function Members({ params }: { params: { team: string } }) {
       })
     }
 
-    const allowDelete = !member.self! && activeUserIsAdmin && member.role.toLowerCase() !== 'owner'
+    const allowDelete =
+      !member.self! && activeUserCanDeleteUsers && member.role!.name!.toLowerCase() !== 'owner'
 
     return (
       <>
@@ -610,7 +680,7 @@ export default function Members({ params }: { params: { team: string } }) {
               variant="danger"
               onClick={openModal}
               title="Remove member"
-              disabled={member.role.toLowerCase() === 'owner'}
+              disabled={member.role!.name!.toLowerCase() === 'owner'}
             >
               <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
                 <FaTrashAlt />
@@ -679,111 +749,136 @@ export default function Members({ params }: { params: { team: string } }) {
     )
   }
 
+  if (!organisation)
+    return (
+      <div className="flex items-center justify-center p-10">
+        <Spinner size="md" />
+      </div>
+    )
+
   return (
-    <section className="overflow-y-auto">
-      <div className="w-full space-y-10 p-8 text-black dark:text-white">
+    <section className="overflow-y-auto h-full">
+      <div className="w-full space-y-6 text-black dark:text-white">
         <div className="space-y-1">
-          <h1 className="text-3xl font-semibold">{params.team} Members</h1>
+          <h2 className="text-xl font-semibold">{params.team} Members</h2>
           <p className="text-neutral-500">Manage organisation members and roles.</p>
         </div>
         <div className="Space-y-4">
-          <div className="flex justify-end">
-            {organisation && <InviteDialog organisationId={organisation.id} />}
-          </div>
+          {userCanInviteMembers && (
+            <div className="flex justify-end">
+              <InviteDialog organisationId={organisation!.id} />
+            </div>
+          )}
 
-          <table className="table-auto min-w-full divide-y divide-zinc-500/40">
-            <thead>
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  User
-                </th>
+          {userCanReadMembers ? (
+            <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+              <thead>
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    User
+                  </th>
 
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Joined
-                </th>
-                {activeUserIsAdmin && <th className="px-6 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-500/40">
-              {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
-                <tr key={member.id}>
-                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                    <Avatar imagePath={member.avatarUrl!} size="lg" />
-                    <div className="flex flex-col">
-                      <span className="text-lg font-medium">{member.fullName || member.email}</span>
-                      {member.fullName && (
-                        <span className="text-neutral-500 text-sm">{member.email}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <RoleSelector member={member} />
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap capitalize">
-                    {relativeTimeFromDates(new Date(member.createdAt))}
-                  </td>
-                  <td className="px-6 py-4 flex items-center justify-end gap-2">
-                    {!member.self! &&
-                      activeUserIsAdmin &&
-                      member.role.toLowerCase() !== 'owner' && (
-                        <DeleteMemberConfirmDialog member={member} />
-                      )}
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Joined
+                  </th>
+                  {activeUserCanDeleteUsers && <th className="px-6 py-3"></th>}
                 </tr>
-              ))}
-              {sortedInvites.map((invite: OrganisationMemberInviteType) => (
-                <tr key={invite.id} className="opacity-60">
-                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                    <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
-                      <FaUserAlt />
-                    </div>
-                    <div className="flex flex-col">
-                      <div className="text-base font-medium">
-                        {invite.inviteeEmail}{' '}
-                        <span className="text-neutral-500 text-sm">
-                          (invited by{' '}
-                          {invite.invitedBy.self
-                            ? 'You'
-                            : invite.invitedBy.fullName || invite.invitedBy.email}
-                          )
+              </thead>
+              <tbody className="divide-y divide-zinc-500/40">
+                {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
+                  <tr key={member.id}>
+                    <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                      <Avatar imagePath={member.avatarUrl!} size="lg" />
+                      <div className="flex flex-col">
+                        <span className="text-lg font-medium">
+                          {member.fullName || member.email}
                         </span>
+                        {member.fullName && (
+                          <span className="text-neutral-500 text-sm">{member.email}</span>
+                        )}
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap"></td>
-                  <td
-                    className={clsx(
-                      'px-6 py-4 whitespace-nowrap',
-                      inviteIsExpired(invite) && 'text-red-500'
-                    )}
-                  >
-                    {inviteIsExpired(invite)
-                      ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
-                      : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
-                  </td>
-                  <td className="px-6 py-4 flex items-center justify-end gap-2">
-                    {!inviteIsExpired(invite) && (
-                      <Button
-                        variant="outline"
-                        title="Copy invite link"
-                        onClick={() => handleCopy(getInviteLink(invite.id))}
-                      >
-                        <div className="p-1">
-                          <FaCopy />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <RoleSelector member={member} />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap capitalize">
+                      {relativeTimeFromDates(new Date(member.createdAt))}
+                    </td>
+                    <td className="px-6 py-4 flex items-center justify-end gap-2">
+                      {!member.self! &&
+                        activeUserCanDeleteUsers &&
+                        member.role!.name!.toLowerCase() !== 'owner' && (
+                          <DeleteMemberConfirmDialog member={member} />
+                        )}
+                    </td>
+                  </tr>
+                ))}
+                {sortedInvites.map((invite: OrganisationMemberInviteType) => (
+                  <tr key={invite.id} className="opacity-60">
+                    <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                      <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
+                        <FaUserAlt />
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="text-base font-medium">
+                          {invite.inviteeEmail}{' '}
+                          <span className="text-neutral-500 text-sm">
+                            (invited by{' '}
+                            {invite.invitedBy.self
+                              ? 'You'
+                              : invite.invitedBy.fullName || invite.invitedBy.email}
+                            )
+                          </span>
                         </div>
-                      </Button>
-                    )}
-                    <DeleteInviteConfirmDialog inviteId={invite.id} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap"></td>
+                    <td
+                      className={clsx(
+                        'px-6 py-4 whitespace-nowrap',
+                        inviteIsExpired(invite) && 'text-red-500'
+                      )}
+                    >
+                      {inviteIsExpired(invite)
+                        ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
+                        : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
+                    </td>
+                    <td className="px-6 py-4 flex items-center justify-end gap-2">
+                      {!inviteIsExpired(invite) && (
+                        <Button
+                          variant="outline"
+                          title="Copy invite link"
+                          onClick={() => handleCopy(getInviteLink(invite.id))}
+                        >
+                          <div className="p-1">
+                            <FaCopy />
+                          </div>
+                        </Button>
+                      )}
+                      <DeleteInviteConfirmDialog inviteId={invite.id} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState
+              title="Access restricted"
+              subtitle="You don't have the permissions required to view members in this organisation."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaBan />
+                </div>
+              }
+            >
+              <></>
+            </EmptyState>
+          )}
         </div>
       </div>
     </section>

@@ -1,11 +1,12 @@
 type Query {
   organisations: [OrganisationType]
+  roles(orgId: ID): [RoleType]
   organisationNameAvailable(name: String): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
   organisationPlan(organisationId: ID): OrganisationPlanType
   organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
-  organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
+  organisationGlobalAccessUsers(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
@@ -47,7 +48,7 @@ type OrganisationType {
   identityKey: String!
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
-  role: String
+  role: RoleType
   memberId: ID
   keyring: String
   recovery: String
@@ -61,7 +62,6 @@ value as specified by
 """
 scalar DateTime
 
-"""An enumeration."""
 enum ApiOrganisationPlanChoices {
   """Free"""
   FR
@@ -72,6 +72,23 @@ enum ApiOrganisationPlanChoices {
   """Enterprise"""
   EN
 }
+
+type RoleType {
+  id: String!
+  name: String
+  description: String
+  color: String
+  permissions: JSONString
+  isDefault: Boolean
+}
+
+"""
+Allows use of a JSON String for input / output from the GraphQL schema.
+
+Use of this type is *not recommended* as you lose the benefits of having a defined, static
+schema (one of the key benefits of GraphQL).
+"""
+scalar JSONString
 
 type OrganisationPlanType {
   name: String
@@ -113,7 +130,7 @@ scalar Date
 
 type OrganisationMemberType {
   id: String!
-  role: ApiOrganisationMemberRoleChoices!
+  role: RoleType
   identityKey: String
   wrappedKeyring: String!
   createdAt: DateTime
@@ -123,18 +140,6 @@ type OrganisationMemberType {
   fullName: String
   avatarUrl: String
   self: Boolean
-}
-
-"""An enumeration."""
-enum ApiOrganisationMemberRoleChoices {
-  """Owner"""
-  OWNER
-
-  """Admin"""
-  ADMIN
-
-  """Developer"""
-  DEV
 }
 
 type ActivatedPhaseLicenseType {
@@ -154,7 +159,6 @@ type ActivatedPhaseLicenseType {
   activatedAt: DateTime!
 }
 
-"""An enumeration."""
 enum ApiActivatedPhaseLicensePlanChoices {
   """Free"""
   FR
@@ -166,19 +170,10 @@ enum ApiActivatedPhaseLicensePlanChoices {
   EN
 }
 
-"""
-Allows use of a JSON String for input / output from the GraphQL schema.
-
-Use of this type is *not recommended* as you lose the benefits of having a defined, static
-schema (one of the key benefits of GraphQL).
-"""
-scalar JSONString
-
 type OrganisationMemberInviteType {
   id: String!
   organisation: OrganisationType!
   apps: [AppType!]!
-  role: ApiOrganisationMemberInviteRoleChoices!
   invitedBy: OrganisationMemberType!
   inviteeEmail: String!
   valid: Boolean!
@@ -218,7 +213,6 @@ type EnvironmentType {
   syncs: [EnvironmentSyncType]!
 }
 
-"""An enumeration."""
 enum ApiEnvironmentEnvTypeChoices {
   """Development"""
   DEV
@@ -265,7 +259,6 @@ type ProviderType {
   authScheme: String
 }
 
-"""An enumeration."""
 enum ApiEnvironmentSyncStatusChoices {
   """In progress"""
   IN_PROGRESS
@@ -299,7 +292,6 @@ type EnvironmentSyncEventType {
   completedAt: DateTime
 }
 
-"""An enumeration."""
 enum ApiEnvironmentSyncEventStatusChoices {
   """In progress"""
   IN_PROGRESS
@@ -315,18 +307,6 @@ enum ApiEnvironmentSyncEventStatusChoices {
 
   """Failed"""
   FAILED
-}
-
-"""An enumeration."""
-enum ApiOrganisationMemberInviteRoleChoices {
-  """Owner"""
-  OWNER
-
-  """Admin"""
-  ADMIN
-
-  """Developer"""
-  DEV
 }
 
 type LogsResponseType {
@@ -448,7 +428,6 @@ type ServerEnvironmentKeyType {
   updatedAt: DateTime!
 }
 
-"""An enumeration."""
 enum ApiSecretEventEventTypeChoices {
   """Create"""
   C
@@ -469,7 +448,6 @@ type ChartDataPointType {
   data: Int
 }
 
-"""An enumeration."""
 enum TimeRange {
   HOUR
   DAY
@@ -611,10 +589,10 @@ type StripeCheckoutDetails {
 
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
-  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
+  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!): InviteOrganisationMemberMutation
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
-  updateOrganisationMemberRole(memberId: ID!, role: String!): UpdateOrganisationMemberRole
+  updateOrganisationMemberRole(memberId: ID!, roleId: ID!): UpdateOrganisationMemberRole
   updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
@@ -629,6 +607,9 @@ type Mutation {
   swapEnvironmentOrder(environment1Id: ID!, environment2Id: ID!): SwapEnvironmentOrderMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
+  createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
+  updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
+  deleteCustomRole(id: ID!): DeleteCustomRoleMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
@@ -755,6 +736,18 @@ type CreateEnvironmentKeyMutation {
 
 type CreateEnvironmentTokenMutation {
   environmentToken: EnvironmentTokenType
+}
+
+type CreateCustomRoleMutation {
+  role: RoleType
+}
+
+type UpdateCustomRoleMutation {
+  role: RoleType
+}
+
+type DeleteCustomRoleMutation {
+  ok: Boolean
 }
 
 type InitEnvSync {

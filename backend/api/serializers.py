@@ -176,9 +176,7 @@ class UserTokenSerializer(serializers.ModelSerializer):
                     "encryption": "E2E",
                 }
 
-                if ServerEnvironmentKey.objects.filter(
-                    environment=key.environment
-                ).exists():
+                if key.environment.app.sse_enabled:
                     app_data["encryption"] = "SSE"
 
                 if index == -1:

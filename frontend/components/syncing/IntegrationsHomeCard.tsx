@@ -2,17 +2,26 @@
 
 import { useQuery } from '@apollo/client'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
-import { OrganisationMemberType, ProviderCredentialsType } from '@/apollo/graphql'
+import { OrganisationType, ProviderCredentialsType } from '@/apollo/graphql'
 import Spinner from '../common/Spinner'
-import { FaCubes, FaProjectDiagram } from 'react-icons/fa'
+import { FaProjectDiagram } from 'react-icons/fa'
 import { Card } from '../common/Card'
+import { userHasPermission } from '@/utils/access/permissions'
 
-export default function IntegrationsHomeCard(props: { organisationId: string }) {
-  const { organisationId } = props
+export default function IntegrationsHomeCard(props: { organisation: OrganisationType }) {
+  const { organisation } = props
+
+  const userCanReadIntegrations = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'read'
+  )
+
   const { data, loading } = useQuery(GetSavedCredentials, {
     variables: {
-      orgId: organisationId,
+      orgId: organisation.id,
     },
+    skip: !userCanReadIntegrations,
   })
 
   const integrations = data?.savedCredentials as ProviderCredentialsType[]

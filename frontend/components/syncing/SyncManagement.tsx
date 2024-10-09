@@ -19,7 +19,7 @@ import { ProviderCredentialPicker } from './ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
 import { Switch } from '@headlessui/react'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { usePathname } from 'next/navigation'
 import { ServiceInfo } from './ServiceInfo'
 
@@ -35,7 +35,9 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(sync.authentication!)
   const [isActive, setIsActive] = useState<boolean>(sync.isActive)
 
-  const isOnIntegrationsPage = usePathname() === `/${organisation?.name}/integrations`
+  const userCanTriggerSyncs =
+    userHasPermission(organisation?.role?.permissions, 'Integrations', 'create', true) ||
+    userHasPermission(organisation?.role?.permissions, 'Integrations', 'update', true)
 
   const handleSync = async () => {
     await triggerSync({
@@ -85,7 +87,23 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
 
   const isSyncing = sync.status === ApiEnvironmentSyncStatusChoices.InProgress
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const userCanReadCredentials = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'read'
+  )
+  const userCanUpdateSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'update',
+    true
+  )
+  const userCanDeleteSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'delete',
+    true
+  )
 
   return (
     <div className="space-y-4 py-4">
@@ -117,7 +135,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           ></div>
           {sync.isActive ? 'Active' : 'Paused'}
 
-          {activeUserIsAdmin && (
+          {userCanUpdateSyncs && (
             <Switch
               id="toggle-sync"
               checked={isActive}
@@ -156,19 +174,21 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           <div
             className="w-full grow"
             title={
-              activeUserIsAdmin
+              userCanUpdateSyncs && userCanReadCredentials
                 ? 'Update Sync authentication'
-                : "You don't have permission to update sync authentication"
+                : "You don't have the permissions required to update sync authentication"
             }
           >
-            <ProviderCredentialPicker
-              credential={credential}
-              setCredential={(cred) => handleUpdateAuth(cred)}
-              orgId={organisation!.id}
-              disabled={!activeUserIsAdmin}
-              newCredentialCallback={closeModal}
-              providerFilter={sync.serviceInfo?.provider?.id}
-            />
+            {userCanUpdateSyncs && userCanReadCredentials && (
+              <ProviderCredentialPicker
+                credential={credential}
+                setCredential={(cred) => handleUpdateAuth(cred)}
+                orgId={organisation!.id}
+                disabled={!userCanUpdateSyncs || !userCanReadCredentials}
+                newCredentialCallback={closeModal}
+                providerFilter={sync.serviceInfo?.provider?.id}
+              />
+            )}
           </div>
           {credential === null && (
             <div className="py-3">
@@ -180,11 +200,15 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           )}
         </div>
 
-        <div className="col-span-2 flex items-center gap-4 justify-end pt-4 border-t border-neutral-500/40">
-          <Button variant="primary" onClick={handleSync} disabled={isSyncing}>
+        <div className="col-span-2 flex items-center justify-between gap-4 pt-4 border-t border-neutral-500/40">
+          <div>{userCanDeleteSyncs && <DeleteSyncDialog sync={sync} />}</div>
+          <Button
+            variant="primary"
+            onClick={handleSync}
+            disabled={!userCanTriggerSyncs || isSyncing}
+          >
             <FaSync className={isSyncing ? 'animate-spin' : ''} /> Sync now
           </Button>
-          {activeUserIsAdmin && <DeleteSyncDialog sync={sync} />}
         </div>
       </div>
     </div>

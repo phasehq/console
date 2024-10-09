@@ -7,7 +7,7 @@ import { AppType } from '@/apollo/graphql'
 import { Fragment, useContext, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { copyToClipBoard } from '@/utils/clipboard'
-import { FaCopy, FaExclamationTriangle, FaInfo, FaTimes } from 'react-icons/fa'
+import { FaBan, FaCopy, FaExclamationTriangle, FaInfo, FaTimes } from 'react-icons/fa'
 import { MdContentCopy, MdOutlineRotateLeft } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import { Dialog, Transition } from '@headlessui/react'
@@ -24,9 +24,18 @@ import {
   splitSecret,
   getWrappedKeyShare,
 } from '@/utils/crypto'
+import { userHasPermission } from '@/utils/access/permissions'
+import { EmptyState } from '@/components/common/EmptyState'
 
 export default function Tokens({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanReadTokens = userHasPermission(
+    organisation?.role?.permissions,
+    'Tokens',
+    'read',
+    true
+  )
 
   const { data } = useQuery(GetAppDetail, {
     variables: {
@@ -241,49 +250,63 @@ export default function Tokens({ params }: { params: { team: string; app: string
 
   return (
     <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
-      <section className="max-w-screen-xl">
-        {keyring !== null && (
-          <div className="flex gap-8 mt-6 divide-x divide-neutral-500/20 items-start">
-            <div className="space-y-4 border-l border-neutral-500/40 h-min">
-              <div
-                role="button"
-                onClick={() => setActivePanel('secrets')}
-                className={clsx(
-                  'p-4 cursor-pointer border-l transition ease -ml-px w-60',
-                  activePanel === 'secrets'
-                    ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
-                    : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
-                )}
-              >
-                Secrets
-              </div>
-              {organisation?.role?.toLowerCase() === 'owner' && (
+      {userCanReadTokens ? (
+        <section className="max-w-screen-xl">
+          {keyring !== null && (
+            <div className="flex gap-8 mt-6 divide-x divide-neutral-500/20 items-start">
+              <div className="space-y-4 border-l border-neutral-500/40 h-min">
                 <div
                   role="button"
-                  onClick={() => setActivePanel('kms')}
+                  onClick={() => setActivePanel('secrets')}
                   className={clsx(
                     'p-4 cursor-pointer border-l transition ease -ml-px w-60',
-                    activePanel === 'kms'
+                    activePanel === 'secrets'
                       ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
                       : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
                   )}
                 >
-                  KMS{' '}
-                  <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
-                    Legacy
-                  </span>
+                  Secrets
                 </div>
-              )}
+                {organisation?.role!.name!.toLowerCase() === 'owner' && (
+                  <div
+                    role="button"
+                    onClick={() => setActivePanel('kms')}
+                    className={clsx(
+                      'p-4 cursor-pointer border-l transition ease -ml-px w-60',
+                      activePanel === 'kms'
+                        ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
+                        : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
+                    )}
+                  >
+                    KMS{' '}
+                    <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
+                      Legacy
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-y-auto px-4">
+                {app && activePanel === 'secrets' && (
+                  <SecretTokens organisationId={organisation!.id} appId={params.app} />
+                )}
+                {app && activePanel === 'kms' && <KmsPanel />}
+              </div>
             </div>
-            <div className="overflow-y-auto px-4">
-              {app && activePanel === 'secrets' && (
-                <SecretTokens organisationId={organisation!.id} appId={params.app} />
-              )}
-              {app && activePanel === 'kms' && <KmsPanel />}
+          )}
+        </section>
+      ) : (
+        <EmptyState
+          title="Access restricted"
+          subtitle="You don't have the permissions required to view Tokens in this app."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBan />
             </div>
-          </div>
-        )}
-      </section>
+          }
+        >
+          <></>
+        </EmptyState>
+      )}
     </div>
   )
 }

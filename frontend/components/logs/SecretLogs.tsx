@@ -9,7 +9,7 @@ import {
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaChevronRight, FaExternalLinkAlt, FaKey } from 'react-icons/fa'
+import { FaBan, FaChevronRight, FaExternalLinkAlt, FaKey } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
@@ -27,6 +27,8 @@ import {
   envKeyring,
   EnvKeypair,
 } from '@/utils/crypto'
+import { userHasPermission } from '@/utils/access/permissions'
+import { EmptyState } from '../common/EmptyState'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
@@ -48,6 +50,10 @@ export default function SecretLogs(props: { app: string }) {
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
+
+  const userCanReadLogs = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Logs', 'read', true)
+    : false
 
   const getCurrentTimeStamp = () => Date.now()
   const getLastLogTimestamp = () =>
@@ -402,50 +408,64 @@ export default function SecretLogs(props: { app: string }) {
 
   return (
     <>
-      <div className="w-full text-black dark:text-white flex flex-col">
-        <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
-          <span className="text-neutral-500 font-light text-lg">
-            {totalCount && <Count from={0} to={totalCount} />} Events
-          </span>
-          <Button variant="secondary" onClick={clearLogList} disabled={loading}>
-            <FiRefreshCw
-              size={20}
-              className={clsx('mr-1', loading && logList.length === 0 ? 'animate-spin' : '')}
-            />{' '}
-            Refresh
-          </Button>
+      {userCanReadLogs ? (
+        <div className="w-full text-black dark:text-white flex flex-col">
+          <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
+            <span className="text-neutral-500 font-light text-lg">
+              {totalCount && <Count from={0} to={totalCount} />} Events
+            </span>
+            <Button variant="secondary" onClick={clearLogList} disabled={loading}>
+              <FiRefreshCw
+                size={20}
+                className={clsx('mr-1', loading && logList.length === 0 ? 'animate-spin' : '')}
+              />{' '}
+              Refresh
+            </Button>
+          </div>
+          <table className="table-auto w-full text-left text-sm font-light">
+            <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-10  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+              <tr className="text-neutral-500">
+                <th></th>
+                <th className="px-6 py-4">User</th>
+                <th className="px-6 py-4">Event</th>
+                <th className="px-6 py-4">Environment</th>
+                <th className="px-6 py-4">Secret</th>
+                <th className="px-6 py-4">Time</th>
+              </tr>
+            </thead>
+            <tbody className="h-full max-h-96 overflow-y-auto" ref={tableBodyRef}>
+              {logList.map((log, n) => (
+                <LogRow log={log} key={log.id} />
+              ))}
+              {loading && <SkeletonRow rows={DEFAULT_PAGE_SIZE} />}
+              <tr className="h-40">
+                <td colSpan={6} ref={loglistEndRef}>
+                  <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
+                    {!endofList && (
+                      <Button variant="secondary" onClick={getNextPage} disabled={loading}>
+                        <FiChevronsDown /> Load more
+                      </Button>
+                    )}
+                    {endofList && `No${logList.length ? ' more ' : ' '}logs to show`}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <table className="table-auto w-full text-left text-sm font-light">
-          <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-10  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
-            <tr className="text-neutral-500">
-              <th></th>
-              <th className="px-6 py-4">User</th>
-              <th className="px-6 py-4">Event</th>
-              <th className="px-6 py-4">Environment</th>
-              <th className="px-6 py-4">Secret</th>
-              <th className="px-6 py-4">Time</th>
-            </tr>
-          </thead>
-          <tbody className="h-full max-h-96 overflow-y-auto" ref={tableBodyRef}>
-            {logList.map((log, n) => (
-              <LogRow log={log} key={log.id} />
-            ))}
-            {loading && <SkeletonRow rows={DEFAULT_PAGE_SIZE} />}
-            <tr className="h-40">
-              <td colSpan={6} ref={loglistEndRef}>
-                <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
-                  {!endofList && (
-                    <Button variant="secondary" onClick={getNextPage} disabled={loading}>
-                      <FiChevronsDown /> Load more
-                    </Button>
-                  )}
-                  {endofList && `No${logList.length ? ' more ' : ' '}logs to show`}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      ) : (
+        <EmptyState
+          title="Access restricted"
+          subtitle="You don't have the permissions required to view Logs in this app."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBan />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
+      )}
     </>
   )
 }

@@ -1,8 +1,10 @@
 import { Dialog, Transition } from '@headlessui/react'
 import { Button } from '../../common/Button'
 import clsx from 'clsx'
-import { useState, Fragment } from 'react'
+import { useState, Fragment, useContext } from 'react'
 import { FaRegCommentDots, FaTimes } from 'react-icons/fa'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userHasPermission } from '@/utils/access/permissions'
 
 export const CommentDialog = (props: {
   secretId: string
@@ -11,6 +13,15 @@ export const CommentDialog = (props: {
   handlePropertyChange: Function
 }) => {
   const { secretId, secretName, comment, handlePropertyChange } = props
+
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanUpdateSecrets = userHasPermission(
+    organisation?.role?.permissions,
+    'Secrets',
+    'update',
+    true
+  )
 
   const [commentValue, setCommentValue] = useState<string>(comment)
 
@@ -90,6 +101,7 @@ export const CommentDialog = (props: {
                       value={commentValue}
                       className="w-full"
                       onChange={(e) => setCommentValue(e.target.value)}
+                      disabled={!userCanUpdateSecrets}
                     ></textarea>
                   </div>
 

@@ -2,18 +2,23 @@
 
 import { useQuery } from '@apollo/client'
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
-import { OrganisationMemberType } from '@/apollo/graphql'
+import { OrganisationMemberType, OrganisationType } from '@/apollo/graphql'
 import Spinner from '../common/Spinner'
-import { FaCubes, FaUsers } from 'react-icons/fa'
+import { FaUsers } from 'react-icons/fa'
 import { Card } from '../common/Card'
+import { userHasPermission } from '@/utils/access/permissions'
 
-export default function MembersHomeCard(props: { organisationId: string }) {
-  const { organisationId } = props
+export default function MembersHomeCard(props: { organisation: OrganisationType }) {
+  const { organisation } = props
+
+  const userCanReadMembers = userHasPermission(organisation?.role?.permissions, 'Members', 'read')
+
   const { data, loading } = useQuery(GetOrganisationMembers, {
     variables: {
-      organisationId,
+      organisationId: organisation.id,
       role: null,
     },
+    skip: !userCanReadMembers,
   })
 
   const members = data?.organisationMembers as OrganisationMemberType[]

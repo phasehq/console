@@ -7,6 +7,7 @@ from api.utils.rest import encode_string_to_base64, get_client_ip
 from api.models import OrganisationMember
 from django.utils import timezone
 
+
 def get_org_member_name(org_member):
     social_acc = org_member.user.socialaccount_set.first()
 
@@ -41,10 +42,10 @@ def send_email(subject, recipient_list, template_name, context):
 def send_login_email(request, email, full_name, provider):
     user_agent = request.META.get("HTTP_USER_AGENT", "Unknown")
     ip_address = get_client_ip(request)
-    
+
     # Get the current time in the current timezone
     current_time = timezone.now()
-    
+
     # Format the timestamp with timezone information
     timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S %Z (%z)")
 
@@ -94,7 +95,7 @@ def send_user_joined_email(invite, new_member):
     members_page_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}/members"
 
     owner = OrganisationMember.objects.get(
-        organisation=invite.organisation, role=OrganisationMember.OWNER, deleted_at=None
+        organisation=invite.organisation, role__name="Owner", deleted_at=None
     )
 
     owner_name = get_org_member_name(owner)
@@ -114,7 +115,7 @@ def send_user_joined_email(invite, new_member):
         "organisation": organisation,
         "invited_by": invited_by_name,
         "new_user": new_user_name,
-        "members_page_link": members_page_link
+        "members_page_link": members_page_link,
     }
 
     send_email(
@@ -123,6 +124,7 @@ def send_user_joined_email(invite, new_member):
         "api/user_joined_org.html",
         context,
     )
+
 
 def send_welcome_email(new_member):
     organisation = new_member.organisation.name

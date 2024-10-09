@@ -1,5 +1,4 @@
 from django.db import models
-from django.contrib.postgres.fields import ArrayField
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
@@ -142,6 +141,7 @@ class App(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
+    sse_enabled = models.BooleanField(default=False)
 
     objects = AppManager()
 
@@ -160,12 +160,30 @@ class App(models.Model):
         return self.name
 
 
-class OrganisationMember(models.Model):
-    OWNER = "owner"
-    ADMIN = "admin"
-    DEVELOPER = "dev"
+class Role(models.Model):
+    """Represents a role with specific permissions for an organization."""
 
-    USER_ROLES = [(OWNER, "Owner"), (ADMIN, "Admin"), (DEVELOPER, "Developer")]
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.CharField(max_length=255)  # Role name, e.g., Owner, Admin, Developer
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="roles"
+    )
+    description = models.TextField(null=True, blank=True)
+    color = models.CharField(max_length=7, blank=True, default="")
+
+    # Store permissions as JSON
+    permissions = models.JSONField(default=dict)
+
+    is_default = models.BooleanField(
+        default=False
+    )  # Indicates if the role is a default role
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.organisation.name})"
+
+
+class OrganisationMember(models.Model):
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     user = models.ForeignKey(
@@ -174,10 +192,12 @@ class OrganisationMember(models.Model):
     organisation = models.ForeignKey(
         Organisation, related_name="users", on_delete=models.CASCADE
     )
-    role = models.CharField(
-        max_length=5,
-        choices=USER_ROLES,
-        default=DEVELOPER,
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="organisation_members",
     )
     apps = models.ManyToManyField(App, related_name="members")
     identity_key = models.CharField(max_length=256, null=True, blank=True)
@@ -209,11 +229,6 @@ class OrganisationMemberInvite(models.Model):
         Organisation, related_name="invites", on_delete=models.CASCADE
     )
     apps = models.ManyToManyField(App)
-    role = models.CharField(
-        max_length=5,
-        choices=OrganisationMember.USER_ROLES,
-        default=OrganisationMember.DEVELOPER,
-    )
     invited_by = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE)
     invitee_email = models.EmailField()
     valid = models.BooleanField(default=True)

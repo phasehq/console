@@ -1,0 +1,5 @@
+mutation DeleteRole($id: ID!) {
+  deleteCustomRole(id: $id) {
+    ok
+  }
+}

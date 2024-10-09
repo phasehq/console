@@ -8,7 +8,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { SyncCard } from '@/components/syncing/SyncCard'
 import { SyncOptions } from '@/components/syncing/SyncOptions'
 import { useSearchParams } from 'next/navigation'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 
 export default function Syncing({ params }: { params: { team: string; app: string } }) {
@@ -23,7 +23,9 @@ export default function Syncing({ params }: { params: { team: string; app: strin
     pollInterval: 10000,
   })
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const userCanCreateSyncs = organisation
+    ? userHasPermission(organisation.role?.permissions, 'Integrations', 'create', true)
+    : false
 
   return (
     <div className="w-full space-y-8 pt-8 text-black dark:text-white">
@@ -42,7 +44,7 @@ export default function Syncing({ params }: { params: { team: string; app: strin
       )}
       {data?.sseEnabled === true && (
         <>
-          {activeUserIsAdmin && (
+          {userCanCreateSyncs && (
             <SyncOptions
               appId={params.app}
               defaultOpen={openCreateSyncPanel || (data.syncs && data.syncs.length === 0)}

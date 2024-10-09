@@ -1,0 +1,10 @@
+query GetRoles($orgId: ID!) {
+  roles(orgId: $orgId) {
+    id
+    name
+    description
+    color
+    permissions
+    isDefault
+  }
+}

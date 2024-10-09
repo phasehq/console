@@ -10,19 +10,36 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
 import { clsx } from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { Avatar } from '@/components/common/Avatar'
 import { CreateServiceTokenDialog } from './CreateServiceTokenDialog'
 import { MdKey } from 'react-icons/md'
+import { toast } from 'react-toastify'
 
 export const SecretTokens = (props: { organisationId: string; appId: string }) => {
   const { organisationId, appId } = props
 
-  const [getServiceTokens, { data: serviceTokensData }] = useLazyQuery(GetServiceTokens)
-
   const [deleteServiceToken] = useMutation(RevokeServiceToken)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanReadTokens = userHasPermission(
+    organisation?.role?.permissions,
+    'Tokens',
+    'read',
+    true
+  )
+
+  const usercanCreateTokens =
+    userHasPermission(organisation?.role?.permissions, 'Tokens', 'create', true) &&
+    userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
+
+  const { data: serviceTokensData } = useQuery(GetServiceTokens, {
+    variables: {
+      appId,
+    },
+    skip: !userCanReadTokens,
+  })
 
   const handleDeleteServiceToken = async (tokenId: string) => {
     await deleteServiceToken({
@@ -37,17 +54,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
         },
       ],
     })
+    toast.success('Service token deleted')
   }
-
-  useEffect(() => {
-    if (organisationId && appId) {
-      getServiceTokens({
-        variables: {
-          appId,
-        },
-      })
-    }
-  }, [appId, getServiceTokens, organisationId])
 
   const DeleteConfirmDialog = (props: {
     token: UserTokenType | ServiceTokenType
@@ -142,9 +150,13 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
 
     const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
 
-    const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+    const userCanReadEnvironments = organisation
+      ? userHasPermission(organisation.role?.permissions, 'Environments', 'read', true)
+      : false
 
-    const allowDelete = activeUserIsAdmin || token.createdBy!.self
+    const userCanDeleteTokens = organisation
+      ? userHasPermission(organisation.role?.permissions, 'Tokens', 'delete', true)
+      : false
 
     const identityKeys = token.keys.map((key) => key.identityKey)
 
@@ -152,6 +164,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
       variables: {
         appId,
       },
+      skip: !userCanReadEnvironments,
     })
 
     const tokenEnvironments = data?.appEnvironments.filter((env: EnvironmentType) =>
@@ -196,7 +209,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
             </div>
           </div>
         </div>
-        {allowDelete && (
+        {userCanDeleteTokens && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
             <DeleteConfirmDialog token={token} onDelete={deleteHandler} />
           </div>
@@ -216,9 +229,11 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           </p>
         </div>
 
-        <div className="flex justify-end py-4 border-b border-neutral-500/40">
-          <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
-        </div>
+        {usercanCreateTokens && (
+          <div className="flex justify-end py-4 border-b border-neutral-500/40">
+            <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
+          </div>
+        )}
 
         {serviceTokensData?.serviceTokens.length > 0 ? (
           <div className="space-y-4">

@@ -54,20 +54,11 @@ export default function AppLayout({
       name: 'Syncing',
       link: 'syncing',
     },
+    {
+      name: 'Settings',
+      link: 'settings',
+    },
   ])
-
-  useEffect(() => {
-    if (organisation) {
-      if (organisation.role!.toLowerCase() !== 'dev') {
-        setTabs((prevTabs) =>
-          prevTabs.some((tab) => tab.name === 'Settings')
-            ? prevTabs
-            : [...prevTabs, { name: 'Settings', link: 'settings' }]
-        )
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisation, params.app])
 
   useEffect(() => {
     const activeTabIndex = () => {

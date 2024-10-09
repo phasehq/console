@@ -2,7 +2,6 @@ import _sodium from 'libsodium-wrappers-sumo'
 
 import {
   ApiEnvironmentEnvTypeChoices,
-  ApiOrganisationMemberRoleChoices,
   EnvironmentKeyType,
   EnvironmentType,
   OrganisationMemberType,
@@ -390,7 +389,7 @@ export const createNewEnv = async (
   appId: string,
   name: string,
   envType: ApiEnvironmentEnvTypeChoices,
-  ownerAndAdmins: OrganisationMemberType[],
+  globalAccessUsers: OrganisationMemberType[],
   serverKey?: string
 ) => {
   const seed = await newEnvSeed()
@@ -398,14 +397,14 @@ export const createNewEnv = async (
 
   const salt = await newEnvSalt()
 
-  const owner = ownerAndAdmins.find(
-    (user: OrganisationMemberType) => user.role === ApiOrganisationMemberRoleChoices.Owner
+  const owner = globalAccessUsers.find(
+    (user: OrganisationMemberType) => user.role!.name?.toLowerCase() === "owner"
   )
 
   const ownerWrappedEnv = await wrapEnvSecretsForUser({ seed, salt }, owner!)
-  const adminWrappedEnvSecrets = await Promise.all(
-    ownerAndAdmins
-      .filter((user) => user.role !== ApiOrganisationMemberRoleChoices.Owner)
+  const globalAccessUsersWrappedEnv = await Promise.all(
+    globalAccessUsers
+      .filter((user) => user.role!.name?.toLowerCase() !== "owner")
       .map(async (admin) => {
         const adminWrappedEnvSecret = await wrapEnvSecretsForUser({ seed, salt }, admin)
         return adminWrappedEnvSecret
@@ -421,7 +420,7 @@ export const createNewEnv = async (
       wrappedSalt: ownerWrappedEnv.wrappedSalt,
       identityKey: keys.publicKey,
     },
-    adminKeysPayload: adminWrappedEnvSecrets.map((wrappedSecrets) => {
+    adminKeysPayload: globalAccessUsersWrappedEnv.map((wrappedSecrets) => {
       const { wrappedSeed, wrappedSalt, user } = wrappedSecrets
       return {
         identityKey: keys.publicKey,

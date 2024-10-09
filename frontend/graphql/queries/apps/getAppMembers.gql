@@ -6,6 +6,12 @@ query GetAppMembers($appId: ID!) {
     fullName
     avatarUrl
     createdAt
-    role
+    role {
+      id
+      name
+      description
+      permissions
+      color
+    }
   }
 }

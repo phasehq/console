@@ -12,15 +12,18 @@ import { organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
 import { LogoMark } from '../common/LogoMark'
 import CommandPalette from '../common/CommandPalette'
+import { userHasPermission } from '@/utils/access/permissions'
 
 export const NavBar = (props: { team: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
 
   const { data: appsData } = useQuery(GetApps, {
     variables: {
       organisationId: organisation?.id,
     },
-    skip: !organisation,
+    skip: !organisation || !userCanReadApps,
   })
   const [getAppEnvs, { data: appEnvsData }] = useLazyQuery(GetAppEnvironments)
 

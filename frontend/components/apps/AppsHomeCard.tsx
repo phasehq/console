@@ -2,17 +2,22 @@
 
 import { useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
-import { AppType } from '@/apollo/graphql'
+import { AppType, OrganisationType } from '@/apollo/graphql'
 import Spinner from '../common/Spinner'
 import { FaCubes } from 'react-icons/fa'
 import { Card } from '../common/Card'
+import { userHasPermission } from '@/utils/access/permissions'
 
-export default function AppsHomeCard(props: { organisationId: string }) {
-  const { organisationId } = props
+export default function AppsHomeCard(props: { organisation: OrganisationType }) {
+  const { organisation } = props
+
+  const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
+
   const { data, loading } = useQuery(GetApps, {
     variables: {
-      organisationId,
+      organisationId: organisation.id,
     },
+    skip: !userCanReadApps,
   })
 
   const apps = data?.apps as AppType[]
