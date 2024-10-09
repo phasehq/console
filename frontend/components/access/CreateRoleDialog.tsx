@@ -1,4 +1,4 @@
-import { RoleType } from '@/apollo/graphql'
+import { ApiOrganisationPlanChoices, RoleType } from '@/apollo/graphql'
 import GenericDialog from '../common/GenericDialog'
 import {
   parsePermissions,
@@ -24,9 +24,12 @@ import { Textarea } from '../common/TextArea'
 import { AccessTemplateSelector } from './AccessTemplateSelector'
 import { PermissionToggle } from './PermissionToggle'
 import { ColorPicker } from '../common/ColorPicker'
+import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 
 export const CreateRoleDialog = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const upsell = organisation?.plan === ApiOrganisationPlanChoices.Fr
 
   const { data: roleData, loading: roleDataPending } = useQuery(GetRoles, {
     variables: { orgId: organisation?.id },
@@ -124,6 +127,17 @@ export const CreateRoleDialog = () => {
       toast.success('Created new role!')
     }
   }
+
+  if (upsell)
+    return (
+      <UpsellDialog
+        buttonLabel={
+          <>
+            <FaPlus /> Create Role
+          </>
+        }
+      />
+    )
 
   if (!rolePolicy || roleDataPending) return <></>
 

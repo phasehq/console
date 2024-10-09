@@ -20,6 +20,11 @@ class CreateCustomRoleMutation(graphene.Mutation):
         user = info.context.user
         org = Organisation.objects.get(id=organisation_id)
 
+        if org.plan == Organisation.FREE_PLAN:
+            raise GraphQLError(
+                "Custom roles are not available on your organisation's plan"
+            )
+
         if not user_has_permission(user, "create", "Roles", org):
             raise GraphQLError(
                 "You don't have the permissions required to create Roles in this organisation"
@@ -53,6 +58,11 @@ class UpdateCustomRoleMutation(graphene.Mutation):
     def mutate(cls, root, info, id, name, description, color, permissions):
         user = info.context.user
         role = Role.objects.get(id=id)
+
+        if role.organisation.plan == Organisation.FREE_PLAN:
+            raise GraphQLError(
+                "Custom roles are not available on your organisation's plan"
+            )
 
         if not user_has_permission(user, "update", "Roles", role.organisation):
             raise GraphQLError(
