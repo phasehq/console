@@ -51,7 +51,7 @@ def user_has_permission(user, action, resource, organisation, is_app_resource=Fa
     try:
         # Get the user's membership in the organization
         org_member = OrganisationMember.objects.get(
-            user=user, organisation=organisation
+            user=user, organisation=organisation, deleted_at=None
         )
         role = org_member.role
         if not role:
