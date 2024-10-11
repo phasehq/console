@@ -4,6 +4,8 @@ import { Tag } from '../Tag'
 import { Alert } from '@/components/common/Alert'
 import GenericDialog from '@/components/common/GenericDialog'
 import { GoDotFill } from 'react-icons/go'
+import { FaTrashAlt } from 'react-icons/fa';
+import { Button } from '@/components/common/Button'
 import clsx from 'clsx'
 type ChangeDetail = {
   old: string | SecretTagType[]
@@ -23,12 +25,16 @@ type DeployPreviewProps = {
   clientSecrets: SecretType[]
   serverSecrets: SecretType[]
   secretsToDelete: string[]
+  onDiscard: () => void
+  isLoading: boolean
 }
 
 export const DeployPreview: React.FC<DeployPreviewProps> = ({
   clientSecrets,
   serverSecrets,
   secretsToDelete,
+  onDiscard,
+  isLoading
 }) => {
   const getChanges = (): Record<string, SecretChange> => {
     const changes: Record<string, SecretChange> = {}
@@ -210,9 +216,16 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
         buttonVariant=""
         title="Preview undeployed changes"
         buttonContent={
-          <Alert variant="info" size="sm" icon={true}>
-            <span>{changeCount()} undeployed changes. Click to preview</span>
-          </Alert>
+          <div>
+            <Alert 
+              variant="neutral" 
+              size="sm" 
+            >
+              <span>
+                {changeCount()} {changeCount() === 1 ? 'change' : 'changes'}. Click to preview
+              </span>
+            </Alert>
+          </div>
         }
       >
         <div className="flex flex-col space-y-2 max-h-[85vh] overflow-auto ph-no-capture">
@@ -259,6 +272,13 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
               </div>
             )
           })}
+          <hr className="border-t border-zinc-700 my-4" />
+            <div className="mt-4">
+              <Button variant="danger" onClick={onDiscard} disabled={isLoading}>
+                <FaTrashAlt className="mr-1" />
+                Discard
+              </Button>
+            </div>
         </div>
       </GenericDialog>
     </div>
