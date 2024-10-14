@@ -144,7 +144,7 @@ export default function Settings({ params }: { params: { team: string } }) {
               </Tab.Panel>
 
               <Tab.Panel>
-                <div className="space-y-8">
+                <div className="space-y-8 h-[50vh]">
                   <div>
                     <h2 className="text-2xl font-semibold mb-2">App</h2>
                     <p className="text-neutral-500">
