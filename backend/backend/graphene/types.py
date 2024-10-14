@@ -1,5 +1,6 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import get_credentials
+from api.utils.access.permissions import user_has_permission
 from backend.quotas import PLAN_CONFIG
 import graphene
 from enum import Enum
@@ -20,6 +21,7 @@ from api.models import (
     OrganisationMemberInvite,
     PersonalSecret,
     ProviderCredentials,
+    Role,
     Secret,
     SecretEvent,
     SecretFolder,
@@ -31,6 +33,7 @@ from api.models import (
 from logs.dynamodb_models import KMSLog
 from allauth.socialaccount.models import SocialAccount
 from django.utils import timezone
+from api.utils.access.roles import default_roles
 
 
 class OrganisationPlanType(ObjectType):
@@ -42,8 +45,30 @@ class OrganisationPlanType(ObjectType):
     app_count = graphene.Int()
 
 
+class RoleType(DjangoObjectType):
+    name = graphene.String()
+    description = graphene.String()
+    color = graphene.String()
+    permissions = graphene.JSONString()
+    is_default = graphene.Boolean()
+
+    class Meta:
+        model = Role
+        fields = ("id", "name", "description")
+
+    def resolve_permissions(self, info):
+        if self.is_default:
+            return default_roles.get(self.name, {})
+        return self.permissions
+
+    def resolve_description(self, info):
+        if self.is_default:
+            return default_roles.get(self.name, {})["meta"]["description"]
+        return self.description
+
+
 class OrganisationType(DjangoObjectType):
-    role = graphene.String()
+    role = graphene.Field(RoleType)
     member_id = graphene.ID()
     keyring = graphene.String()
     recovery = graphene.String()
@@ -118,6 +143,7 @@ class OrganisationMemberType(DjangoObjectType):
     username = graphene.String()
     full_name = graphene.String()
     avatar_url = graphene.String()
+    role = graphene.Field(RoleType)
     self = graphene.Boolean()
 
     class Meta:
@@ -169,7 +195,6 @@ class OrganisationMemberInviteType(DjangoObjectType):
             "valid",
             "organisation",
             "apps",
-            "role",
             "created_at",
             "updated_at",
             "expires_at",
@@ -262,6 +287,7 @@ class EnvironmentType(DjangoObjectType):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self.app.organisation, deleted_at=None
         )
+
         user_env_key = EnvironmentKey.objects.get(
             environment=self, user=org_member, deleted_at=None
         )
@@ -291,7 +317,6 @@ class EnvironmentType(DjangoObjectType):
 
 
 class AppType(DjangoObjectType):
-    sse_enabled = graphene.Boolean()
     environments = graphene.NonNull(graphene.List(EnvironmentType))
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
 
@@ -306,11 +331,8 @@ class AppType(DjangoObjectType):
             "app_token",
             "app_seed",
             "app_version",
+            "sse_enabled",
         )
-
-    def resolve_sse_enabled(self, info):
-        app_envs = Environment.objects.filter(app=self).values_list("id")
-        return ServerEnvironmentKey.objects.filter(environment_id__in=app_envs).exists()
 
     def resolve_environments(self, info):
         org_member = OrganisationMember.objects.get(
@@ -484,6 +506,23 @@ class SecretEventType(DjangoObjectType):
             "path",
         )
 
+    def resolve_user(self, info):
+        # Resolve if the user has either Org or App member read permissions
+        if user_has_permission(
+            info.context.user,
+            "read",
+            "Members",
+            self.secret.environment.app.organisation,
+            True,
+        ) or user_has_permission(
+            info.context.user,
+            "read",
+            "Members",
+            self.secret.environment.app.organisation,
+            False,
+        ):
+            return self.user
+
 
 class PersonalSecretType(DjangoObjectType):
     class Meta:
@@ -633,9 +672,13 @@ class PhaseLicenseType(graphene.ObjectType):
         if ActivatedPhaseLicense.objects.filter(id=self.id).exists():
             activated_license = ActivatedPhaseLicense.objects.get(id=self.id)
 
+            owner_role = Role.objects.get(
+                organisation=activated_license.organisation, name__iexact="owner"
+            )
+
             return OrganisationMember.objects.get(
                 organisation=activated_license.organisation,
-                role=OrganisationMember.OWNER,
+                role=owner_role,
             )
 
 

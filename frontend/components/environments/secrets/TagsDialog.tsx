@@ -9,18 +9,7 @@ import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
 import { Button } from '../../common/Button'
 import { areTagsAreSame } from '@/utils/tags'
-
-/**
- * Generates a random hexadecimal color string.
- *
- * @returns {string} A string representing a random hex color in the format "#RRGGBB".
- */
-const generateRandomHexColor = (): string => {
-  // Generate a random number between 0 and 0xFFFFFF, then convert to a hexadecimal string
-  const randomColor = Math.floor(Math.random() * 0xffffff).toString(16)
-  // Pad the string with leading zeros if necessary to ensure it has a length of 6 characters
-  return '#' + randomColor.padStart(6, '0')
-}
+import { generateRandomHexColor } from '@/utils/copy'
 
 const TagCreator = (props: { orgId: string }) => {
   const { orgId } = props
@@ -110,8 +99,9 @@ export const TagsDialog = (props: {
   secretName: string
   tags: Array<SecretTagType>
   handlePropertyChange: Function
+  disabled?: boolean
 }) => {
-  const { orgId, secretId, secretName, tags, handlePropertyChange } = props
+  const { orgId, secretId, secretName, tags, handlePropertyChange, disabled } = props
 
   const [getOrgTags, { data: orgTags }] = useLazyQuery(GetSecretTags)
 
@@ -175,14 +165,27 @@ export const TagsDialog = (props: {
   return (
     <>
       {tags.length > 0 ? (
-        <div className="flex items-center gap-1.5 cursor-pointer" role="button" onClick={openModal}>
+        <div
+          className={clsx(
+            'flex items-center gap-1.5',
+            disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+          )}
+          role="button"
+          onClick={disabled ? undefined : openModal}
+        >
           {tags.map((tag) => (
             <Tag key={tag.id} tag={tag} />
           ))}
         </div>
       ) : (
         <div className="flex items-center justify-center">
-          <Button variant="outline" onClick={openModal} title="Update tags" tabIndex={-1}>
+          <Button
+            variant="outline"
+            onClick={openModal}
+            title="Update tags"
+            tabIndex={-1}
+            disabled={disabled}
+          >
             <FaTags /> Tags
           </Button>
         </div>

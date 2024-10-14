@@ -1,5 +1,6 @@
 from api.models import Organisation
 from api.utils.organisations import get_organisation_seats
+from api.utils.access.permissions import user_has_permission
 import stripe
 from django.conf import settings
 from graphene import Mutation, ID, String
@@ -19,6 +20,10 @@ class CreateProUpgradeCheckoutSession(Mutation):
             stripe.api_key = settings.STRIPE["secret_key"]
 
             organisation = Organisation.objects.get(id=organisation_id)
+
+            if not user_has_permission(info.context.user, "update", "Billing"):
+                raise GraphQLError("You don't have permission to update Billing")
+
             seats = get_organisation_seats(organisation)
 
             # Ensure the organisation has a Stripe customer ID

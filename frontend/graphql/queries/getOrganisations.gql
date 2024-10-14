@@ -13,7 +13,12 @@ query GetOrganisations {
       userCount
       appCount
     }
-    role
+    role {
+      name
+      description
+      color
+      permissions
+    }
     memberId
     keyring
     recovery

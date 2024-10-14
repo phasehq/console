@@ -3,9 +3,10 @@ from api.utils.secrets import normalize_path_string
 
 import graphene
 from graphql import GraphQLError
-from api.utils.permissions import (
+from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_has_permission,
     user_is_org_member,
 )
 from backend.graphene.types import AppType, EnvironmentSyncType, ProviderCredentialsType
@@ -41,7 +42,15 @@ class InitEnvSync(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
+        for env in Environment.objects.filter(app=app):
+            if not user_can_access_environment(info.context.user.userId, env.id):
+                raise GraphQLError(
+                    "You cannot enable SSE as you don't have access to all environments in this App"
+                )
+
         else:
+            app.sse_enabled = True
+            app.save()
             # set new server env keys
             for key in env_keys:
                 ServerEnvironmentKey.objects.create(
@@ -65,10 +74,15 @@ class CreateProviderCredentials(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, org_id, provider, name, credentials):
-        if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError("You don't have permission to perform this action")
 
         org = Organisation.objects.get(id=org_id)
+
+        if not user_has_permission(
+            info.context.user, "create", "IntegrationCredentials", org
+        ):
+            raise GraphQLError(
+                "You dont have permission to create Integration Credentials"
+            )
 
         credential = ProviderCredentials.objects.create(
             organisation=org, name=name, provider=provider, credentials=credentials
@@ -89,8 +103,15 @@ class UpdateProviderCredentials(graphene.Mutation):
     def mutate(cls, root, info, credential_id, name, credentials):
         credential = ProviderCredentials.objects.get(id=credential_id)
 
-        if not user_is_org_member(info.context.user.userId, credential.organisation.id):
-            raise GraphQLError("You don't have permission to perform this action")
+        if not user_has_permission(
+            info.context.user,
+            "update",
+            "IntegrationCredentials",
+            credential.organisation,
+        ):
+            raise GraphQLError(
+                "You dont have permission to update Integration Credentials"
+            )
 
         credential.name = name
         credential.credentials = credentials
@@ -109,8 +130,15 @@ class DeleteProviderCredentials(graphene.Mutation):
     def mutate(cls, root, info, credential_id):
         credential = ProviderCredentials.objects.get(id=credential_id)
 
-        if not user_is_org_member(info.context.user.userId, credential.organisation.id):
-            raise GraphQLError("You don't have permission to perform this action")
+        if not user_has_permission(
+            info.context.user,
+            "delete",
+            "IntegrationCredentials",
+            credential.organisation,
+        ):
+            raise GraphQLError(
+                "You dont have permission to delete Integration Credentials"
+            )
 
         credential.delete()
 
@@ -145,7 +173,7 @@ class CreateCloudflarePagesSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -196,7 +224,7 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -247,7 +275,7 @@ class CreateGitHubActionsSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -293,7 +321,7 @@ class CreateVaultSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -341,7 +369,7 @@ class CreateNomadSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -402,7 +430,7 @@ class CreateGitLabCISync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -467,7 +495,7 @@ class CreateRailwaySync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):

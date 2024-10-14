@@ -8,6 +8,7 @@ import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { Button } from '../common/Button'
 import clsx from 'clsx'
 import app from 'next/app'
+import { userHasPermission } from '@/utils/access/permissions'
 
 export const SseLabel = ({ sseEnabled }: { sseEnabled: boolean }) => (
   <div
@@ -26,7 +27,16 @@ export const EncryptionModeIndicator = (props: { app: AppType; asMenu?: boolean 
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const userCanReadEncMode = userHasPermission(
+    organisation?.role?.permissions,
+    'EncryptionMode',
+    'read',
+    true
+  )
+
   if (asMenu === false) return <SseLabel sseEnabled={app.sseEnabled!} />
+
+  if (!userCanReadEncMode) return <></>
 
   return (
     <Menu as="div" className="relative inline-block text-left">
