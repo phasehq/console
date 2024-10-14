@@ -100,7 +100,7 @@ export const ReleaseInfo = () => {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Popover.Panel className="absolute z-50 right-0 mt-2 w-60 p-4 origin-top-right divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+              <Popover.Panel className="absolute z-50 left-0 mt-2 w-60 p-4 origin-top-right divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
                 <div className="flex flex-col space-y-4 border-l border-neutral-500/40">
                   {releases.map((release, index) => (
                     <div key={release.id} className="flex gap-2 items-start">
@@ -110,8 +110,8 @@ export const ReleaseInfo = () => {
                           release.tag_name === healthData.version
                             ? 'bg-emerald-500'
                             : index === 0
-                            ? 'bg-amber-500'
-                            : 'bg-neutral-500'
+                              ? 'bg-amber-500'
+                              : 'bg-neutral-500'
                         )}
                       ></div>
                       <div className="flex flex-col">
@@ -124,8 +124,8 @@ export const ReleaseInfo = () => {
                             release.tag_name === healthData.version
                               ? 'text-emerald-500 font-bold'
                               : index === 0
-                              ? 'text-amber-500 font-bold'
-                              : 'text-neutral-500 hover:text-neutral-400'
+                                ? 'text-amber-500 font-bold'
+                                : 'text-neutral-500 hover:text-neutral-400'
                           )}
                         >
                           {release.tag_name === healthData.version ? (
