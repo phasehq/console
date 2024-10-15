@@ -21,7 +21,7 @@ class CreateProUpgradeCheckoutSession(Mutation):
 
             organisation = Organisation.objects.get(id=organisation_id)
 
-            if not user_has_permission(info.context.user, "update", "Billing"):
+            if not user_has_permission(info.context.user, "update", "Billing", organisation):
                 raise GraphQLError("You don't have permission to update Billing")
 
             seats = get_organisation_seats(organisation)
