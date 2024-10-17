@@ -22,11 +22,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - name: Set version and PR flag
         id: set_version
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "version=$(git rev-parse --short HEAD | cut -c 1-7)" >> $GITHUB_OUTPUT
+            echo "version=$(git rev-parse --short ${{ github.event.pull_request.head.sha }} | cut -c 1-7)" >> $GITHUB_OUTPUT
             echo "is_pr=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "push" ]]; then
             echo "version=latest" >> $GITHUB_OUTPUT
