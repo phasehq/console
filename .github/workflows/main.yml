@@ -1,0 +1,49 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  determine_version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set_version.outputs.version }}
+      is_pr: ${{ steps.set_version.outputs.is_pr }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set version and PR flag
+        id: set_version
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "version=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+            echo "is_pr=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "is_pr=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            echo "is_pr=false" >> $GITHUB_OUTPUT
+          fi
+
+  frontend:
+    needs: determine_version
+    uses: ./.github/workflows/frontend.yml
+    with:
+      version: ${{ needs.determine_version.outputs.version }}
+      is_pr: ${{ needs.determine_version.outputs.is_pr }}
+    secrets: inherit
+
+  backend:
+    needs: determine_version
+    uses: ./.github/workflows/backend.yml
+    with:
+      version: ${{ needs.determine_version.outputs.version }}
+      is_pr: ${{ needs.determine_version.outputs.is_pr }}
+    secrets: inherit
