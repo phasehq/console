@@ -183,7 +183,7 @@ const Sidebar = () => {
         <div className="gap-4 p-4 grid grid-cols-1 w-full">
           <OrgsMenu />
 
-          {links.slice(0, 5).map((link) => (
+          {links.slice(0, 4).map((link) => (
             <SidebarLink
               key={link.name}
               name={link.name}
