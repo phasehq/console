@@ -94,7 +94,7 @@ const CommandPalette: React.FC = () => {
       name: 'Go to Members',
       description: 'Manage organization members',
       icon: <FaUsersCog />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/members`),
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
       id: 'go-integrations',
