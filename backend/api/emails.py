@@ -92,7 +92,7 @@ def send_invite_email(invite):
 
 def send_user_joined_email(invite, new_member):
     organisation = invite.organisation.name
-    members_page_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}/members"
+    members_page_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}/access/members"
 
     owner = OrganisationMember.objects.get(
         organisation=invite.organisation, role__name="Owner", deleted_at=None
