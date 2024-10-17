@@ -6,6 +6,9 @@ on:
       version:
         required: true
         type: string
+      is_pr:
+        required: true
+        type: string
 
 jobs:
   build_and_push:
@@ -35,9 +38,9 @@ jobs:
         with:
           context: ./backend
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ inputs.is_pr == 'true' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/backend:${{ inputs.version }}
-            ghcr.io/${{ github.repository }}/backend:${{ inputs.version }}
+            ${{ inputs.is_pr == 'true' && 'phasehq/backend-staging' || 'phasehq/backend' }}:${{ inputs.version }}
+            ghcr.io/${{ github.repository }}/${{ inputs.is_pr == 'true' && 'backend-staging' || 'backend' }}:${{ inputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

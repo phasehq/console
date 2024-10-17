@@ -56,6 +56,6 @@ jobs:
           platforms: ${{ inputs.is_pr == 'true' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           tags: |
             ${{ inputs.is_pr == 'true' && 'phasehq/frontend-staging' || 'phasehq/frontend' }}:${{ inputs.version }}
-            ghcr.io/${{ github.repository }}/frontend:${{ inputs.version }}
+            ghcr.io/${{ github.repository }}/${{ inputs.is_pr == 'true' && 'frontend-staging' || 'frontend' }}:${{ inputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
