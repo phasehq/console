@@ -24,6 +24,7 @@ type Query {
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
+  serviceAccounts(orgId: ID): [ServiceAccountType]
   serverPublicKey: String
   sseEnabled(appId: ID): Boolean
   providers: [ProviderType]
@@ -191,7 +192,7 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
-  sseEnabled: Boolean
+  sseEnabled: Boolean!
   environments: [EnvironmentType]!
   members: [OrganisationMemberType]!
 }
@@ -488,6 +489,29 @@ type UserTokenType {
   expiresAt: DateTime
 }
 
+type ServiceAccountType {
+  id: String!
+  name: String!
+  role: RoleType
+  apps: [AppType!]!
+  identityKey: String
+  createdAt: DateTime
+  updatedAt: DateTime!
+  thirdPartyAuthEnabled: Boolean
+  handlers: [ServiceAccountHandlerType]
+  tokens: [ServiceTokenType]
+}
+
+type ServiceAccountHandlerType {
+  id: String!
+  serviceAccount: ServiceAccountType!
+  user: OrganisationMemberType!
+  wrappedKeyring: String!
+  wrappedRecovery: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
 type CloudFlarePagesType {
   name: String
   deploymentId: String
@@ -610,6 +634,9 @@ type Mutation {
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
   updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
   deleteCustomRole(id: ID!): DeleteCustomRoleMutation
+  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
+  enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
+  updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], serviceAccountId: ID): UpdateServiceAccountHandlersMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
@@ -748,6 +775,24 @@ type UpdateCustomRoleMutation {
 
 type DeleteCustomRoleMutation {
   ok: Boolean
+}
+
+type CreateServiceAccountMutation {
+  serviceAccount: ServiceAccountType
+}
+
+input ServiceAccountHandlerInput {
+  memberId: ID
+  wrappedKeyring: String!
+  wrappedRecovery: String!
+}
+
+type EnableServiceAccountThirdPartyAuthMutation {
+  serviceAccount: ServiceAccountType
+}
+
+type UpdateServiceAccountHandlersMutation {
+  serviceAccount: ServiceAccountType
 }
 
 type InitEnvSync {
