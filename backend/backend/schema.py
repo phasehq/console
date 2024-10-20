@@ -3,6 +3,11 @@ from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
+from backend.graphene.mutations.service_accounts import (
+    CreateServiceAccountMutation,
+    EnableServiceAccountThirdPartyAuthMutation,
+    UpdateServiceAccountHandlersMutation,
+)
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
     DeleteCustomRoleMutation,
@@ -32,6 +37,7 @@ from .graphene.queries.syncing import (
     resolve_railway_projects,
 )
 from .graphene.queries.access import resolve_roles
+from .graphene.queries.service_accounts import resolve_service_accounts
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
@@ -119,6 +125,7 @@ from .graphene.types import (
     SecretFolderType,
     SecretTagType,
     SecretType,
+    ServiceAccountType,
     ServiceTokenType,
     ServiceType,
     TimeRange,
@@ -231,6 +238,8 @@ class Query(graphene.ObjectType):
     )
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
+
+    service_accounts = graphene.List(ServiceAccountType, org_id=graphene.ID())
 
     server_public_key = graphene.String()
 
@@ -562,6 +571,8 @@ class Query(graphene.ObjectType):
 
         return ServiceToken.objects.filter(app=app, deleted_at=None)
 
+    resolve_service_accounts = resolve_service_accounts
+
     def resolve_logs(root, info, app_id, start=0, end=0):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
@@ -765,6 +776,13 @@ class Mutation(graphene.ObjectType):
     create_custom_role = CreateCustomRoleMutation.Field()
     update_custom_role = UpdateCustomRoleMutation.Field()
     delete_custom_role = DeleteCustomRoleMutation.Field()
+
+    # Service Accounts
+    create_service_account = CreateServiceAccountMutation.Field()
+    enable_service_account_third_party_auth = (
+        EnableServiceAccountThirdPartyAuthMutation.Field()
+    )
+    update_service_account_handlers = UpdateServiceAccountHandlersMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
     delete_env_sync = DeleteSync.Field()

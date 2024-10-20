@@ -27,6 +27,8 @@ from api.models import (
     SecretFolder,
     SecretTag,
     ServerEnvironmentKey,
+    ServiceAccount,
+    ServiceAccountHandler,
     ServiceToken,
     UserToken,
 )
@@ -455,6 +457,43 @@ class ServiceTokenType(DjangoObjectType):
             "updated_at",
             "expires_at",
         )
+
+
+class ServiceAccountHandlerType(DjangoObjectType):
+    class Meta:
+        model = ServiceAccountHandler
+        fields = "__all__"
+
+
+class ServiceAccountType(DjangoObjectType):
+
+    third_party_auth_enabled = graphene.Boolean()
+    handlers = graphene.List(ServiceAccountHandlerType)
+    tokens = graphene.List(ServiceTokenType)
+
+    class Meta:
+        model = ServiceAccount
+        fields = (
+            "id",
+            "name",
+            "role",
+            "apps",
+            "identity_key",
+            "created_at",
+            "updated_at",
+        )
+
+    def resolve_third_party_auth_enabled(self, info):
+        return (
+            self.server_wrapped_keyring is not None
+            and self.server_wrapped_recovery is not None
+        )
+
+    def resolve_handlers(self, info):
+        return ServiceAccountHandler.objects.filter(service_account=self)
+
+    def resolve_tokens(self, info):
+        return ServiceToken.objects.filter(service_account=self)
 
 
 class SecretFolderType(DjangoObjectType):
