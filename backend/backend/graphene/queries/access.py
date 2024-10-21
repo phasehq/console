@@ -1,8 +1,10 @@
 from api.utils.access.permissions import user_has_permission, user_is_org_member
-from api.models import Organisation, Role
+from api.models import Organisation, OrganisationMember, Role
 from graphql import GraphQLError
 from django.db import transaction
 from api.utils.access.roles import default_roles
+from itertools import chain
+from django.db.models import Q
 
 
 @transaction.atomic
@@ -30,3 +32,30 @@ def resolve_roles(root, info, org_id):
         return Role.objects.filter(organisation=org)
     else:
         raise GraphQLError("You don't have permission to perform this action")
+
+
+def resolve_organisation_global_access_users(root, info, organisation_id):
+    if not user_is_org_member(info.context.user.userId, organisation_id):
+        raise GraphQLError("You don't have access to this organisation")
+
+    global_access_roles = Role.objects.filter(
+        Q(organisation_id=organisation_id)
+        & (Q(name__iexact="owner") | Q(name__iexact="admin"))
+        | Q(permissions__global_access=True)
+    )
+
+    members = OrganisationMember.objects.filter(
+        organisation_id=organisation_id,
+        role__in=global_access_roles,
+        deleted_at=None,
+    )
+
+    if not info.context.user.userId in [member.user_id for member in members]:
+        self_member = OrganisationMember.objects.filter(
+            organisation_id=organisation_id,
+            user_id=info.context.user.userId,
+            deleted_at=None,
+        )
+        members = list(chain(members, self_member))
+
+    return members

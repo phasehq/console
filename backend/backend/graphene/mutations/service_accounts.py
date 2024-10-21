@@ -134,3 +134,26 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
         return EnableServiceAccountThirdPartyAuthMutation(
             service_account=service_account
         )
+
+
+class DeleteServiceAccountMutation(graphene.Mutation):
+    class Arguments:
+        service_account_id = graphene.ID()
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, service_account_id):
+        user = info.context.user
+        service_account = ServiceAccount.objects.get(id=service_account_id)
+
+        if not user_has_permission(
+            user, "delete", "ServiceAccounts", service_account.organisation
+        ):
+            raise GraphQLError(
+                "You don't have the permissions required to delete Service Accounts in this organisation"
+            )
+
+        service_account.delete()
+
+        return DeleteServiceAccountMutation(ok=True)

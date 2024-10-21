@@ -5,6 +5,7 @@ from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
+    DeleteServiceAccountMutation,
     EnableServiceAccountThirdPartyAuthMutation,
     UpdateServiceAccountHandlersMutation,
 )
@@ -36,8 +37,14 @@ from .graphene.queries.syncing import (
     resolve_test_nomad_creds,
     resolve_railway_projects,
 )
-from .graphene.queries.access import resolve_roles
-from .graphene.queries.service_accounts import resolve_service_accounts
+from .graphene.queries.access import (
+    resolve_roles,
+    resolve_organisation_global_access_users,
+)
+from .graphene.queries.service_accounts import (
+    resolve_service_accounts,
+    resolve_service_account_handlers,
+)
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
@@ -125,6 +132,7 @@ from .graphene.types import (
     SecretFolderType,
     SecretTagType,
     SecretType,
+    ServiceAccountHandlerType,
     ServiceAccountType,
     ServiceTokenType,
     ServiceType,
@@ -153,9 +161,7 @@ from logs.queries import get_app_log_count, get_app_log_count_range, get_app_log
 from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
-from itertools import chain
 from django.utils import timezone
-from django.db.models import Q
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -240,6 +246,10 @@ class Query(graphene.ObjectType):
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
     service_accounts = graphene.List(ServiceAccountType, org_id=graphene.ID())
+
+    service_account_handlers = graphene.List(
+        OrganisationMemberType, org_id=graphene.ID()
+    )
 
     server_public_key = graphene.String()
 
@@ -348,31 +358,7 @@ class Query(graphene.ObjectType):
 
         return OrganisationMember.objects.filter(**filter)
 
-    def resolve_organisation_global_access_users(root, info, organisation_id):
-        if not user_is_org_member(info.context.user.userId, organisation_id):
-            raise GraphQLError("You don't have access to this organisation")
-
-        global_access_roles = Role.objects.filter(
-            Q(organisation_id=organisation_id)
-            & (Q(name__iexact="owner") | Q(name__iexact="admin"))
-            | Q(permissions__global_access=True)
-        )
-
-        members = OrganisationMember.objects.filter(
-            organisation_id=organisation_id,
-            role__in=global_access_roles,
-            deleted_at=None,
-        )
-
-        if not info.context.user.userId in [member.user_id for member in members]:
-            self_member = OrganisationMember.objects.filter(
-                organisation_id=organisation_id,
-                user_id=info.context.user.userId,
-                deleted_at=None,
-            )
-            members = list(chain(members, self_member))
-
-        return members
+    resolve_organisation_global_access_users = resolve_organisation_global_access_users
 
     def resolve_organisation_invites(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
@@ -572,6 +558,7 @@ class Query(graphene.ObjectType):
         return ServiceToken.objects.filter(app=app, deleted_at=None)
 
     resolve_service_accounts = resolve_service_accounts
+    resolve_service_account_handlers = resolve_service_account_handlers
 
     def resolve_logs(root, info, app_id, start=0, end=0):
         if not user_can_access_app(info.context.user.userId, app_id):
@@ -783,6 +770,7 @@ class Mutation(graphene.ObjectType):
         EnableServiceAccountThirdPartyAuthMutation.Field()
     )
     update_service_account_handlers = UpdateServiceAccountHandlersMutation.Field()
+    delete_service_account = DeleteServiceAccountMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
     delete_env_sync = DeleteSync.Field()
