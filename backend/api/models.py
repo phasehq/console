@@ -233,13 +233,6 @@ class ServiceAccount(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
-    def delete(self, *args, **kwargs):
-        """
-        Soft delete the object by setting the 'deleted_at' field.
-        """
-        self.deleted_at = timezone.now()
-        self.save()
-
 
 class ServiceAccountHandler(models.Model):
     id = models.TextField(default=uuid4, primary_key=True)
