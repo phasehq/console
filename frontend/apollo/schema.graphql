@@ -25,6 +25,7 @@ type Query {
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
   serviceAccounts(orgId: ID): [ServiceAccountType]
+  serviceAccountHandlers(orgId: ID): [OrganisationMemberType]
   serverPublicKey: String
   sseEnabled(appId: ID): Boolean
   providers: [ProviderType]
@@ -637,6 +638,7 @@ type Mutation {
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
   enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], serviceAccountId: ID): UpdateServiceAccountHandlersMutation
+  deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
@@ -793,6 +795,10 @@ type EnableServiceAccountThirdPartyAuthMutation {
 
 type UpdateServiceAccountHandlersMutation {
   serviceAccount: ServiceAccountType
+}
+
+type DeleteServiceAccountMutation {
+  ok: Boolean
 }
 
 type InitEnvSync {
