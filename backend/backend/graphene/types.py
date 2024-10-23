@@ -29,6 +29,7 @@ from api.models import (
     ServerEnvironmentKey,
     ServiceAccount,
     ServiceAccountHandler,
+    ServiceAccountToken,
     ServiceToken,
     UserToken,
 )
@@ -465,11 +466,17 @@ class ServiceAccountHandlerType(DjangoObjectType):
         fields = "__all__"
 
 
+class ServiceAccountTokenType(DjangoObjectType):
+    class Meta:
+        model = ServiceAccountToken
+        fields = "__all__"
+
+
 class ServiceAccountType(DjangoObjectType):
 
     third_party_auth_enabled = graphene.Boolean()
     handlers = graphene.List(ServiceAccountHandlerType)
-    tokens = graphene.List(ServiceTokenType)
+    tokens = graphene.List(ServiceAccountTokenType)
 
     class Meta:
         model = ServiceAccount
@@ -493,7 +500,7 @@ class ServiceAccountType(DjangoObjectType):
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
-        return ServiceToken.objects.filter(service_account=self)
+        return ServiceAccountToken.objects.filter(service_account=self)
 
 
 class SecretFolderType(DjangoObjectType):
