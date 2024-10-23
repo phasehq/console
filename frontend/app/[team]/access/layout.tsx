@@ -30,6 +30,10 @@ export default function AccessLayout({
         link: 'members',
       },
       {
+        name: 'Service Accounts',
+        link: 'service-accounts',
+      },
+      {
         name: 'Roles',
         link: 'roles',
       },

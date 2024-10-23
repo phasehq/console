@@ -215,6 +215,35 @@ class OrganisationMember(models.Model):
         self.save()
 
 
+class ServiceAccount(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.CharField(max_length=255)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    apps = models.ManyToManyField(App, related_name="apps")
+    identity_key = models.CharField(max_length=256, null=True, blank=True)
+    server_wrapped_keyring = models.TextField(null=True)
+    server_wrapped_recovery = models.TextField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+
+class ServiceAccountHandler(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True)
+    service_account = models.ForeignKey(ServiceAccount, on_delete=models.CASCADE)
+    user = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE)
+    wrapped_keyring = models.TextField()
+    wrapped_recovery = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class OrganisationMemberInviteManager(models.Manager):
     def create(self, *args, **kwargs):
         organisation = kwargs.get("organisation")
@@ -299,6 +328,10 @@ class EnvironmentKey(models.Model):
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
     )
+    service_account = models.ForeignKey(
+        ServiceAccount, on_delete=models.CASCADE, blank=True, null=True
+    )
+    paths = models.TextField(blank=True, null=True)
     identity_key = models.CharField(max_length=256)
     wrapped_seed = models.CharField(max_length=256)
     wrapped_salt = models.CharField(max_length=256)
@@ -427,6 +460,22 @@ class ServiceToken(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
     objects = ServiceTokenManager()
+
+
+class ServiceAccountToken(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    service_account = models.ForeignKey(ServiceAccount, on_delete=models.CASCADE)
+    name = models.CharField(max_length=64)
+    identity_key = models.CharField(max_length=256)
+    token = models.CharField(max_length=64)
+    wrapped_key_share = models.CharField(max_length=406)
+    created_by = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+    expires_at = models.DateTimeField(null=True)
 
 
 class UserToken(models.Model):
