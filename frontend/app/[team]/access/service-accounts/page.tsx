@@ -8,11 +8,14 @@ import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServic
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import { useContext } from 'react'
-import { FaBan } from 'react-icons/fa'
+import { FaBan, FaChevronRight } from 'react-icons/fa'
 import { CreateServiceAccountDialog } from './_components/CreateServiceAccountDialog'
 import { FaRobot } from 'react-icons/fa6'
 import { relativeTimeFromDates } from '@/utils/time'
 import { DeleteServiceAccountDialog } from './_components/DeleteServiceAccountDialog'
+import { CreateServiceAccountTokenDialog } from './_components/CreateServiceAccountTokenDialog'
+import Link from 'next/link'
+import { Button } from '@/components/common/Button'
 
 export default function ServiceAccounts({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -36,7 +39,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
 
   return (
     <section className="overflow-y-auto">
-      <div className="w-full space-y-4 text-black dark:text-white">
+      <div className="w-full space-y-4 text-zinc-900 dark:text-zinc-100">
         <div className="space-y-1">
           <h2 className="text-xl font-semibold">{params.team} Service Accounts</h2>
           <p className="text-neutral-500">Manage service accounts.</p>
@@ -82,8 +85,17 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                       {relativeTimeFromDates(new Date(account.createdAt))}
                     </td>
 
-                    <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
-                      {userCanDeleteSA && <DeleteServiceAccountDialog account={account} />}
+                    {/* <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
+                        <CreateServiceAccountTokenDialog serviceAccount={account} />
+                        {userCanDeleteSA && <DeleteServiceAccountDialog account={account} />}
+                      </td> */}
+
+                    <td className="px-6 py-4">
+                      <Link href={`/${params.team}/access/service-accounts/${account.id}`}>
+                        <Button variant="secondary">
+                          Manage <FaChevronRight />
+                        </Button>
+                      </Link>
                     </td>
                   </tr>
                 ))}

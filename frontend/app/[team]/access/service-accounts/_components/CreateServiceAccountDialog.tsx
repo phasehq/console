@@ -12,11 +12,8 @@ import { useMutation, useQuery } from '@apollo/client'
 import {
   organisationSeed,
   organisationKeyring,
-  deviceVaultKey,
-  encryptAccountKeyring,
-  encryptAccountRecovery,
-  OrganisationKeyring,
   getUserKxPublicKey,
+  encryptAsymmetric,
 } from '@/utils/crypto'
 import { Input } from '@/components/common/Input'
 import { RoleLabel } from '@/components/users/RoleLabel'
@@ -70,9 +67,9 @@ export const CreateServiceAccountDialog = () => {
         if (thirdParty) {
           const serverKey = serverKeyData.serverPublicKey
 
-          const serverEncryptedKeyring = await encryptAccountKeyring(keyring, serverKey)
+          const serverEncryptedKeyring = await encryptAsymmetric(JSON.stringify(keyring), serverKey)
 
-          const serverEncryptedMnemonic = await encryptAccountRecovery(mnemonic, serverKey)
+          const serverEncryptedMnemonic = await encryptAsymmetric(mnemonic, serverKey)
 
           serverKeys = {
             serverEncryptedKeyring,
@@ -85,8 +82,8 @@ export const CreateServiceAccountDialog = () => {
 
         const handlerWrappingPromises = handlers.map(async (handler) => {
           const kxKey = await getUserKxPublicKey(handler.identityKey!)
-          const wrappedKeyring = await encryptAccountKeyring(keyring, kxKey)
-          const wrappedRecovery = await encryptAccountRecovery(mnemonic, kxKey)
+          const wrappedKeyring = await encryptAsymmetric(JSON.stringify(keyring), kxKey)
+          const wrappedRecovery = await encryptAsymmetric(mnemonic, kxKey)
           return {
             memberId: handler.id,
             wrappedKeyring,
@@ -153,7 +150,7 @@ export const CreateServiceAccountDialog = () => {
                         'py-2 flex items-center justify-between w-full rounded-md h-10'
                       )}
                     >
-                      {role ? <RoleLabel role={role} /> : <></>}
+                      {role ? <RoleLabel role={role} /> : <>Select a role</>}
                       <FaChevronDown
                         className={clsx(
                           'transition-transform ease duration-300 text-neutral-500',

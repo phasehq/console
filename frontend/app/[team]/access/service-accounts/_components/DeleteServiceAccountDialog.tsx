@@ -8,6 +8,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { ServiceAccountType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
+import { useRouter } from 'next/navigation'
 
 export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccountType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -27,6 +28,10 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
     }
   }
 
+  const router = useRouter()
+
+  const handleRedirect = () => router.push(`/${organisation?.name}/access/service-accounts`)
+
   return (
     <GenericDialog
       title={`Delete ${account.name}`}
@@ -37,6 +42,7 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
       }
       buttonVariant="danger"
       ref={dialogRef}
+      onClose={handleRedirect}
     >
       <div className="space-y-4">
         <div className="text-neutral-500 py-4">
