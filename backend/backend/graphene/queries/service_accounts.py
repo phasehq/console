@@ -5,10 +5,16 @@ from django.db.models import Q
 from graphql import GraphQLError
 
 
-def resolve_service_accounts(root, info, org_id):
+def resolve_service_accounts(root, info, org_id, service_account_id=None):
     org = Organisation.objects.get(id=org_id)
     if user_has_permission(info.context.user.userId, "read", "ServiceAccounts", org):
-        return ServiceAccount.objects.filter(organisation=org)
+
+        filter = {"organisation": org}
+
+        if service_account_id is not None:
+            filter["id"] = service_account_id
+
+        return ServiceAccount.objects.filter(**filter)
 
 
 def resolve_service_account_handlers(root, info, org_id):
