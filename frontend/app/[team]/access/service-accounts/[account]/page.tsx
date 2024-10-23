@@ -9,13 +9,14 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext } from 'react'
-import { FaBan, FaChevronLeft, FaRobot } from 'react-icons/fa'
-import { CreateServiceAccountTokenDialog } from '../_components/CreateServiceAccountTokenDialog'
+import { FaBan, FaChevronLeft, FaKey, FaRobot } from 'react-icons/fa'
+import { CreateServiceAccountTokenDialog } from './_components/CreateServiceAccountTokenDialog'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { ServiceAccountTokenType } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { humanReadableExpiry } from '@/utils/tokens'
+import { DeleteServiceAccountTokenDialog } from './_components/DeleteServiceAccountTokenDialog'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -114,14 +115,14 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <CreateServiceAccountTokenDialog serviceAccount={account} />
           </div>
 
-          <div className="space-y-2 divide-y divide-neutral-500/20">
+          <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
             {account.tokens?.map((token: ServiceAccountTokenType) => (
-              <div key={token!.id} className="grid grid-cols-3 items-center p-2">
-                <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100">
-                  {token!.name}
+              <div key={token!.id} className="grid grid-cols-4 gap-2 items-center p-2 group">
+                <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <FaKey className="text-neutral-500" /> {token!.name}
                 </div>
 
-                <div className="text-neutral-500 flex items-center gap-1">
+                <div className="text-neutral-500 text-sm flex items-center gap-1">
                   <span>Created</span> {relativeTimeFromDates(new Date(token?.createdAt))} by{' '}
                   <Avatar imagePath={token.createdBy?.avatarUrl} size="sm" />
                   <span className="font-medium text-zinc-900 dark:text-zinc-100">
@@ -129,11 +130,13 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   </span>
                 </div>
 
-                {/* <div>{new Date(token.expiresAt).toDateString()}</div> */}
-
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 text-neutral-500 text-sm">
                   Expires{' '}
                   {token.expiresAt ? relativeTimeFromDates(new Date(token?.expiresAt)) : 'never'}
+                </div>
+
+                <div className="flex justify-end opacity-0 group-hover:opacity-100 transition ease">
+                  <DeleteServiceAccountTokenDialog token={token} />
                 </div>
               </div>
             ))}

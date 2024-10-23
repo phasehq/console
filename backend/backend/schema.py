@@ -7,6 +7,7 @@ from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
     DeleteServiceAccountMutation,
+    DeleteServiceAccountTokenMutation,
     EnableServiceAccountThirdPartyAuthMutation,
     UpdateServiceAccountHandlersMutation,
 )
@@ -777,6 +778,7 @@ class Mutation(graphene.ObjectType):
     update_service_account_handlers = UpdateServiceAccountHandlersMutation.Field()
     delete_service_account = DeleteServiceAccountMutation.Field()
     create_service_account_token = CreateServiceAccountTokenMutation.Field()
+    delete_service_account_token = DeleteServiceAccountTokenMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
     delete_env_sync = DeleteSync.Field()

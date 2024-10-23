@@ -13,7 +13,7 @@ import { CreateServiceAccountDialog } from './_components/CreateServiceAccountDi
 import { FaRobot } from 'react-icons/fa6'
 import { relativeTimeFromDates } from '@/utils/time'
 import { DeleteServiceAccountDialog } from './_components/DeleteServiceAccountDialog'
-import { CreateServiceAccountTokenDialog } from './_components/CreateServiceAccountTokenDialog'
+import { CreateServiceAccountTokenDialog } from './[account]/_components/CreateServiceAccountTokenDialog'
 import Link from 'next/link'
 import { Button } from '@/components/common/Button'
 
@@ -84,11 +84,6 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                     <td className="px-6 py-4">
                       {relativeTimeFromDates(new Date(account.createdAt))}
                     </td>
-
-                    {/* <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
-                        <CreateServiceAccountTokenDialog serviceAccount={account} />
-                        {userCanDeleteSA && <DeleteServiceAccountDialog account={account} />}
-                      </td> */}
 
                     <td className="px-6 py-4">
                       <Link href={`/${params.team}/access/service-accounts/${account.id}`}>

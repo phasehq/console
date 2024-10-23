@@ -219,3 +219,26 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
         )
 
         return CreateServiceAccountTokenMutation(token=token)
+
+
+class DeleteServiceAccountTokenMutation(graphene.Mutation):
+    class Arguments:
+        token_id = graphene.ID()
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, token_id):
+        user = info.context.user
+        token = ServiceAccountToken.objects.get(id=token_id)
+
+        if not user_has_permission(
+            user, "update", "ServiceAccounts", token.service_account.organisation
+        ):
+            raise GraphQLError(
+                "You don't have the permissions required to delete Service Tokens in this organisation"
+            )
+
+        token.delete()
+
+        return DeleteServiceAccountTokenMutation(ok=True)

@@ -654,6 +654,7 @@ type Mutation {
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], serviceAccountId: ID): UpdateServiceAccountHandlersMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
   createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+  deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
@@ -818,6 +819,10 @@ type DeleteServiceAccountMutation {
 
 type CreateServiceAccountTokenMutation {
   token: ServiceAccountTokenType
+}
+
+type DeleteServiceAccountTokenMutation {
+  ok: Boolean
 }
 
 type InitEnvSync {
