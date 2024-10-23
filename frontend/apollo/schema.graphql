@@ -24,7 +24,7 @@ type Query {
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
-  serviceAccounts(orgId: ID): [ServiceAccountType]
+  serviceAccounts(orgId: ID, serviceAccountId: ID): [ServiceAccountType]
   serviceAccountHandlers(orgId: ID): [OrganisationMemberType]
   serverPublicKey: String
   sseEnabled(appId: ID): Boolean
@@ -500,7 +500,7 @@ type ServiceAccountType {
   updatedAt: DateTime!
   thirdPartyAuthEnabled: Boolean
   handlers: [ServiceAccountHandlerType]
-  tokens: [ServiceTokenType]
+  tokens: [ServiceAccountTokenType]
 }
 
 type ServiceAccountHandlerType {
@@ -511,6 +511,20 @@ type ServiceAccountHandlerType {
   wrappedRecovery: String!
   createdAt: DateTime
   updatedAt: DateTime!
+}
+
+type ServiceAccountTokenType {
+  id: String!
+  serviceAccount: ServiceAccountType!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  expiresAt: DateTime
 }
 
 type CloudFlarePagesType {
@@ -639,6 +653,7 @@ type Mutation {
   enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], serviceAccountId: ID): UpdateServiceAccountHandlersMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
+  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
@@ -799,6 +814,10 @@ type UpdateServiceAccountHandlersMutation {
 
 type DeleteServiceAccountMutation {
   ok: Boolean
+}
+
+type CreateServiceAccountTokenMutation {
+  token: ServiceAccountTokenType
 }
 
 type InitEnvSync {
