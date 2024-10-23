@@ -1,9 +1,17 @@
 from backend.graphene.mutations.environment import EnvironmentKeyInput
 import graphene
 from graphql import GraphQLError
-from api.models import Organisation, Role, ServiceAccount, ServiceAccountHandler
+from api.models import (
+    Organisation,
+    OrganisationMember,
+    Role,
+    ServiceAccount,
+    ServiceAccountHandler,
+    ServiceAccountToken,
+)
 from api.utils.access.permissions import user_has_permission
-from backend.graphene.types import ServiceAccountType
+from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
+from datetime import datetime
 
 
 class ServiceAccountHandlerInput(graphene.InputObjectType):
@@ -157,3 +165,57 @@ class DeleteServiceAccountMutation(graphene.Mutation):
         service_account.delete()
 
         return DeleteServiceAccountMutation(ok=True)
+
+
+class CreateServiceAccountTokenMutation(graphene.Mutation):
+    class Arguments:
+        service_account_id = graphene.ID()
+        name = graphene.String(required=True)
+        identity_key = graphene.String(required=True)
+        token = graphene.String(required=True)
+        wrapped_key_share = graphene.String(required=True)
+        expiry = graphene.BigInt(required=False)
+
+    token = graphene.Field(ServiceAccountTokenType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        service_account_id,
+        name,
+        identity_key,
+        token,
+        wrapped_key_share,
+        expiry,
+    ):
+        user = info.context.user
+        service_account = ServiceAccount.objects.get(id=service_account_id)
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=service_account.organisation, deleted_at=None
+        )
+
+        if not user_has_permission(
+            user, "create", "ServiceAccounts", service_account.organisation
+        ):
+            raise GraphQLError(
+                "You don't have the permissions required to create Service Tokens in this organisation"
+            )
+
+        if expiry is not None:
+            expires_at = datetime.fromtimestamp(expiry / 1000)
+        else:
+            expires_at = None
+
+        token = ServiceAccountToken.objects.create(
+            service_account=service_account,
+            name=name,
+            identity_key=identity_key,
+            token=token,
+            wrapped_key_share=wrapped_key_share,
+            created_by=org_member,
+            expires_at=expires_at,
+        )
+
+        return CreateServiceAccountTokenMutation(token=token)

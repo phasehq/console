@@ -5,6 +5,7 @@ from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
+    CreateServiceAccountTokenMutation,
     DeleteServiceAccountMutation,
     EnableServiceAccountThirdPartyAuthMutation,
     UpdateServiceAccountHandlersMutation,
@@ -245,7 +246,11 @@ class Query(graphene.ObjectType):
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
-    service_accounts = graphene.List(ServiceAccountType, org_id=graphene.ID())
+    service_accounts = graphene.List(
+        ServiceAccountType,
+        org_id=graphene.ID(),
+        service_account_id=graphene.ID(required=False),
+    )
 
     service_account_handlers = graphene.List(
         OrganisationMemberType, org_id=graphene.ID()
@@ -771,6 +776,7 @@ class Mutation(graphene.ObjectType):
     )
     update_service_account_handlers = UpdateServiceAccountHandlersMutation.Field()
     delete_service_account = DeleteServiceAccountMutation.Field()
+    create_service_account_token = CreateServiceAccountTokenMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
     delete_env_sync = DeleteSync.Field()
