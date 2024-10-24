@@ -225,7 +225,7 @@ class ServiceAccount(models.Model):
         null=True,
         blank=True,
     )
-    apps = models.ManyToManyField(App, related_name="apps")
+    apps = models.ManyToManyField(App, related_name="service_accounts")
     identity_key = models.CharField(max_length=256, null=True, blank=True)
     server_wrapped_keyring = models.TextField(null=True)
     server_wrapped_recovery = models.TextField(null=True)
