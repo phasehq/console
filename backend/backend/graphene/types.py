@@ -204,6 +204,54 @@ class OrganisationMemberInviteType(DjangoObjectType):
         )
 
 
+class ServiceAccountHandlerType(DjangoObjectType):
+    class Meta:
+        model = ServiceAccountHandler
+        fields = "__all__"
+
+
+class ServiceAccountTokenType(DjangoObjectType):
+    class Meta:
+        model = ServiceAccountToken
+        fields = "__all__"
+
+
+class MemberType(graphene.Enum):
+    USER = "user"
+    SERVICE = "service"
+
+
+class ServiceAccountType(DjangoObjectType):
+
+    third_party_auth_enabled = graphene.Boolean()
+    handlers = graphene.List(ServiceAccountHandlerType)
+    tokens = graphene.List(ServiceAccountTokenType)
+
+    class Meta:
+        model = ServiceAccount
+        fields = (
+            "id",
+            "name",
+            "role",
+            "apps",
+            "identity_key",
+            "created_at",
+            "updated_at",
+        )
+
+    def resolve_third_party_auth_enabled(self, info):
+        return (
+            self.server_wrapped_keyring is not None
+            and self.server_wrapped_recovery is not None
+        )
+
+    def resolve_handlers(self, info):
+        return ServiceAccountHandler.objects.filter(service_account=self)
+
+    def resolve_tokens(self, info):
+        return ServiceAccountToken.objects.filter(service_account=self)
+
+
 class ProviderType(graphene.ObjectType):
     id = graphene.String(required=True)
     name = graphene.String(required=True)
@@ -322,6 +370,7 @@ class EnvironmentType(DjangoObjectType):
 class AppType(DjangoObjectType):
     environments = graphene.NonNull(graphene.List(EnvironmentType))
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
+    service_accounts = graphene.NonNull(graphene.List(ServiceAccountType))
 
     class Meta:
         model = App
@@ -356,6 +405,9 @@ class AppType(DjangoObjectType):
 
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)
+
+    def resolve_service_accounts(self, info):
+        return self.service_accounts.filter(deleted_at=None)
 
 
 class EnvironmentKeyType(DjangoObjectType):
@@ -458,54 +510,6 @@ class ServiceTokenType(DjangoObjectType):
             "updated_at",
             "expires_at",
         )
-
-
-class ServiceAccountHandlerType(DjangoObjectType):
-    class Meta:
-        model = ServiceAccountHandler
-        fields = "__all__"
-
-
-class ServiceAccountTokenType(DjangoObjectType):
-    class Meta:
-        model = ServiceAccountToken
-        fields = "__all__"
-
-
-class MemberType(graphene.Enum):
-    USER = "user"
-    SERVICE = "service"
-
-
-class ServiceAccountType(DjangoObjectType):
-
-    third_party_auth_enabled = graphene.Boolean()
-    handlers = graphene.List(ServiceAccountHandlerType)
-    tokens = graphene.List(ServiceAccountTokenType)
-
-    class Meta:
-        model = ServiceAccount
-        fields = (
-            "id",
-            "name",
-            "role",
-            "apps",
-            "identity_key",
-            "created_at",
-            "updated_at",
-        )
-
-    def resolve_third_party_auth_enabled(self, info):
-        return (
-            self.server_wrapped_keyring is not None
-            and self.server_wrapped_recovery is not None
-        )
-
-    def resolve_handlers(self, info):
-        return ServiceAccountHandler.objects.filter(service_account=self)
-
-    def resolve_tokens(self, info):
-        return ServiceAccountToken.objects.filter(service_account=self)
 
 
 class SecretFolderType(DjangoObjectType):

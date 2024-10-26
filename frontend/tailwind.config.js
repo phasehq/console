@@ -25,6 +25,9 @@ module.exports = {
     },
     typography: require('./utils/typography'),
     extend: {
+      screens: {
+        '1080p': '1920px',
+      },
       colors: {
         primary: {
           200: '#f7ff73',

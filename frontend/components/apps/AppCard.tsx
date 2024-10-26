@@ -1,4 +1,4 @@
-import { FaProjectDiagram, FaUsers } from 'react-icons/fa'
+import { FaProjectDiagram, FaRobot, FaUsers } from 'react-icons/fa'
 import { Card } from '../common/Card'
 
 import { AppType } from '@/apollo/graphql'
@@ -12,7 +12,7 @@ interface AppCardProps {
 }
 
 export const AppCard = (props: AppCardProps) => {
-  const { name, id, members, environments } = props.app
+  const { name, id, members, serviceAccounts, environments } = props.app
 
   const totalSyncCount = environments
     ? environments.reduce((acc, env) => acc + (env!.syncs?.length || 0), 0)
@@ -31,6 +31,8 @@ export const AppCard = (props: AppCardProps) => {
     : []
 
   const surplusMemberCount = members.length > 5 ? members.length - 5 : 0
+
+  const surplusServiceAccountsCount = serviceAccounts.length > 5 ? serviceAccounts.length - 5 : 0
 
   const surplusEnvCount = environments.length > 5 ? environments.length - 5 : 0
 
@@ -64,6 +66,33 @@ export const AppCard = (props: AppCardProps) => {
               )}
             </div>
           </div>
+
+          {serviceAccounts.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-2xl">
+                <FaRobot />
+                <span className="font-light">{serviceAccounts.length}</span>
+              </div>
+              <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
+                {serviceAccounts.length > 1 ? 'Service Accounts' : 'Service Account'}
+              </span>
+              <div className="flex items-center gap-1 text-base">
+                {serviceAccounts.slice(0, 5).map((account) => (
+                  <div
+                    key={account!.id}
+                    className="rounded-full flex items-center bg-neutral-500/40 justify-center size-5 p-1"
+                  >
+                    <span className="text-2xs font-semibold text-zinc-900 dark:text-zinc-100">
+                      {account?.name.slice(0, 1)}
+                    </span>
+                  </div>
+                ))}
+                {surplusMemberCount > 0 && (
+                  <span className="text-neutral-500 text-xs">+{surplusMemberCount}</span>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-2xl">
