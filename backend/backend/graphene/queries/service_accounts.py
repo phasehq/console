@@ -1,5 +1,9 @@
-from api.utils.access.permissions import user_has_permission, user_is_org_member
-from api.models import Organisation, OrganisationMember, Role, ServiceAccount
+from api.utils.access.permissions import (
+    user_can_access_app,
+    user_has_permission,
+    user_is_org_member,
+)
+from api.models import App, Organisation, OrganisationMember, Role, ServiceAccount
 from .access import resolve_organisation_global_access_users
 from django.db.models import Q
 from graphql import GraphQLError
@@ -39,3 +43,19 @@ def resolve_service_account_handlers(root, info, org_id):
     )
 
     return members
+
+
+def resolve_app_service_accounts(root, info, app_id):
+    app = App.objects.get(id=app_id)
+
+    if not user_has_permission(
+        info.context.user, "read", "ServiceAccounts", app.organisation, True
+    ):
+        raise GraphQLError(
+            "You don't have permission to read service accounts in this App"
+        )
+
+    if not user_can_access_app(info.context.user.userId, app_id):
+        raise GraphQLError("You don't have access to this app")
+
+    return app.service_accounts.filter(deleted_at=None)

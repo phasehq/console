@@ -46,6 +46,7 @@ from .graphene.queries.access import (
 from .graphene.queries.service_accounts import (
     resolve_service_accounts,
     resolve_service_account_handlers,
+    resolve_app_service_accounts,
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
@@ -101,6 +102,7 @@ from .graphene.mutations.app import (
     AddAppMemberMutation,
     CreateAppMutation,
     DeleteAppMutation,
+    MemberType,
     RemoveAppMemberMutation,
     RotateAppKeysMutation,
 )
@@ -156,6 +158,7 @@ from api.models import (
     SecretEvent,
     SecretFolder,
     SecretTag,
+    ServiceAccount,
     ServiceToken,
     UserToken,
 )
@@ -225,8 +228,12 @@ class Query(graphene.ObjectType):
         app_id=graphene.ID(),
         environment_id=graphene.ID(required=False),
         member_id=graphene.ID(required=False),
+        member_type=MemberType(),
     )
     app_users = graphene.List(OrganisationMemberType, app_id=graphene.ID())
+
+    app_service_accounts = graphene.List(ServiceAccountType, app_id=graphene.ID())
+
     secrets = graphene.List(
         SecretType, env_id=graphene.ID(), path=graphene.String(required=False)
     )
@@ -412,7 +419,9 @@ class Query(graphene.ObjectType):
             filter["id"] = app_id
         return App.objects.filter(**filter)
 
-    def resolve_app_environments(root, info, app_id, environment_id, member_id=None):
+    def resolve_app_environments(
+        root, info, app_id, environment_id, member_id=None, member_type=MemberType.USER
+    ):
 
         app = App.objects.get(id=app_id)
 
@@ -425,7 +434,10 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have access to this app")
 
         if member_id is not None:
-            org_member = OrganisationMember.objects.get(id=member_id)
+            if member_type == MemberType.USER:
+                org_member = OrganisationMember.objects.get(id=member_id)
+            else:
+                org_member = ServiceAccount.objects.get(id=member_id)
         else:
             org_member = OrganisationMember.objects.get(
                 organisation=app.organisation,
@@ -440,13 +452,23 @@ class Query(graphene.ObjectType):
 
         app_environments = Environment.objects.filter(**filter).order_by("index")
 
-        return [
-            app_env
-            for app_env in app_environments
-            if EnvironmentKey.objects.filter(
-                user=org_member, environment_id=app_env.id
-            ).exists()
-        ]
+        if member_type == MemberType.USER:
+            return [
+                app_env
+                for app_env in app_environments
+                if EnvironmentKey.objects.filter(
+                    user=org_member, environment_id=app_env.id
+                ).exists()
+            ]
+
+        else:
+            return [
+                app_env
+                for app_env in app_environments
+                if EnvironmentKey.objects.filter(
+                    service_account=org_member, environment_id=app_env.id
+                ).exists()
+            ]
 
     def resolve_app_users(root, info, app_id):
         app = App.objects.get(id=app_id)
@@ -460,6 +482,8 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have access to this app")
 
         return app.members.filter(deleted_at=None)
+
+    resolve_app_service_accounts = resolve_app_service_accounts
 
     def resolve_secrets(root, info, env_id, path=None):
 

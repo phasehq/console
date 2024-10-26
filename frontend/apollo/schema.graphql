@@ -14,8 +14,9 @@ type Query {
   kmsLogsCount(appId: ID, thisMonth: Boolean): Int
   secretsLogsCount(appId: ID): Int
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
-  appEnvironments(appId: ID, environmentId: ID, memberId: ID): [EnvironmentType]
+  appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
+  appServiceAccounts(appId: ID): [ServiceAccountType]
   secrets(envId: ID, path: String): [SecretType]
   folders(envId: ID, path: String): [SecretFolderType]
   secretHistory(secretId: ID): [SecretEventType]
@@ -459,35 +460,9 @@ enum TimeRange {
   ALL_TIME
 }
 
-type EnvironmentKeyType {
-  id: String!
-  environment: EnvironmentType!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-type EnvironmentTokenType {
-  id: String!
-  name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-type UserTokenType {
-  id: String!
-  name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
+enum MemberType {
+  USER
+  SERVICE
 }
 
 type ServiceAccountType {
@@ -524,6 +499,37 @@ type ServiceAccountTokenType {
   createdAt: DateTime
   updatedAt: DateTime!
   deletedAt: DateTime
+  expiresAt: DateTime
+}
+
+type EnvironmentKeyType {
+  id: String!
+  environment: EnvironmentType!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type EnvironmentTokenType {
+  id: String!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type UserTokenType {
+  id: String!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
   expiresAt: DateTime
 }
 
@@ -637,9 +643,9 @@ type Mutation {
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
-  addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): AddAppMemberMutation
-  removeAppMember(appId: ID, memberId: ID): RemoveAppMemberMutation
-  updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): UpdateMemberEnvScopeMutation
+  addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
+  removeAppMember(appId: ID, memberId: ID, memberType: MemberType): RemoveAppMemberMutation
+  updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): UpdateMemberEnvScopeMutation
   createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation

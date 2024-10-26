@@ -3,13 +3,19 @@ from backend.graphene.mutations.environment import EnvironmentKeyInput
 from api.utils.access.permissions import (
     user_can_access_app,
     user_has_permission,
-    user_is_admin,
     user_is_org_member,
 )
 import graphene
 from graphql import GraphQLError
-from api.models import App, EnvironmentKey, Organisation, OrganisationMember, Role
-from backend.graphene.types import AppType
+from api.models import (
+    App,
+    EnvironmentKey,
+    Organisation,
+    OrganisationMember,
+    Role,
+    ServiceAccount,
+)
+from backend.graphene.types import AppType, MemberType
 from django.conf import settings
 from django.db.models import Q
 
@@ -160,37 +166,54 @@ class AddAppMemberMutation(graphene.Mutation):
         member_id = graphene.ID()
         app_id = graphene.ID()
         env_keys = graphene.List(EnvironmentKeyInput)
+        member_type = MemberType(required=False)
 
     app = graphene.Field(AppType)
 
     @classmethod
-    def mutate(cls, root, info, member_id, app_id, env_keys):
+    def mutate(
+        cls, root, info, member_id, app_id, env_keys, member_type=MemberType.USER
+    ):
         user = info.context.user
         app = App.objects.get(id=app_id)
 
+        if member_type == MemberType.USER:
+            permission_key = "Members"
+            member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
+        else:
+            permission_key = "ServiceAccounts"
+            member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
+
         if not user_has_permission(
-            info.context.user, "create", "Members", app.organisation, True
+            info.context.user, "create", permission_key, app.organisation, True
         ):
             raise GraphQLError("You don't have permission to add members to this App")
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
-
-        app.members.add(org_member)
+        if member_type == MemberType.USER:
+            app.members.add(member)
+        else:
+            app.service_accounts.add(member)
 
         # Create new env keys
         for key in env_keys:
-            EnvironmentKey.objects.update_or_create(
-                environment_id=key.env_id,
-                user_id=key.user_id,
-                defaults={
-                    "wrapped_seed": key.wrapped_seed,
-                    "wrapped_salt": key.wrapped_salt,
-                    "identity_key": key.identity_key,
-                },
-            )
+            defaults = {
+                "wrapped_seed": key.wrapped_seed,
+                "wrapped_salt": key.wrapped_salt,
+                "identity_key": key.identity_key,
+            }
+
+            condition = {
+                "environment_id": key.env_id,
+                "user_id": key.user_id if member_type == MemberType.USER else None,
+                "service_account_id": (
+                    key.user_id if member_type == MemberType.SERVICE else None
+                ),
+            }
+
+            EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
 
         return AddAppMemberMutation(app=app)
 
@@ -199,31 +222,55 @@ class RemoveAppMemberMutation(graphene.Mutation):
     class Arguments:
         member_id = graphene.ID()
         app_id = graphene.ID()
+        member_type = MemberType(required=False)  # Add member_type argument
 
     app = graphene.Field(AppType)
 
     @classmethod
-    def mutate(cls, root, info, member_id, app_id):
+    def mutate(cls, root, info, member_id, app_id, member_type=MemberType.USER):
         user = info.context.user
         app = App.objects.get(id=app_id)
 
+        if member_type == MemberType.USER:
+            permission_key = "Members"
+        else:
+            permission_key = "ServiceAccounts"
+
         if not user_has_permission(
-            info.context.user, "delete", "Members", app.organisation, True
+            info.context.user, "delete", permission_key, app.organisation, True
         ):
             raise GraphQLError(
-                "You don't have permission to remove members from this App"
+                f"You don't have permission to remove {permission_key} from this App"
             )
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
-        if org_member not in app.members.all():
-            raise GraphQLError("This user is not a member of this app")
-        else:
-            app.members.remove(org_member)
+        member = None
+        if member_type == MemberType.USER:
+            member = OrganisationMember.objects.get(id=member_id)
+        elif member_type == MemberType.SERVICE:
+            member = ServiceAccount.objects.get(id=member_id)
+
+        if not member:
+            raise GraphQLError("Invalid member type or ID")
+
+        if member_type == MemberType.USER:
+            if member not in app.members.all():
+                raise GraphQLError("This user is not a member of this app")
+
+            app.members.remove(member)
             EnvironmentKey.objects.filter(
                 environment__app=app, user_id=member_id
+            ).delete()
+
+        elif member_type == MemberType.SERVICE:
+            if member not in app.service_accounts.all():
+                raise GraphQLError("This service account is not a member of this app")
+
+            app.service_accounts.remove(member)
+            EnvironmentKey.objects.filter(
+                environment__app=app, service_account_id=member_id
             ).delete()
 
         return RemoveAppMemberMutation(app=app)

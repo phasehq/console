@@ -8,7 +8,7 @@ import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
 import { OrganisationMemberType, EnvironmentType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -18,6 +18,7 @@ import {
   FaBan,
   FaCheckSquare,
   FaChevronDown,
+  FaCog,
   FaPlus,
   FaSquare,
   FaTimes,
@@ -33,9 +34,10 @@ import { userHasGlobalAccess, userHasPermission, userIsAdmin } from '@/utils/acc
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
+import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
+import loading from '@/app/loading'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { keyring } = useContext(KeyringContext)
@@ -162,7 +164,7 @@ export default function Members({ params }: { params: { team: string; app: strin
             keyring!
           )
 
-          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForUser(
+          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(
             { seed, salt },
             selectedMember!
           )
@@ -271,7 +273,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                     onChange={(event) => setQuery(event.target.value)}
                                     required
                                     displayValue={(person: OrganisationMemberType) =>
-                                      person?.fullName || person?.email!
+                                      person ? person?.fullName || person?.email! : 'Select a user'
                                     }
                                   />
                                   <div className="absolute inset-y-0 right-2 flex items-center">
@@ -460,9 +462,7 @@ export default function Members({ params }: { params: { team: string; app: strin
       <>
         <div className="flex items-center justify-center">
           <Button variant="danger" onClick={openModal} title="Remove member">
-            <div className="text-white dark:text-red-500 flex items-center gap-1">
-              <FaUserTimes /> Remove user
-            </div>
+            <FaUserTimes /> Remove user
           </Button>
         </div>
 
@@ -526,15 +526,32 @@ export default function Members({ params }: { params: { team: string; app: strin
     )
   }
 
-  const ManageUserAccessDialog = (props: { member: OrganisationMemberType }) => {
+  const ManageUserAccessDialog = ({ member }: { member: OrganisationMemberType }) => {
     const [updateScope] = useMutation(UpdateEnvScope)
-    const [getUserEnvScope] = useLazyQuery(GetAppEnvironments)
 
+    // Get environments that the active user has access to
     const { data: appEnvsData } = useQuery(GetAppEnvironments, {
       variables: {
         appId: params.app,
       },
     })
+
+    // Get the environemnts that the member has access to
+    const { data: userEnvScopeData } = useQuery(GetAppEnvironments, {
+      variables: {
+        appId: params.app,
+        memberId: member.id,
+      },
+    })
+
+    const envScope: Array<Record<string, string>> = useMemo(() => {
+      return (
+        userEnvScopeData?.appEnvironments.map((env: EnvironmentType) => ({
+          id: env.id,
+          name: env.name,
+        })) ?? []
+      )
+    }, [userEnvScopeData])
 
     const envOptions =
       appEnvsData?.appEnvironments.map((env: EnvironmentType) => {
@@ -548,7 +565,7 @@ export default function Members({ params }: { params: { team: string; app: strin
 
     const [isOpen, setIsOpen] = useState<boolean>(false)
 
-    const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
+    const [scope, setScope] = useState<Array<Record<string, string>>>([])
     const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
 
     const memberHasGlobalAccess = (user: OrganisationMemberType) =>
@@ -563,36 +580,13 @@ export default function Members({ params }: { params: { team: string; app: strin
     }
 
     useEffect(() => {
-      if (isOpen) {
-        const handleGetCurrentSCope = async () => {
-          const { data: currentScope } = await getUserEnvScope({
-            variables: {
-              appId: params.app,
-              memberId: props.member.id,
-            },
-            fetchPolicy: 'no-cache',
-          })
-
-          setEnvScope(
-            currentScope?.appEnvironments.map((env: EnvironmentType) => {
-              const { id, name } = env
-
-              return {
-                id,
-                name,
-              }
-            }) ?? []
-          )
-        }
-
-        if (isOpen) handleGetCurrentSCope()
-      }
-    }, [getUserEnvScope, isOpen, props.member.id])
+      setScope(envScope)
+    }, [envScope])
 
     const handleUpdateScope = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
 
-      if (envScope.length === 0) {
+      if (scope.length === 0) {
         setShowEnvHint(true)
         return false
       }
@@ -600,7 +594,7 @@ export default function Members({ params }: { params: { team: string; app: strin
       const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
       const envKeyPromises = appEnvironments
-        .filter((env) => envScope.map((selectedEnv) => selectedEnv.id).includes(env.id))
+        .filter((env) => scope.map((selectedEnv) => selectedEnv.id).includes(env.id))
         .map(async (env: EnvironmentType) => {
           const { data } = await getEnvKey({
             variables: {
@@ -621,14 +615,14 @@ export default function Members({ params }: { params: { team: string; app: strin
             keyring!
           )
 
-          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForUser(
+          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(
             { seed, salt },
-            props.member!
+            member!
           )
 
           return {
             envId: env.id,
-            userId: props.member!.id,
+            userId: member!.id,
             identityKey,
             wrappedSeed,
             wrappedSalt,
@@ -638,11 +632,14 @@ export default function Members({ params }: { params: { team: string; app: strin
       const envKeyInputs = await Promise.all(envKeyPromises)
 
       await updateScope({
-        variables: { memberId: props.member!.id, appId: params.app, envKeys: envKeyInputs },
+        variables: { memberId: member!.id, appId: params.app, envKeys: envKeyInputs },
         refetchQueries: [
           {
-            query: GetAppMembers,
-            variables: { appId: params.app },
+            query: GetAppEnvironments,
+            variables: {
+              appId: params.app,
+              memberId: member.id,
+            },
           },
         ],
       })
@@ -650,12 +647,26 @@ export default function Members({ params }: { params: { team: string; app: strin
       toast.success('Updated user access', { autoClose: 2000 })
     }
 
+    const allowUpdateScope =
+      member.email !== session?.user?.email &&
+      member.role!.name!.toLowerCase() !== 'owner' &&
+      userCanUpdateMemberAccess
+
     return (
       <>
-        <div className="flex items-center justify-center">
-          <Button variant="outline" onClick={openModal} title="Manage access">
-            <FaUserCog /> Manage user access
-          </Button>
+        <div className="flex items-center gap-2">
+          {envScope.map((env) => (
+            <span className="text-zinc-900 dark:text-zinc-100 text-sm font-medium" key={env.id}>
+              {env.name}
+            </span>
+          ))}
+          {allowUpdateScope && (
+            <div className="opacity-0 group-hover:opacity-100 transition ease">
+              <Button variant="outline" onClick={openModal} title="Manage access">
+                <FaCog /> Manage
+              </Button>
+            </div>
+          )}
         </div>
 
         <Transition appear show={isOpen} as={Fragment}>
@@ -686,7 +697,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                   <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                     <Dialog.Title as="div" className="flex w-full justify-between">
                       <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                        Manage access for {props.member.fullName || props.member.email}
+                        Manage access for {member.fullName || member.email}
                       </h3>
 
                       <Button variant="text" onClick={closeModal}>
@@ -695,7 +706,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                     </Dialog.Title>
 
                     <form className="space-y-6 py-4" onSubmit={handleUpdateScope}>
-                      {memberHasGlobalAccess(props.member) && (
+                      {memberHasGlobalAccess(member) && (
                         <Alert variant="info" icon={true} size="sm">
                           <p>
                             This user&apos;s role grants them access to all environments in this
@@ -712,18 +723,18 @@ export default function Members({ params }: { params: { team: string; app: strin
                       )}
 
                       <div className="space-y-1 w-full relative">
-                        {envScope.length === 0 && showEnvHint && (
+                        {scope.length === 0 && showEnvHint && (
                           <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
                             Select an environment scope
                           </span>
                         )}
                         <Listbox
-                          value={envScope}
+                          value={scope}
                           by="id"
-                          onChange={setEnvScope}
+                          onChange={setScope}
                           multiple
                           name="environments"
-                          disabled={memberHasGlobalAccess(props.member)}
+                          disabled={memberHasGlobalAccess(member)}
                         >
                           {({ open }) => (
                             <>
@@ -739,13 +750,13 @@ export default function Members({ params }: { params: { team: string; app: strin
                                 <div
                                   className={clsx(
                                     'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md h-10',
-                                    memberHasGlobalAccess(props.member)
+                                    memberHasGlobalAccess(member)
                                       ? 'cursor-not-allowed'
                                       : 'cursor-pointer'
                                   )}
                                 >
                                   <span className="text-black dark:text-white">
-                                    {envScope
+                                    {scope
                                       .map((env: Partial<EnvironmentType>) => env.name)
                                       .join(' + ')}
                                   </span>
@@ -803,7 +814,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                         <Button
                           variant="primary"
                           type="submit"
-                          disabled={memberHasGlobalAccess(props.member)}
+                          disabled={memberHasGlobalAccess(member)}
                         >
                           Save
                         </Button>
@@ -827,7 +838,11 @@ export default function Members({ params }: { params: { team: string; app: strin
     )
 
   return (
-    <div className="w-full space-y-10 pt-8 text-black dark:text-white">
+    <div className="w-full space-y-6 text-black dark:text-white">
+      <div className="px-4">
+        <h2 className="text-xl font-bold">Members</h2>
+        <div className="text-neutral-500">Manage access for human users to this App</div>
+      </div>
       {userCanReadAppMembers ? (
         <div className="space-y-4">
           {userCanAddAppMembers && (
@@ -844,14 +859,12 @@ export default function Members({ params }: { params: { team: string; app: strin
                 </th>
 
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Joined
+                  Environment Access
                 </th>
-                {(userCanRemoveAppMembers || userCanUpdateMemberAccess) && (
-                  <th className="px-6 py-3"></th>
-                )}
+                {userCanRemoveAppMembers && <th className="px-6 py-3"></th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-500/40">
+            <tbody className="divide-y divide-neutral-500/20">
               {data?.appUsers.map((member: OrganisationMemberType) => (
                 <tr className="group" key={member.id}>
                   <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
@@ -869,20 +882,16 @@ export default function Members({ params }: { params: { team: string; app: strin
                     </div>
                   </td>
 
-                  <td className="px-6 py-4 whitespace-nowrap capitalize">
-                    {relativeTimeFromDates(new Date(member.createdAt))}
+                  <td className="px-6 py-4">
+                    <ManageUserAccessDialog member={member} />
                   </td>
-                  {(userCanRemoveAppMembers || userCanUpdateMemberAccess) && (
+
+                  {userCanRemoveAppMembers && (
                     <td className="px-6 py-4">
                       {member.email !== session?.user?.email &&
                         member.role!.name!.toLowerCase() !== 'owner' && (
                           <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
-                            {userCanUpdateMemberAccess && (
-                              <ManageUserAccessDialog member={member} />
-                            )}
-                            {userCanRemoveAppMembers && (
-                              <RemoveMemberConfirmDialog member={member} />
-                            )}
+                            <RemoveMemberConfirmDialog member={member} />
                           </div>
                         )}
                     </td>

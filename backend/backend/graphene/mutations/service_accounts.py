@@ -1,4 +1,3 @@
-from backend.graphene.mutations.environment import EnvironmentKeyInput
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -107,6 +106,34 @@ class EnableServiceAccountThirdPartyAuthMutation(graphene.Mutation):
         return EnableServiceAccountThirdPartyAuthMutation(
             service_account=service_account
         )
+
+
+class UpdateServiceAccountMutation(graphene.Mutation):
+    class Arguments:
+        service_account_id = graphene.ID()
+        name = graphene.String()
+        role_id = graphene.ID()
+
+    service_account = graphene.Field(ServiceAccountType)
+
+    @classmethod
+    def mutate(cls, root, info, service_account_id, name, role_id):
+        user = info.context.user
+        service_account = ServiceAccountToken.objects.get(id=service_account_id)
+
+        if not user_has_permission(
+            user, "update", "ServiceAccounts", service_account.organisation
+        ):
+            raise GraphQLError(
+                "You don't have the permissions required to update Service Accounts in this organisation"
+            )
+
+        role = Role.objects.get(id=role_id)
+        service_account.name = name
+        service_account.role = role
+        service_account.save()
+
+        return UpdateServiceAccountMutation(service_account=service_account)
 
 
 class UpdateServiceAccountHandlersMutation(graphene.Mutation):

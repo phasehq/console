@@ -104,8 +104,6 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           </div>
         </div>
 
-        {/* <div>Created {relativeTimeFromDates(new Date(account.createdAt))}</div> */}
-
         <div className="py-4">
           <div>
             <div className="text-xl font-semibold">Tokens</div>

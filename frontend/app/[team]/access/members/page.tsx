@@ -47,7 +47,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { Alert } from '@/components/common/Alert'
 import { Input } from '@/components/common/Input'
 import CopyButton from '@/components/common/CopyButton'
-import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
+import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { useSearchParams } from 'next/navigation'
@@ -136,7 +136,10 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
           )
 
           // re-encrypt the env key for the target user
-          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForUser({ seed, salt }, member)
+          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(
+            { seed, salt },
+            member
+          )
 
           // resolve the promise with the mutation payload
           return {

@@ -5,9 +5,7 @@ import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { userHasPermission } from '@/utils/access/permissions'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useRouter } from 'next/router'
 
 export default function AccessLayout({
   params,

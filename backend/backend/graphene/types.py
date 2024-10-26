@@ -472,6 +472,11 @@ class ServiceAccountTokenType(DjangoObjectType):
         fields = "__all__"
 
 
+class MemberType(graphene.Enum):
+    USER = "user"
+    SERVICE = "service"
+
+
 class ServiceAccountType(DjangoObjectType):
 
     third_party_auth_enabled = graphene.Boolean()

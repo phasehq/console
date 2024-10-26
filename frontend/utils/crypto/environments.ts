@@ -6,6 +6,7 @@ import {
   EnvironmentType,
   OrganisationMemberType,
   SecretType,
+  ServiceAccountType,
 } from '@/apollo/graphql'
 
 import { EnvKeypair, OrganisationKeyring } from './types'
@@ -223,19 +224,19 @@ export const generateUserToken = async (
  * Wraps environment secrets for a user.
  *
  * @param {{ seed: string; salt: string }} envSecrets - The environment secrets to be wrapped.
- * @param {OrganisationMemberType} user - The user for whom the secrets are wrapped.
+ * @param {OrganisationMemberType | ServiceAccountType} account - The target account for whom the secrets are wrapped.
  * @returns {Promise<{ user: OrganisationMemberType; wrappedSeed: string; wrappedSalt: string }>} - An object containing the wrapped environment secrets and user information.
  */
-export const wrapEnvSecretsForUser = async (
+export const wrapEnvSecretsForAccount = async (
   envSecrets: { seed: string; salt: string },
-  user: OrganisationMemberType
+  account: OrganisationMemberType | ServiceAccountType
 ) => {
-  const userPubKey = await getUserKxPublicKey(user.identityKey!)
+  const userPubKey = await getUserKxPublicKey(account.identityKey!)
   const wrappedSeed = await encryptAsymmetric(envSecrets.seed, userPubKey)
   const wrappedSalt = await encryptAsymmetric(envSecrets.salt, userPubKey)
 
   return {
-    user,
+    user: account,
     wrappedSeed,
     wrappedSalt,
   }
@@ -401,12 +402,12 @@ export const createNewEnv = async (
     (user: OrganisationMemberType) => user.role!.name?.toLowerCase() === "owner"
   )
 
-  const ownerWrappedEnv = await wrapEnvSecretsForUser({ seed, salt }, owner!)
+  const ownerWrappedEnv = await wrapEnvSecretsForAccount({ seed, salt }, owner!)
   const globalAccessUsersWrappedEnv = await Promise.all(
     globalAccessUsers
       .filter((user) => user.role!.name?.toLowerCase() !== "owner")
       .map(async (admin) => {
-        const adminWrappedEnvSecret = await wrapEnvSecretsForUser({ seed, salt }, admin)
+        const adminWrappedEnvSecret = await wrapEnvSecretsForAccount({ seed, salt }, admin)
         return adminWrappedEnvSecret
       })
   )

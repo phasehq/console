@@ -39,20 +39,16 @@ export default function AppLayout({
       link: '',
     },
     {
-      name: 'Service tokens',
-      link: 'tokens',
-    },
-    {
-      name: 'Logs',
-      link: 'logs',
-    },
-    {
-      name: 'Members',
-      link: 'members',
+      name: 'Access',
+      link: 'access/members',
     },
     {
       name: 'Syncing',
       link: 'syncing',
+    },
+    {
+      name: 'Logs',
+      link: 'logs',
     },
     {
       name: 'Settings',
@@ -64,7 +60,7 @@ export default function AppLayout({
     const activeTabIndex = () => {
       if (app) {
         const currentUrl = path?.split('/')[4] || ''
-        const index = tabs.findIndex((tab) => tab.link === currentUrl)
+        const index = tabs.findIndex((tab) => tab.link.split('/')[0] === currentUrl)
         return index >= 0 ? index : 0
       }
       return 0
