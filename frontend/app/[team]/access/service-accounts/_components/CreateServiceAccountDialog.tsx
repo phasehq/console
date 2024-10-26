@@ -6,7 +6,7 @@ import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServic
 import { GetServiceAccountHandlers } from '@/graphql/queries/service-accounts/getServiceAccountHandlers.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { GetServerKey } from '@/graphql/queries/syncing/getServerKey.gql'
-import { CreateServiceAccount } from '@/graphql/mutations/service-accounts/createServiceAccount.gql'
+import { CreateServiceAccountOp } from '@/graphql/mutations/service-accounts/createServiceAccount.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useMutation, useQuery } from '@apollo/client'
 import {
@@ -39,7 +39,7 @@ export const CreateServiceAccountDialog = () => {
     skip: !organisation,
   })
 
-  const [createServiceAccount] = useMutation(CreateServiceAccount)
+  const [createServiceAccount] = useMutation(CreateServiceAccountOp)
 
   const { data: serverKeyData } = useQuery(GetServerKey)
 

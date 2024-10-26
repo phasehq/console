@@ -1,5 +1,5 @@
 import { FaTrash } from 'react-icons/fa'
-import { DeleteServiceAccount } from '@/graphql/mutations/service-accounts/deleteServiceAccount.gql'
+import { DeleteServiceAccountOp } from '@/graphql/mutations/service-accounts/deleteServiceAccount.gql'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
@@ -15,7 +15,7 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
-  const [deleteAccount] = useMutation(DeleteServiceAccount)
+  const [deleteAccount] = useMutation(DeleteServiceAccountOp)
 
   const handleDelete = async () => {
     const deleted = await deleteAccount({
