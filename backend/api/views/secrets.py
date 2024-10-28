@@ -388,7 +388,7 @@ class E2EESecretsView(APIView):
                     account,
                     "delete",
                     "Secrets",
-                    secret.env.app.organisation,
+                    secret.environment.app.organisation,
                     True,
                     request.auth["service_account"] is not None,
                 ):
