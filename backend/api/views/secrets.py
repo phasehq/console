@@ -58,8 +58,13 @@ class E2EESecretsView(APIView):
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
         if request.auth["org_member"] or request.auth["service_account"]:
+            account = (
+                request.auth["service_account"]
+                if "service_account" in request
+                else request.auth["org_member"].user
+            )
             if not user_has_permission(
-                request.auth["org_member"].user or request.auth["service_account"],
+                account,
                 "read",
                 "Secrets",
                 env.app.organisation,
