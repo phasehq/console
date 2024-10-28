@@ -60,7 +60,7 @@ class E2EESecretsView(APIView):
         if request.auth["org_member"] or request.auth["service_account"]:
             account = (
                 request.auth["service_account"]
-                if "service_account" in request
+                if "service_account" in request.auth
                 else request.auth["org_member"].user
             )
             if not user_has_permission(
