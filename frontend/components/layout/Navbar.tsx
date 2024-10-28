@@ -48,31 +48,31 @@ export const NavBar = (props: { team: string }) => {
 
   return (
     <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
-      <div className="flex items-center gap-2">
-        <Link href="/">
+      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+        <Link href="/" className="shrink-0">
           <LogoMark className="w-10 fill-black dark:fill-white" />
         </Link>
-        <span>/</span>
+        <span className="shrink-0">/</span>
 
-        {!activeApp && <span className="text-black dark:text-white">{props.team}</span>}
+        {!activeApp && (<span className="text-black dark:text-white overflow-hidden text-ellipsis whitespace-nowrap">{props.team}</span>)}
 
-        {activeApp && <Link href={`/${props.team}`}>{props.team}</Link>}
+        {activeApp && (<Link href={`/${props.team}`} className="overflow-hidden text-ellipsis whitespace-nowrap">{props.team}</Link>)}
 
-        {activeApp && <span>/</span>}
+        {activeApp && <span className="shrink-0">/</span>}
 
         {activeApp &&
           (appPage ? (
-            <Link href={`/${props.team}/apps/${activeApp.id}`}>{activeApp.name}</Link>
+            <Link href={`/${props.team}/apps/${activeApp.id}`} className="overflow-hidden text-ellipsis whitespace-nowrap">{activeApp.name}</Link>
           ) : (
-            <span className="text-black dark:text-white">{activeApp.name}</span>
+            <span className="text-black dark:text-white overflow-hidden text-ellipsis whitespace-nowrap">{activeApp.name}</span>
           ))}
 
-        {appPage && <span>/</span>}
+        {appPage && <span className="shrink-0">/</span>}
 
         {appPage && (
           <span
             className={clsx(
-              'capitalize',
+              'capitalize overflow-hidden text-ellipsis whitespace-nowrap',
               activeEnv ? 'text-neutral-500' : 'text-black dark:text-white'
             )}
           >
@@ -80,9 +80,9 @@ export const NavBar = (props: { team: string }) => {
           </span>
         )}
 
-        {activeEnv && <span>/</span>}
+        {activeEnv && <span className="shrink-0">/</span>}
 
-        {activeEnv && <span className="text-black dark:text-white">{activeEnv.name}</span>}
+        {activeEnv && (<span className="text-black dark:text-white overflow-hidden text-ellipsis whitespace-nowrap">{activeEnv.name}</span>)}
       </div>
 
       <div className="flex justify-center w-full">
