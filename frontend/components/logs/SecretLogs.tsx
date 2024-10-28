@@ -9,7 +9,7 @@ import {
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaBan, FaChevronRight, FaExternalLinkAlt, FaKey } from 'react-icons/fa'
+import { FaBan, FaChevronRight, FaExternalLinkAlt, FaKey, FaRobot } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
@@ -237,6 +237,31 @@ export default function SecretLogs(props: { app: string }) {
       if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted secret'
     }
 
+    const logCreatedBy = (log: SecretEventType) => {
+      if (log.user)
+        return (
+          <div className="flex items-center gap-1 text-sm">
+            <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
+            {log.user.fullName || log.user.email}
+          </div>
+        )
+      else if (log.serviceToken)
+        return (
+          <div className="flex items-center gap-1 text-sm">
+            <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
+          </div>
+        )
+      else if (log.serviceAccount)
+        return (
+          <div className="flex items-center gap-1 text-sm">
+            <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-6">
+              <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
+            </div>{' '}
+            {log.serviceAccount.name}
+          </div>
+        )
+    }
+
     return (
       <Disclosure>
         {({ open }) => (
@@ -266,16 +291,7 @@ export default function SecretLogs(props: { app: string }) {
               </td>
               <td className="whitespace-nowrap px-6 py-4">
                 <div className="text-sm flex items-center gap-2 text-neutral-500">
-                  {log.user ? (
-                    <div className="flex items-center gap-1 text-sm">
-                      <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
-                      {log.user.fullName || log.user.email}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-sm">
-                      <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
-                    </div>
-                  )}
+                  {logCreatedBy(log)}
                 </div>
               </td>
               <td className="whitespace-nowrap px-6 py-4">
@@ -333,19 +349,7 @@ export default function SecretLogs(props: { app: string }) {
                       </div>
                     </LogField>
 
-                    <LogField label="Created by">
-                      {' '}
-                      {log.user ? (
-                        <div className="flex items-center gap-1 text-sm">
-                          <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
-                          {log.user.fullName || log.user.email}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-sm">
-                          <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
-                        </div>
-                      )}
-                    </LogField>
+                    <LogField label="Created by">{logCreatedBy(log)}</LogField>
 
                     <LogField label="IP address"> {log.ipAddress}</LogField>
 
