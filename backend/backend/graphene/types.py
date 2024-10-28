@@ -555,6 +555,7 @@ class SecretEventType(DjangoObjectType):
             "timestamp",
             "user",
             "service_token",
+            "service_account",
             "ip_address",
             "user_agent",
             "environment",

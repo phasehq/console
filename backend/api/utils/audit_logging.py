@@ -4,7 +4,13 @@ from api.models import SecretEvent
 
 
 def log_secret_event(
-    secret, event_type, user, service_token=None, ip_address=None, user_agent=None
+    secret,
+    event_type,
+    user=None,
+    service_token=None,
+    service_account=None,
+    ip_address=None,
+    user_agent=None,
 ):
     """
     Utility function to log secret events.
@@ -16,6 +22,7 @@ def log_secret_event(
         path=secret.path,
         user=user,
         service_token=service_token,
+        service_account=service_account,
         key=secret.key,
         key_digest=secret.key_digest,
         value=secret.value,

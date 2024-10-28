@@ -392,6 +392,7 @@ type SecretEventType {
   path: String!
   user: OrganisationMemberType
   serviceToken: ServiceTokenType
+  serviceAccount: ServiceAccountType
   key: String!
   value: String!
   version: Int!
