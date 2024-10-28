@@ -88,7 +88,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           href={`/${params.team}/access/service-accounts`}
           className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
         >
-          <FaChevronLeft /> Back to service accouts
+          <FaChevronLeft /> Back to service accounts
         </Link>
       </div>
       <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
