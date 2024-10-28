@@ -3,6 +3,7 @@ from api.models import (
     Environment,
     EnvironmentKey,
     OrganisationMember,
+    ServiceAccount,
 )
 from api.utils.access.roles import default_roles
 
@@ -40,19 +41,39 @@ def user_can_access_environment(user_id, env_id):
     ).exists()
 
 
+def service_account_can_access_environment(account_id, env_id):
+    env = Environment.objects.get(id=env_id)
+    service_account = ServiceAccount.objects.get(
+        organisation=env.app.organisation, id=account_id, deleted_at=None
+    )
+    return EnvironmentKey.objects.filter(
+        service_account=service_account, environment_id=env_id
+    ).exists()
+
+
 def member_can_access_org(member_id, org_id):
     return OrganisationMember.objects.filter(
         id=member_id, organisation_id=org_id, deleted_at=None
     ).exists()
 
 
-def user_has_permission(user, action, resource, organisation, is_app_resource=False):
+def user_has_permission(
+    account,
+    action,
+    resource,
+    organisation,
+    is_app_resource=False,
+    is_service_account=False,
+):
     """Check if the user has the specified permission for a resource in an organization."""
     try:
         # Get the user's membership in the organization
-        org_member = OrganisationMember.objects.get(
-            user=user, organisation=organisation, deleted_at=None
-        )
+        if is_service_account:
+            org_member = account
+        else:
+            org_member = OrganisationMember.objects.get(
+                user=account, organisation=organisation, deleted_at=None
+            )
         role = org_member.role
         if not role:
             return False  # No role assigned, hence no permissions

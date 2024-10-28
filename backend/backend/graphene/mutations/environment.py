@@ -755,7 +755,7 @@ class CreateSecretMutation(graphene.Mutation):
         )
 
         log_secret_event(
-            secret, SecretEvent.CREATE, org_member, None, ip_address, user_agent
+            secret, SecretEvent.CREATE, org_member, None, None, ip_address, user_agent
         )
 
         return CreateSecretMutation(secret=secret)
@@ -819,7 +819,13 @@ class BulkCreateSecretMutation(graphene.Mutation):
                 user=info.context.user, organisation=org, deleted_at=None
             )
             log_secret_event(
-                secret, SecretEvent.CREATE, org_member, None, ip_address, user_agent
+                secret,
+                SecretEvent.CREATE,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
             )
 
         return BulkCreateSecretMutation(secrets=created_secrets)
@@ -874,7 +880,7 @@ class EditSecretMutation(graphene.Mutation):
         )
 
         log_secret_event(
-            secret, SecretEvent.UPDATE, org_member, None, ip_address, user_agent
+            secret, SecretEvent.UPDATE, org_member, None, None, ip_address, user_agent
         )
 
         return EditSecretMutation(secret=secret)
@@ -932,7 +938,13 @@ class BulkEditSecretMutation(graphene.Mutation):
                 user=info.context.user, organisation=org, deleted_at=None
             )
             log_secret_event(
-                secret, SecretEvent.UPDATE, org_member, None, ip_address, user_agent
+                secret,
+                SecretEvent.UPDATE,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
             )
 
         return BulkEditSecretMutation(secrets=updated_secrets)
@@ -966,7 +978,7 @@ class DeleteSecretMutation(graphene.Mutation):
         )
 
         log_secret_event(
-            secret, SecretEvent.DELETE, org_member, None, ip_address, user_agent
+            secret, SecretEvent.DELETE, org_member, None, None, ip_address, user_agent
         )
 
         return DeleteSecretMutation(secret=secret)
@@ -1004,7 +1016,13 @@ class BulkDeleteSecretMutation(graphene.Mutation):
                 user=info.context.user, organisation=org, deleted_at=None
             )
             log_secret_event(
-                secret, SecretEvent.DELETE, org_member, None, ip_address, user_agent
+                secret,
+                SecretEvent.DELETE,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
             )
 
         return BulkDeleteSecretMutation(secrets=deleted_secrets)
@@ -1032,7 +1050,13 @@ class ReadSecretMutation(graphene.Mutation):
                 )
 
                 log_secret_event(
-                    secret, SecretEvent.READ, org_member, None, ip_address, user_agent
+                    secret,
+                    SecretEvent.READ,
+                    org_member,
+                    None,
+                    None,
+                    ip_address,
+                    user_agent,
                 )
         return ReadSecretMutation(ok=True)
 

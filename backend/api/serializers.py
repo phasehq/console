@@ -225,6 +225,65 @@ class ServiceTokenSerializer(serializers.ModelSerializer):
         return representation
 
 
+class ServiceAccountTokenSerializer(serializers.ModelSerializer):
+    apps = EnvironmentKeySerializer(many=True, read_only=True)
+
+    # New field 'userId'
+    account_id = serializers.UUIDField(source="service_account.id", read_only=True)
+
+    # New field 'offline_enabled' with default value False
+    offline_enabled = serializers.BooleanField(default=False, read_only=True)
+
+    organisation = OrganisationSerializer(
+        source="service_account.organisation", read_only=True
+    )
+
+    class Meta:
+        model = UserToken
+        fields = [
+            "wrapped_key_share",
+            "account_id",
+            "offline_enabled",
+            "apps",
+            "organisation",
+        ]
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+
+        # Filter environment_keys to include only those associated with the same user
+        service_account = instance.service_account
+
+        if service_account is not None:
+            environment_keys = EnvironmentKey.objects.filter(
+                service_account=service_account, environment__app__deleted_at=None
+            )
+            apps = []
+            for key in environment_keys:
+
+                serializer = EnvironmentKeySerializer(key)
+                index = find_index_by_id(apps, key.environment.app.id)
+
+                app_data = {
+                    "id": key.environment.app.id,
+                    "name": key.environment.app.name,
+                    "encryption": "E2E",
+                }
+
+                if key.environment.app.sse_enabled:
+                    app_data["encryption"] = "SSE"
+
+                if index == -1:
+                    app_data["environment_keys"] = [serializer.data]
+                    apps.append(app_data)
+                else:
+                    apps[index]["environment_keys"].append(serializer.data)
+
+            representation["apps"] = apps
+
+        return representation
+
+
 class LockboxSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lockbox

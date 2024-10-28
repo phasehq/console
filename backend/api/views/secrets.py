@@ -18,6 +18,7 @@ from api.utils.secrets import (
     get_environment_keys,
 )
 from api.utils.access.permissions import (
+    service_account_can_access_environment,
     user_can_access_environment,
     user_has_permission,
 )
@@ -56,13 +57,14 @@ class E2EESecretsView(APIView):
         if not env.id:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
-        if request.auth["org_member"]:
+        if request.auth["org_member"] or request.auth["service_account"]:
             if not user_has_permission(
-                request.auth["org_member"].user,
+                request.auth["org_member"].user or request.auth["service_account"],
                 "read",
                 "Secrets",
                 env.app.organisation,
                 True,
+                request.auth["service_account"] is not None,
             ):
                 return JsonResponse(
                     {
@@ -98,6 +100,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.READ,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account"],
                 ip_address,
                 user_agent,
             )
@@ -115,13 +118,14 @@ class E2EESecretsView(APIView):
         if not env:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
-        if request.auth["org_member"]:
+        if request.auth["org_member"] or request.auth["service_account"]:
             if not user_has_permission(
-                request.auth["org_member"].user,
+                request.auth["org_member"].user or request.auth["service_account"],
                 "create",
                 "Secrets",
                 env.app.organisation,
                 True,
+                request.auth["service_account"] is not None,
             ):
                 return JsonResponse(
                     {
@@ -183,6 +187,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.CREATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account"],
                 ip_address,
                 user_agent,
             )
@@ -204,13 +209,14 @@ class E2EESecretsView(APIView):
         if not env:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
-        if request.auth["org_member"]:
+        if request.auth["org_member"] or request.auth["service_account"]:
             if not user_has_permission(
-                request.auth["org_member"].user,
+                request.auth["org_member"].user or request.auth["service_account"],
                 "update",
                 "Secrets",
                 env.app.organisation,
                 True,
+                request.auth["service_account"] is not None,
             ):
                 return JsonResponse(
                     {
@@ -278,6 +284,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.UPDATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account"],
                 ip_address,
                 user_agent,
             )
@@ -307,14 +314,14 @@ class E2EESecretsView(APIView):
         for secret in secrets_to_delete:
             if not Secret.objects.filter(id=secret.id).exists():
                 return JsonResponse({"error": "Secret doesn't exist"}, status=404)
-            if request.auth["org_member"]:
-
+            if request.auth["org_member"] or request.auth["service_account"]:
                 if not user_has_permission(
-                    request.auth["org_member"].user,
+                    request.auth["org_member"].user or request.auth["service_account"],
                     "delete",
                     "Secrets",
-                    secret.environment.app.organisation,
+                    secret.env.app.organisation,
                     True,
+                    request.auth["service_account"] is not None,
                 ):
                     return JsonResponse(
                         {
@@ -332,6 +339,15 @@ class E2EESecretsView(APIView):
                     {"error": "You don't have access to this environment"}, status=403
                 )
 
+            if request.auth[
+                "service_account"
+            ] is not None and not service_account_can_access_environment(
+                request.auth["service_account"].id, secret.environment.id
+            ):
+                return JsonResponse(
+                    {"error": "You don't have access to this environment"}, status=403
+                )
+
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
             secret.deleted_at = timezone.now()
@@ -342,6 +358,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.DELETE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account"],
                 ip_address,
                 user_agent,
             )
@@ -406,6 +423,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.READ,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account"],
                 ip_address,
                 user_agent,
             )
@@ -507,6 +525,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.CREATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account"],
                 ip_address,
                 user_agent,
             )
@@ -638,6 +657,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.UPDATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account"],
                 ip_address,
                 user_agent,
             )
@@ -716,6 +736,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.DELETE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account"],
                 ip_address,
                 user_agent,
             )

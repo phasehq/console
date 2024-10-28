@@ -28,12 +28,11 @@ def resolve_service_account_handlers(root, info, org_id):
     service_account_handler_roles = Role.objects.filter(
         Q(organisation_id=org_id)
         & (
-            Q(name__iexact="owner") | Q(name__iexact="admin")
-        )  # Check for "owner" or "admin" roles
-        | Q(permissions__global_access=True),  # Check for global access roles
-        Q(
-            permissions__permissions__ServiceAccounts__gt=0
-        ),  # Add condition for non-empty 'ServiceAccounts' list
+            Q(name__iexact="owner")
+            | Q(name__iexact="admin")
+            | Q(permissions__global_access=True)  # Check for global access roles
+            | Q(permissions__permissions__ServiceAccounts__gt=0)
+        ),
     )
 
     members = OrganisationMember.objects.filter(

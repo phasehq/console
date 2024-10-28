@@ -52,6 +52,9 @@ class CreateServiceAccountMutation(graphene.Mutation):
                 "You don't have the permissions required to create Service Accounts in this organisation"
             )
 
+        if handlers is None or handlers.length == 0:
+            raise GraphQLError("At least one service account handler must be provided")
+
         service_account = ServiceAccount.objects.create(
             name=name,
             organisation=org,
