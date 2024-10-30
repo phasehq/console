@@ -1,6 +1,6 @@
 import { OrganisationMemberType, RoleType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
-import { Fragment, useContext, useRef, useState } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { FaChevronDown, FaPlus } from 'react-icons/fa'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { GetServiceAccountHandlers } from '@/graphql/queries/service-accounts/getServiceAccountHandlers.gql'
@@ -21,7 +21,6 @@ import { Listbox } from '@headlessui/react'
 import clsx from 'clsx'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { Button } from '@/components/common/Button'
-import { identity } from 'lodash'
 import { toast } from 'react-toastify'
 
 const bip39 = require('bip39')
@@ -179,12 +178,12 @@ export const CreateServiceAccountDialog = () => {
               )}
             </Listbox>
           </div>
-          <div>
+          {/* <div>
             <label className="block text-neutral-500 text-sm mb-2" htmlFor="role">
               Enable third-party authentication
             </label>
             <ToggleSwitch value={thirdParty} onToggle={() => setThirdParty(!thirdParty)} />
-          </div>
+          </div> */}
         </div>
         <div className="flex justify-end items-center gap-2 pt-8">
           <Button type="submit" variant="primary" isLoading={createPending}>

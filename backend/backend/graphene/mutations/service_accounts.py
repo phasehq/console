@@ -8,12 +8,13 @@ from api.models import (
     ServiceAccountHandler,
     ServiceAccountToken,
 )
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import user_has_permission, user_is_org_member
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
 from datetime import datetime
 
 
 class ServiceAccountHandlerInput(graphene.InputObjectType):
+    service_account_id = graphene.ID(required=False)
     member_id = graphene.ID(required=False)
     wrapped_keyring = graphene.String(required=True)
     wrapped_recovery = graphene.String(required=True)
@@ -141,24 +142,27 @@ class UpdateServiceAccountMutation(graphene.Mutation):
 
 class UpdateServiceAccountHandlersMutation(graphene.Mutation):
     class Arguments:
-        service_account_id = graphene.ID()
+        organisation_id = graphene.ID()
         handlers = graphene.List(ServiceAccountHandlerInput)
 
-    service_account = graphene.Field(ServiceAccountType)
+    ok = graphene.Boolean()
 
     @classmethod
-    def mutate(cls, root, info, service_account_id, handlers):
+    def mutate(cls, root, info, organisation_id, handlers):
         user = info.context.user
-        service_account = ServiceAccount.objects.get(id=service_account_id)
+        org = Organisation.objects.get(id=organisation_id)
 
-        if not user_has_permission(
-            user, "update", "ServiceAccounts", service_account.organisation
-        ):
+        if not user_is_org_member(user.userId, organisation_id):
             raise GraphQLError(
-                "You don't have the permissions required to update Service Accounts in this organisation"
+                "You are not a member of this organisation and cannot perform this operation"
             )
 
+        for account in org.service_accounts.all():
+            [handler.delete() for handler in account.handlers.all()]
+
         for handler in handlers:
+            service_account = ServiceAccount.objects.get(id=handler.service_account_id)
+
             if not ServiceAccountHandler.objects.filter(
                 service_account=service_account, user_id=handler.member_id
             ).exists():
@@ -169,9 +173,7 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
                     wrapped_recovery=handler.wrapped_recovery,
                 )
 
-        return EnableServiceAccountThirdPartyAuthMutation(
-            service_account=service_account
-        )
+        return UpdateServiceAccountHandlersMutation(ok=True)
 
 
 class DeleteServiceAccountMutation(graphene.Mutation):

@@ -218,7 +218,9 @@ class OrganisationMember(models.Model):
 class ServiceAccount(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)
-    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="service_accounts"
+    )
     role = models.ForeignKey(
         Role,
         on_delete=models.SET_NULL,
@@ -236,7 +238,9 @@ class ServiceAccount(models.Model):
 
 class ServiceAccountHandler(models.Model):
     id = models.TextField(default=uuid4, primary_key=True)
-    service_account = models.ForeignKey(ServiceAccount, on_delete=models.CASCADE)
+    service_account = models.ForeignKey(
+        ServiceAccount, on_delete=models.CASCADE, related_name="handlers"
+    )
     user = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE)
     wrapped_keyring = models.TextField()
     wrapped_recovery = models.TextField()

@@ -54,6 +54,7 @@ const documents = {
     "mutation CreateSAToken($serviceAccountId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createServiceAccountToken(\n    serviceAccountId: $serviceAccountId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    token {\n      id\n    }\n  }\n}": types.CreateSaTokenDocument,
     "mutation DeleteServiceAccountOp($id: ID!) {\n  deleteServiceAccount(serviceAccountId: $id) {\n    ok\n  }\n}": types.DeleteServiceAccountOpDocument,
     "mutation DeleteServiceAccountTokenOp($id: ID!) {\n  deleteServiceAccountToken(tokenId: $id) {\n    ok\n  }\n}": types.DeleteServiceAccountTokenOpDocument,
+    "mutation UpdateServiceAccountHandlerKeys($orgId: ID!, $handlers: [ServiceAccountHandlerInput]) {\n  updateServiceAccountHandlers(organisationId: $orgId, handlers: $handlers) {\n    ok\n  }\n}": types.UpdateServiceAccountHandlerKeysDocument,
     "mutation CreateNewAWSSecretsSync($envId: ID!, $path: String!, $credentialId: ID!, $secretName: String!, $kmsId: String) {\n  createAwsSecretSync(\n    envId: $envId\n    path: $path\n    credentialId: $credentialId\n    secretName: $secretName\n    kmsId: $kmsId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}": types.CreateNewAwsSecretsSyncDocument,
     "mutation CreateNewCfPagesSync($envId: ID!, $path: String!, $projectName: String!, $deploymentId: ID!, $projectEnv: String!, $credentialId: ID!) {\n  createCloudflarePagesSync(\n    envId: $envId\n    path: $path\n    projectName: $projectName\n    deploymentId: $deploymentId\n    projectEnv: $projectEnv\n    credentialId: $credentialId\n  ) {\n    sync {\n      id\n      environment {\n        id\n        name\n        envType\n      }\n      serviceInfo {\n        id\n        name\n      }\n      isActive\n      lastSync\n      createdAt\n    }\n  }\n}": types.CreateNewCfPagesSyncDocument,
     "mutation DeleteProviderCreds($credentialId: ID!) {\n  deleteProviderCredentials(credentialId: $credentialId) {\n    ok\n  }\n}": types.DeleteProviderCredsDocument,
@@ -294,6 +295,10 @@ export function graphql(source: "mutation DeleteServiceAccountOp($id: ID!) {\n  
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation DeleteServiceAccountTokenOp($id: ID!) {\n  deleteServiceAccountToken(tokenId: $id) {\n    ok\n  }\n}"): (typeof documents)["mutation DeleteServiceAccountTokenOp($id: ID!) {\n  deleteServiceAccountToken(tokenId: $id) {\n    ok\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation UpdateServiceAccountHandlerKeys($orgId: ID!, $handlers: [ServiceAccountHandlerInput]) {\n  updateServiceAccountHandlers(organisationId: $orgId, handlers: $handlers) {\n    ok\n  }\n}"): (typeof documents)["mutation UpdateServiceAccountHandlerKeys($orgId: ID!, $handlers: [ServiceAccountHandlerInput]) {\n  updateServiceAccountHandlers(organisationId: $orgId, handlers: $handlers) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

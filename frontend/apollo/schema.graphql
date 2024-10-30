@@ -659,7 +659,7 @@ type Mutation {
   deleteCustomRole(id: ID!): DeleteCustomRoleMutation
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
   enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
-  updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], serviceAccountId: ID): UpdateServiceAccountHandlersMutation
+  updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
   createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
   deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
@@ -808,6 +808,7 @@ type CreateServiceAccountMutation {
 }
 
 input ServiceAccountHandlerInput {
+  serviceAccountId: ID
   memberId: ID
   wrappedKeyring: String!
   wrappedRecovery: String!
@@ -818,7 +819,7 @@ type EnableServiceAccountThirdPartyAuthMutation {
 }
 
 type UpdateServiceAccountHandlersMutation {
-  serviceAccount: ServiceAccountType
+  ok: Boolean
 }
 
 type DeleteServiceAccountMutation {
