@@ -61,8 +61,10 @@ class E2EESecretsView(APIView):
             account = (
                 request.auth["service_account"]
                 if "service_account" in request.auth
+                and request.auth["service_account"] is not None
                 else request.auth["org_member"].user
             )
+
             if not user_has_permission(
                 account,
                 "read",
@@ -143,6 +145,7 @@ class E2EESecretsView(APIView):
             account = (
                 request.auth["service_account"]
                 if "service_account" in request.auth
+                and request.auth["service_account"] is not None
                 else request.auth["org_member"].user
             )
             if not user_has_permission(
@@ -255,6 +258,7 @@ class E2EESecretsView(APIView):
             account = (
                 request.auth["service_account"]
                 if "service_account" in request.auth
+                and request.auth["service_account"] is not None
                 else request.auth["org_member"].user
             )
 
@@ -382,6 +386,7 @@ class E2EESecretsView(APIView):
                 account = (
                     request.auth["service_account"]
                     if "service_account" in request.auth
+                    and request.auth["service_account"] is not None
                     else request.auth["org_member"].user
                 )
                 if not user_has_permission(
@@ -453,8 +458,10 @@ class PublicSecretsView(APIView):
             account = (
                 request.auth["service_account"]
                 if "service_account" in request.auth
+                and request.auth["service_account"] is not None
                 else request.auth["org_member"].user
             )
+
             if not user_has_permission(
                 account,
                 "read",
@@ -534,6 +541,7 @@ class PublicSecretsView(APIView):
         account = (
             request.auth["service_account"]
             if "service_account" in request.auth
+            and request.auth["service_account"] is not None
             else request.auth["org_member"].user
         )
         if not user_has_permission(
@@ -667,6 +675,7 @@ class PublicSecretsView(APIView):
         account = (
             request.auth["service_account"]
             if "service_account" in request.auth
+            and request.auth["service_account"] is not None
             else request.auth["org_member"].user
         )
 
@@ -825,6 +834,7 @@ class PublicSecretsView(APIView):
         account = (
             request.auth["service_account"]
             if "service_account" in request.auth
+            and request.auth["service_account"] is not None
             else request.auth["org_member"].user
         )
         if not user_has_permission(
