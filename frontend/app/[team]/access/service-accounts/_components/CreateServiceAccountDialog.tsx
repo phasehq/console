@@ -49,7 +49,10 @@ export const CreateServiceAccountDialog = () => {
   const [thirdParty, setThirdParty] = useState(false)
   const [createPending, setCreatePending] = useState(false)
 
-  const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner') || []
+  const roleOptions =
+    roleData?.roles.filter(
+      (option: RoleType) => option.name !== 'Owner' && option.name !== 'Admin'
+    ) || []
 
   useEffect(() => {
     if (roleData?.roles) {

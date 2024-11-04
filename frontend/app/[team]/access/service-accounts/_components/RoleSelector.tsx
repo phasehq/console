@@ -69,7 +69,10 @@ export const ServiceAccountRoleSelector = (props: { account: ServiceAccountType 
     })
   }
 
-  const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner') || []
+  const roleOptions =
+    roleData?.roles.filter(
+      (option: RoleType) => option.name !== 'Owner' && option.name !== 'Admin'
+    ) || []
 
   const disabled = isOwner || !userCanUpdateAccountRoles
 
