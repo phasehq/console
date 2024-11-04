@@ -123,7 +123,7 @@ class UpdateServiceAccountMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, service_account_id, name, role_id):
         user = info.context.user
-        service_account = ServiceAccountToken.objects.get(id=service_account_id)
+        service_account = ServiceAccount.objects.get(id=service_account_id)
 
         if not user_has_permission(
             user, "update", "ServiceAccounts", service_account.organisation

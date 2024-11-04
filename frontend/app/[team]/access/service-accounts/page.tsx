@@ -12,10 +12,9 @@ import { FaBan, FaChevronRight } from 'react-icons/fa'
 import { CreateServiceAccountDialog } from './_components/CreateServiceAccountDialog'
 import { FaRobot } from 'react-icons/fa6'
 import { relativeTimeFromDates } from '@/utils/time'
-import { DeleteServiceAccountDialog } from './_components/DeleteServiceAccountDialog'
-import { CreateServiceAccountTokenDialog } from './[account]/_components/CreateServiceAccountTokenDialog'
 import Link from 'next/link'
 import { Button } from '@/components/common/Button'
+import { ServiceAccountRoleSelector } from './_components/RoleSelector'
 
 export default function ServiceAccounts({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -26,10 +25,6 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
 
   const userCanCreateSA = organisation
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create')
-    : false
-
-  const userCanDeleteSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete')
     : false
 
   const { data, loading } = useQuery(GetServiceAccounts, {
@@ -78,7 +73,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                     </td>
 
                     <td className="px-6 py-4">
-                      <RoleLabel role={account.role!} />
+                      <ServiceAccountRoleSelector account={account} />
                     </td>
 
                     <td className="px-6 py-4">

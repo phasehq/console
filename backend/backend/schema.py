@@ -10,6 +10,7 @@ from backend.graphene.mutations.service_accounts import (
     DeleteServiceAccountTokenMutation,
     EnableServiceAccountThirdPartyAuthMutation,
     UpdateServiceAccountHandlersMutation,
+    UpdateServiceAccountMutation,
 )
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
@@ -800,6 +801,7 @@ class Mutation(graphene.ObjectType):
         EnableServiceAccountThirdPartyAuthMutation.Field()
     )
     update_service_account_handlers = UpdateServiceAccountHandlersMutation.Field()
+    update_service_account = UpdateServiceAccountMutation.Field()
     delete_service_account = DeleteServiceAccountMutation.Field()
     create_service_account_token = CreateServiceAccountTokenMutation.Field()
     delete_service_account_token = DeleteServiceAccountTokenMutation.Field()
