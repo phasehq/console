@@ -1,7 +1,6 @@
 'use client'
 
 import Spinner from '@/components/common/Spinner'
-import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -15,8 +14,8 @@ import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountD
 import { ServiceAccountTokenType } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
-import { humanReadableExpiry } from '@/utils/tokens'
 import { DeleteServiceAccountTokenDialog } from './_components/DeleteServiceAccountTokenDialog'
+import { ServiceAccountRoleSelector } from '../_components/RoleSelector'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -98,8 +97,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           </div>{' '}
           <div>
             <h3>{account?.name}</h3>
-            <div>
-              <RoleLabel role={account.role} />
+            <div className="text-base">
+              <ServiceAccountRoleSelector account={account} />
             </div>
           </div>
         </div>
