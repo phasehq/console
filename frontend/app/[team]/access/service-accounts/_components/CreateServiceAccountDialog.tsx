@@ -51,6 +51,15 @@ export const CreateServiceAccountDialog = () => {
 
   const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner') || []
 
+  useEffect(() => {
+    if (roleData?.roles) {
+      const defaultRole = roleData?.roles.find(
+        (role: RoleType) => role.name?.toLowerCase() === 'service'
+      )
+      if (defaultRole) setRole(defaultRole)
+    }
+  }, [roleData])
+
   const handleCreateServiceAccount = (e: { preventDefault: () => void }) => {
     return new Promise<boolean>((resolve) => {
       e.preventDefault()
