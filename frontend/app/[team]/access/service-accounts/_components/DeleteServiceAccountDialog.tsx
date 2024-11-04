@@ -24,7 +24,10 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
     })
     if (deleted.data.deleteServiceAccount.ok) {
       toast.success('Deleted service account!')
-      if (dialogRef.current) dialogRef.current.closeModal()
+      if (dialogRef.current) {
+        dialogRef.current.closeModal()
+      }
+      handleRedirect()
     }
   }
 
@@ -42,7 +45,6 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
       }
       buttonVariant="danger"
       ref={dialogRef}
-      onClose={handleRedirect}
     >
       <div className="space-y-4">
         <div className="text-neutral-500 py-4">

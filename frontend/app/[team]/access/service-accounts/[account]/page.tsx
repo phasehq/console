@@ -25,8 +25,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
     : false
 
-  const userCanCreateSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create')
+  const userCanReadTokens = organisation
+    ? userHasPermission(organisation.role?.permissions, 'ServiceAccountTokens', 'read')
     : false
 
   const userCanDeleteSA = organisation
@@ -113,32 +113,46 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <CreateServiceAccountTokenDialog serviceAccount={account} />
           </div>
 
-          <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
-            {account.tokens?.map((token: ServiceAccountTokenType) => (
-              <div key={token!.id} className="grid grid-cols-4 gap-2 items-center p-2 group">
-                <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                  <FaKey className="text-neutral-500" /> {token!.name}
-                </div>
+          {userCanReadTokens ? (
+            <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+              {account.tokens?.map((token: ServiceAccountTokenType) => (
+                <div key={token!.id} className="grid grid-cols-4 gap-2 items-center p-2 group">
+                  <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                    <FaKey className="text-neutral-500" /> {token!.name}
+                  </div>
 
-                <div className="text-neutral-500 text-sm flex items-center gap-1">
-                  <span>Created</span> {relativeTimeFromDates(new Date(token?.createdAt))} by{' '}
-                  <Avatar imagePath={token.createdBy?.avatarUrl} size="sm" />
-                  <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                    {token?.createdBy?.fullName}
-                  </span>
-                </div>
+                  <div className="text-neutral-500 text-sm flex items-center gap-1">
+                    <span>Created</span> {relativeTimeFromDates(new Date(token?.createdAt))} by{' '}
+                    <Avatar imagePath={token.createdBy?.avatarUrl} size="sm" />
+                    <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                      {token?.createdBy?.fullName}
+                    </span>
+                  </div>
 
-                <div className="flex items-center gap-1 text-neutral-500 text-sm">
-                  Expires{' '}
-                  {token.expiresAt ? relativeTimeFromDates(new Date(token?.expiresAt)) : 'never'}
-                </div>
+                  <div className="flex items-center gap-1 text-neutral-500 text-sm">
+                    Expires{' '}
+                    {token.expiresAt ? relativeTimeFromDates(new Date(token?.expiresAt)) : 'never'}
+                  </div>
 
-                <div className="flex justify-end opacity-0 group-hover:opacity-100 transition ease">
-                  <DeleteServiceAccountTokenDialog token={token} />
+                  <div className="flex justify-end opacity-0 group-hover:opacity-100 transition ease">
+                    <DeleteServiceAccountTokenDialog token={token} />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Access restricted"
+              subtitle="You don't have the permissions required to view service account tokens"
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaBan />
+                </div>
+              }
+            >
+              <></>
+            </EmptyState>
+          )}
         </div>
 
         <div className="space-y-2 py-4">

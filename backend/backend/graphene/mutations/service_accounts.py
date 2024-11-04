@@ -229,7 +229,7 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
         )
 
         if not user_has_permission(
-            user, "create", "ServiceAccounts", service_account.organisation
+            user, "create", "ServiceAccountTokens", service_account.organisation
         ):
             raise GraphQLError(
                 "You don't have the permissions required to create Service Tokens in this organisation"
@@ -265,7 +265,7 @@ class DeleteServiceAccountTokenMutation(graphene.Mutation):
         token = ServiceAccountToken.objects.get(id=token_id)
 
         if not user_has_permission(
-            user, "update", "ServiceAccounts", token.service_account.organisation
+            user, "delete", "ServiceAccountTokens", token.service_account.organisation
         ):
             raise GraphQLError(
                 "You don't have the permissions required to delete Service Tokens in this organisation"

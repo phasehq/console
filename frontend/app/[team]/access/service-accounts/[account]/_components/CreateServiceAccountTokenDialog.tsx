@@ -7,7 +7,7 @@ import {
   humanReadableExpiry,
   tokenExpiryOptions,
 } from '@/utils/tokens'
-import { Fragment, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, useContext, useRef, useState } from 'react'
 import { FaCheckCircle, FaCircle, FaExternalLinkSquareAlt, FaPlus } from 'react-icons/fa'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { CreateSAToken } from '@/graphql/mutations/service-accounts/createServiceAccountToken.gql'
@@ -21,7 +21,7 @@ import {
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { generateSAToken, updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
+import { generateSAToken } from '@/utils/crypto/service-accounts'
 import { Alert } from '@/components/common/Alert'
 import CopyButton from '@/components/common/CopyButton'
 import { CliCommand } from '@/components/dashboard/CliCommand'
@@ -29,7 +29,7 @@ import { getApiHost } from '@/utils/appConfig'
 import { Tab, RadioGroup } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { log } from 'console'
+import { userHasPermission } from '@/utils/access/permissions'
 
 export const CreateServiceAccountTokenDialog = ({
   serviceAccount,
@@ -39,11 +39,9 @@ export const CreateServiceAccountTokenDialog = ({
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
 
-  useEffect(() => {
-    if (organisation && keyring) {
-      updateServiceAccountHandlers(organisation.id, keyring)
-    }
-  }, [organisation, keyring])
+  const userCanCreateTokens = organisation
+    ? userHasPermission(organisation.role?.permissions, 'ServiceAccountTokens', 'create')
+    : false
 
   const serviceAccountHandler = serviceAccount.handlers?.find(
     (handler) => handler?.user.self === true
@@ -132,6 +130,8 @@ export const CreateServiceAccountTokenDialog = ({
       }
     })
   }
+
+  if (!userCanCreateTokens) return <></>
 
   return (
     <GenericDialog

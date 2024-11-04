@@ -9,9 +9,14 @@ import { ServiceAccountTokenType, ServiceAccountType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { useRouter } from 'next/navigation'
+import { userHasPermission } from '@/utils/access/permissions'
 
 export const DeleteServiceAccountTokenDialog = ({ token }: { token: ServiceAccountTokenType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanDeleteTokens = organisation
+    ? userHasPermission(organisation.role?.permissions, 'ServiceAccountTokens', 'delete')
+    : false
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
@@ -27,6 +32,8 @@ export const DeleteServiceAccountTokenDialog = ({ token }: { token: ServiceAccou
       if (dialogRef.current) dialogRef.current.closeModal()
     }
   }
+
+  if (!userCanDeleteTokens) return <></>
 
   return (
     <GenericDialog

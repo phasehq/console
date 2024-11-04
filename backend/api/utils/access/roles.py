@@ -10,6 +10,7 @@ default_roles = {
             "Apps": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
+            "ServiceAccountTokens": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
             "IntegrationCredentials": ["create", "read", "update", "delete"],
         },
@@ -37,6 +38,7 @@ default_roles = {
             "Apps": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
+            "ServiceAccountTokens": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
             "IntegrationCredentials": ["create", "read", "update", "delete"],
         },
@@ -64,6 +66,7 @@ default_roles = {
             "Apps": ["read"],
             "Members": ["read"],
             "ServiceAccounts": [],
+            "ServiceAccountTokens": [],
             "Roles": ["read"],
             "IntegrationCredentials": [
                 "create",
