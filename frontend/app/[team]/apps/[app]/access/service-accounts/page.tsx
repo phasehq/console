@@ -1,25 +1,17 @@
 'use client'
 
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
-
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import RemoveMemberFromApp from '@/graphql/mutations/apps/removeAppMember.gql'
 import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
-
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
-import {
-  EnvironmentType,
-  ServiceAccountType,
-  MemberType,
-  OrganisationMemberType,
-} from '@/apollo/graphql'
+import { EnvironmentType, ServiceAccountType, MemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
-import { relativeTimeFromDates } from '@/utils/time'
 import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
 import {
   FaBan,
@@ -31,22 +23,18 @@ import {
   FaSquare,
   FaTimes,
   FaTrash,
-  FaUserCog,
-  FaUserTimes,
 } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
-import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasGlobalAccess, userHasPermission, userIsAdmin } from '@/utils/access/permissions'
+import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
-import loading from '@/app/loading'
 
 export default function ServiceAccounts({ params }: { params: { team: string; app: string } }) {
   const { keyring } = useContext(KeyringContext)
@@ -759,7 +747,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                             <>
                               <Listbox.Label as={Fragment}>
                                 <label
-                                  className="block text-gray-700 text-sm font-bold mb-2"
+                                  className="block text-neutral-500 text-sm mb-2"
                                   htmlFor="name"
                                 >
                                   Environment scope
@@ -826,7 +814,18 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                         </Listbox>
                       </div>
 
-                      <div className="flex items-center gap-4">
+                      <div className="space-y-1">
+                        <Link href={`/${params.team}/access/service-accounts/${account.id}`}>
+                          <Button
+                            variant="outline"
+                            title="Manage this service account, or get a token"
+                          >
+                            <FaCog /> Manage Account
+                          </Button>
+                        </Link>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4">
                         <Button variant="secondary" type="button" onClick={closeModal}>
                           Cancel
                         </Button>
