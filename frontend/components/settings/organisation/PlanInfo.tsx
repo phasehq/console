@@ -8,7 +8,15 @@ import { PlanLabel } from './PlanLabel'
 import Spinner from '@/components/common/Spinner'
 import { calculatePercentage } from '@/utils/dataUnits'
 import { Button } from '@/components/common/Button'
-import { FaCheckCircle, FaCube, FaCubes, FaTimesCircle, FaUser, FaUsersCog } from 'react-icons/fa'
+import {
+  FaCheckCircle,
+  FaCog,
+  FaCube,
+  FaCubes,
+  FaTimesCircle,
+  FaUser,
+  FaUsersCog,
+} from 'react-icons/fa'
 import Link from 'next/link'
 import { ActivatedPhaseLicenseType, ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { isCloudHosted } from '@/utils/appConfig'
@@ -148,6 +156,13 @@ export const PlanInfo = () => {
       )
     : 0
 
+  const serviceAccountQuotaUsage = data
+    ? calculatePercentage(
+        data.organisationPlan.serviceAccountCount,
+        license()?.seats || data.organisationPlan.maxUsers
+      )
+    : 0
+
   const progressBarColor = (value: number, maxValue: number) =>
     value >= maxValue ? 'bg-red-500' : value === maxValue - 1 ? 'bg-amber-500' : 'bg-emerald-500'
 
@@ -263,9 +278,33 @@ export const PlanInfo = () => {
             />
           )}
           <div className="flex justify-start">
-            <Link href={`/${activeOrganisation.name}/members`}>
+            <Link href={`/${activeOrganisation.name}/access/members`}>
               <Button variant="secondary">
                 <FaUsersCog /> Manage
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-lg font-medium text-black dark:text-white">Service Accounts</div>
+            <div className="text-neutral-500">{`${data.organisationPlan.serviceAccountCount} ${license()?.seats || data.organisationPlan.maxUsers ? `of ${license()?.seats || data.organisationPlan.maxUsers}` : ''}  Seats used`}</div>
+          </div>
+          {(activeOrganisation.plan === ApiOrganisationPlanChoices.Fr || license()?.seats) && (
+            <ProgressBar
+              percentage={serviceAccountQuotaUsage}
+              color={progressBarColor(
+                data.organisationPlan.serviceAccountCount,
+                license()?.seats || data.organisationPlan.maxUsers
+              )}
+              size="sm"
+            />
+          )}
+          <div className="flex justify-start">
+            <Link href={`/${activeOrganisation.name}/access/service-accounts`}>
+              <Button variant="secondary">
+                <FaCog /> Manage
               </Button>
             </Link>
           </div>

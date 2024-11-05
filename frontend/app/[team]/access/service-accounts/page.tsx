@@ -65,7 +65,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
               <tbody className="divide-y divide-zinc-500/20">
                 {data?.serviceAccounts.map((account: ServiceAccountType) => (
                   <tr key={account.id} className="group">
-                    <td className="flex items-center gap-2 py-4">
+                    <td className="flex items-center gap-2 py-4 font-semibold">
                       <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-10">
                         <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 text-xl" />
                       </div>

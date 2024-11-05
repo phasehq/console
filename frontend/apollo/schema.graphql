@@ -99,6 +99,7 @@ type OrganisationPlanType {
   maxApps: Int
   maxEnvsPerApp: Int
   userCount: Int
+  serviceAccountCount: Int
   appCount: Int
 }
 

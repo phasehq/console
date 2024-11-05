@@ -59,11 +59,11 @@ export const generateSAToken = async (
 export const updateServiceAccountHandlers = async (orgId: string, userKeyring: OrganisationKeyring) => {
   return new Promise(async (resolve, reject) => {
     // Fetch service accounts
-    const { data: serviceAccountsData } = await graphQlClient.query({ query: GetServiceAccounts, variables: { orgId}, fetchPolicy: 'network-only' })
+    const { data: serviceAccountsData } = await graphQlClient.query({ query: GetServiceAccounts, variables: { orgId }, fetchPolicy: 'network-only' })
     const serviceAccounts = serviceAccountsData?.serviceAccounts || []
 
     // Fetch service account handlers
-    const { data: handlersData } = await graphQlClient.query({ query: GetServiceAccountHandlers, variables: { orgId}, fetchPolicy: 'network-only' })
+    const { data: handlersData } = await graphQlClient.query({ query: GetServiceAccountHandlers, variables: { orgId }, fetchPolicy: 'network-only' })
     const handlers = handlersData.serviceAccountHandlers
 
     // Current user kx keys

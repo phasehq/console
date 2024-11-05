@@ -5,6 +5,7 @@ query GetOrganisationPlan($organisationId: ID!) {
     maxApps
     maxEnvsPerApp
     userCount
+    serviceAccountCount
     appCount
   }
 }

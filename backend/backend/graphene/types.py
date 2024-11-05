@@ -45,6 +45,7 @@ class OrganisationPlanType(ObjectType):
     max_apps = graphene.Int()
     max_envs_per_app = graphene.Int()
     user_count = graphene.Int()
+    service_account_count = graphene.Int()
     app_count = graphene.Int()
 
 
@@ -133,6 +134,10 @@ class OrganisationType(DjangoObjectType):
                 organisation=self, valid=True, expires_at__gte=timezone.now()
             ).count()
         )
+
+        plan["service_account_count"] = ServiceAccount.objects.filter(
+            organisation=self, deleted_at=None
+        ).count()
 
         plan["app_count"] = App.objects.filter(
             organisation=self, deleted_at=None

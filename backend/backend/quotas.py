@@ -91,6 +91,37 @@ def can_add_user(organisation):
     return current_user_count < user_limit
 
 
+def can_add_service_account(organisation):
+    """Check if a new service account can be added to the organisation."""
+
+    ServiceAccount = apps.get_model("api", "ServiceAccount")
+    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
+
+    plan_limits = PLAN_CONFIG[organisation.plan]
+    license_exists = ActivatedPhaseLicense.objects.filter(
+        organisation=organisation
+    ).exists()
+
+    current_account_count = ServiceAccount.objects.filter(
+        organisation=organisation, deleted_at=None
+    ).count()
+
+    if license_exists:
+        license = (
+            ActivatedPhaseLicense.objects.filter(organisation=organisation)
+            .order_by("-activated_at")
+            .first()
+        )
+        user_limit = license.seats
+
+    else:
+        user_limit = plan_limits["max_users"]
+
+    if user_limit is None:
+        return True
+    return current_account_count < user_limit
+
+
 def can_add_environment(app):
     """Check if a new environment can be added to the app."""
 

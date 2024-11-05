@@ -1,3 +1,4 @@
+from backend.quotas import can_add_service_account
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -51,6 +52,11 @@ class CreateServiceAccountMutation(graphene.Mutation):
         if not user_has_permission(user, "create", "ServiceAccounts", org):
             raise GraphQLError(
                 "You don't have the permissions required to create Service Accounts in this organisation"
+            )
+
+        if not can_add_service_account(org):
+            raise GraphQLError(
+                "You cannot add any more service accounts to this organisation"
             )
 
         if handlers is None or len(handlers) == 0:
