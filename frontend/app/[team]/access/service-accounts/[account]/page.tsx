@@ -34,6 +34,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     ? userHasPermission(organisation.role?.permissions, 'ServiceAccountTokens', 'read')
     : false
 
+  const userCanUpdateSA = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update')
+    : false
+
   const userCanDeleteSA = organisation
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete')
     : false
@@ -50,6 +54,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   const nameUpdated = account ? account.name !== name : false
 
   const updateName = async () => {
+    if (!userCanUpdateSA) {
+      toast.error("You don't have the permissions requried to update Service Accounts")
+    }
     await updateAccount({
       variables: {
         serviceAccountId: account.id,
@@ -126,7 +133,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           </div>{' '}
           <div>
             <h3 className="relative">
-              <Input value={name} setValue={setName} />
+              <Input readOnly={!userCanUpdateSA} value={name} setValue={setName} />
               {nameUpdated && (
                 <div className="absolute right-2 top-2">
                   <Button variant="primary" onClick={updateName}>
@@ -137,7 +144,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             </h3>
 
             <div className="text-base">
-              <ServiceAccountRoleSelector account={account} />
+              <ServiceAccountRoleSelector account={account} displayOnly={!userCanUpdateSA} />
             </div>
           </div>
         </div>
