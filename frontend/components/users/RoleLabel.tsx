@@ -15,8 +15,12 @@ export const RoleLabel = ({ role, size }: { role: RoleType; size?: 'sm' | 'md' |
       return 'ring-emerald-400/10 bg-emerald-400 text-black dark:bg-zinc-800 dark:text-emerald-400'
     else if (role.name!.toLowerCase() === 'owner')
       return 'ring-amber-400/10 bg-amber-400 text-black dark:bg-zinc-800 dark:text-amber-400'
+    else if (role.name!.toLowerCase() === 'manager')
+      return 'ring-cyan-500/40 bg-cyan-500/40 text-black dark:bg-zinc-800 dark:text-cyan-300'
     else if (role.name!.toLowerCase() === 'developer')
       return 'ring-neutral-500/40 bg-neutral-500/40 text-black dark:bg-zinc-800 dark:text-neutral-300'
+    else if (role.name!.toLowerCase() === 'service')
+      return 'ring-purple-500/40 bg-purple-500/40 text-black dark:bg-zinc-800 dark:text-purple-300'
     else return ''
   }
 
