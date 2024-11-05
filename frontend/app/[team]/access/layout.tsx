@@ -55,7 +55,7 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full p-8 pb-0 text-black dark:text-white flex flex-col oveflow-y-auto"
+      className="w-full p-8 pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col oveflow-y-auto"
       style={{ height: 'calc(100vh - 64px)' }}
     >
       <div className="flex items-center gap-2 pb-8">
@@ -70,8 +70,10 @@ export default function AccessLayout({
                 <Link
                   href={`/${params.team}/access/${tab.link}`}
                   className={clsx(
-                    'p-3 font-medium border-b focus:outline-none',
-                    selected ? 'border-emerald-500 font-semibold' : ' border-transparent'
+                    'p-3 font-medium border-b -mb-px focus:outline-none',
+                    selected
+                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                   )}
                 >
                   {tab.name}

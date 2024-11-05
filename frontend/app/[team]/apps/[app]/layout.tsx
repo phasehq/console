@@ -93,8 +93,10 @@ export default function AppLayout({
                 <Link
                   href={`/${params.team}/apps/${params.app}/${tab.link}`}
                   className={clsx(
-                    'p-3 font-medium border-b focus:outline-none',
-                    selected ? 'border-emerald-500 font-semibold' : ' border-transparent'
+                    'p-3 font-medium border-b focus:outline-none -mb-px',
+                    selected
+                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                   )}
                 >
                   {tab.name}

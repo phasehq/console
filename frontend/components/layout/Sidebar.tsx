@@ -35,10 +35,10 @@ const SidebarLink = (props: SidebarLinkT) => {
     <Link href={href} title={name}>
       <div
         className={clsx(
-          'flex items-center gap-2 text-sm border-l p-3 w-full',
+          'flex items-center gap-2 text-sm border-l p-3 w-full transition ease rounded-r-lg font-semibold',
           active
-            ? 'border-emerald-500 font-semibold bg-zinc-300 dark:bg-zinc-800'
-            : ' border-transparent'
+            ? 'border-emerald-500 bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
+            : ' border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
         )}
       >
         <div>{icon}</div>
@@ -148,31 +148,31 @@ const Sidebar = () => {
     {
       name: 'Home',
       href: `/${team}`,
-      icon: <FaHome size="20" />,
+      icon: <FaHome />,
       active: usePathname() === `/${team}`,
     },
     {
       name: 'Apps',
       href: `/${team}/apps`,
-      icon: <FaCubes size="20" />,
+      icon: <FaCubes />,
       active: usePathname()?.split('/')[2] === 'apps',
     },
     {
       name: 'Integrations',
       href: `/${team}/integrations`,
-      icon: <FaProjectDiagram size="20" />,
+      icon: <FaProjectDiagram />,
       active: usePathname() === `/${team}/integrations`,
     },
     {
       name: 'Access Control',
       href: `/${team}/access/members`,
-      icon: <FaUsersCog size="20" />,
+      icon: <FaUsersCog />,
       active: usePathname()?.split('/')[2] === `access`,
     },
     {
       name: 'Settings',
       href: `/${team}/settings`,
-      icon: <FaCog size="20" />,
+      icon: <FaCog />,
       active: usePathname() === `/${team}/settings`,
     },
   ]

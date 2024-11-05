@@ -69,10 +69,10 @@ export default function AccessLayout({
                   <Link
                     href={`/${params.team}/apps/${params.app}/access/${tab.link}`}
                     className={clsx(
-                      'p-3 font-medium border-l focus:outline-none',
+                      'p-3 font-medium border-l rounded-r-lg focus:outline-none transition ease',
                       selected
-                        ? 'border-emerald-500 font-semibold bg-zinc-300 dark:bg-zinc-800'
-                        : ' border-transparent'
+                        ? 'border-emerald-500 font-semibold bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
+                        : ' border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                     )}
                   >
                     {tab.name}{' '}
