@@ -49,6 +49,11 @@ export const CreateServiceAccountDialog = () => {
   const [thirdParty, setThirdParty] = useState(false)
   const [createPending, setCreatePending] = useState(false)
 
+  const reset = () => {
+    setName('')
+    setThirdParty(false)
+  }
+
   const roleOptions =
     roleData?.roles.filter(
       (option: RoleType) => option.name !== 'Owner' && option.name !== 'Admin'
@@ -123,6 +128,7 @@ export const CreateServiceAccountDialog = () => {
         })
 
         setCreatePending(false)
+        reset()
 
         if (dialogRef.current) dialogRef.current.closeModal()
 
