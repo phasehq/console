@@ -13,8 +13,11 @@ import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { UpdateServiceAccountOp } from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
 
-export const ServiceAccountRoleSelector = (props: { account: ServiceAccountType }) => {
-  const { account } = props
+export const ServiceAccountRoleSelector = (props: {
+  account: ServiceAccountType
+  displayOnly?: boolean
+}) => {
+  const { account, displayOnly } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
@@ -74,7 +77,7 @@ export const ServiceAccountRoleSelector = (props: { account: ServiceAccountType 
       (option: RoleType) => option.name !== 'Owner' && option.name !== 'Admin'
     ) || []
 
-  const disabled = isOwner || !userCanUpdateAccountRoles
+  const disabled = isOwner || !userCanUpdateAccountRoles || displayOnly
 
   if (roleDataPending) return <></>
 

@@ -73,7 +73,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                     </td>
 
                     <td className="px-6 py-4">
-                      <ServiceAccountRoleSelector account={account} />
+                      <ServiceAccountRoleSelector account={account} displayOnly={true} />
                     </td>
 
                     <td className="px-6 py-4">

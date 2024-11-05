@@ -3,11 +3,12 @@
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
+import { UpdateServiceAccountOp } from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { relativeTimeFromDates } from '@/utils/time'
-import { useQuery } from '@apollo/client'
+import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { FaBan, FaChevronLeft, FaKey, FaRobot } from 'react-icons/fa'
 import { CreateServiceAccountTokenDialog } from './_components/CreateServiceAccountTokenDialog'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
@@ -16,9 +17,14 @@ import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { DeleteServiceAccountTokenDialog } from './_components/DeleteServiceAccountTokenDialog'
 import { ServiceAccountRoleSelector } from '../_components/RoleSelector'
+import { Input } from '@/components/common/Input'
+import { Button } from '@/components/common/Button'
+import { toast } from 'react-toastify'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const [name, setName] = useState('')
 
   const userCanReadSA = organisation
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
@@ -37,7 +43,30 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     skip: !organisation || !userCanReadSA,
   })
 
+  const [updateAccount] = useMutation(UpdateServiceAccountOp)
+
   const account = data?.serviceAccounts[0]
+
+  const nameUpdated = account ? account.name !== name : false
+
+  const updateName = async () => {
+    await updateAccount({
+      variables: {
+        serviceAccountId: account.id,
+        roleId: account.role.id,
+        name,
+      },
+      refetchQueries: [
+        { query: GetServiceAccounts, variables: { orgId: organisation?.id, id: params.account } },
+      ],
+    })
+
+    toast.success('Updated account name!')
+  }
+
+  useEffect(() => {
+    if (account) setName(account.name)
+  }, [account])
 
   if (!userCanReadSA)
     return (
@@ -91,12 +120,22 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         </Link>
       </div>
       <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
-        <div className="text-3xl font-semibold flex items-start gap-2">
+        <div className="text-2xl font-semibold flex items-start gap-2">
           <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-16">
             <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
           </div>{' '}
           <div>
-            <h3>{account?.name}</h3>
+            <h3 className="relative">
+              <Input value={name} setValue={setName} />
+              {nameUpdated && (
+                <div className="absolute right-2 top-2">
+                  <Button variant="primary" onClick={updateName}>
+                    <span className="text-2xs">Save</span>
+                  </Button>
+                </div>
+              )}
+            </h3>
+
             <div className="text-base">
               <ServiceAccountRoleSelector account={account} />
             </div>
