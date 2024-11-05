@@ -29,7 +29,7 @@ def resolve_roles(root, info, org_id):
     # migrate_role_permissions()
 
     if user_has_permission(info.context.user.userId, "read", "Roles", org):
-        return Role.objects.filter(organisation=org)
+        return Role.objects.filter(organisation=org).order_by("-is_default")
     else:
         raise GraphQLError("You don't have permission to perform this action")
 
