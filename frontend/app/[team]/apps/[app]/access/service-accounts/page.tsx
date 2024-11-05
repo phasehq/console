@@ -243,13 +243,13 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                       <div className="py-4">
                         <Alert variant="info" icon={true}>
                           <p>
-                            All organisation members are added to this App. You can invite more
-                            users from the{' '}
+                            All Service Accounts have been added to this App. You can create more
+                            Service Accounts from the{' '}
                             <Link
                               className="font-semibold hover:underline"
-                              href={`/${params.team}/access/members`}
+                              href={`/${params.team}/access/service-accounts`}
                             >
-                              organisation members
+                              organisation access
                             </Link>{' '}
                             page.
                           </p>
