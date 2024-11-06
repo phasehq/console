@@ -12,6 +12,7 @@ from api.models import (
 from api.utils.access.permissions import user_has_permission, user_is_org_member
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
 from datetime import datetime
+from django.conf import settings
 
 
 class ServiceAccountHandlerInput(graphene.InputObjectType):
@@ -78,6 +79,11 @@ class CreateServiceAccountMutation(graphene.Mutation):
                 wrapped_keyring=handler.wrapped_keyring,
                 wrapped_recovery=handler.wrapped_recovery,
             )
+
+        if settings.APP_HOST == "cloud":
+            from ee.billing.stripe import update_stripe_subscription_seats
+
+            update_stripe_subscription_seats(org)
 
         return CreateServiceAccountMutation(service_account=service_account)
 
@@ -201,6 +207,11 @@ class DeleteServiceAccountMutation(graphene.Mutation):
             )
 
         service_account.delete()
+
+        if settings.APP_HOST == "cloud":
+            from ee.billing.stripe import update_stripe_subscription_seats
+
+            update_stripe_subscription_seats(service_account.organisation)
 
         return DeleteServiceAccountMutation(ok=True)
 
