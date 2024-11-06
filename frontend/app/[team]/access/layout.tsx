@@ -70,7 +70,7 @@ export default function AccessLayout({
                 <Link
                   href={`/${params.team}/access/${tab.link}`}
                   className={clsx(
-                    'p-3 font-medium border-b -mb-px focus:outline-none',
+                    'p-3 font-medium border-b -mb-px focus:outline-none transition ease',
                     selected
                       ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
                       : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'

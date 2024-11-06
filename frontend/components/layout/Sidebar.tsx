@@ -35,10 +35,10 @@ const SidebarLink = (props: SidebarLinkT) => {
     <Link href={href} title={name}>
       <div
         className={clsx(
-          'flex items-center gap-2 text-sm border-l p-3 w-full transition ease rounded-r-lg font-semibold',
+          'flex items-center gap-2 text-sm  p-3 w-full transition ease rounded-lg font-semibold',
           active
-            ? 'border-emerald-500 bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
-            : ' border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+            ? 'bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
+            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
         )}
       >
         <div>{icon}</div>
