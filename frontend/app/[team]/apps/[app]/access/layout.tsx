@@ -5,7 +5,6 @@ import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { organisationContext } from '@/contexts/organisationContext'
 
 export default function AccessLayout({
   params,
@@ -15,9 +14,6 @@ export default function AccessLayout({
   children: React.ReactNode
 }) {
   const path = usePathname()
-  //const router = useRouter()
-
-  const { activeOrganisation } = useContext(organisationContext)
 
   const [tabIndex, setTabIndex] = useState(0)
 
