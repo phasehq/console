@@ -79,6 +79,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
         if (accountKeyRing.publicKey !== org?.identityKey) {
           toast.error('Incorrect account recovery key!')
           reject('Incorrect account recovery key')
+          return;
         }
 
         const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
