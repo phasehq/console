@@ -9,7 +9,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext, useEffect, useState } from 'react'
-import { FaBan, FaChevronLeft, FaKey, FaRobot } from 'react-icons/fa'
+import { FaBan, FaChevronLeft, FaEdit, FaKey, FaRobot } from 'react-icons/fa'
 import { CreateServiceAccountTokenDialog } from './_components/CreateServiceAccountTokenDialog'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { ServiceAccountTokenType } from '@/apollo/graphql'
@@ -17,7 +17,6 @@ import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { DeleteServiceAccountTokenDialog } from './_components/DeleteServiceAccountTokenDialog'
 import { ServiceAccountRoleSelector } from '../_components/RoleSelector'
-import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 
@@ -70,6 +69,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
     toast.success('Updated account name!')
   }
+
+  const resetName = () => setName(account.name)
 
   useEffect(() => {
     if (account) setName(account.name)
@@ -127,25 +128,47 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         </Link>
       </div>
       <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
-        <div className="text-2xl font-semibold flex items-start gap-2">
+        <div className="text-2xl font-semibold flex items-center gap-2">
           <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-16">
             <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
           </div>{' '}
-          <div>
-            <h3 className="relative">
-              <Input readOnly={!userCanUpdateSA} value={name} setValue={setName} />
-              {nameUpdated && (
-                <div className="absolute right-2 top-2">
-                  <Button variant="primary" onClick={updateName}>
-                    <span className="text-2xs">Save</span>
-                  </Button>
-                </div>
-              )}
-            </h3>
+          <h3 className="relative group w-full max-w-md">
+            <input
+              className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full "
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              readOnly={!userCanUpdateSA}
+              maxLength={64}
+            />
 
-            <div className="text-base">
+            {nameUpdated ? (
+              <div className="flex items-center inset-y-0 gap-1 absolute right-2 bg-neutral-500/10 backdrop-blur-sm">
+                <Button variant="secondary" onClick={resetName}>
+                  <span className="text-2xs">Discard</span>
+                </Button>
+
+                <Button variant="primary" onClick={updateName}>
+                  <span className="text-2xs">Save</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center inset-y-0 gap-1 absolute right-2 opacity-0 group-hover:opacity-100 transition ease ">
+                <FaEdit className="text-neutral-500 text-base" />
+              </div>
+            )}
+          </h3>
+        </div>
+
+        <div className="py-4 space-y-4">
+          <div>
+            <div className="text-xl font-semibold">Role</div>
+            <div className="text-neutral-500">Manage the role for this account</div>
+          </div>
+          <div>
+            <div className="text-lg w-max">
               <ServiceAccountRoleSelector account={account} displayOnly={!userCanUpdateSA} />
             </div>
+            <div className="text-neutral-500 text-sm">{account.role.description}</div>
           </div>
         </div>
 

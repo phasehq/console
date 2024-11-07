@@ -91,7 +91,7 @@ export const ServiceAccountRoleSelector = (props: {
             <Listbox.Button as={Fragment} aria-required>
               <div
                 className={clsx(
-                  'py-2 flex items-center justify-between  rounded-md h-10',
+                  'py-2 flex items-center gap-4 rounded-md h-10',
                   disabled ? 'cursor-not-allowed' : 'cursor-pointer'
                 )}
               >
