@@ -142,7 +142,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             />
 
             {nameUpdated ? (
-              <div className="flex items-center inset-y-0 gap-1 absolute right-2 bg-neutral-500/10 backdrop-blur-sm">
+              <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
                 <Button variant="secondary" onClick={resetName}>
                   <span className="text-2xs">Discard</span>
                 </Button>

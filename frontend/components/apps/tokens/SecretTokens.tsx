@@ -2,15 +2,15 @@ import { RevokeServiceToken } from '@/graphql/mutations/environments/deleteServi
 import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { EnvironmentType, ServiceTokenType, UserTokenType } from '@/apollo/graphql'
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { useState, useEffect, useContext, Fragment } from 'react'
+import { useMutation, useQuery } from '@apollo/client'
+import { useState, useContext, Fragment } from 'react'
 import { Button } from '@/components/common/Button'
-import { FaBan, FaKey, FaTimes, FaTrashAlt } from 'react-icons/fa'
+import { FaExclamationTriangle, FaTimes, FaTrashAlt } from 'react-icons/fa'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
 import { clsx } from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
+import { userHasPermission } from '@/utils/access/permissions'
 import { Avatar } from '@/components/common/Avatar'
 import { CreateServiceTokenDialog } from './CreateServiceTokenDialog'
 import { MdKey } from 'react-icons/md'
@@ -237,7 +237,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           subtitle="Service tokens are deprecated. Please use a Service Account instead"
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-              <FaBan />
+              <FaExclamationTriangle />
             </div>
           }
         >
