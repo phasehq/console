@@ -14,6 +14,7 @@ import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
 import {
+  FaArrowRight,
   FaBan,
   FaCheckSquare,
   FaChevronDown,
@@ -242,17 +243,17 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                     {accountOptions.length === 0 ? (
                       <div className="py-4">
                         <Alert variant="info" icon={true}>
-                          <p>
-                            All Service Accounts have been added to this App. You can create more
-                            Service Accounts from the{' '}
-                            <Link
-                              className="font-semibold hover:underline"
-                              href={`/${params.team}/access/service-accounts`}
-                            >
-                              organisation access
-                            </Link>{' '}
-                            page.
-                          </p>
+                          <div className="flex flex-col gap-2">
+                            <p>
+                              All organisation servuce accounts are added to this App. You can
+                              create more service accounts from the organisation access page.
+                            </p>
+                            <Link href={`/${params.team}/access/service-accounts`}>
+                              <Button variant="secondary">
+                                Go to Service Accounts <FaArrowRight />
+                              </Button>
+                            </Link>
+                          </div>
                         </Alert>
                       </div>
                     ) : (

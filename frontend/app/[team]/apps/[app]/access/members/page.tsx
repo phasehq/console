@@ -15,6 +15,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
 import {
+  FaArrowRight,
   FaBan,
   FaCheckSquare,
   FaChevronDown,
@@ -240,17 +241,17 @@ export default function Members({ params }: { params: { team: string; app: strin
                     {memberOptions.length === 0 ? (
                       <div className="py-4">
                         <Alert variant="info" icon={true}>
-                          <p>
-                            All organisation members are added to this App. You can invite more
-                            users from the{' '}
-                            <Link
-                              className="font-semibold hover:underline"
-                              href={`/${params.team}/access/members`}
-                            >
-                              organisation members
-                            </Link>{' '}
-                            page.
-                          </p>
+                          <div className="flex flex-col gap-2">
+                            <p>
+                              All organisation members are added to this App. You can invite more
+                              users from the organisation members page.
+                            </p>
+                            <Link href={`/${params.team}/access/members`}>
+                              <Button variant="secondary">
+                                Go to Members <FaArrowRight />
+                              </Button>
+                            </Link>
+                          </div>
                         </Alert>
                       </div>
                     ) : (
