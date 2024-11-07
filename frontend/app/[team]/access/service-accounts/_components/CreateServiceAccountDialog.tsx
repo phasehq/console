@@ -152,7 +152,7 @@ export const CreateServiceAccountDialog = () => {
       ref={dialogRef}
     >
       <form onSubmit={handleCreateServiceAccount}>
-        <div className="grid grid-cols-2 gap-8 max-h-[85vh] overflow-y-auto">
+        <div className="grid grid-cols-2 gap-8">
           <Input value={name} setValue={setName} label="Account name" required maxLength={32} />
           <div className="space-y-1 w-full">
             <label className="block text-neutral-500 text-sm mb-2" htmlFor="role">
@@ -164,7 +164,7 @@ export const CreateServiceAccountDialog = () => {
                   <Listbox.Button as={Fragment} aria-required>
                     <div
                       className={clsx(
-                        'py-2 flex items-center justify-between w-full rounded-md h-10'
+                        'py-2 flex items-center gap-4 w-full rounded-md h-10 cursor-pointer'
                       )}
                     >
                       {role ? <RoleLabel role={role} /> : <>Select a role</>}
