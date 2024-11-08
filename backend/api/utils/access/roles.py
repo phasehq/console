@@ -58,7 +58,7 @@ default_roles = {
     "Manager": {
         "meta": {
             "version": 1,
-            "description": "Developers have broad access to environments, secrets and service accounts at the organisation level, and must be given explicit access to Apps and Environments.",
+            "description": "Managers have broad access to environments, secrets and service accounts at the organisation level, but must be given explicit access to Apps and Environments.",
         },
         "permissions": {
             "Organisation": ["read"],
