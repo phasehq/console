@@ -2,7 +2,7 @@ default_roles = {
     "Owner": {
         "meta": {
             "version": 1,
-            "description": "The organisation owner. This role is unique to a single user, and grants access to all resources and actions.",
+            "description": "The organisation owner, limited to a single user, with full access to all resources and actions.",
         },
         "permissions": {
             "Organisation": ["create", "read", "update", "delete"],
