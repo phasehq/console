@@ -118,7 +118,7 @@ default_roles = {
     "Service": {
         "meta": {
             "version": 1,
-            "description": "Services are restricted to accessing secrets, and have no access to other Organisation or App resources. This is the default role for Service Accounts.",
+            "description": "The default role for Service Accounts for accessing secrets programmatically without access to other Organisation or App resources.",
         },
         "permissions": {
             "Organisation": [],
