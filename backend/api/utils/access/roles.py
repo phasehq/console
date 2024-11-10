@@ -2,7 +2,7 @@ default_roles = {
     "Owner": {
         "meta": {
             "version": 1,
-            "description": "The organisation owner. This role is unique to a single user, and grants access to all resources and actions.",
+            "description": "The organisation owner, limited to a single user, with full access to all resources and actions.",
         },
         "permissions": {
             "Organisation": ["create", "read", "update", "delete"],
@@ -30,7 +30,7 @@ default_roles = {
     "Admin": {
         "meta": {
             "version": 1,
-            "description": "Admin users have access to most resources and permissions, and have global access to all Apps and Environments.",
+            "description": "Administrative users with broad access to resources and global access to all Apps and Environments.",
         },
         "permissions": {
             "Organisation": ["read", "update"],
@@ -58,7 +58,7 @@ default_roles = {
     "Manager": {
         "meta": {
             "version": 1,
-            "description": "Managers have broad access to environments, secrets and service accounts at the organisation level, but must be given explicit access to Apps and Environments.",
+            "description": "Management users with broad access to environments, secrets, and service accounts at the organisation level. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
             "Organisation": ["read"],
@@ -86,7 +86,7 @@ default_roles = {
     "Developer": {
         "meta": {
             "version": 1,
-            "description": "Developers have limited permissions to at the organisation level, and must be given explicit access to Apps and Environments.",
+            "description": "Development users with limited organisation-level permissions. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
             "Organisation": [],
@@ -118,7 +118,7 @@ default_roles = {
     "Service": {
         "meta": {
             "version": 1,
-            "description": "Services are restricted to accessing secrets, and have no access to other Organisation or App resources. This is the default role for Service Accounts.",
+            "description": "Default role for Service Accounts, providing programmatic access to secrets without access to other organisation or app resources.",
         },
         "permissions": {
             "Organisation": [],
