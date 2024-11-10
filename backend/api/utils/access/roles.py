@@ -30,7 +30,7 @@ default_roles = {
     "Admin": {
         "meta": {
             "version": 1,
-            "description": "Admin users have access to most resources and permissions, and have global access to all Apps and Environments.",
+            "description": "Administrative users with broad access to resources and global access to all Apps and Environments.",
         },
         "permissions": {
             "Organisation": ["read", "update"],
