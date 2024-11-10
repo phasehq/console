@@ -86,7 +86,7 @@ default_roles = {
     "Developer": {
         "meta": {
             "version": 1,
-            "description": "Developers have limited permissions to at the organisation level, and must be given explicit access to Apps and Environments.",
+            "description": "Development users with limited organisation-level permissions. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
             "Organisation": [],
