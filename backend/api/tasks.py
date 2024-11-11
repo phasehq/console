@@ -92,6 +92,15 @@ def trigger_sync_tasks(env_sync):
         job_id = job.get_id()
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+       
+    elif env_sync.service == ServiceConfig.VERCEL["id"]:
+        env_sync.status = EnvironmentSync.IN_PROGRESS
+        env_sync.save()
+
+        job = perform_vercel_sync.delay(env_sync)
+        job_id = job.get_id()
+
+        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
 
 
 # try and cancel running or queued jobs for this sync
