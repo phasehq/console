@@ -3,6 +3,12 @@ from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
+from api.utils.syncing.vercel.main import VercelProjectType
+from .graphene.queries.syncing import (
+    resolve_vercel_projects,
+    resolve_test_vercel_creds,
+)
+from .graphene.mutations.syncing import CreateVercelSync
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
     DeleteCustomRoleMutation,
@@ -271,6 +277,10 @@ class Query(graphene.ObjectType):
 
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
+    vercel_projects = graphene.List(VercelProjectType, credential_id=graphene.ID())
+    
+    test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
+
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_nomad_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -305,6 +315,7 @@ class Query(graphene.ObjectType):
     resolve_gitlab_groups = resolve_gitlab_groups
 
     resolve_railway_projects = resolve_railway_projects
+    resolve_vercel_projects = resolve_vercel_projects
 
     resolve_test_vault_creds = resolve_test_vault_creds
 
@@ -796,6 +807,9 @@ class Mutation(graphene.ObjectType):
 
     # Railway
     create_railway_sync = CreateRailwaySync.Field()
+
+    # Vercel
+    create_vercel_sync = CreateVercelSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
