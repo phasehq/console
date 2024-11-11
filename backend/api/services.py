@@ -142,6 +142,13 @@ class ServiceConfig:
         "resource_type": "environment",
     }
 
+    VERCEL = {
+        "id": "vercel",
+        "name": "Vercel",
+        "provider": Providers.VERCEL,
+        "resource_type": "environment",
+    }
+
     @classmethod
     def get_service_choices(cls):
         return [
