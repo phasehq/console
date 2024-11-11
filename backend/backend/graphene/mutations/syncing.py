@@ -541,6 +541,67 @@ class CreateRailwaySync(graphene.Mutation):
         return CreateRailwaySync(sync=sync)
 
 
+class CreateVercelSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        project_id = graphene.String()
+        project_name = graphene.String()
+        environment = graphene.String()
+        secret_type = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        project_id,
+        project_name,
+        environment="production",
+        secret_type="encrypted",
+    ):
+        service_id = "vercel"
+
+        env = Environment.objects.get(id=env_id)
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "project": {"id": project_id, "name": project_name},
+            "environment": environment,
+            "secret_type": secret_type,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError("A sync already exists for this Vercel project!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateVercelSync(sync=sync)
+
 class DeleteSync(graphene.Mutation):
     class Arguments:
         sync_id = graphene.ID()
