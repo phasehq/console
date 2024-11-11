@@ -62,6 +62,14 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    VERCEL = {
+        "id": "vercel",
+        "name": "Vercel",
+        "expected_credentials": ["api_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
