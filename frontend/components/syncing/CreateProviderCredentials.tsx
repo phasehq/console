@@ -103,6 +103,10 @@ export const CreateProviderCredentials = (props: {
       return 'https://docs.phase.dev/integrations/platforms/github-actions'
     else if (provider.id === 'gitlab')
       return 'https://docs.phase.dev/integrations/platforms/gitlab-ci'
+    else if (provider.id === 'railway')
+      return 'https://docs.phase.dev/integrations/platforms/railway'
+    else if (provider.id === 'vercel')
+      return 'https://docs.phase.dev/integrations/platforms/vercel'
     else return 'https://docs.phase.dev/integrations'
   }
 
