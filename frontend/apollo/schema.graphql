@@ -37,6 +37,8 @@ type Query {
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
   railwayProjects(credentialId: ID): [RailwayProjectType]
+  vercelProjects(credentialId: ID): [VercelProjectType]
+  testVercelCreds(credentialId: ID): Boolean
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
@@ -191,7 +193,7 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
-  sseEnabled: Boolean
+  sseEnabled: Boolean!
   environments: [EnvironmentType]!
   members: [OrganisationMemberType]!
 }
@@ -578,6 +580,12 @@ type RailwayServiceType {
   name: String!
 }
 
+type VercelProjectType {
+  id: ID!
+  name: String!
+  environment: [String]
+}
+
 type StripeCheckoutDetails {
   paymentStatus: String
   customerEmail: String
@@ -625,6 +633,7 @@ type Mutation {
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
+  createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String): CreateVercelSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -813,6 +822,10 @@ type CreateRailwaySync {
 input RailwayResourceInput {
   id: ID!
   name: String!
+}
+
+type CreateVercelSync {
+  sync: EnvironmentSyncType
 }
 
 type CreateUserTokenMutation {
