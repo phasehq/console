@@ -7,6 +7,7 @@ import {
   SiNomad,
   SiRailway,
   SiVault,
+  SiVercel,
 } from 'react-icons/si'
 
 export const ProviderIcon = (props: { providerId: string }) => {
@@ -32,5 +33,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
 
   if (providerId.toLowerCase().includes('railway'))
     return <SiRailway className="shrink-0 text-[#0B0D0E] dark:text-white" />
+
+  if (providerId.toLowerCase().includes('vercel'))
+    return <SiVercel className="shrink-0 text-[#000000] dark:text-white" />
   else return <FaCube />
 }
