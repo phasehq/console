@@ -15,7 +15,7 @@ import { Combobox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { FaAngleDoubleDown, FaChevronDown, FaCircle, FaDotCircle } from 'react-icons/fa'
 import { toast } from 'react-toastify'
-import { TbBrandVercel } from 'react-icons/tb'
+import { SiVercel } from 'react-icons/si'
 
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
