@@ -108,7 +108,6 @@ const documents = {
     "query GetRailwayProjects($credentialId: ID!) {\n  railwayProjects(credentialId: $credentialId) {\n    id\n    name\n    environments {\n      id\n      name\n    }\n    services {\n      id\n      name\n    }\n  }\n}": types.GetRailwayProjectsDocument,
     "query TestVaultAuth($credentialId: ID!) {\n  testVaultCreds(credentialId: $credentialId)\n}": types.TestVaultAuthDocument,
     "query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    name\n    environment\n  }\n}": types.GetVercelProjectsDocument,
-    "query TestVercelAuth($credentialId: ID!) {\n  testVercelCreds(credentialId: $credentialId)\n}": types.TestVercelAuthDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
 };
 
@@ -506,10 +505,6 @@ export function graphql(source: "query TestVaultAuth($credentialId: ID!) {\n  te
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    name\n    environment\n  }\n}"): (typeof documents)["query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    name\n    environment\n  }\n}"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "query TestVercelAuth($credentialId: ID!) {\n  testVercelCreds(credentialId: $credentialId)\n}"): (typeof documents)["query TestVercelAuth($credentialId: ID!) {\n  testVercelCreds(credentialId: $credentialId)\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
