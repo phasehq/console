@@ -179,14 +179,6 @@ def resolve_vercel_projects(root, info, credential_id):
     except Exception as ex:
         raise GraphQLError(f"Error listing Vercel projects: {str(ex)}")
 
-def resolve_test_vercel_creds(root, info, credential_id):
-    """Resolver for testing Vercel credentials."""
-    try:
-        valid = test_vercel_creds(credential_id)
-        return valid
-    except Exception as ex:
-        raise GraphQLError(f"Error testing Vercel credentials: {str(ex)}")
-
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
 
     # If both app_id and env_id are provided
