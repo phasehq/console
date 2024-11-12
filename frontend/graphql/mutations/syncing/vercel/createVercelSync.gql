@@ -1,0 +1,35 @@
+mutation CreateNewVercelSync(
+  $envId: ID!
+  $path: String!
+  $credentialId: ID!
+  $projectId: String!
+  $projectName: String!
+  $environment: String!
+  $secretType: String!
+) {
+  createVercelSync(
+    envId: $envId
+    path: $path
+    credentialId: $credentialId
+    projectId: $projectId
+    projectName: $projectName
+    environment: $environment
+    secretType: $secretType
+  ) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}
