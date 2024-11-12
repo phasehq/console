@@ -125,7 +125,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
     <div className="p-4 space-y-6">
       <div>
         <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
-          <TbBrandVercel className="text-2xl" />
+          <SiVercel className="text-2xl" />
           Vercel
         </div>
         <div className="text-neutral-500 text-sm">
