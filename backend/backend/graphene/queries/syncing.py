@@ -27,6 +27,10 @@ from api.utils.syncing.gitlab.main import list_gitlab_groups, list_gitlab_projec
 from api.utils.syncing.railway.main import (
     fetch_railway_projects,
 )
+from api.utils.syncing.vercel.main import (
+    test_vercel_creds,
+    list_vercel_projects
+)
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -162,6 +166,18 @@ def resolve_railway_projects(root, info, credential_id):
     except Exception as ex:
         raise GraphQLError(f"Error listing Railway environments: {str(ex)}")
 
+def resolve_vercel_projects(root, info, credential_id):
+    """Resolver for listing Vercel projects."""
+    try:
+        if not test_vercel_creds(credential_id):
+            raise GraphQLError(
+                "Could not authenticate with Vercel. Please check that your credentials are valid"
+            )
+        
+        projects = list_vercel_projects(credential_id)
+        return projects
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Vercel projects: {str(ex)}")
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
 
