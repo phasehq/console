@@ -6,7 +6,6 @@ from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.vercel.main import VercelProjectType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
-    resolve_test_vercel_creds,
 )
 from .graphene.mutations.syncing import CreateVercelSync
 from .graphene.mutations.access import (
