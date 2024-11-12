@@ -878,7 +878,7 @@ class PublicSecretsView(APIView):
             if request.auth[
                 "service_account"
             ] is not None and not service_account_can_access_environment(
-                request.auth["service_account"].user.userId, secret.environment.id
+                request.auth["service_account"].id, secret.environment.id
             ):
                 return JsonResponse(
                     {"error": "You don't have access to this environment"}, status=403
