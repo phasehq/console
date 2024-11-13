@@ -256,6 +256,31 @@ class ServiceAccountType(DjangoObjectType):
     def resolve_tokens(self, info):
         return ServiceAccountToken.objects.filter(service_account=self)
 
+    def resolve_apps(self, info):
+        # Fetch all apps that this service account is related to
+        apps = self.apps.all()
+
+        # For each app, filter environments that this ServiceAccount has access to
+        filtered_apps = []
+        for app in apps:
+            # Get environments for the app
+            app_environments = Environment.objects.filter(app=app).order_by("index")
+
+            # Check which environments the service account has access to
+            accessible_environments = [
+                env
+                for env in app_environments
+                if EnvironmentKey.objects.filter(
+                    service_account=self, environment=env
+                ).exists()
+            ]
+
+            # Set the environments field manually to the filtered environments
+            app.environments = accessible_environments
+            filtered_apps.append(app)
+
+        return filtered_apps
+
 
 class ProviderType(graphene.ObjectType):
     id = graphene.String(required=True)
