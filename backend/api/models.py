@@ -573,6 +573,9 @@ class SecretEvent(models.Model):
     service_account = models.ForeignKey(
         ServiceAccount, on_delete=models.SET_NULL, blank=True, null=True
     )
+    service_account_token = models.ForeignKey(
+        ServiceAccountToken, on_delete=models.SET_NULL, blank=True, null=True
+    )
     key = models.TextField()
     key_digest = models.TextField()
     value = models.TextField()

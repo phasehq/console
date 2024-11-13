@@ -8,13 +8,18 @@ def log_secret_event(
     event_type,
     user=None,
     service_token=None,
-    service_account=None,
+    service_account_token=None,
     ip_address=None,
     user_agent=None,
 ):
     """
     Utility function to log secret events.
     """
+
+    service_account = None
+    if service_account_token is not None:
+        service_account = service_account_token.service_account
+
     event = SecretEvent.objects.create(
         secret=secret,
         environment=secret.environment,
@@ -23,6 +28,7 @@ def log_secret_event(
         user=user,
         service_token=service_token,
         service_account=service_account,
+        service_account_token=service_account_token,
         key=secret.key,
         key_digest=secret.key_digest,
         value=secret.value,

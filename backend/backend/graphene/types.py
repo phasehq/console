@@ -34,8 +34,8 @@ from api.models import (
     UserToken,
 )
 from logs.dynamodb_models import KMSLog
-from allauth.socialaccount.models import SocialAccount
 from django.utils import timezone
+from datetime import datetime
 from api.utils.access.roles import default_roles
 
 
@@ -216,9 +216,21 @@ class ServiceAccountHandlerType(DjangoObjectType):
 
 
 class ServiceAccountTokenType(DjangoObjectType):
+
+    last_used = graphene.DateTime()
+
     class Meta:
         model = ServiceAccountToken
         fields = "__all__"
+
+    def resolve_last_used(self, info):
+        event = (
+            SecretEvent.objects.filter(service_account_token=self)
+            .order_by("-timestamp")
+            .last()
+        )
+        if event:
+            return event.timestamp
 
 
 class MemberType(graphene.Enum):
@@ -586,6 +598,7 @@ class SecretEventType(DjangoObjectType):
             "user",
             "service_token",
             "service_account",
+            "service_account_token",
             "ip_address",
             "user_agent",
             "environment",
@@ -608,6 +621,10 @@ class SecretEventType(DjangoObjectType):
             False,
         ):
             return self.user
+
+    def resolve_service_account(self, info):
+        if self.service_account_token:
+            return self.service_account_token.service_account
 
 
 class PersonalSecretType(DjangoObjectType):

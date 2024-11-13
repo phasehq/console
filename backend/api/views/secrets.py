@@ -123,7 +123,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.READ,
                 request.auth["org_member"],
                 request.auth["service_token"],
-                request.auth["service_account"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -232,7 +232,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.CREATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
-                request.auth["service_account"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -352,7 +352,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.UPDATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
-                request.auth["service_account"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -432,7 +432,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.DELETE,
                 request.auth["org_member"],
                 request.auth["service_token"],
-                request.auth["service_account"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -521,7 +521,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.READ,
                 request.auth["org_member"],
                 request.auth["service_token"],
-                request.auth["service_account"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -645,7 +645,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.CREATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
-                request.auth["service_account"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -800,7 +800,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.UPDATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
-                request.auth["service_account"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -894,7 +894,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.DELETE,
                 request.auth["org_member"],
                 request.auth["service_token"],
-                request.auth["service_account"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )

@@ -258,6 +258,7 @@ export default function SecretLogs(props: { app: string }) {
               <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
             </div>{' '}
             {log.serviceAccount.name}
+            {log.serviceAccountToken && ` - ${log.serviceAccountToken.name}`}
           </div>
         )
     }
@@ -430,7 +431,7 @@ export default function SecretLogs(props: { app: string }) {
             <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-10  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-neutral-500">
                 <th></th>
-                <th className="px-6 py-4">User</th>
+                <th className="px-6 py-4">Account</th>
                 <th className="px-6 py-4">Event</th>
                 <th className="px-6 py-4">Environment</th>
                 <th className="px-6 py-4">Secret</th>

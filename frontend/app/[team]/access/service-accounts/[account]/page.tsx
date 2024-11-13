@@ -219,7 +219,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           {userCanReadTokens ? (
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {account.tokens!.map((token) => (
-                <div key={token!.id} className="grid grid-cols-4 gap-2 items-center p-2 group">
+                <div key={token!.id} className="grid grid-cols-5 gap-2 items-center p-2 group">
                   <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                     <FaKey className="text-neutral-500" /> {token!.name}
                   </div>
@@ -235,6 +235,11 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   <div className="flex items-center gap-1 text-neutral-500 text-sm">
                     Expires{' '}
                     {token!.expiresAt ? relativeTimeFromDates(new Date(token?.expiresAt)) : 'never'}
+                  </div>
+
+                  <div className="flex items-center gap-1 text-neutral-500 text-sm">
+                    Last used{' '}
+                    {token!.lastUsed ? relativeTimeFromDates(new Date(token?.lastUsed)) : 'never'}
                   </div>
 
                   <div className="flex justify-end opacity-0 group-hover:opacity-100 transition ease">

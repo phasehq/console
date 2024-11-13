@@ -349,42 +349,9 @@ type ServiceAccountTokenType {
   updatedAt: DateTime!
   deletedAt: DateTime
   expiresAt: DateTime
+  secreteventSet: [SecretEventType!]!
+  lastUsed: DateTime
 }
-
-type LogsResponseType {
-  kms: [KMSLogType]
-  secrets: [SecretEventType]
-}
-
-type KMSLogType implements Node {
-  id: ID!
-  timestamp: BigInt
-  appId: String
-  phaseNode: String
-  eventType: String
-  ipAddress: String
-  phSize: Int
-  asn: Int
-  isp: String
-  edgeLocation: String
-  country: String
-  city: String
-  latitude: Float
-  longitude: Float
-}
-
-"""An object with an ID"""
-interface Node {
-  """The ID of the object"""
-  id: ID!
-}
-
-"""
-The `BigInt` scalar type represents non-fractional whole numeric values.
-`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
-compatible type.
-"""
-scalar BigInt
 
 type SecretEventType {
   id: String!
@@ -394,6 +361,7 @@ type SecretEventType {
   user: OrganisationMemberType
   serviceToken: ServiceTokenType
   serviceAccount: ServiceAccountType
+  serviceAccountToken: ServiceAccountTokenType
   key: String!
   value: String!
   version: Int!
@@ -484,6 +452,41 @@ enum ApiSecretEventEventTypeChoices {
   """Delete"""
   D
 }
+
+type LogsResponseType {
+  kms: [KMSLogType]
+  secrets: [SecretEventType]
+}
+
+type KMSLogType implements Node {
+  id: ID!
+  timestamp: BigInt
+  appId: String
+  phaseNode: String
+  eventType: String
+  ipAddress: String
+  phSize: Int
+  asn: Int
+  isp: String
+  edgeLocation: String
+  country: String
+  city: String
+  latitude: Float
+  longitude: Float
+}
+
+"""An object with an ID"""
+interface Node {
+  """The ID of the object"""
+  id: ID!
+}
+
+"""
+The `BigInt` scalar type represents non-fractional whole numeric values.
+`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
+compatible type.
+"""
+scalar BigInt
 
 type ChartDataPointType {
   index: Int

@@ -33,6 +33,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             "org_member": None,
             "service_token": None,
             "service_account": None,
+            "service_account_token": None,
         }
 
         if token_is_expired_or_deleted(auth_token):
@@ -83,6 +84,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 service_account = get_service_account_from_token(auth_token)
                 user = service_token.created_by.user
                 auth["service_account"] = service_account
+                auth["service_account_token"] = service_token
 
                 if not service_account_can_access_environment(
                     service_account.id, env.id
