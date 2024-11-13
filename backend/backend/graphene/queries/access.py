@@ -4,7 +4,7 @@ from graphql import GraphQLError
 from django.db import transaction
 from api.utils.access.roles import default_roles
 from itertools import chain
-from django.db.models import Q
+from django.db.models import Q, Case, When, Value, IntegerField
 
 
 @transaction.atomic
@@ -26,10 +26,20 @@ def migrate_role_permissions():
 def resolve_roles(root, info, org_id):
     org = Organisation.objects.get(id=org_id)
 
-    # migrate_role_permissions()
+    custom_order = Case(
+        When(name="Owner", then=Value(1)),
+        When(name="Admin", then=Value(2)),
+        When(name="Manager", then=Value(3)),
+        When(name="Developer", then=Value(4)),
+        When(name="Service", then=Value(5)),
+        default=Value(6),  # For custom roles
+        output_field=IntegerField(),
+    )
 
     if user_has_permission(info.context.user.userId, "read", "Roles", org):
-        return Role.objects.filter(organisation=org).order_by("-is_default")
+        return Role.objects.filter(organisation=org).order_by(
+            "-is_default", custom_order
+        )
     else:
         raise GraphQLError("You don't have permission to perform this action")
 
