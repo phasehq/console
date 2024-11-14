@@ -4,17 +4,18 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import {
-  FaChevronDown,
   FaCog,
   FaCubes,
   FaExchangeAlt,
   FaHome,
-  FaKey,
   FaPlus,
   FaUsersCog,
   FaProjectDiagram,
+  FaAngleDoubleLeft,
+  FaAngleDoubleRight,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
+import { SidebarContext } from '@/contexts/sidebarContext'
 import { Fragment, useContext } from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
@@ -28,66 +29,74 @@ export type SidebarLinkT = {
   active: boolean
 }
 
-const SidebarLink = (props: SidebarLinkT) => {
-  const { name, href, icon, active } = props
-
+const SidebarLink = ({ name, href, icon, active, collapsed }: SidebarLinkT & { collapsed: boolean }) => {
   return (
     <Link href={href} title={name}>
-      <div
-        className={clsx(
-          'flex items-center gap-2 text-sm  p-3 w-full transition ease rounded-lg font-semibold',
-          active
-            ? 'bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
-            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+      <div className="relative group">
+        <div
+          className={clsx(
+            'flex items-center gap-2 text-sm p-3 transition ease rounded-lg font-semibold',
+            collapsed ? 'justify-center' : '',
+            active
+              ? 'bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
+              : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+          )}
+        >
+          <div className="text-xl">{icon}</div>
+          {!collapsed && name}
+        </div>
+        {collapsed && (
+          <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-sm whitespace-nowrap z-50">
+            {name}
+          </div>
         )}
-      >
-        <div>{icon}</div>
-        {name}
       </div>
     </Link>
   )
 }
 
 const Sidebar = () => {
+  const { sidebarState, setSidebarState } = useContext(SidebarContext)
+  const collapsed = sidebarState === 'collapsed'
   const team = usePathname()?.split('/')[1]
-
   const { organisations, activeOrganisation } = useContext(organisationContext)
-
   const showOrgsMenu = organisations && organisations.length > 1
-
   const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
 
   const OrgsMenu = () => {
     const OrgLabel = () => (
-      <div className="p-2 text-neutral-500 flex items-center justify-between w-full bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10 rounded-lg">
-        <div className="flex flex-col gap-0.5 min-w-0 items-start">
-          <div>
-            <PlanLabel plan={activeOrganisation?.plan!} />
+      <div className={clsx(
+        "p-2 text-neutral-500 flex items-center bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10 rounded-lg",
+        collapsed ? "justify-center" : "justify-between w-full"
+      )}>
+        {!collapsed && (
+          <div className="flex flex-col gap-0.5 min-w-0 items-start">
+            <div>
+              <PlanLabel plan={activeOrganisation?.plan!} />
+            </div>
+            <span className="truncate font-semibold tracking-wider text-lg">
+              {activeOrganisation?.name}
+            </span>
           </div>
-          <span className="truncate font-semibold tracking-wider text-lg">
-            {activeOrganisation?.name}
-          </span>
-        </div>
+        )}
+        {collapsed && (
+          <div className="w-8 h-8 flex items-center justify-center">
+            <span className="font-bold text-xl">
+              {activeOrganisation?.name?.[0]?.toUpperCase()}
+            </span>
+          </div>
+        )}
       </div>
     )
 
     if (!showOrgsMenu) return <OrgLabel />
 
     return (
-      <Menu as="div" className="relative inline-block text-left w-full">
+      <Menu as="div" className={clsx("relative inline-block text-left", collapsed ? "" : "w-full")}>
         {({ open }) => (
           <>
-            <Menu.Button className="w-full">
-              <div className="relative">
-                <OrgLabel />
-                <FaChevronDown
-                  className={clsx(
-                    'absolute right-2 top-1/2 -translate-y-1/2 transition-transform',
-                    'text-zinc-800 dark:text-zinc-100',
-                    open ? 'rotate-180' : 'rotate-0'
-                  )}
-                />
-              </div>
+            <Menu.Button className={collapsed ? "" : "w-full"}>
+              <OrgLabel />
             </Menu.Button>
             <Transition
               as={Fragment}
@@ -178,30 +187,39 @@ const Sidebar = () => {
   ]
 
   return (
-    <div className="h-screen flex flex-col pt-[64px] w-72">
+    <div className={clsx(
+      "h-screen flex flex-col pt-[64px] transition-all duration-300",
+      collapsed ? "w-20" : "w-72"
+    )}>
       <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/70 dark:bg-neutral-800/20 text-black dark:text-white">
+        {/* Main navigation area */}
         <div className="gap-4 p-4 grid grid-cols-1 w-full">
           <OrgsMenu />
-
-          {links.slice(0, 4).map((link) => (
+          {links.map((link) => (
             <SidebarLink
               key={link.name}
               name={link.name}
               href={link.href}
               icon={link.icon}
               active={link.active}
+              collapsed={collapsed}
             />
           ))}
         </div>
 
+        {/* Bottom section with collapse/expand button */}
         <div className="p-4 w-full">
-          <SidebarLink
-            key={links[4].name}
-            name={links[4].name}
-            href={links[4].href}
-            icon={links[4].icon}
-            active={links[4].active}
-          />
+          <button
+            onClick={() => setSidebarState(collapsed ? 'expanded' : 'collapsed')}
+            className="flex items-center justify-center p-3 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? (
+              <FaAngleDoubleRight className="text-xl" />
+            ) : (
+              <FaAngleDoubleLeft className="text-xl" />
+            )}
+          </button>
         </div>
       </nav>
     </div>
