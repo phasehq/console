@@ -664,11 +664,9 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
     return (
       <>
         <div className="flex items-center gap-2">
-          {envScope.map((env) => (
-            <span className="text-zinc-900 dark:text-zinc-100 text-sm font-medium" key={env.id}>
-              {env.name}
-            </span>
-          ))}
+          <span className="text-zinc-900 dark:text-zinc-100 text-sm font-medium">
+            {envScope.map((env) => env.name).join(' + ')}
+          </span>
           {allowUpdateScope && (
             <div className="opacity-0 group-hover:opacity-100 transition ease">
               <Button variant="outline" onClick={openModal} title="Manage access">
