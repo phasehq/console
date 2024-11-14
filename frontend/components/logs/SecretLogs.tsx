@@ -9,7 +9,14 @@ import {
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaBan, FaChevronRight, FaExternalLinkAlt, FaKey, FaRobot } from 'react-icons/fa'
+import {
+  FaArrowRight,
+  FaBan,
+  FaChevronRight,
+  FaExternalLinkAlt,
+  FaKey,
+  FaRobot,
+} from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
@@ -258,7 +265,7 @@ export default function SecretLogs(props: { app: string }) {
               <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
             </div>{' '}
             {log.serviceAccount.name}
-            {log.serviceAccountToken && ` - ${log.serviceAccountToken.name}`}
+            {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
           </div>
         )
     }
@@ -350,7 +357,21 @@ export default function SecretLogs(props: { app: string }) {
                       </div>
                     </LogField>
 
-                    <LogField label="Created by">{logCreatedBy(log)}</LogField>
+                    <LogField label="Created by">
+                      <div className="flex items-center gap-2">
+                        {logCreatedBy(log)}{' '}
+                        {log.serviceAccount && (
+                          <Link
+                            href={`/${organisation!.name}/access/service-accounts/${log.serviceAccount.id}`}
+                            className="font-sans"
+                          >
+                            <Button variant="outline">
+                              Manage account <FaArrowRight />
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    </LogField>
 
                     <LogField label="IP address"> {log.ipAddress}</LogField>
 
