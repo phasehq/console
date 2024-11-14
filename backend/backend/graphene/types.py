@@ -238,62 +238,6 @@ class MemberType(graphene.Enum):
     SERVICE = "service"
 
 
-class ServiceAccountType(DjangoObjectType):
-
-    third_party_auth_enabled = graphene.Boolean()
-    handlers = graphene.List(ServiceAccountHandlerType)
-    tokens = graphene.List(ServiceAccountTokenType)
-
-    class Meta:
-        model = ServiceAccount
-        fields = (
-            "id",
-            "name",
-            "role",
-            "apps",
-            "identity_key",
-            "created_at",
-            "updated_at",
-        )
-
-    def resolve_third_party_auth_enabled(self, info):
-        return (
-            self.server_wrapped_keyring is not None
-            and self.server_wrapped_recovery is not None
-        )
-
-    def resolve_handlers(self, info):
-        return ServiceAccountHandler.objects.filter(service_account=self)
-
-    def resolve_tokens(self, info):
-        return ServiceAccountToken.objects.filter(service_account=self)
-
-    def resolve_apps(self, info):
-        # Fetch all apps that this service account is related to
-        apps = self.apps.all()
-
-        # For each app, filter environments that this ServiceAccount has access to
-        filtered_apps = []
-        for app in apps:
-            # Get environments for the app
-            app_environments = Environment.objects.filter(app=app).order_by("index")
-
-            # Check which environments the service account has access to
-            accessible_environments = [
-                env
-                for env in app_environments
-                if EnvironmentKey.objects.filter(
-                    service_account=self, environment=env
-                ).exists()
-            ]
-
-            # Set the environments field manually to the filtered environments
-            app.environments = accessible_environments
-            filtered_apps.append(app)
-
-        return filtered_apps
-
-
 class ProviderType(graphene.ObjectType):
     id = graphene.String(required=True)
     name = graphene.String(required=True)
@@ -412,7 +356,6 @@ class EnvironmentType(DjangoObjectType):
 class AppType(DjangoObjectType):
     environments = graphene.NonNull(graphene.List(EnvironmentType))
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
-    service_accounts = graphene.NonNull(graphene.List(ServiceAccountType))
 
     class Meta:
         model = App
@@ -426,9 +369,14 @@ class AppType(DjangoObjectType):
             "app_seed",
             "app_version",
             "sse_enabled",
+            "service_accounts",
         )
 
     def resolve_environments(self, info):
+
+        if hasattr(self, "filtered_environments"):
+            return self.filtered_environments
+
         org_member = OrganisationMember.objects.get(
             organisation=self.organisation,
             user_id=info.context.user.userId,
@@ -448,8 +396,62 @@ class AppType(DjangoObjectType):
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)
 
-    def resolve_service_accounts(self, info):
-        return self.service_accounts.filter(deleted_at=None)
+
+class ServiceAccountType(DjangoObjectType):
+
+    third_party_auth_enabled = graphene.Boolean()
+    handlers = graphene.List(ServiceAccountHandlerType)
+    tokens = graphene.List(ServiceAccountTokenType)
+    app_memberships = graphene.List(graphene.NonNull(AppType))
+
+    class Meta:
+        model = ServiceAccount
+        fields = (
+            "id",
+            "name",
+            "role",
+            "identity_key",
+            "created_at",
+            "updated_at",
+        )
+
+    def resolve_third_party_auth_enabled(self, info):
+        return (
+            self.server_wrapped_keyring is not None
+            and self.server_wrapped_recovery is not None
+        )
+
+    def resolve_handlers(self, info):
+        return ServiceAccountHandler.objects.filter(service_account=self)
+
+    def resolve_tokens(self, info):
+        return ServiceAccountToken.objects.filter(service_account=self)
+
+    def resolve_app_memberships(self, info):
+        # Fetch all apps that this service account is related to
+        apps = self.apps.all()
+
+        filtered_apps = []
+        for app in apps:
+            # Get environments for the app
+            app_environments = Environment.objects.filter(app=app).order_by("index")
+
+            # Check which environments the service account has access to
+            accessible_environments = [
+                env
+                for env in app_environments
+                if EnvironmentKey.objects.filter(
+                    service_account=self, environment=env
+                ).exists()
+            ]
+
+            # Manually override the 'environments' field for this app instance
+            app.filtered_environments = accessible_environments
+
+            # Add this app to the filtered list
+            filtered_apps.append(app)
+
+        return filtered_apps
 
 
 class EnvironmentKeyType(DjangoObjectType):

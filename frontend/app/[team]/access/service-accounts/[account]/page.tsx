@@ -36,6 +36,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     ? userHasPermission(organisation.role?.permissions, 'ServiceAccountTokens', 'read')
     : false
 
+  const userCanReadAppMemberships = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read', true)
+    : false
+
   const userCanUpdateSA = organisation
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update')
     : false
@@ -183,28 +187,47 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             </div>
           </div>
 
-          <div className="grid grid-cols-4 1080p:grid-cols-6 gap-4 py-4">
-            {account.apps.map((app) => (
-              <Card key={app.id}>
-                <div className="space-y-4 relative">
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold text-xl">{app.name}</div>
-                    <Link
-                      className="opacity-0 group-hover:opacity-100 transition ease"
-                      href={`/${params.team}/apps/${app.id}/access/service-accounts`}
-                    >
-                      <Button variant="secondary">
-                        <FaCog /> Manage
-                      </Button>
-                    </Link>
+          {userCanReadAppMemberships ? (
+            <div className="grid grid-cols-4 1080p:grid-cols-6 gap-4 py-4">
+              {account.appMemberships?.map((app) => (
+                <Card key={app.id}>
+                  <div className="space-y-6 relative">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-2xl">{app.name}</div>
+                      <Link
+                        className="opacity-0 group-hover:opacity-100 transition ease"
+                        href={`/${params.team}/apps/${app.id}/access/service-accounts`}
+                      >
+                        <Button variant="secondary">
+                          <FaCog /> Manage
+                        </Button>
+                      </Link>
+                    </div>
+                    <div>
+                      <div className="text-neutral-500 text-2xs uppercase tracking-widest">
+                        Environments
+                      </div>
+                      <div className="text-zinc-700 dark:text-zinc-300 text-sm" key={env!.id}>
+                        {app.environments.map((app) => app!.name).join(' + ')}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-zinc-700 dark:text-zinc-300 text-sm" key={env!.id}>
-                    {app.environments.map((app) => app!.name).join(' + ')}
-                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Access restricted"
+              subtitle="You don't have the permissions required to view Service Account App memberships"
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaBan />
                 </div>
-              </Card>
-            ))}
-          </div>
+              }
+            >
+              <></>
+            </EmptyState>
+          )}
         </div>
 
         <div className="py-4">
@@ -251,7 +274,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           ) : (
             <EmptyState
               title="Access restricted"
-              subtitle="You don't have the permissions required to view service account tokens"
+              subtitle="You don't have the permissions required to view Service Account Tokens"
               graphic={
                 <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                   <FaBan />
