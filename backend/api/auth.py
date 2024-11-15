@@ -30,6 +30,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
         auth = {
             "token": auth_token,
+            "auth_type": token_type,
             "org_member": None,
             "service_token": None,
             "service_account": None,
