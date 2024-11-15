@@ -1,0 +1,7 @@
+query GetVercelProjects($credentialId: ID!) {
+  vercelProjects(credentialId: $credentialId) {
+    id
+    name
+    environment
+  }
+}

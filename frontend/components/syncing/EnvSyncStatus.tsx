@@ -50,11 +50,11 @@ export const EnvSyncStatus = (props: {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute z-20 -right-2 top-12 w-[512px] md:w-[768px] origin-top-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur-md shadow-2xl focus:outline-none">
+              <Menu.Items className="absolute z-20 -right-2 top-12 w-[512px] md:w-[900px] origin-top-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur-md shadow-2xl focus:outline-none">
                 <div className="p-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="text-black dark:text-white font-medium text-lg flex items-center gap-2">
+                      <div className="text-black dark:text-white font-medium flex items-center gap-2">
                         <FaSync />
                         Syncs
                       </div>

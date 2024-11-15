@@ -18,6 +18,7 @@ from api.utils.secrets import (
     get_environment_keys,
 )
 from api.utils.access.permissions import (
+    PermissionMiddleware,
     service_account_can_access_environment,
     user_can_access_environment,
     user_has_permission,
@@ -40,6 +41,7 @@ from django.utils import timezone
 from djangorestframework_camel_case.render import (
     CamelCaseJSONRenderer,
 )
+from django.utils.decorators import method_decorator
 
 
 class E2EESecretsView(APIView):
@@ -50,51 +52,21 @@ class E2EESecretsView(APIView):
     def dispatch(self, request, *args):
         return super(E2EESecretsView, self).dispatch(request, *args)
 
-    def get(self, request):
+    def get(self, request, *args, **kwargs):
 
         env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
         if not env.id:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
-        if request.auth["org_member"] or request.auth["service_account"]:
-            account = (
-                request.auth["service_account"]
-                if "service_account" in request.auth
-                and request.auth["service_account"] is not None
-                else request.auth["org_member"].user
-            )
-
-            if not user_has_permission(
-                account,
-                "read",
-                "Secrets",
-                env.app.organisation,
-                True,
-                request.auth["service_account"] is not None,
-            ):
-                return JsonResponse(
-                    {
-                        "error": "You don't have permission to read secrets in this environment"
-                    },
-                    status=403,
-                )
-
-        if request.auth["org_member"] is not None and not user_can_access_environment(
-            request.auth["org_member"].user.userId, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
-
-        elif request.auth[
-            "service_account"
-        ] is not None and not service_account_can_access_environment(
-            request.auth["service_account"].id, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
+        kwargs.update(
+            {
+                "action": "read",
+                "resource": "Secrets",
+                "organisation": env.app.organisation,
+                "env": env,
+            }
+        )
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -134,50 +106,21 @@ class E2EESecretsView(APIView):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def post(self, request):
+    def post(self, request, *args, **kwargs):
 
         env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
         if not env:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
-        if request.auth["org_member"] or request.auth["service_account"]:
-            account = (
-                request.auth["service_account"]
-                if "service_account" in request.auth
-                and request.auth["service_account"] is not None
-                else request.auth["org_member"].user
-            )
-            if not user_has_permission(
-                account,
-                "create",
-                "Secrets",
-                env.app.organisation,
-                True,
-                request.auth["service_account"] is not None,
-            ):
-                return JsonResponse(
-                    {
-                        "error": "You don't have permission to create secrets in this environment"
-                    },
-                    status=403,
-                )
-
-        if request.auth["org_member"] is not None and not user_can_access_environment(
-            request.auth["org_member"].user.userId, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
-
-        elif request.auth[
-            "service_account"
-        ] is not None and not service_account_can_access_environment(
-            request.auth["service_account"].id, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
+        kwargs.update(
+            {
+                "action": "create",
+                "resource": "Secrets",
+                "organisation": env.app.organisation,
+                "env": env,
+            }
+        )
 
         request_body = json.loads(request.body)
 
@@ -247,51 +190,21 @@ class E2EESecretsView(APIView):
 
         return Response(status=status.HTTP_200_OK)
 
-    def put(self, request):
+    def put(self, request, *args, **kwargs):
 
         env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
         if not env:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
-        if request.auth["org_member"] or request.auth["service_account"]:
-            account = (
-                request.auth["service_account"]
-                if "service_account" in request.auth
-                and request.auth["service_account"] is not None
-                else request.auth["org_member"].user
-            )
-
-            if not user_has_permission(
-                account,
-                "update",
-                "Secrets",
-                env.app.organisation,
-                True,
-                request.auth["service_account"] is not None,
-            ):
-                return JsonResponse(
-                    {
-                        "error": "You don't have permission to update secrets in this environment"
-                    },
-                    status=403,
-                )
-
-        if request.auth["org_member"] is not None and not user_can_access_environment(
-            request.auth["org_member"].user.userId, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
-
-        elif request.auth[
-            "service_account"
-        ] is not None and not service_account_can_access_environment(
-            request.auth["service_account"].id, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
+        kwargs.update(
+            {
+                "action": "update",
+                "resource": "Secrets",
+                "organisation": env.app.organisation,
+                "env": env,
+            }
+        )
 
         request_body = json.loads(request.body)
 
@@ -371,7 +284,7 @@ class E2EESecretsView(APIView):
 
         return Response(status=status.HTTP_200_OK)
 
-    def delete(self, request):
+    def delete(self, request, *args, **kwargs):
 
         request_body = json.loads(request.body)
 
@@ -379,48 +292,19 @@ class E2EESecretsView(APIView):
 
         secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"])
 
-        for secret in secrets_to_delete:
-            if not Secret.objects.filter(id=secret.id).exists():
-                return JsonResponse({"error": "Secret doesn't exist"}, status=404)
-            if request.auth["org_member"] or request.auth["service_account"]:
-                account = (
-                    request.auth["service_account"]
-                    if "service_account" in request.auth
-                    and request.auth["service_account"] is not None
-                    else request.auth["org_member"].user
-                )
-                if not user_has_permission(
-                    account,
-                    "delete",
-                    "Secrets",
-                    secret.environment.app.organisation,
-                    True,
-                    request.auth["service_account"] is not None,
-                ):
-                    return JsonResponse(
-                        {
-                            "error": "You don't have permission to delete secrets in this environment"
-                        },
-                        status=403,
-                    )
+        if not secrets_to_delete.exists():
+            return Response(status=status.HTTP_200_OK)
 
-            if request.auth[
-                "org_member"
-            ] is not None and not user_can_access_environment(
-                request.auth["org_member"].user.userId, secret.environment.id
-            ):
-                return JsonResponse(
-                    {"error": "You don't have access to this environment"}, status=403
-                )
+        env = secrets_to_delete[0].environment
 
-            if request.auth[
-                "service_account"
-            ] is not None and not service_account_can_access_environment(
-                request.auth["service_account"].id, secret.environment.id
-            ):
-                return JsonResponse(
-                    {"error": "You don't have access to this environment"}, status=403
-                )
+        kwargs.update(
+            {
+                "action": "delete",
+                "resource": "Secrets",
+                "organisation": env.app.organisation,
+                "env": env,
+            }
+        )
 
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
@@ -440,6 +324,7 @@ class E2EESecretsView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
+@method_decorator(PermissionMiddleware, name="dispatch")
 class PublicSecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -451,47 +336,16 @@ class PublicSecretsView(APIView):
     def dispatch(self, request, *args):
         return super(PublicSecretsView, self).dispatch(request, *args)
 
-    def get(self, request):
+    def get(self, request, *args, **kwargs):
         env = request.auth["environment"]
-
-        if request.auth["org_member"] or request.auth["service_account"]:
-            account = (
-                request.auth["service_account"]
-                if "service_account" in request.auth
-                and request.auth["service_account"] is not None
-                else request.auth["org_member"].user
-            )
-
-            if not user_has_permission(
-                account,
-                "read",
-                "Secrets",
-                env.app.organisation,
-                True,
-                request.auth["service_account"] is not None,
-            ):
-                return JsonResponse(
-                    {
-                        "error": "You don't have permission to read secrets in this environment"
-                    },
-                    status=403,
-                )
-
-        if request.auth["org_member"] is not None and not user_can_access_environment(
-            request.auth["org_member"].user.userId, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
-
-        elif request.auth[
-            "service_account"
-        ] is not None and not service_account_can_access_environment(
-            request.auth["service_account"].id, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
+        kwargs.update(
+            {
+                "action": "read",
+                "resource": "Secrets",
+                "organisation": env.app.organisation,
+                "env": env,
+            }
+        )
 
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
@@ -534,46 +388,17 @@ class PublicSecretsView(APIView):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def post(self, request):
+    def post(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
-
-        account = (
-            request.auth["service_account"]
-            if "service_account" in request.auth
-            and request.auth["service_account"] is not None
-            else request.auth["org_member"].user
+        kwargs.update(
+            {
+                "action": "create",
+                "resource": "Secrets",
+                "organisation": env.app.organisation,
+                "env": env,
+            }
         )
-        if not user_has_permission(
-            account,
-            "create",
-            "Secrets",
-            env.app.organisation,
-            True,
-            request.auth["service_account"] is not None,
-        ):
-            return JsonResponse(
-                {
-                    "error": "You don't have permission to create secrets in this environment"
-                },
-                status=403,
-            )
-
-        if request.auth["org_member"] is not None and not user_can_access_environment(
-            request.auth["org_member"].user.userId, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
-
-        elif request.auth[
-            "service_account"
-        ] is not None and not service_account_can_access_environment(
-            request.auth["service_account"].id, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
 
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
@@ -668,47 +493,17 @@ class PublicSecretsView(APIView):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def put(self, request):
+    def put(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
-
-        account = (
-            request.auth["service_account"]
-            if "service_account" in request.auth
-            and request.auth["service_account"] is not None
-            else request.auth["org_member"].user
+        kwargs.update(
+            {
+                "action": "update",
+                "resource": "Secrets",
+                "organisation": env.app.organisation,
+                "env": env,
+            }
         )
-
-        if not user_has_permission(
-            account,
-            "update",
-            "Secrets",
-            env.app.organisation,
-            True,
-            request.auth["service_account"] is not None,
-        ):
-            return JsonResponse(
-                {
-                    "error": "You don't have permission to update secrets in this environment"
-                },
-                status=403,
-            )
-
-        if request.auth["org_member"] is not None and not user_can_access_environment(
-            request.auth["org_member"].user.userId, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
-
-        elif request.auth[
-            "service_account"
-        ] is not None and not service_account_can_access_environment(
-            request.auth["service_account"].id, env.id
-        ):
-            return JsonResponse(
-                {"error": "You don't have access to this environment"}, status=403
-            )
 
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
@@ -827,30 +622,17 @@ class PublicSecretsView(APIView):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def delete(self, request):
+    def delete(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
-
-        account = (
-            request.auth["service_account"]
-            if "service_account" in request.auth
-            and request.auth["service_account"] is not None
-            else request.auth["org_member"].user
+        kwargs.update(
+            {
+                "action": "delete",
+                "resource": "Secrets",
+                "organisation": env.app.organisation,
+                "env": env,
+            }
         )
-        if not user_has_permission(
-            account,
-            "delete",
-            "Secrets",
-            env.app.organisation,
-            True,
-            request.auth["service_account"] is not None,
-        ):
-            return JsonResponse(
-                {
-                    "error": "You don't have permission to delete secrets in this environment"
-                },
-                status=403,
-            )
 
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
@@ -865,24 +647,6 @@ class PublicSecretsView(APIView):
         for secret in secrets_to_delete:
             if not Secret.objects.filter(id=secret.id).exists():
                 return JsonResponse({"error": "Secret does not exist"}, status=404)
-
-            if request.auth[
-                "org_member"
-            ] is not None and not user_can_access_environment(
-                request.auth["org_member"].user.userId, secret.environment.id
-            ):
-                return JsonResponse(
-                    {"error": "You don't have access to this environment"}, status=403
-                )
-
-            if request.auth[
-                "service_account"
-            ] is not None and not service_account_can_access_environment(
-                request.auth["service_account"].id, secret.environment.id
-            ):
-                return JsonResponse(
-                    {"error": "You don't have access to this environment"}, status=403
-                )
 
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()

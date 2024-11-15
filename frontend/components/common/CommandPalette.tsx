@@ -98,7 +98,7 @@ const CommandPalette: React.FC = () => {
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
-      id: 'go-members',
+      id: 'go-service-accounts',
       name: 'Go to Service Accounts',
       description: 'Manage organization service accounts',
       icon: <FaRobot />,

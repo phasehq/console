@@ -13,7 +13,7 @@ export const EmptyState = (props: {
       {graphic}
       <div className="text-center">
         <div className="font-semibold text-zinc-900 dark:text-zinc-100 text-lg">{title}</div>
-        <div className="text-neutral-500">{subtitle}</div>
+        <div className="text-neutral-500 text-sm">{subtitle}</div>
       </div>
       {children}
     </div>

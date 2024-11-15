@@ -9,7 +9,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext, useEffect, useState } from 'react'
-import { FaBan, FaChevronLeft, FaCog, FaEdit, FaKey, FaRobot } from 'react-icons/fa'
+import { FaBan, FaBoxOpen, FaChevronLeft, FaCog, FaEdit, FaKey, FaRobot } from 'react-icons/fa'
 import { CreateServiceAccountTokenDialog } from './_components/CreateServiceAccountTokenDialog'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { ServiceAccountTokenType, ServiceAccountType } from '@/apollo/graphql'
@@ -214,6 +214,21 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   </div>
                 </Card>
               ))}
+              {account.appMemberships?.length === 0 && (
+                <div className="col-span-2">
+                  <EmptyState
+                    title="No App memberships"
+                    subtitle="This Service Account does not have access to any Apps. Grant this account access from the Access tab of an App."
+                    graphic={
+                      <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                        <FaBoxOpen />
+                      </div>
+                    }
+                  >
+                    <></>
+                  </EmptyState>
+                </div>
+              )}
             </div>
           ) : (
             <EmptyState
