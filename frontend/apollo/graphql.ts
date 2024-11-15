@@ -2410,9 +2410,7 @@ export type GetAppsQueryVariables = Exact<{
 }>;
 
 
-
 export type GetAppsQuery = { __typename?: 'Query', apps?: Array<{ __typename?: 'AppType', id: string, name: string, identityKey: string, createdAt?: any | null, sseEnabled: boolean, members: Array<{ __typename?: 'OrganisationMemberType', id: string, email?: string | null, fullName?: string | null, avatarUrl?: string | null } | null>, serviceAccounts: Array<{ __typename?: 'ServiceAccountType', id: string, name: string }>, environments: Array<{ __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices, syncs: Array<{ __typename?: 'EnvironmentSyncType', id: string, status: ApiEnvironmentSyncStatusChoices, serviceInfo?: { __typename?: 'ServiceType', id?: string | null, name?: string | null, provider?: { __typename?: 'ProviderType', id: string, name: string } | null } | null } | null> } | null> } | null> | null };
-
 
 export type GetDashboardQueryVariables = Exact<{
   organisationId: Scalars['ID']['input'];
