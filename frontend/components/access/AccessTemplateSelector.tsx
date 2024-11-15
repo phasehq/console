@@ -95,7 +95,7 @@ export const AccessTemplateSelector = ({
   }
 
   return (
-    <div>
+    <div className="relative">
       <Listbox value={value} onChange={handleChange}>
         {({ open }) => (
           <>
