@@ -10,6 +10,7 @@ import { CreateVaultSync } from './Vault/CreateVaultSync'
 import { CreateNomadSync } from './Nomad/CreateNomadSync'
 import { CreateGitLabCISync } from './GitLab/CreateGitLabCISync'
 import { CreateRailwaySync } from './Railway/CreateRailwaySync'
+import { CreateVercelSync } from './Vercel/CreateVercelSync'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
@@ -63,6 +64,8 @@ export const CreateSyncDialog = (props: {
         return <CreateNomadSync appId={props.appId} closeModal={closeModal} />
       case 'railway':
         return <CreateRailwaySync appId={props.appId} closeModal={closeModal} />
+      case 'vercel':
+        return <CreateVercelSync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null

@@ -1,4 +1,4 @@
-import { EnvironmentSyncType, RailwayProjectType, RailwayResourceInput } from '@/apollo/graphql'
+import { EnvironmentSyncType, RailwayResourceInput, VercelProjectType } from '@/apollo/graphql'
 import { FaEyeSlash, FaLock } from 'react-icons/fa'
 
 export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
@@ -64,6 +64,18 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     return (
       <div className="flex gap-2 text-xs text-neutral-500">
         {project.name} {service ? ` - ${service.name}` : ''} ({environment.name})
+      </div>
+    )
+  } else if (sync.serviceInfo?.id?.includes('vercel')) {
+    const project: VercelProjectType = JSON.parse(sync.options)['project']
+    const environment = JSON.parse(sync.options)['environment']
+    const secretType = JSON.parse(sync.options)['secret_type']
+
+    return (
+      <div className="flex gap-2 items-center text-xs text-neutral-500">
+        {project.name} ({environment})
+        {secretType === 'encrypted' && <FaLock title="Encrypted" />}
+        {secretType === 'sensitive' && <FaEyeSlash title="Sensitive" />}
       </div>
     )
   } else return <>{sync.serviceInfo?.id}</>
