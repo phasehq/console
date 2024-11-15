@@ -369,7 +369,8 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                             ([resource, actions]) => (
                               <tr key={resource}>
                                 <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
-                                  {camelCaseToSpaces(resource)}
+                                  {camelCaseToSpaces(resource)}{' '}
+                                  {resource === 'Tokens' && '(Legacy)'}
                                 </td>
                                 <td>
                                   <AccessTemplateSelector
