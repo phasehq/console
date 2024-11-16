@@ -1,18 +1,26 @@
 from rest_framework.views import exception_handler
-from django.http import HttpResponse
+from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse, HttpResponse
 
 
 def custom_exception_handler(exc, context):
-    # Call REST framework's default exception handler first,
-    # to get the standard error response.
+    """
+    Custom exception handler to modify 'PermissionDenied' responses.
+    """
+    # Handle PermissionDenied
+    if isinstance(exc, PermissionDenied):
+        # Extract the custom message and replace the key
+        error_message = str(exc) if exc else "Permission denied."
+        return JsonResponse(
+            {"error": error_message},  # Change "detail" to "error"
+            status=403,
+        )
+
+    # Call REST framework's default exception handler for other exceptions
     response = exception_handler(exc, context)
-    print("EXCEPTION", exc)
 
-    # set 404 as default response code
-    status_code = 404
+    if response is not None and "detail" in response.data:
+        # If "detail" exists in other exceptions, you can modify it too
+        response.data["error"] = response.data.pop("detail")
 
-    # Now add the HTTP status code to the response.
-    if response is not None:
-        status_code = response.status_code
-
-    return HttpResponse(status=status_code)
+    return response
