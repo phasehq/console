@@ -2,6 +2,14 @@ from api.models import EnvironmentToken, ServiceAccountToken, ServiceToken, User
 from django.utils import timezone
 import base64
 
+# Map HTTP methods to permission actions
+METHOD_TO_ACTION = {
+    "GET": "read",
+    "POST": "create",
+    "PUT": "update",
+    "DELETE": "delete",
+}
+
 
 def get_client_ip(request):
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")

@@ -5,7 +5,6 @@ from api.models import (
     Secret,
     SecretEvent,
     SecretTag,
-    ServerEnvironmentKey,
 )
 from api.serializers import (
     SecretSerializer,
@@ -18,39 +17,63 @@ from api.utils.secrets import (
     get_environment_keys,
 )
 from api.utils.access.permissions import (
-    PermissionMiddleware,
-    service_account_can_access_environment,
-    user_can_access_environment,
     user_has_permission,
 )
 from api.utils.audit_logging import log_secret_event
 
 from api.utils.crypto import encrypt_asymmetric, validate_encrypted_string
 from api.utils.rest import (
+    METHOD_TO_ACTION,
     get_resolver_request_meta,
 )
 
 import json
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
-from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.utils import timezone
 from djangorestframework_camel_case.render import (
     CamelCaseJSONRenderer,
 )
-from django.utils.decorators import method_decorator
 
 
 class E2EESecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated]
 
-    @csrf_exempt
-    def dispatch(self, request, *args):
-        return super(E2EESecretsView, self).dispatch(request, *args)
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+
+        # Determine the action based on the request method
+        action = METHOD_TO_ACTION.get(request.method)
+        if not action:
+            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+
+        # Perform permission check
+        account = None
+        if request.auth["auth_type"] == "User":
+            account = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            account = request.auth["service_account"]
+
+        if account is not None:
+            env = request.auth["environment"]
+            organisation = env.app.organisation
+
+            if not user_has_permission(
+                account,
+                action,
+                "Secrets",
+                organisation,
+                True,
+                request.auth.get("service_account") is not None,
+            ):
+                raise PermissionDenied(
+                    f"You don't have permission to {action} secrets in this environment."
+                )
 
     def get(self, request, *args, **kwargs):
 
@@ -58,15 +81,6 @@ class E2EESecretsView(APIView):
         env = Environment.objects.get(id=env_id)
         if not env.id:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
-
-        kwargs.update(
-            {
-                "action": "read",
-                "resource": "Secrets",
-                "organisation": env.app.organisation,
-                "env": env,
-            }
-        )
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -112,15 +126,6 @@ class E2EESecretsView(APIView):
         env = Environment.objects.get(id=env_id)
         if not env:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
-
-        kwargs.update(
-            {
-                "action": "create",
-                "resource": "Secrets",
-                "organisation": env.app.organisation,
-                "env": env,
-            }
-        )
 
         request_body = json.loads(request.body)
 
@@ -196,15 +201,6 @@ class E2EESecretsView(APIView):
         env = Environment.objects.get(id=env_id)
         if not env:
             return JsonResponse({"error": "Environment doesn't exist"}, status=404)
-
-        kwargs.update(
-            {
-                "action": "update",
-                "resource": "Secrets",
-                "organisation": env.app.organisation,
-                "env": env,
-            }
-        )
 
         request_body = json.loads(request.body)
 
@@ -297,15 +293,6 @@ class E2EESecretsView(APIView):
 
         env = secrets_to_delete[0].environment
 
-        kwargs.update(
-            {
-                "action": "delete",
-                "resource": "Secrets",
-                "organisation": env.app.organisation,
-                "env": env,
-            }
-        )
-
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
             secret.deleted_at = timezone.now()
@@ -324,7 +311,6 @@ class E2EESecretsView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
-@method_decorator(PermissionMiddleware, name="dispatch")
 class PublicSecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -332,20 +318,39 @@ class PublicSecretsView(APIView):
         CamelCaseJSONRenderer,
     ]
 
-    @csrf_exempt
-    def dispatch(self, request, *args):
-        return super(PublicSecretsView, self).dispatch(request, *args)
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+
+        # Determine the action based on the request method
+        action = METHOD_TO_ACTION.get(request.method)
+        if not action:
+            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+
+        # Perform permission check
+        account = None
+        if request.auth["auth_type"] == "User":
+            account = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            account = request.auth["service_account"]
+
+        if account is not None:
+            env = request.auth["environment"]
+            organisation = env.app.organisation
+
+            if not user_has_permission(
+                account,
+                action,
+                "Secrets",
+                organisation,
+                True,
+                request.auth.get("service_account") is not None,
+            ):
+                raise PermissionDenied(
+                    f"You don't have permission to {action} secrets in this environment."
+                )
 
     def get(self, request, *args, **kwargs):
         env = request.auth["environment"]
-        kwargs.update(
-            {
-                "action": "read",
-                "resource": "Secrets",
-                "organisation": env.app.organisation,
-                "env": env,
-            }
-        )
 
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
@@ -391,14 +396,6 @@ class PublicSecretsView(APIView):
     def post(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
-        kwargs.update(
-            {
-                "action": "create",
-                "resource": "Secrets",
-                "organisation": env.app.organisation,
-                "env": env,
-            }
-        )
 
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
@@ -496,14 +493,6 @@ class PublicSecretsView(APIView):
     def put(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
-        kwargs.update(
-            {
-                "action": "update",
-                "resource": "Secrets",
-                "organisation": env.app.organisation,
-                "env": env,
-            }
-        )
 
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
@@ -625,14 +614,6 @@ class PublicSecretsView(APIView):
     def delete(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
-        kwargs.update(
-            {
-                "action": "delete",
-                "resource": "Secrets",
-                "organisation": env.app.organisation,
-                "env": env,
-            }
-        )
 
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
