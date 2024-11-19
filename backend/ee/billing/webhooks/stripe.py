@@ -7,6 +7,29 @@ from api.models import Organisation
 from django.conf import settings
 
 
+def handle_subscription_created(event):
+    """
+    Handles the creation of a subscription. Updates the organisation's
+    stripe_subscription_id and plan tier based on the price_id.
+    """
+    subscription = event["data"]["object"]
+
+    try:
+        organisation = Organisation.objects.get(
+            stripe_customer_id=subscription["customer"]
+        )
+
+        # Set the subscription ID and update the plan
+        organisation.stripe_subscription_id = subscription["id"]
+        organisation.plan = map_stripe_plan_to_tier(
+            subscription["items"]["data"][0]["price"]["id"]
+        )
+        organisation.save()
+
+    except Organisation.DoesNotExist:
+        return JsonResponse({"error": "Organisation not found"}, status=404)
+
+
 def handle_subscription_updated(event):
     subscription = event["data"]["object"]
 
@@ -74,7 +97,9 @@ def stripe_webhook(request):
         return JsonResponse({"error": "Invalid signature"}, status=400)
 
     # Route events to the appropriate handler
-    if event["type"] == "customer.subscription.updated":
+    if event["type"] == "customer.subscription.created":
+        handle_subscription_created(event)
+    elif event["type"] == "customer.subscription.updated":
         handle_subscription_updated(event)
     elif event["type"] == "customer.subscription.deleted":
         handle_subscription_deleted(event)
