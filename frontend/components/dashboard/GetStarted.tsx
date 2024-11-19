@@ -416,7 +416,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
 
                   {!memberAdded && (
                     <div className="flex gap-4">
-                      <Link href={`/${organisation.name}/members`}>
+                      <Link href={`/${organisation.name}/access/members`}>
                         <Button variant="primary">Go to Members</Button>
                       </Link>
                       <Link
