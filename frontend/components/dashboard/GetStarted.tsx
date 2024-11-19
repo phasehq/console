@@ -124,7 +124,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
   const userCanReadSyncs = userHasPermission(
     organisation?.role?.permissions,
     'Integrations',
-    'read'
+    'read',
+    true
   )
 
   const hasPermissionsForGuide =
@@ -228,6 +229,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
       linkText: 'Join',
     },
   ]
+
+  if (!hasPermissionsForGuide) return <></>
 
   if (!showGuide)
     return (
