@@ -27,7 +27,11 @@ interface SidebarProviderProps {
 }
 
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({ children }) => {
-  const [sidebarState, setSidebarState] = useState<SidebarState>(getInitialState())
+  const [sidebarState, setSidebarState] = useState<SidebarState>('expanded')
+
+  useEffect(() => {
+    setSidebarState(getInitialState())
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('sidebar-state', sidebarState)
