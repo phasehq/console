@@ -163,7 +163,7 @@ const CommandPalette: React.FC = () => {
       name: 'Invite a User',
       description: 'Invite a new user to the organization',
       icon: <FaUserPlus />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/members?invite=true`),
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/members?invite=true`),
     })
 
   const externalResources: CommandItem[] = [

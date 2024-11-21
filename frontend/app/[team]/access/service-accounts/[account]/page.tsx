@@ -301,14 +301,15 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           )}
         </div>
 
-        <div className="space-y-2 py-4">
-          <div>
-            <div className="text-xl font-semibold">Danger Zone</div>
-            <div className="text-neutral-500">
-              These actions are destructive and cannot be reversed
+        {userCanDeleteSA && (
+          <div className="space-y-2 py-4">
+            <div>
+              <div className="text-xl font-semibold">Danger Zone</div>
+              <div className="text-neutral-500">
+                These actions are destructive and cannot be reversed
+              </div>
             </div>
-          </div>
-          {userCanDeleteSA && (
+
             <div className="flex justify-between ring-1 ring-inset ring-red-500/40 bg-red-400/10 rounded-lg space-y-2 p-4">
               <div>
                 <div className="font-medium text-red-400">Delete account</div>
@@ -318,8 +319,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
               </div>
               <DeleteServiceAccountDialog account={account} />
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </section>
   )

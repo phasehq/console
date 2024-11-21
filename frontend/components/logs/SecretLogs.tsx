@@ -286,7 +286,7 @@ export default function SecretLogs(props: { app: string }) {
               {/* <tr > */}
               <td
                 className={clsx(
-                  'px-6 py-4 border-l-4',
+                  'px-6 py-4 border-l',
                   open ? 'border-l-emerald-500 ' : 'border-l-transparent'
                 )}
               >
@@ -334,8 +334,10 @@ export default function SecretLogs(props: { app: string }) {
               <td colSpan={6}>
                 <Disclosure.Panel
                   className={clsx(
-                    'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20',
-                    open ? 'border-b border-l-2 border-l-emerald-500 border-r shadow-xl' : ''
+                    'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
+                    open
+                      ? 'border-b  border-l-emerald-500 border-r shadow-xl'
+                      : 'border-l-transparent'
                   )}
                 >
                   <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-4 text-sm">
