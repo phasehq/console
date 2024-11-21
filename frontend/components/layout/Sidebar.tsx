@@ -13,6 +13,7 @@ import {
   FaProjectDiagram,
   FaAngleDoubleLeft,
   FaAngleDoubleRight,
+  FaChevronDown,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
@@ -37,7 +38,7 @@ const SidebarLink = ({
   collapsed,
 }: SidebarLinkT & { collapsed: boolean }) => {
   return (
-    <Link href={href} title={name}>
+    <Link href={href}>
       <div className="relative group">
         <div
           className={clsx(
@@ -92,10 +93,10 @@ const Sidebar = () => {
         return 'ring-amber-400/10 bg-amber-400 text-zinc-900 dark:bg-amber-400/10 dark:text-amber-400'
     }
 
-    const OrgLabel = () => (
+    const OrgLabel = ({ open }: { open?: boolean }) => (
       <div
         className={clsx(
-          'p-2 text-neutral-500 flex items-center transition-colors ease rounded-lg',
+          'p-2 text-neutral-500 flex items-center transition-colors ease rounded-lg relative',
           collapsed
             ? `justify-center mb-[22px] ${planStyle()}`
             : 'justify-between w-full bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10'
@@ -117,17 +118,33 @@ const Sidebar = () => {
             </span>
           </div>
         )}
+        {showOrgsMenu && !collapsed && (
+          <FaChevronDown
+            className={clsx(
+              'text-neutral-500 opacity-0 group-hover:opacity-100 transition transform ease',
+              open ? 'rotate-180' : 'rotate-0'
+            )}
+          />
+        )}
+        {collapsed && (
+          <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-sm whitespace-nowrap z-50">
+            {activeOrganisation?.name}
+          </div>
+        )}
       </div>
     )
 
     if (!showOrgsMenu) return <OrgLabel />
 
     return (
-      <Menu as="div" className={clsx('relative inline-block text-left', collapsed ? '' : 'w-full')}>
+      <Menu
+        as="div"
+        className={clsx('relative group inline-block text-left', collapsed ? '' : 'w-full')}
+      >
         {({ open }) => (
           <>
-            <Menu.Button className={collapsed ? '' : 'w-full'}>
-              <OrgLabel />
+            <Menu.Button className={collapsed ? '' : 'w-full flex items-center'}>
+              <OrgLabel open={open} />
             </Menu.Button>
             <Transition
               as={Fragment}
@@ -138,7 +155,7 @@ const Sidebar = () => {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute z-10 left-0 shadow-2xl top-16 mt-2 w-64 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+              <Menu.Items className="absolute z-20 left-0 shadow-2xl top-16 mt-2 w-64 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
                 <div className="px-1 py-1">
                   {organisations?.map((org: OrganisationType) => (
                     <Menu.Item key={org.id}>
