@@ -10,8 +10,8 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 PLAN_CONFIG = {
     "FR": {
         "name": "Free",
-        "max_users": 5 if CLOUD_HOSTED else 20,
-        "max_apps": 3 if CLOUD_HOSTED else 20,
+        "max_users": 5 if CLOUD_HOSTED else None,
+        "max_apps": 3 if CLOUD_HOSTED else None,
         "max_envs_per_app": 3,
         "max_tokens_per_app": 3,
     },
@@ -54,46 +54,11 @@ def can_add_app(organisation):
     return current_app_count < plan_limits["max_apps"]
 
 
-def can_add_user(organisation):
-    """Check if a new user can be added to the organisation."""
+def can_add_account(organisation):
+    """Check if a new human or service account can be added to the organisation."""
 
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     OrganisationMemberInvite = apps.get_model("api", "OrganisationMemberInvite")
-    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
-
-    plan_limits = PLAN_CONFIG[organisation.plan]
-    license_exists = ActivatedPhaseLicense.objects.filter(
-        organisation=organisation
-    ).exists()
-
-    current_user_count = (
-        OrganisationMember.objects.filter(
-            organisation=organisation, deleted_at=None
-        ).count()
-        + OrganisationMemberInvite.objects.filter(
-            organisation=organisation, valid=True, expires_at__gte=timezone.now()
-        ).count()
-    )
-
-    if license_exists:
-        license = (
-            ActivatedPhaseLicense.objects.filter(organisation=organisation)
-            .order_by("-activated_at")
-            .first()
-        )
-        user_limit = license.seats
-
-    else:
-        user_limit = plan_limits["max_users"]
-
-    if user_limit is None:
-        return True
-    return current_user_count < user_limit
-
-
-def can_add_service_account(organisation):
-    """Check if a new service account can be added to the organisation."""
-
     ServiceAccount = apps.get_model("api", "ServiceAccount")
     ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
@@ -102,10 +67,21 @@ def can_add_service_account(organisation):
         organisation=organisation
     ).exists()
 
-    current_account_count = ServiceAccount.objects.filter(
+    # Calculate the current count of users and service accounts
+    current_human_user_count = (
+        OrganisationMember.objects.filter(
+            organisation=organisation, deleted_at=None
+        ).count()
+        + OrganisationMemberInvite.objects.filter(
+            organisation=organisation, valid=True, expires_at__gte=timezone.now()
+        ).count()
+    )
+    current_service_account_count = ServiceAccount.objects.filter(
         organisation=organisation, deleted_at=None
     ).count()
+    total_account_count = current_human_user_count + current_service_account_count
 
+    # Determine the user limit
     if license_exists:
         license = (
             ActivatedPhaseLicense.objects.filter(organisation=organisation)
@@ -113,13 +89,15 @@ def can_add_service_account(organisation):
             .first()
         )
         user_limit = license.seats
-
     else:
         user_limit = plan_limits["max_users"]
 
+    # If there's no limit, allow unlimited additions
     if user_limit is None:
         return True
-    return current_account_count < user_limit
+
+    # Check if the total account count is below the limit
+    return total_account_count < user_limit
 
 
 def can_add_environment(app):

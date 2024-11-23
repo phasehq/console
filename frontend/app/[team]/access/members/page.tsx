@@ -316,7 +316,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const upsell =
     isCloudHosted() &&
     activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
-    data?.organisationPlan.userCount === data?.organisationPlan.maxUsers
+    data?.organisationPlan.seatsUsed.total === data?.organisationPlan.maxUsers
 
   const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
 

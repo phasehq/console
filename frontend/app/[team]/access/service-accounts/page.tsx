@@ -2,7 +2,6 @@
 
 import { ServiceAccountType } from '@/apollo/graphql'
 import { EmptyState } from '@/components/common/EmptyState'
-import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { userHasPermission } from '@/utils/access/permissions'

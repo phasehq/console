@@ -1,4 +1,4 @@
-import { OrganisationMemberType, RoleType } from '@/apollo/graphql'
+import { ApiOrganisationPlanChoices, OrganisationMemberType, RoleType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { FaChevronDown, FaPlus } from 'react-icons/fa'
@@ -7,6 +7,7 @@ import { GetServiceAccountHandlers } from '@/graphql/queries/service-accounts/ge
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { GetServerKey } from '@/graphql/queries/syncing/getServerKey.gql'
 import { CreateServiceAccountOp } from '@/graphql/mutations/service-accounts/createServiceAccount.gql'
+import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useMutation, useQuery } from '@apollo/client'
 import {
@@ -22,6 +23,8 @@ import clsx from 'clsx'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
+import { isCloudHosted } from '@/utils/appConfig'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 
 const bip39 = require('bip39')
 
@@ -35,6 +38,12 @@ export const CreateServiceAccountDialog = () => {
 
   const { data: serviceAccountHandlerData } = useQuery(GetServiceAccountHandlers, {
     variables: { orgId: organisation?.id },
+    skip: !organisation,
+  })
+
+  const { data } = useQuery(GetOrganisationPlan, {
+    variables: { organisationId: organisation?.id },
+    fetchPolicy: 'cache-and-network',
     skip: !organisation,
   })
 
@@ -53,6 +62,11 @@ export const CreateServiceAccountDialog = () => {
     setName('')
     setThirdParty(false)
   }
+
+  const upsell =
+    isCloudHosted() &&
+    organisation?.plan === ApiOrganisationPlanChoices.Fr &&
+    data?.organisationPlan.seatsUsed.total === data?.organisationPlan.maxUsers
 
   const roleOptions =
     roleData?.roles.filter(
@@ -138,6 +152,17 @@ export const CreateServiceAccountDialog = () => {
       }, 500)
     })
   }
+
+  if (upsell)
+    return (
+      <UpsellDialog
+        buttonLabel={
+          <>
+            <FaPlus /> Create Service Account
+          </>
+        }
+      />
+    )
 
   return (
     <GenericDialog
