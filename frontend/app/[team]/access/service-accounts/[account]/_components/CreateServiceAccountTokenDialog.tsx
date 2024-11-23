@@ -202,7 +202,7 @@ export const CreateServiceAccountTokenDialog = ({
                     <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
                       <div className="w-full flex items-center justify-between pb-4">
                         <span className="uppercase text-xs tracking-widest text-gray-500">
-                          user token
+                          Service token
                         </span>
                         <div className="flex gap-4 items-center">
                           {cliSAToken && (
