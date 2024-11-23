@@ -155,9 +155,6 @@ export const CreateServiceAccountTokenDialog = ({
               <div className="space-y-1">
                 <div className="font-semibold text-black dark:text-white text-2xl">{name}</div>
                 <div className="text-neutral-500 text-sm">{humanReadableExpiry(expiry)}</div>
-                <div className="text-neutral-500 text-sm">
-                  This token has access to all apps and environments accessible by you.
-                </div>
               </div>
             </div>
 
