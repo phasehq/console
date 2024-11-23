@@ -10,6 +10,7 @@ import { calculatePercentage } from '@/utils/dataUnits'
 import { Button } from '@/components/common/Button'
 import {
   FaCheckCircle,
+  FaChevronDown,
   FaCog,
   FaCube,
   FaCubes,
@@ -28,6 +29,8 @@ import { useSearchParams } from 'next/navigation'
 import { PostCheckoutScreen } from '@/ee/billing/PostCheckoutScreen'
 import { UpsellDialog } from './UpsellDialog'
 import { userHasPermission } from '@/utils/access/permissions'
+import Accordion from '@/components/common/Accordion'
+import clsx from 'clsx'
 
 const plansInfo = {
   FR: {
@@ -47,7 +50,7 @@ const plansInfo = {
       'Community Support',
     ],
     notIncluded: [
-      ...['SAML SSO', 'Priority Support'],
+      ...['Priority Support'],
       ...(isCloudHosted()
         ? [
             '90-day audit log retention',
@@ -75,7 +78,7 @@ const plansInfo = {
       'Priority Support',
     ],
     notIncluded: [
-      ...['SAML SSO', 'Dedicated Support'],
+      ...['Dedicated Support'],
       ...(isCloudHosted()
         ? ['Unlimited audit log retention', 'Unlimited Environments', 'Unlimited Service Tokens']
         : []),
@@ -91,7 +94,7 @@ const plansInfo = {
     tokens: 'Unlimited Service Tokens per app',
     featureSummary: [
       'End-to-end Encryption',
-      'Google/GitHub/Gitlab/SAML SSO',
+      'Google/GitHub/Gitlab SSO',
       'Role-based Access Control',
       'Secret Versioning',
       'Secret Referencing',
@@ -108,7 +111,7 @@ const PlanFeatureItem = (props: {
   iconType: 'check' | 'cross' | 'user' | 'app' | 'env' | 'key'
 }) => {
   return (
-    <div className="flex items-center gap-4 py-2 text-sm">
+    <div className="flex items-center gap-2 py-1 text-xs">
       {props.iconType === 'check' && <FaCheckCircle className={props.iconColor} />}
       {props.iconType === 'cross' && <FaTimesCircle className={props.iconColor} />}
       {props.iconType === 'user' && <FaUser className={props.iconColor} />}
@@ -145,8 +148,18 @@ export const PlanInfo = () => {
 
   const license = (): ActivatedPhaseLicenseType | null => licenseData?.organisationLicense || null
 
+  const seatsUsed = data
+    ? data.organisationPlan.userCount + data.organisationPlan.serviceAccountCount
+    : 0
+
+  const seatLimit = data ? license()?.seats || data.organisationPlan.maxUsers : undefined
+
   const appQuotaUsage = data
     ? calculatePercentage(data.organisationPlan.appCount, data.organisationPlan.maxApps)
+    : 0
+
+  const seatQuotaUsage = data
+    ? calculatePercentage(seatsUsed, license()?.seats || data.organisationPlan.maxUsers)
     : 0
 
   const memberQuotaUsage = data
@@ -236,75 +249,110 @@ export const PlanInfo = () => {
       </div>
 
       <div className="space-y-10 py-4">
-        <div className="text-lg font-medium py-2 border-b border-neutral-500/20">Usage</div>
+        <div className="border-b border-neutral-500/20 pb-2">
+          <div className="text-lg font-medium py-2 ">Usage</div>
+          <div className="text-neutral-500">
+            Details of seat and app quota usage for your Organisation plan
+          </div>
+        </div>
+
+        <Accordion
+          buttonContent={(open) => (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="text-lg font-medium text-black dark:text-white">Seats</div>
+                  <FaChevronDown
+                    className={clsx(
+                      'text-neutral-500 transform transition ease',
+                      open ? 'rotate-180' : 'rotate-0'
+                    )}
+                  />
+                </div>
+                <div className="text-neutral-500">{`${seatsUsed} ${seatLimit ? `of ${seatLimit}` : ''}  Seats used`}</div>
+              </div>
+              {seatLimit && (
+                <ProgressBar
+                  percentage={seatQuotaUsage}
+                  color={progressBarColor(seatsUsed, seatLimit)}
+                  size="md"
+                />
+              )}
+            </div>
+          )}
+        >
+          <div className="space-y-4 py-8 pl-8">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-sm text-black dark:text-white">Members</div>
+                  <Link href={`/${activeOrganisation.name}/access/members`}>
+                    <Button variant="secondary">
+                      <div className="flex items-center gap-1 text-2xs">
+                        <FaCog /> Manage
+                      </div>
+                    </Button>
+                  </Link>
+                </div>
+
+                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.userCount}  Seats used`}</div>
+              </div>
+              {seatLimit && (
+                <ProgressBar
+                  percentage={memberQuotaUsage}
+                  color={progressBarColor(data.organisationPlan.userCount, seatLimit)}
+                  size="sm"
+                />
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-sm text-black dark:text-white">
+                    Service Accounts
+                  </div>
+                  <Link href={`/${activeOrganisation.name}/access/service-accounts`}>
+                    <Button variant="secondary">
+                      <div className="flex items-center gap-1 text-2xs">
+                        <FaCog /> Manage
+                      </div>
+                    </Button>
+                  </Link>
+                </div>
+
+                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.serviceAccountCount} Seats used`}</div>
+              </div>
+              {seatLimit && (
+                <ProgressBar
+                  percentage={serviceAccountQuotaUsage}
+                  color={progressBarColor(data.organisationPlan.serviceAccountCount, seatLimit)}
+                  size="sm"
+                />
+              )}
+            </div>
+          </div>
+        </Accordion>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-lg font-medium text-black dark:text-white">Apps</div>
             <div className="text-neutral-500">{`${data.organisationPlan.appCount} ${data.organisationPlan.maxApps ? `of ${data.organisationPlan.maxApps}` : ''}  Apps used`}</div>
           </div>
-          {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr && (
+          {data.organisationPlan.maxApps && (
             <ProgressBar
               percentage={appQuotaUsage}
               color={progressBarColor(
                 data.organisationPlan.appCount,
                 data.organisationPlan.maxApps
               )}
-              size="sm"
+              size="md"
             />
           )}
           <div className="flex justify-start">
             <Link href={`/${activeOrganisation.name}/apps`}>
               <Button variant="secondary">
                 <FaCubes /> Manage
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="text-lg font-medium text-black dark:text-white">Members</div>
-            <div className="text-neutral-500">{`${data.organisationPlan.userCount} ${license()?.seats || data.organisationPlan.maxUsers ? `of ${license()?.seats || data.organisationPlan.maxUsers}` : ''}  Seats used`}</div>
-          </div>
-          {(activeOrganisation.plan === ApiOrganisationPlanChoices.Fr || license()?.seats) && (
-            <ProgressBar
-              percentage={memberQuotaUsage}
-              color={progressBarColor(
-                data.organisationPlan.userCount,
-                license()?.seats || data.organisationPlan.maxUsers
-              )}
-              size="sm"
-            />
-          )}
-          <div className="flex justify-start">
-            <Link href={`/${activeOrganisation.name}/access/members`}>
-              <Button variant="secondary">
-                <FaUsersCog /> Manage
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="text-lg font-medium text-black dark:text-white">Service Accounts</div>
-            <div className="text-neutral-500">{`${data.organisationPlan.serviceAccountCount} ${license()?.seats || data.organisationPlan.maxUsers ? `of ${license()?.seats || data.organisationPlan.maxUsers}` : ''}  Seats used`}</div>
-          </div>
-          {(activeOrganisation.plan === ApiOrganisationPlanChoices.Fr || license()?.seats) && (
-            <ProgressBar
-              percentage={serviceAccountQuotaUsage}
-              color={progressBarColor(
-                data.organisationPlan.serviceAccountCount,
-                license()?.seats || data.organisationPlan.maxUsers
-              )}
-              size="sm"
-            />
-          )}
-          <div className="flex justify-start">
-            <Link href={`/${activeOrganisation.name}/access/service-accounts`}>
-              <Button variant="secondary">
-                <FaCog /> Manage
               </Button>
             </Link>
           </div>
