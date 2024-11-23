@@ -204,7 +204,7 @@ export const PlanInfo = () => {
           </div>
         </div>
 
-        {planInfo && (
+        {planInfo && isCloudHosted() && (
           <div className="grid grid-cols-2 gap-8">
             <div>
               <PlanFeatureItem iconColor="text-emerald-500" iconType="user">
