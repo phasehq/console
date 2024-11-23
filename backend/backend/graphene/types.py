@@ -39,13 +39,18 @@ from datetime import datetime
 from api.utils.access.roles import default_roles
 
 
+class SeatsUsed(ObjectType):
+    users = graphene.Int()
+    service_accounts = graphene.Int()
+    total = graphene.Int()
+
+
 class OrganisationPlanType(ObjectType):
     name = graphene.String()
     max_users = graphene.Int()
     max_apps = graphene.Int()
     max_envs_per_app = graphene.Int()
-    user_count = graphene.Int()
-    service_account_count = graphene.Int()
+    seats_used = graphene.Field(SeatsUsed)
     app_count = graphene.Int()
 
 
@@ -126,18 +131,23 @@ class OrganisationType(DjangoObjectType):
 
         plan = PLAN_CONFIG[self.plan]
 
-        plan["user_count"] = (
-            OrganisationMember.objects.filter(
+        plan["seats_used"] = {
+            "users": (
+                OrganisationMember.objects.filter(
+                    organisation=self, deleted_at=None
+                ).count()
+                + OrganisationMemberInvite.objects.filter(
+                    organisation=self, valid=True, expires_at__gte=timezone.now()
+                ).count()
+            ),
+            "service_accounts": ServiceAccount.objects.filter(
                 organisation=self, deleted_at=None
-            ).count()
-            + OrganisationMemberInvite.objects.filter(
-                organisation=self, valid=True, expires_at__gte=timezone.now()
-            ).count()
-        )
+            ).count(),
+        }
 
-        plan["service_account_count"] = ServiceAccount.objects.filter(
-            organisation=self, deleted_at=None
-        ).count()
+        plan["seats_used"]["total"] = (
+            plan["seats_used"]["users"] + plan["seats_used"]["service_accounts"]
+        )
 
         plan["app_count"] = App.objects.filter(
             organisation=self, deleted_at=None

@@ -100,9 +100,14 @@ type OrganisationPlanType {
   maxUsers: Int
   maxApps: Int
   maxEnvsPerApp: Int
-  userCount: Int
-  serviceAccountCount: Int
+  seatsUsed: SeatsUsed
   appCount: Int
+}
+
+type SeatsUsed {
+  users: Int
+  serviceAccounts: Int
+  total: Int
 }
 
 type PhaseLicenseType {
