@@ -37,9 +37,8 @@ const plansInfo = {
     id: ApiOrganisationPlanChoices.Fr,
     name: 'Free',
     description: 'Try Phase without any commitments.',
-    seats: isCloudHosted() ? '5 Users' : 'Unlimited Users',
+    seats: isCloudHosted() ? '5 Users / Service Accounts' : 'Unlimited Users',
     apps: isCloudHosted() ? '3 Apps' : 'Unlimited Apps',
-    tokens: isCloudHosted() ? '3 Service Tokens per app' : 'Unlimited Service Tokens per app',
     featureSummary: [
       'End-to-end Encryption',
       'Google/GitHub/Gitlab SSO',
@@ -50,7 +49,6 @@ const plansInfo = {
       'Community Support',
     ],
     notIncluded: [
-      ...['Priority Support'],
       ...(isCloudHosted()
         ? [
             '90-day audit log retention',
@@ -67,7 +65,6 @@ const plansInfo = {
     name: 'Pro',
     seats: 'Unlimited Users',
     apps: 'Unlimited Apps',
-    tokens: isCloudHosted() ? '10 Service Tokens per app' : 'Unlimited Service Tokens per app',
     featureSummary: [
       'End-to-end Encryption',
       'Google/GitHub/Gitlab SSO',
@@ -78,10 +75,7 @@ const plansInfo = {
       'Priority Support',
     ],
     notIncluded: [
-      ...['Dedicated Support'],
-      ...(isCloudHosted()
-        ? ['Unlimited audit log retention', 'Unlimited Environments', 'Unlimited Service Tokens']
-        : []),
+      ...(isCloudHosted() ? ['Unlimited audit log retention', 'Unlimited Environments'] : []),
     ],
   },
   EN: {
@@ -91,7 +85,6 @@ const plansInfo = {
       'Secure existing data in your enterprise workload. Get full onboarding and priority technical support.',
     seats: 'Unlimited Users',
     apps: 'Unlimited Apps',
-    tokens: 'Unlimited Service Tokens per app',
     featureSummary: [
       'End-to-end Encryption',
       'Google/GitHub/Gitlab SSO',
@@ -148,9 +141,7 @@ export const PlanInfo = () => {
 
   const license = (): ActivatedPhaseLicenseType | null => licenseData?.organisationLicense || null
 
-  const seatsUsed = data
-    ? data.organisationPlan.userCount + data.organisationPlan.serviceAccountCount
-    : 0
+  const seatsUsed = data ? data.organisationPlan.seatsUsed.total : 0
 
   const seatLimit = data ? license()?.seats || data.organisationPlan.maxUsers : undefined
 
@@ -164,14 +155,14 @@ export const PlanInfo = () => {
 
   const memberQuotaUsage = data
     ? calculatePercentage(
-        data.organisationPlan.userCount,
+        data.organisationPlan.seatsUsed.users,
         license()?.seats || data.organisationPlan.maxUsers
       )
     : 0
 
   const serviceAccountQuotaUsage = data
     ? calculatePercentage(
-        data.organisationPlan.serviceAccountCount,
+        data.organisationPlan.seatsUsed.serviceAccounts,
         license()?.seats || data.organisationPlan.maxUsers
       )
     : 0
@@ -217,16 +208,12 @@ export const PlanInfo = () => {
           <div className="grid grid-cols-2 gap-8">
             <div>
               <PlanFeatureItem iconColor="text-emerald-500" iconType="user">
-                {license()?.seats ? `${license()?.seats} Users` : planInfo.seats}
+                {license()?.seats ? `${license()?.seats} Users / Service Accounts` : planInfo.seats}
               </PlanFeatureItem>
               <PlanFeatureItem iconColor="text-emerald-500" iconType="app">
                 {planInfo.apps}
               </PlanFeatureItem>
-              <PlanFeatureItem iconColor="text-emerald-500" iconType="key">
-                {license()?.tokens
-                  ? `${license()?.tokens} Service Tokens per App`
-                  : planInfo.tokens}
-              </PlanFeatureItem>
+
               {planInfo.featureSummary.map((feature) => (
                 <PlanFeatureItem key={feature} iconColor="text-emerald-500" iconType="check">
                   {feature}
@@ -295,12 +282,12 @@ export const PlanInfo = () => {
                   </Link>
                 </div>
 
-                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.userCount}  Seats used`}</div>
+                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.seatsUsed.users}  Seats used`}</div>
               </div>
               {seatLimit && (
                 <ProgressBar
                   percentage={memberQuotaUsage}
-                  color={progressBarColor(data.organisationPlan.userCount, seatLimit)}
+                  color={progressBarColor(data.organisationPlan.seatsUsed.users, seatLimit)}
                   size="sm"
                 />
               )}
@@ -321,12 +308,15 @@ export const PlanInfo = () => {
                   </Link>
                 </div>
 
-                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.serviceAccountCount} Seats used`}</div>
+                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.seatsUsed.serviceAccounts} Seats used`}</div>
               </div>
               {seatLimit && (
                 <ProgressBar
                   percentage={serviceAccountQuotaUsage}
-                  color={progressBarColor(data.organisationPlan.serviceAccountCount, seatLimit)}
+                  color={progressBarColor(
+                    data.organisationPlan.seatsUsed.serviceAccounts,
+                    seatLimit
+                  )}
                   size="sm"
                 />
               )}
