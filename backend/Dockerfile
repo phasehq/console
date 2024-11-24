@@ -30,4 +30,4 @@ ENV VIRTUAL_ENV /env
 ENV PATH /env/bin:$PATH
 
 EXPOSE 8000
-CMD ["sh", "-c", "python manage.py migrate && gunicorn --bind :8000 --workers 3 backend.wsgi:application"]
+CMD ["sh", "-c", "python manage.py migrate && gunicorn --bind 0.0.0.0:8000 --bind [::]:8000 --workers 3 backend.wsgi:application"]
