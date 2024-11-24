@@ -4,10 +4,11 @@ import base64
 import jwt
 import os
 from api.serializers import (
+    ServiceAccountTokenSerializer,
     ServiceTokenSerializer,
     UserTokenSerializer,
 )
-from api.models import ServiceToken, UserToken, CustomUser
+from api.models import ServiceAccountToken, ServiceToken, UserToken, CustomUser
 from api.emails import send_login_email
 from api.utils.syncing.auth import store_oauth_token
 from backend.api.notifier import notify_slack
@@ -122,7 +123,7 @@ class CustomGoogleOAuth2Adapter(GoogleOAuth2Adapter):
             raise OAuth2Error("Invalid id_token") from e
         login = self.get_provider().sociallogin_from_response(request, identity_data)
         email = identity_data.get("email")
-        full_name = identity_data.get("name")  # Get the full name from the id_token 
+        full_name = identity_data.get("name")  # Get the full name from the id_token
 
         if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
             try:
@@ -161,13 +162,12 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
         resp.raise_for_status()
         extra_data = resp.json()
         if app_settings.QUERY_EMAIL and not extra_data.get("email"):
-            extra_data["email"] = self.get_email(headers) 
+            extra_data["email"] = self.get_email(headers)
 
         email = extra_data["email"]
 
         if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
-            
-            
+
             try:
                 # Notify Slack
                 notify_slack(f"New user signup: {email}")
@@ -175,7 +175,7 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
                 print(f"Error notifying Slack: {e}")
 
         try:
-            full_name = extra_data.get("name", email.split('@')[0])
+            full_name = extra_data.get("name", email.split("@")[0])
             send_login_email(request, email, full_name, "GitHub")
         except Exception as e:
             print(f"Error sending email: {e}")
@@ -268,9 +268,15 @@ def service_token_kms(request):
 
     token = auth_token.split(" ")[2]
 
-    service_token = ServiceToken.objects.get(token=token)
+    token_type = get_token_type(auth_token)
 
-    serializer = ServiceTokenSerializer(service_token)
+    if token_type == "Service":
+        service_token = ServiceToken.objects.get(token=token)
+        serializer = ServiceTokenSerializer(service_token)
+
+    elif token_type == "ServiceAccount":
+        service_token = ServiceAccountToken.objects.get(token=token)
+        serializer = ServiceAccountTokenSerializer(service_token)
 
     return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -285,7 +291,7 @@ def secrets_tokens(request):
 
     token_type = get_token_type(auth_token)
 
-    if token_type == "Service":
+    if token_type == "Service" or token_type == "ServiceAccount":
         return service_token_kms(request)
     elif token_type == "User":
         return user_token_kms(request)

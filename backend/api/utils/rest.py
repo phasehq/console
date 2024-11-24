@@ -1,6 +1,14 @@
-from api.models import EnvironmentToken, ServiceToken, UserToken
+from api.models import EnvironmentToken, ServiceAccountToken, ServiceToken, UserToken
 from django.utils import timezone
 import base64
+
+# Map HTTP methods to permission actions
+METHOD_TO_ACTION = {
+    "GET": "read",
+    "POST": "create",
+    "PUT": "update",
+    "DELETE": "delete",
+}
 
 
 def get_client_ip(request):
@@ -49,13 +57,30 @@ def get_org_member_from_user_token(auth_token):
         return False
 
 
+def get_service_account_from_token(auth_token):
+    token = auth_token.split(" ")[2]
+
+    if not token:
+        return False
+
+    try:
+        sa_token = ServiceAccountToken.objects.get(token=token)
+        return sa_token.service_account
+    except Exception as ex:
+        return False
+
+
 def get_service_token(auth_token):
     prefix, token_type, token_value = auth_token.split(" ")
 
     if token_type == "User":
         return None
 
-    return ServiceToken.objects.get(token=token_value)
+    elif token_type == "Service":
+        return ServiceToken.objects.get(token=token_value)
+
+    elif token_type == "ServiceAccount":
+        return ServiceAccountToken.objects.get(token=token_value)
 
 
 def token_is_expired_or_deleted(auth_token):
@@ -63,8 +88,10 @@ def token_is_expired_or_deleted(auth_token):
 
     if token_type == "User":
         token = UserToken.objects.get(token=token_value)
-    else:
+    elif token_type == "Service":
         token = ServiceToken.objects.get(token=token_value)
+    elif token_type == "ServiceAccount":
+        token = ServiceAccountToken.objects.get(token=token_value)
 
     return token.deleted_at is not None or (
         token.expires_at is not None and token.expires_at < timezone.now()

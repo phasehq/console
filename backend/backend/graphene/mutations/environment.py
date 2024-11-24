@@ -6,11 +6,11 @@ from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
     user_has_permission,
-    user_is_admin,
     user_is_org_member,
 )
 from api.utils.audit_logging import log_secret_event
 from api.utils.secrets import normalize_path_string
+
 from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
 from graphql import GraphQLError
@@ -28,6 +28,7 @@ from api.models import (
     SecretFolder,
     SecretTag,
     ServerEnvironmentKey,
+    ServiceAccount,
     UserToken,
     ServiceToken,
 )
@@ -36,6 +37,7 @@ from backend.graphene.types import (
     EnvironmentKeyType,
     EnvironmentTokenType,
     EnvironmentType,
+    MemberType,
     PersonalSecretType,
     SecretFolderType,
     SecretTagType,
@@ -342,42 +344,66 @@ class CreateEnvironmentKeyMutation(graphene.Mutation):
 class UpdateMemberEnvScopeMutation(graphene.Mutation):
     class Arguments:
         member_id = graphene.ID()
+        member_type = MemberType(required=False)
         app_id = graphene.ID()
         env_keys = graphene.List(EnvironmentKeyInput)
 
     app = graphene.Field(AppType)
 
     @classmethod
-    def mutate(cls, root, info, member_id, app_id, env_keys):
+    def mutate(
+        cls, root, info, member_id, app_id, env_keys, member_type=MemberType.USER
+    ):
         user = info.context.user
         app = App.objects.get(id=app_id)
 
+        if member_type == MemberType.USER:
+            permission_key = "Members"
+        else:
+            permission_key = "ServiceAccounts"
+
         if not user_has_permission(
-            info.context.user, "update", "Members", app.organisation, True
+            info.context.user, "update", permission_key, app.organisation, True
         ):
             raise GraphQLError("You don't have permission to update App member access")
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
-        if org_member not in app.members.all():
-            raise GraphQLError("This user does not have access to this app")
-        else:
-            # delete all existing keys
-            EnvironmentKey.objects.filter(
-                environment__app=app, user_id=member_id
-            ).delete()
+        key_to_delete_filter = {
+            "environment__app": app,
+        }
 
-            # set new keys
-            for key in env_keys:
-                EnvironmentKey.objects.create(
-                    environment_id=key.env_id,
-                    user_id=key.user_id,
-                    wrapped_seed=key.wrapped_seed,
-                    wrapped_salt=key.wrapped_salt,
-                    identity_key=key.identity_key,
+        if member_type == MemberType.USER:
+            app_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
+            key_to_delete_filter["user_id"] = member_id
+            if app_member not in app.members.all():
+                raise GraphQLError("This user does not have access to this app")
+
+        elif member_type == MemberType.SERVICE:
+            app_member = ServiceAccount.objects.get(id=member_id)
+            key_to_delete_filter["service_account_id"] = member_id
+            if app_member not in app.service_accounts.all():
+                raise GraphQLError(
+                    "This service account does not have access to this app"
                 )
+
+        # delete all existing keys for this member
+        EnvironmentKey.objects.filter(**key_to_delete_filter).delete()
+
+        # set new keys
+        for key in env_keys:
+
+            EnvironmentKey.objects.create(
+                environment_id=key.env_id,
+                user_id=key.user_id if member_type == MemberType.USER else None,
+                service_account_id=(
+                    key.user_id if member_type == MemberType.SERVICE else None
+                ),
+                wrapped_seed=key.wrapped_seed,
+                wrapped_salt=key.wrapped_salt,
+                identity_key=key.identity_key,
+            )
 
         return UpdateMemberEnvScopeMutation(app=app)
 
@@ -729,7 +755,7 @@ class CreateSecretMutation(graphene.Mutation):
         )
 
         log_secret_event(
-            secret, SecretEvent.CREATE, org_member, None, ip_address, user_agent
+            secret, SecretEvent.CREATE, org_member, None, None, ip_address, user_agent
         )
 
         return CreateSecretMutation(secret=secret)
@@ -793,7 +819,13 @@ class BulkCreateSecretMutation(graphene.Mutation):
                 user=info.context.user, organisation=org, deleted_at=None
             )
             log_secret_event(
-                secret, SecretEvent.CREATE, org_member, None, ip_address, user_agent
+                secret,
+                SecretEvent.CREATE,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
             )
 
         return BulkCreateSecretMutation(secrets=created_secrets)
@@ -848,7 +880,7 @@ class EditSecretMutation(graphene.Mutation):
         )
 
         log_secret_event(
-            secret, SecretEvent.UPDATE, org_member, None, ip_address, user_agent
+            secret, SecretEvent.UPDATE, org_member, None, None, ip_address, user_agent
         )
 
         return EditSecretMutation(secret=secret)
@@ -906,7 +938,13 @@ class BulkEditSecretMutation(graphene.Mutation):
                 user=info.context.user, organisation=org, deleted_at=None
             )
             log_secret_event(
-                secret, SecretEvent.UPDATE, org_member, None, ip_address, user_agent
+                secret,
+                SecretEvent.UPDATE,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
             )
 
         return BulkEditSecretMutation(secrets=updated_secrets)
@@ -940,7 +978,7 @@ class DeleteSecretMutation(graphene.Mutation):
         )
 
         log_secret_event(
-            secret, SecretEvent.DELETE, org_member, None, ip_address, user_agent
+            secret, SecretEvent.DELETE, org_member, None, None, ip_address, user_agent
         )
 
         return DeleteSecretMutation(secret=secret)
@@ -978,7 +1016,13 @@ class BulkDeleteSecretMutation(graphene.Mutation):
                 user=info.context.user, organisation=org, deleted_at=None
             )
             log_secret_event(
-                secret, SecretEvent.DELETE, org_member, None, ip_address, user_agent
+                secret,
+                SecretEvent.DELETE,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
             )
 
         return BulkDeleteSecretMutation(secrets=deleted_secrets)
@@ -1006,7 +1050,13 @@ class ReadSecretMutation(graphene.Mutation):
                 )
 
                 log_secret_event(
-                    secret, SecretEvent.READ, org_member, None, ip_address, user_agent
+                    secret,
+                    SecretEvent.READ,
+                    org_member,
+                    None,
+                    None,
+                    ip_address,
+                    user_agent,
                 )
         return ReadSecretMutation(ok=True)
 

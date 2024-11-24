@@ -11,6 +11,10 @@ query GetApps($organisationId: ID!, $appId: ID) {
       fullName
       avatarUrl
     }
+    serviceAccounts {
+      id
+      name
+    }
     environments {
       id
       name

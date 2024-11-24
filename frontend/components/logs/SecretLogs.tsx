@@ -9,7 +9,14 @@ import {
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaBan, FaChevronRight, FaExternalLinkAlt, FaKey } from 'react-icons/fa'
+import {
+  FaArrowRight,
+  FaBan,
+  FaChevronRight,
+  FaExternalLinkAlt,
+  FaKey,
+  FaRobot,
+} from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
@@ -237,6 +244,32 @@ export default function SecretLogs(props: { app: string }) {
       if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted secret'
     }
 
+    const logCreatedBy = (log: SecretEventType) => {
+      if (log.user)
+        return (
+          <div className="flex items-center gap-1 text-sm">
+            <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
+            {log.user.fullName || log.user.email}
+          </div>
+        )
+      else if (log.serviceToken)
+        return (
+          <div className="flex items-center gap-1 text-sm">
+            <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
+          </div>
+        )
+      else if (log.serviceAccount)
+        return (
+          <div className="flex items-center gap-1 text-sm">
+            <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-6">
+              <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
+            </div>{' '}
+            {log.serviceAccount.name}
+            {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
+          </div>
+        )
+    }
+
     return (
       <Disclosure>
         {({ open }) => (
@@ -253,7 +286,7 @@ export default function SecretLogs(props: { app: string }) {
               {/* <tr > */}
               <td
                 className={clsx(
-                  'px-6 py-4 border-l-4',
+                  'px-6 py-4 border-l',
                   open ? 'border-l-emerald-500 ' : 'border-l-transparent'
                 )}
               >
@@ -266,16 +299,7 @@ export default function SecretLogs(props: { app: string }) {
               </td>
               <td className="whitespace-nowrap px-6 py-4">
                 <div className="text-sm flex items-center gap-2 text-neutral-500">
-                  {log.user ? (
-                    <div className="flex items-center gap-1 text-sm">
-                      <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
-                      {log.user.fullName || log.user.email}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-sm">
-                      <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
-                    </div>
-                  )}
+                  {logCreatedBy(log)}
                 </div>
               </td>
               <td className="whitespace-nowrap px-6 py-4">
@@ -310,8 +334,10 @@ export default function SecretLogs(props: { app: string }) {
               <td colSpan={6}>
                 <Disclosure.Panel
                   className={clsx(
-                    'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20',
-                    open ? 'border-b border-l-2 border-l-emerald-500 border-r shadow-xl' : ''
+                    'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
+                    open
+                      ? 'border-b  border-l-emerald-500 border-r shadow-xl'
+                      : 'border-l-transparent'
                   )}
                 >
                   <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-4 text-sm">
@@ -334,17 +360,19 @@ export default function SecretLogs(props: { app: string }) {
                     </LogField>
 
                     <LogField label="Created by">
-                      {' '}
-                      {log.user ? (
-                        <div className="flex items-center gap-1 text-sm">
-                          <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
-                          {log.user.fullName || log.user.email}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-sm">
-                          <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {logCreatedBy(log)}{' '}
+                        {log.serviceAccount && (
+                          <Link
+                            href={`/${organisation!.name}/access/service-accounts/${log.serviceAccount.id}`}
+                            className="font-sans"
+                          >
+                            <Button variant="outline">
+                              Manage account <FaArrowRight />
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
                     </LogField>
 
                     <LogField label="IP address"> {log.ipAddress}</LogField>
@@ -426,7 +454,7 @@ export default function SecretLogs(props: { app: string }) {
             <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-10  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-neutral-500">
                 <th></th>
-                <th className="px-6 py-4">User</th>
+                <th className="px-6 py-4">Account</th>
                 <th className="px-6 py-4">Event</th>
                 <th className="px-6 py-4">Environment</th>
                 <th className="px-6 py-4">Secret</th>

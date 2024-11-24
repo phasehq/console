@@ -131,9 +131,9 @@ export default function AppSettings({ params }: { params: { team: string; app: s
             <h2 className="text-2xl font-semibold text-black dark:text-white">Danger Zone</h2>
             <p className="text-neutral-500">These actions may result in permanent loss of data</p>
           </div>
-          <div className="flex items-center justify-between p-3 rounded-lg ring-1 ring-inset ring-red-200 dark:ring-red-400/10">
+          <div className="flex items-center justify-between p-3 rounded-lg ring-1 ring-inset ring-red-500/40 bg-red-400/10 ">
             <div>
-              <h3 className="text-red-500 dark:text-red-800 font-semibold">Delete App</h3>
+              <h3 className="text-red-400 font-semibold">Delete App</h3>
               <p className="text-neutral-500">Permanently delete this App</p>
             </div>
 

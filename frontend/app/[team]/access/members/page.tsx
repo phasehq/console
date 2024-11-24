@@ -40,20 +40,21 @@ import clsx from 'clsx'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
-import { userHasGlobalAccess, userIsAdmin } from '@/utils/access/permissions'
+import { PermissionPolicy, userHasGlobalAccess, userIsAdmin } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 
 import { Alert } from '@/components/common/Alert'
 import { Input } from '@/components/common/Input'
 import CopyButton from '@/components/common/CopyButton'
-import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForUser } from '@/utils/crypto'
+import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
+import { updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -97,24 +98,28 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
 
   /**
    * Handles the assignment of a user to a global access role.
-   * Env keys for all apps, are fetched and decrypted by the active user, then each key is re-encrypted for the new user and saved on the backend via the addMemberToApp mutation
+   * Env keys for all apps are fetched and decrypted by the active user,
+   * then each key is re-encrypted for the new user and saved on the backend via the addMemberToApp mutation.
    *
-   * @returns {void}
+   * @returns {Promise<void>}
    */
-  const assignGlobalAccess = () => {
-    if (appsData) {
-      const apps = appsData.apps
+  const assignGlobalAccess = async (): Promise<void> => {
+    if (!appsData) {
+      return Promise.reject(new Error('No apps data available'))
+    }
 
-      // Function to process an individual app
-      const processApp = async (app: AppType) => {
-        // fetch envs for the app
+    const apps = appsData.apps
+
+    // Function to process an individual app
+    const processApp = async (app: AppType) => {
+      try {
+        // Fetch envs for the app
         const { data: appEnvsData } = await getAppEnvs({ variables: { appId: app.id } })
-
         const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
-        // construct promises to encrypt each env key for the target user
+        // Construct promises to encrypt each env key for the target user
         const envKeyPromises = appEnvironments.map(async (env: EnvironmentType) => {
-          // fetch the current wrapped key for the environment
+          // Fetch the current wrapped key for the environment
           const { data } = await getEnvKey({
             variables: {
               envId: env.id,
@@ -128,17 +133,20 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
             identityKey,
           } = data.environmentKeys[0]
 
-          // unwrap env keys for current logged in user
+          // Unwrap env keys for current logged in user
           const { seed, salt } = await unwrapEnvSecretsForUser(
             userWrappedSeed,
             userWrappedSalt,
             keyring!
           )
 
-          // re-encrypt the env key for the target user
-          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForUser({ seed, salt }, member)
+          // Re-encrypt the env key for the target user
+          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(
+            { seed, salt },
+            member
+          )
 
-          // resolve the promise with the mutation payload
+          // Return the mutation payload
           return {
             envId: env.id,
             userId: member.id,
@@ -148,46 +156,52 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
           }
         })
 
-        // get mutation payloads with wrapped keys for each environment
+        // Get mutation payloads with wrapped keys for each environment
         const envKeyInputs = await Promise.all(envKeyPromises)
 
-        // add the user to this app, with wrapped keys for each environment
+        // Add the user to this app, with wrapped keys for each environment
         await addMemberToApp({
           variables: { memberId: member.id, appId: app.id, envKeys: envKeyInputs },
         })
+      } catch (error) {
+        console.error(`Error processing app ${app.id}:`, error)
+        throw error // Propagate the error to be caught later
+      }
+    }
+
+    try {
+      // Process each app sequentially using for...of to ensure async operations complete in order
+      for (const app of apps) {
+        await processApp(app)
       }
 
-      // Process each app sequentially
-      const processAppsSequentially = async () => {
-        for (const app of apps) {
-          await processApp(app)
-        }
-      }
+      // After all apps have been processed, assign the global admin role
+      const adminRole = roleOptions.find(
+        (option: RoleType) => option.name?.toLowerCase() === 'admin'
+      )
 
-      // Call the function to process all apps sequentially
-      processAppsSequentially()
-        .then(async () => {
-          // All apps have been processed
-          const adminRole = roleOptions.find(
-            (option: RoleType) => option.name?.toLowerCase() === 'admin'
-          )
-          await updateRole({
-            variables: {
-              memberId: member.id,
-              roleId: adminRole.id,
-            },
-          })
-          toast.success('Updated member role', { autoClose: 2000 })
+      if (adminRole) {
+        await updateRole({
+          variables: {
+            memberId: member.id,
+            roleId: adminRole.id,
+          },
         })
-        .catch((error) => {
-          console.error('Error processing apps:', error)
-        })
+      } else {
+        throw new Error('Admin role not found')
+      }
+    } catch (error) {
+      console.error('Error assigning global access:', error)
+      throw error // Ensure the promise rejects if any error occurs
     }
   }
 
   const handleUpdateRole = async (newRole: RoleType) => {
     const newRoleHasGlobalAccess = userHasGlobalAccess(newRole.permissions)
     const currentUserHasGlobalAccess = userHasGlobalAccess(organisation?.role?.permissions)
+
+    const newRolePolicy: PermissionPolicy = JSON.parse(newRole.permissions)
+    const newRoleHasServiceAccountAccess = newRolePolicy.permissions['ServiceAccounts'].length > 0
 
     if (newRoleHasGlobalAccess && !currentUserHasGlobalAccess) {
       toast.error('You cannot assign users to this role as it requires global access!', {
@@ -206,16 +220,31 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
 
     setRole(newRole)
 
-    if (newRoleHasGlobalAccess) assignGlobalAccess()
-    else {
-      await updateRole({
-        variables: {
-          memberId: member.id,
-          roleId: newRole.id,
-        },
+    const processUpdate = async () => {
+      return new Promise(async (resolve, reject) => {
+        try {
+          if (newRoleHasGlobalAccess) await assignGlobalAccess()
+          else {
+            await updateRole({
+              variables: {
+                memberId: member.id,
+                roleId: newRole.id,
+              },
+            })
+          }
+          //if (newRoleHasServiceAccountAccess)
+          await updateServiceAccountHandlers(organisation!.id, keyring!)
+          resolve(true)
+        } catch (error) {
+          reject(error)
+        }
       })
-      toast.success('Updated member role', { autoClose: 2000 })
     }
+    await toast.promise(processUpdate, {
+      pending: 'Updating role...',
+      success: 'Updated role!',
+      error: 'Something went wrong!',
+    })
   }
 
   const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner') || []
@@ -287,7 +316,7 @@ const InviteDialog = (props: { organisationId: string }) => {
   const upsell =
     isCloudHosted() &&
     activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
-    data?.organisationPlan.userCount === data?.organisationPlan.maxUsers
+    data?.organisationPlan.seatsUsed.total === data?.organisationPlan.maxUsers
 
   const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
 

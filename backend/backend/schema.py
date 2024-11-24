@@ -3,6 +3,15 @@ from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
+from backend.graphene.mutations.service_accounts import (
+    CreateServiceAccountMutation,
+    CreateServiceAccountTokenMutation,
+    DeleteServiceAccountMutation,
+    DeleteServiceAccountTokenMutation,
+    EnableServiceAccountThirdPartyAuthMutation,
+    UpdateServiceAccountHandlersMutation,
+    UpdateServiceAccountMutation,
+)
 from api.utils.syncing.vercel.main import VercelProjectType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
@@ -36,7 +45,15 @@ from .graphene.queries.syncing import (
     resolve_test_nomad_creds,
     resolve_railway_projects,
 )
-from .graphene.queries.access import resolve_roles
+from .graphene.queries.access import (
+    resolve_roles,
+    resolve_organisation_global_access_users,
+)
+from .graphene.queries.service_accounts import (
+    resolve_service_accounts,
+    resolve_service_account_handlers,
+    resolve_app_service_accounts,
+)
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.mutations.environment import (
@@ -91,6 +108,7 @@ from .graphene.mutations.app import (
     AddAppMemberMutation,
     CreateAppMutation,
     DeleteAppMutation,
+    MemberType,
     RemoveAppMemberMutation,
     RotateAppKeysMutation,
 )
@@ -124,6 +142,8 @@ from .graphene.types import (
     SecretFolderType,
     SecretTagType,
     SecretType,
+    ServiceAccountHandlerType,
+    ServiceAccountType,
     ServiceTokenType,
     ServiceType,
     TimeRange,
@@ -144,6 +164,7 @@ from api.models import (
     SecretEvent,
     SecretFolder,
     SecretTag,
+    ServiceAccount,
     ServiceToken,
     UserToken,
 )
@@ -151,9 +172,7 @@ from logs.queries import get_app_log_count, get_app_log_count_range, get_app_log
 from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
-from itertools import chain
 from django.utils import timezone
-from django.db.models import Q
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -215,8 +234,12 @@ class Query(graphene.ObjectType):
         app_id=graphene.ID(),
         environment_id=graphene.ID(required=False),
         member_id=graphene.ID(required=False),
+        member_type=MemberType(),
     )
     app_users = graphene.List(OrganisationMemberType, app_id=graphene.ID())
+
+    app_service_accounts = graphene.List(ServiceAccountType, app_id=graphene.ID())
+
     secrets = graphene.List(
         SecretType, env_id=graphene.ID(), path=graphene.String(required=False)
     )
@@ -236,6 +259,16 @@ class Query(graphene.ObjectType):
     )
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
     service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
+
+    service_accounts = graphene.List(
+        ServiceAccountType,
+        org_id=graphene.ID(),
+        service_account_id=graphene.ID(required=False),
+    )
+
+    service_account_handlers = graphene.List(
+        OrganisationMemberType, org_id=graphene.ID()
+    )
 
     server_public_key = graphene.String()
 
@@ -349,31 +382,7 @@ class Query(graphene.ObjectType):
 
         return OrganisationMember.objects.filter(**filter)
 
-    def resolve_organisation_global_access_users(root, info, organisation_id):
-        if not user_is_org_member(info.context.user.userId, organisation_id):
-            raise GraphQLError("You don't have access to this organisation")
-
-        global_access_roles = Role.objects.filter(
-            Q(organisation_id=organisation_id)
-            & (Q(name__iexact="owner") | Q(name__iexact="admin"))
-            | Q(permissions__global_access=True)
-        )
-
-        members = OrganisationMember.objects.filter(
-            organisation_id=organisation_id,
-            role__in=global_access_roles,
-            deleted_at=None,
-        )
-
-        if not info.context.user.userId in [member.user_id for member in members]:
-            self_member = OrganisationMember.objects.filter(
-                organisation_id=organisation_id,
-                user_id=info.context.user.userId,
-                deleted_at=None,
-            )
-            members = list(chain(members, self_member))
-
-        return members
+    resolve_organisation_global_access_users = resolve_organisation_global_access_users
 
     def resolve_organisation_invites(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
@@ -421,7 +430,9 @@ class Query(graphene.ObjectType):
             filter["id"] = app_id
         return App.objects.filter(**filter)
 
-    def resolve_app_environments(root, info, app_id, environment_id, member_id=None):
+    def resolve_app_environments(
+        root, info, app_id, environment_id, member_id=None, member_type=MemberType.USER
+    ):
 
         app = App.objects.get(id=app_id)
 
@@ -434,7 +445,10 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have access to this app")
 
         if member_id is not None:
-            org_member = OrganisationMember.objects.get(id=member_id)
+            if member_type == MemberType.USER:
+                org_member = OrganisationMember.objects.get(id=member_id)
+            else:
+                org_member = ServiceAccount.objects.get(id=member_id)
         else:
             org_member = OrganisationMember.objects.get(
                 organisation=app.organisation,
@@ -449,13 +463,23 @@ class Query(graphene.ObjectType):
 
         app_environments = Environment.objects.filter(**filter).order_by("index")
 
-        return [
-            app_env
-            for app_env in app_environments
-            if EnvironmentKey.objects.filter(
-                user=org_member, environment_id=app_env.id
-            ).exists()
-        ]
+        if member_type == MemberType.USER:
+            return [
+                app_env
+                for app_env in app_environments
+                if EnvironmentKey.objects.filter(
+                    user=org_member, environment_id=app_env.id
+                ).exists()
+            ]
+
+        else:
+            return [
+                app_env
+                for app_env in app_environments
+                if EnvironmentKey.objects.filter(
+                    service_account=org_member, environment_id=app_env.id
+                ).exists()
+            ]
 
     def resolve_app_users(root, info, app_id):
         app = App.objects.get(id=app_id)
@@ -469,6 +493,8 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have access to this app")
 
         return app.members.filter(deleted_at=None)
+
+    resolve_app_service_accounts = resolve_app_service_accounts
 
     def resolve_secrets(root, info, env_id, path=None):
 
@@ -571,6 +597,9 @@ class Query(graphene.ObjectType):
             raise GraphQLError("You don't have permission to view Tokens in this App")
 
         return ServiceToken.objects.filter(app=app, deleted_at=None)
+
+    resolve_service_accounts = resolve_service_accounts
+    resolve_service_account_handlers = resolve_service_account_handlers
 
     def resolve_logs(root, info, app_id, start=0, end=0):
         if not user_can_access_app(info.context.user.userId, app_id):
@@ -775,6 +804,17 @@ class Mutation(graphene.ObjectType):
     create_custom_role = CreateCustomRoleMutation.Field()
     update_custom_role = UpdateCustomRoleMutation.Field()
     delete_custom_role = DeleteCustomRoleMutation.Field()
+
+    # Service Accounts
+    create_service_account = CreateServiceAccountMutation.Field()
+    enable_service_account_third_party_auth = (
+        EnableServiceAccountThirdPartyAuthMutation.Field()
+    )
+    update_service_account_handlers = UpdateServiceAccountHandlersMutation.Field()
+    update_service_account = UpdateServiceAccountMutation.Field()
+    delete_service_account = DeleteServiceAccountMutation.Field()
+    create_service_account_token = CreateServiceAccountTokenMutation.Field()
+    delete_service_account_token = DeleteServiceAccountTokenMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
     delete_env_sync = DeleteSync.Field()

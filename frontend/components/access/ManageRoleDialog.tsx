@@ -26,9 +26,13 @@ import { Textarea } from '../common/TextArea'
 import { PermissionToggle } from './PermissionToggle'
 import { AccessTemplateSelector } from './AccessTemplateSelector'
 import { ColorPicker } from '../common/ColorPicker'
+import { updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
+import { KeyringContext } from '@/contexts/keyringContext'
+import { arraysEqual } from '@/utils/crypto'
 
 export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRole: RoleType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const { keyring } = useContext(KeyringContext)
 
   const ownerRolePolicy = parsePermissions(ownerRole.permissions)
 
@@ -86,7 +90,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
     })
   }
 
-  const handleUpdateRole = async (e: { preventDefault: () => void }) => {
+  const handleFormSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
     if (!stringContainsCharacters(name)) {
@@ -94,22 +98,40 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
       return false
     }
 
-    const updated = await updateRole({
-      variables: {
-        id: role.id,
-        name,
-        description,
-        color,
-        permissions: JSON.stringify(rolePolicy),
-      },
-      refetchQueries: [{ query: GetRoles, variables: { orgId: organisation!.id } }],
+    toast.promise(handleUpdateRole, {
+      pending: 'Updating role...',
+      success: 'Updated role!',
+      error: 'Something went wrong!',
     })
+  }
 
-    if (updated.data.updateCustomRole.role.id) {
-      if (dialogRef.current) dialogRef.current.closeModal()
+  const handleUpdateRole = () => {
+    return new Promise(async (resolve, reject) => {
+      const existingRolePolicy: PermissionPolicy = JSON.parse(role.permissions)
+      const mustUpdateServiceAccountHandlers = !arraysEqual(
+        rolePolicy!.permissions!['ServiceAccounts'],
+        existingRolePolicy.permissions['ServiceAccounts']
+      )
 
-      toast.success('Updated role!')
-    }
+      const updated = await updateRole({
+        variables: {
+          id: role.id,
+          name,
+          description,
+          color,
+          permissions: JSON.stringify(rolePolicy),
+        },
+        refetchQueries: [{ query: GetRoles, variables: { orgId: organisation!.id } }],
+      })
+
+      if (mustUpdateServiceAccountHandlers)
+        await updateServiceAccountHandlers(organisation!.id, keyring!)
+
+      if (updated.data.updateCustomRole.role.id) {
+        resolve(true)
+        if (dialogRef.current) dialogRef.current.closeModal()
+      } else reject
+    })
   }
 
   return (
@@ -124,7 +146,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
       size="lg"
       ref={dialogRef}
     >
-      <form onSubmit={handleUpdateRole}>
+      <form onSubmit={handleFormSubmit}>
         <div className="divide-y divide-neutral-500/40 max-h-[85vh] overflow-y-auto">
           {role.isDefault && (
             <div className="py-3">
@@ -347,7 +369,8 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                             ([resource, actions]) => (
                               <tr key={resource}>
                                 <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
-                                  {camelCaseToSpaces(resource)}
+                                  {camelCaseToSpaces(resource)}{' '}
+                                  {resource === 'Tokens' && '(Legacy)'}
                                 </td>
                                 <td>
                                   <AccessTemplateSelector

@@ -10,7 +10,11 @@ query GetOrganisations {
       maxUsers
       maxApps
       maxEnvsPerApp
-      userCount
+      seatsUsed {
+        users
+        serviceAccounts
+        total
+      }
       appCount
     }
     role {

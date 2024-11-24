@@ -12,10 +12,10 @@ from django.conf import settings
 from api.services import Providers, ServiceConfig
 from api.tasks import trigger_sync_tasks
 from backend.quotas import (
+    can_add_account,
     can_add_app,
     can_add_environment,
     can_add_service_token,
-    can_add_user,
 )
 
 
@@ -215,10 +215,52 @@ class OrganisationMember(models.Model):
         self.save()
 
 
+class ServiceAccountManager(models.Manager):
+    def create(self, *args, **kwargs):
+        organisation = kwargs.get("organisation")
+        if not can_add_account(organisation):
+            raise ValueError("Cannot add more accounts to this organisation's plan.")
+        return super().create(*args, **kwargs)
+
+
+class ServiceAccount(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.CharField(max_length=255)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="service_accounts"
+    )
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    apps = models.ManyToManyField(App, related_name="service_accounts")
+    identity_key = models.CharField(max_length=256, null=True, blank=True)
+    server_wrapped_keyring = models.TextField(null=True)
+    server_wrapped_recovery = models.TextField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    objects = ServiceAccountManager()
+
+
+class ServiceAccountHandler(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True)
+    service_account = models.ForeignKey(
+        ServiceAccount, on_delete=models.CASCADE, related_name="handlers"
+    )
+    user = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE)
+    wrapped_keyring = models.TextField()
+    wrapped_recovery = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class OrganisationMemberInviteManager(models.Manager):
     def create(self, *args, **kwargs):
         organisation = kwargs.get("organisation")
-        if not can_add_user(organisation):
+        if not can_add_account(organisation):
             raise ValueError("Cannot add more users to this organisation's plan.")
         return super().create(*args, **kwargs)
 
@@ -299,6 +341,10 @@ class EnvironmentKey(models.Model):
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
     )
+    service_account = models.ForeignKey(
+        ServiceAccount, on_delete=models.CASCADE, blank=True, null=True
+    )
+    paths = models.TextField(blank=True, null=True)
     identity_key = models.CharField(max_length=256)
     wrapped_seed = models.CharField(max_length=256)
     wrapped_salt = models.CharField(max_length=256)
@@ -429,6 +475,22 @@ class ServiceToken(models.Model):
     objects = ServiceTokenManager()
 
 
+class ServiceAccountToken(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    service_account = models.ForeignKey(ServiceAccount, on_delete=models.CASCADE)
+    name = models.CharField(max_length=64)
+    identity_key = models.CharField(max_length=256)
+    token = models.CharField(max_length=64)
+    wrapped_key_share = models.CharField(max_length=406)
+    created_by = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+    expires_at = models.DateTimeField(null=True)
+
+
 class UserToken(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     user = models.ForeignKey(
@@ -516,6 +578,12 @@ class SecretEvent(models.Model):
     )
     service_token = models.ForeignKey(
         ServiceToken, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    service_account = models.ForeignKey(
+        ServiceAccount, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    service_account_token = models.ForeignKey(
+        ServiceAccountToken, on_delete=models.SET_NULL, blank=True, null=True
     )
     key = models.TextField()
     key_digest = models.TextField()

@@ -27,13 +27,22 @@ from api.models import (
     SecretFolder,
     SecretTag,
     ServerEnvironmentKey,
+    ServiceAccount,
+    ServiceAccountHandler,
+    ServiceAccountToken,
     ServiceToken,
     UserToken,
 )
 from logs.dynamodb_models import KMSLog
-from allauth.socialaccount.models import SocialAccount
 from django.utils import timezone
+from datetime import datetime
 from api.utils.access.roles import default_roles
+
+
+class SeatsUsed(ObjectType):
+    users = graphene.Int()
+    service_accounts = graphene.Int()
+    total = graphene.Int()
 
 
 class OrganisationPlanType(ObjectType):
@@ -41,7 +50,7 @@ class OrganisationPlanType(ObjectType):
     max_users = graphene.Int()
     max_apps = graphene.Int()
     max_envs_per_app = graphene.Int()
-    user_count = graphene.Int()
+    seats_used = graphene.Field(SeatsUsed)
     app_count = graphene.Int()
 
 
@@ -122,13 +131,22 @@ class OrganisationType(DjangoObjectType):
 
         plan = PLAN_CONFIG[self.plan]
 
-        plan["user_count"] = (
-            OrganisationMember.objects.filter(
+        plan["seats_used"] = {
+            "users": (
+                OrganisationMember.objects.filter(
+                    organisation=self, deleted_at=None
+                ).count()
+                + OrganisationMemberInvite.objects.filter(
+                    organisation=self, valid=True, expires_at__gte=timezone.now()
+                ).count()
+            ),
+            "service_accounts": ServiceAccount.objects.filter(
                 organisation=self, deleted_at=None
-            ).count()
-            + OrganisationMemberInvite.objects.filter(
-                organisation=self, valid=True, expires_at__gte=timezone.now()
-            ).count()
+            ).count(),
+        }
+
+        plan["seats_used"]["total"] = (
+            plan["seats_used"]["users"] + plan["seats_used"]["service_accounts"]
         )
 
         plan["app_count"] = App.objects.filter(
@@ -199,6 +217,35 @@ class OrganisationMemberInviteType(DjangoObjectType):
             "updated_at",
             "expires_at",
         )
+
+
+class ServiceAccountHandlerType(DjangoObjectType):
+    class Meta:
+        model = ServiceAccountHandler
+        fields = "__all__"
+
+
+class ServiceAccountTokenType(DjangoObjectType):
+
+    last_used = graphene.DateTime()
+
+    class Meta:
+        model = ServiceAccountToken
+        fields = "__all__"
+
+    def resolve_last_used(self, info):
+        event = (
+            SecretEvent.objects.filter(service_account_token=self)
+            .order_by("timestamp")
+            .last()
+        )
+        if event:
+            return event.timestamp
+
+
+class MemberType(graphene.Enum):
+    USER = "user"
+    SERVICE = "service"
 
 
 class ProviderType(graphene.ObjectType):
@@ -332,9 +379,14 @@ class AppType(DjangoObjectType):
             "app_seed",
             "app_version",
             "sse_enabled",
+            "service_accounts",
         )
 
     def resolve_environments(self, info):
+
+        if hasattr(self, "filtered_environments"):
+            return self.filtered_environments
+
         org_member = OrganisationMember.objects.get(
             organisation=self.organisation,
             user_id=info.context.user.userId,
@@ -353,6 +405,63 @@ class AppType(DjangoObjectType):
 
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)
+
+
+class ServiceAccountType(DjangoObjectType):
+
+    third_party_auth_enabled = graphene.Boolean()
+    handlers = graphene.List(ServiceAccountHandlerType)
+    tokens = graphene.List(ServiceAccountTokenType)
+    app_memberships = graphene.List(graphene.NonNull(AppType))
+
+    class Meta:
+        model = ServiceAccount
+        fields = (
+            "id",
+            "name",
+            "role",
+            "identity_key",
+            "created_at",
+            "updated_at",
+        )
+
+    def resolve_third_party_auth_enabled(self, info):
+        return (
+            self.server_wrapped_keyring is not None
+            and self.server_wrapped_recovery is not None
+        )
+
+    def resolve_handlers(self, info):
+        return ServiceAccountHandler.objects.filter(service_account=self)
+
+    def resolve_tokens(self, info):
+        return ServiceAccountToken.objects.filter(service_account=self)
+
+    def resolve_app_memberships(self, info):
+        # Fetch all apps that this service account is related to
+        apps = self.apps.all()
+
+        filtered_apps = []
+        for app in apps:
+            # Get environments for the app
+            app_environments = Environment.objects.filter(app=app).order_by("index")
+
+            # Check which environments the service account has access to
+            accessible_environments = [
+                env
+                for env in app_environments
+                if EnvironmentKey.objects.filter(
+                    service_account=self, environment=env
+                ).exists()
+            ]
+
+            # Manually override the 'environments' field for this app instance
+            app.filtered_environments = accessible_environments
+
+            # Add this app to the filtered list
+            filtered_apps.append(app)
+
+        return filtered_apps
 
 
 class EnvironmentKeyType(DjangoObjectType):
@@ -500,6 +609,8 @@ class SecretEventType(DjangoObjectType):
             "timestamp",
             "user",
             "service_token",
+            "service_account",
+            "service_account_token",
             "ip_address",
             "user_agent",
             "environment",
@@ -522,6 +633,10 @@ class SecretEventType(DjangoObjectType):
             False,
         ):
             return self.user
+
+    def resolve_service_account(self, info):
+        if self.service_account_token:
+            return self.service_account_token.service_account
 
 
 class PersonalSecretType(DjangoObjectType):

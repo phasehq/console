@@ -95,13 +95,18 @@ export const AccessTemplateSelector = ({
   }
 
   return (
-    <div>
+    <div className="relative">
       <Listbox value={value} onChange={handleChange}>
         {({ open }) => (
           <>
             <Listbox.Button as={Fragment} aria-required>
               {({ value }) => (
-                <div className="px-2 flex items-center justify-between text-xs rounded-md cursor-pointer text-zinc-700 dark:text-zinc-300 w-40">
+                <div
+                  className={clsx(
+                    'px-2 flex items-center justify-between text-xs rounded-md cursor-pointer w-40 transition ease',
+                    open ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-700 dark:text-zinc-300'
+                  )}
+                >
                   <div className="flex items-center gap-2">
                     {value.icon}
                     {value.name}
@@ -116,7 +121,7 @@ export const AccessTemplateSelector = ({
                 </div>
               )}
             </Listbox.Button>
-            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 p-2 rounded-md shadow-2xl absolute z-10 focus:outline-none">
+            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 p-2 w-40 rounded-md shadow-2xl absolute top-8 z-10 focus:outline-none">
               {accessTemplates.map((template) => (
                 <Listbox.Option value={template} key={template.name} as={Fragment}>
                   {({ active, selected }) => (

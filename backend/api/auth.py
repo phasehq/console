@@ -1,18 +1,22 @@
 from api.utils.rest import (
     get_org_member_from_user_token,
+    get_service_account_from_token,
     get_service_token,
     get_token_type,
     token_is_expired_or_deleted,
 )
 from api.models import Environment
-from api.utils.access.permissions import user_can_access_environment
+from api.utils.access.permissions import (
+    service_account_can_access_environment,
+    user_can_access_environment,
+)
 from rest_framework import authentication, exceptions
 
 
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
 
-        token_types = ["User", "Service"]
+        token_types = ["User", "Service", "ServiceAccount"]
 
         auth_token = request.headers.get("Authorization")
 
@@ -24,7 +28,14 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         if token_type not in token_types:
             raise exceptions.AuthenticationFailed("Invalid token")
 
-        auth = {"token": auth_token, "org_member": None, "service_token": None}
+        auth = {
+            "token": auth_token,
+            "auth_type": token_type,
+            "org_member": None,
+            "service_token": None,
+            "service_account": None,
+            "service_account_token": None,
+        }
 
         if token_is_expired_or_deleted(auth_token):
             raise exceptions.AuthenticationFailed("Token expired or deleted")
@@ -62,9 +73,27 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             except Exception as ex:
                 raise exceptions.NotFound("User not found")
 
-        else:
+        elif token_type == "Service":
             service_token = get_service_token(auth_token)
             auth["service_token"] = service_token
             user = service_token.created_by.user
+
+        if token_type == "ServiceAccount":
+
+            try:
+                service_token = get_service_token(auth_token)
+                service_account = get_service_account_from_token(auth_token)
+                user = service_token.created_by.user
+                auth["service_account"] = service_account
+                auth["service_account_token"] = service_token
+
+                if not service_account_can_access_environment(
+                    service_account.id, env.id
+                ):
+                    raise exceptions.AuthenticationFailed(
+                        "Service account cannot access this environment"
+                    )
+            except Exception as ex:
+                raise exceptions.NotFound("Service account not found")
 
         return (user, auth)

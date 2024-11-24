@@ -14,6 +14,7 @@ import {
   FaMoon,
   FaPlus,
   FaProjectDiagram,
+  FaRobot,
   FaSearch,
   FaSun,
   FaUserPlus,
@@ -97,6 +98,13 @@ const CommandPalette: React.FC = () => {
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
+      id: 'go-service-accounts',
+      name: 'Go to Service Accounts',
+      description: 'Manage organization service accounts',
+      icon: <FaRobot />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/service-accounts`),
+    },
+    {
       id: 'go-integrations',
       name: 'Go to Integrations',
       description: 'Manage integrations',
@@ -155,7 +163,7 @@ const CommandPalette: React.FC = () => {
       name: 'Invite a User',
       description: 'Invite a new user to the organization',
       icon: <FaUserPlus />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/members?invite=true`),
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/members?invite=true`),
     })
 
   const externalResources: CommandItem[] = [
@@ -207,14 +215,24 @@ const CommandPalette: React.FC = () => {
           name: `Service tokens`,
           description: `Manage service tokens for ${app.name}`,
           icon: <FaKey />,
-          action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/tokens`),
+          action: () =>
+            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/tokens`),
         },
         {
           id: `${app.id}-members`,
           name: `Members`,
           description: `Manage members in ${app.name}`,
           icon: <FaUsers />,
-          action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/members`),
+          action: () =>
+            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/members`),
+        },
+        {
+          id: `${app.id}-service-accounts`,
+          name: `Service Accounts`,
+          description: `Manage service accounts in ${app.name}`,
+          icon: <FaRobot />,
+          action: () =>
+            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/service-accounts`),
         },
         {
           id: `${app.id}-syncing`,

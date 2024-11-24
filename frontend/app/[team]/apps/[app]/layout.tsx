@@ -39,20 +39,16 @@ export default function AppLayout({
       link: '',
     },
     {
-      name: 'Service tokens',
-      link: 'tokens',
-    },
-    {
-      name: 'Logs',
-      link: 'logs',
-    },
-    {
-      name: 'Members',
-      link: 'members',
+      name: 'Access',
+      link: 'access/members',
     },
     {
       name: 'Syncing',
       link: 'syncing',
+    },
+    {
+      name: 'Logs',
+      link: 'logs',
     },
     {
       name: 'Settings',
@@ -64,7 +60,7 @@ export default function AppLayout({
     const activeTabIndex = () => {
       if (app) {
         const currentUrl = path?.split('/')[4] || ''
-        const index = tabs.findIndex((tab) => tab.link === currentUrl)
+        const index = tabs.findIndex((tab) => tab.link.split('/')[0] === currentUrl)
         return index >= 0 ? index : 0
       }
       return 0
@@ -97,8 +93,10 @@ export default function AppLayout({
                 <Link
                   href={`/${params.team}/apps/${params.app}/${tab.link}`}
                   className={clsx(
-                    'p-3 font-medium border-b focus:outline-none',
-                    selected ? 'border-emerald-500 font-semibold' : ' border-transparent'
+                    'p-3 font-medium border-b focus:outline-none -mb-px',
+                    selected
+                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                   )}
                 >
                   {tab.name}
