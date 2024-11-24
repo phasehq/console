@@ -63,7 +63,7 @@ SERVER_SECRET = os.getenv("SERVER_SECRET")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True if os.getenv("DEBUG") == "True" else False
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", []).split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 
