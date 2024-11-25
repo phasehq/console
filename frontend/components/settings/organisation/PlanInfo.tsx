@@ -130,7 +130,6 @@ export const PlanInfo = () => {
   const { loading, data } = useQuery(GetOrganisationPlan, {
     variables: { organisationId: activeOrganisation?.id },
     skip: !activeOrganisation,
-    fetchPolicy: 'cache-and-network',
   })
 
   const { data: licenseData } = useQuery(GetOrgLicense, {
@@ -141,26 +140,28 @@ export const PlanInfo = () => {
 
   const license = (): ActivatedPhaseLicenseType | null => licenseData?.organisationLicense || null
 
-  const seatsUsed = data ? data.organisationPlan.seatsUsed.total : 0
+  const seatsUsed = data?.organisationPlan?.seatsUsed?.total || 0
 
-  const seatLimit = data ? license()?.seats || data.organisationPlan.maxUsers : undefined
+  const seatLimit = data?.organisationPlan
+    ? license()?.seats || data.organisationPlan.maxUsers
+    : undefined
 
-  const appQuotaUsage = data
+  const appQuotaUsage = data?.organisationPlan
     ? calculatePercentage(data.organisationPlan.appCount, data.organisationPlan.maxApps)
     : 0
 
-  const seatQuotaUsage = data
+  const seatQuotaUsage = data?.organisationPlan
     ? calculatePercentage(seatsUsed, license()?.seats || data.organisationPlan.maxUsers)
     : 0
 
-  const memberQuotaUsage = data
+  const memberQuotaUsage = data?.organisationPlan?.seatsUsed
     ? calculatePercentage(
         data.organisationPlan.seatsUsed.users,
         license()?.seats || data.organisationPlan.maxUsers
       )
     : 0
 
-  const serviceAccountQuotaUsage = data
+  const serviceAccountQuotaUsage = data?.organisationPlan?.seatsUsed
     ? calculatePercentage(
         data.organisationPlan.seatsUsed.serviceAccounts,
         license()?.seats || data.organisationPlan.maxUsers
