@@ -7,18 +7,8 @@ interface SidebarContextValue {
   setSidebarState: (state: SidebarState) => void
 }
 
-const getInitialState = (): SidebarState => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    const storedState = window.localStorage.getItem('sidebar-state')
-    if (storedState === 'collapsed') {
-      return 'collapsed'
-    }
-  }
-  return 'expanded' // Default state is expanded
-}
-
 export const SidebarContext = createContext<SidebarContextValue>({
-  sidebarState: 'expanded',
+  sidebarState: 'expanded', // Default to expanded before loading
   setSidebarState: () => {},
 })
 
@@ -27,15 +17,23 @@ interface SidebarProviderProps {
 }
 
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({ children }) => {
-  const [sidebarState, setSidebarState] = useState<SidebarState>('expanded')
+  const [sidebarState, setSidebarState] = useState<SidebarState | null>(null)
 
   useEffect(() => {
-    setSidebarState(getInitialState())
+    const storedState = localStorage.getItem('sidebar-state') as SidebarState
+    setSidebarState(storedState === 'collapsed' ? 'collapsed' : 'expanded')
   }, [])
 
   useEffect(() => {
-    localStorage.setItem('sidebar-state', sidebarState)
+    if (sidebarState !== null) {
+      localStorage.setItem('sidebar-state', sidebarState)
+    }
   }, [sidebarState])
+
+  // Don't render context until the initial state is determined
+  if (sidebarState === null) {
+    return null
+  }
 
   return (
     <SidebarContext.Provider value={{ sidebarState, setSidebarState }}>
