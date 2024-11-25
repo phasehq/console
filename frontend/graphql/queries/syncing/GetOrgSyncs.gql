@@ -58,6 +58,10 @@ query GetOrganisationSyncs($orgId: ID!) {
     members {
       id
     }
+    serviceAccounts {
+      id
+      name
+    }
     environments {
       id
       name
