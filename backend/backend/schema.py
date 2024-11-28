@@ -24,9 +24,17 @@ from .graphene.mutations.access import (
 )
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
+    StripeSubscriptionDetails,
     resolve_stripe_checkout_details,
+    resolve_stripe_subscription_details,
 )
-from ee.billing.graphene.mutations.stripe import CreateProUpgradeCheckoutSession
+from ee.billing.graphene.mutations.stripe import (
+    CancelSubscriptionMutation,
+    CreateProUpgradeCheckoutSession,
+    CreateSetupIntentMutation,
+    DeletePaymentMethodMutation,
+    SetDefaultPaymentMethodMutation,
+)
 from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
@@ -310,7 +318,7 @@ class Query(graphene.ObjectType):
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
     vercel_projects = graphene.List(VercelProjectType, credential_id=graphene.ID())
-    
+
     test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -319,6 +327,10 @@ class Query(graphene.ObjectType):
 
     stripe_checkout_details = graphene.Field(
         StripeCheckoutDetails, stripe_session_id=graphene.String(required=True)
+    )
+
+    stripe_subscription_details = graphene.Field(
+        StripeSubscriptionDetails, organisation_id=graphene.ID()
     )
 
     # --------------------------------------------------------------------
@@ -774,6 +786,7 @@ class Query(graphene.ObjectType):
         return time_series_logs
 
     resolve_stripe_checkout_details = resolve_stripe_checkout_details
+    resolve_stripe_subscription_details = resolve_stripe_subscription_details
 
 
 class Mutation(graphene.ObjectType):
@@ -878,6 +891,10 @@ class Mutation(graphene.ObjectType):
 
     # Billing
     create_pro_upgrade_checkout_session = CreateProUpgradeCheckoutSession.Field()
+    delete_payment_method = DeletePaymentMethodMutation.Field()
+    cancel_subscription = CancelSubscriptionMutation.Field()
+    create_setup_intent = CreateSetupIntentMutation.Field()
+    set_default_payment_method = SetDefaultPaymentMethodMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
