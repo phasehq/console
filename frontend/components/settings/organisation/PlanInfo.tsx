@@ -2,6 +2,7 @@ import ProgressBar from '@/components/common/ProgressBar'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { GetOrgLicense } from '@/graphql/queries/organisation/getOrganisationLicense.gql'
+import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptionDetails.gql'
 import { useQuery } from '@apollo/client'
 import { ReactNode, useContext } from 'react'
 import { PlanLabel } from './PlanLabel'
@@ -31,6 +32,7 @@ import { UpsellDialog } from './UpsellDialog'
 import { userHasPermission } from '@/utils/access/permissions'
 import Accordion from '@/components/common/Accordion'
 import clsx from 'clsx'
+import { StripeBillingInfo } from './StripeBillingInfo'
 
 const plansInfo = {
   FR: {
@@ -202,6 +204,9 @@ export const PlanInfo = () => {
               )}
             </div>
             {license() && <License license={license()!} showExpiry />}
+            {isCloudHosted() && activeOrganisation.plan === ApiOrganisationPlanChoices.Pr && (
+              <StripeBillingInfo />
+            )}
           </div>
         </div>
 
