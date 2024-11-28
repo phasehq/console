@@ -52,7 +52,7 @@ export const UpsellDialog = ({
           activeOrganisation.plan === ApiOrganisationPlanChoices.Pr ? (
             <UpgradeRequestForm onSuccess={() => {}} />
           ) : (
-            ProUpgradeDialog && <ProUpgradeDialog userCount={data.organisationPlan.userCount} />
+            ProUpgradeDialog && <ProUpgradeDialog userCount={data.organisationPlan.seatsUsed.total} />
           )
         ) : (
           <div className="text-zinc-900 dark:text-zinc-100">
