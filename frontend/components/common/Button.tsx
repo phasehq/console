@@ -75,6 +75,10 @@ export function Button(buttonProps: ButtonProps) {
         return 'red'
       case 'warning':
         return 'amber'
+      case 'secondary':
+        return 'neutral'
+      case 'outline':
+        return 'neutral'
       default:
         return 'emerald'
     }
