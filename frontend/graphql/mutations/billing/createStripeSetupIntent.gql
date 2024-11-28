@@ -1,0 +1,5 @@
+mutation CreateStripeSetupIntentOp($organisationId: ID!) {
+  createSetupIntent(organisationId: $organisationId) {
+    clientSecret
+  }
+}
