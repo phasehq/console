@@ -1,4 +1,4 @@
-import { StripeSubscriptionDetails } from '@/apollo/graphql'
+import { PaymentMethodDetails, StripeSubscriptionDetails } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import Spinner from '@/components/common/Spinner'
@@ -10,7 +10,7 @@ import { SetDefaultStripePaymentMethodOp } from '@/graphql/mutations/billing/set
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef } from 'react'
-import { FaCreditCard, FaTimes, FaTrash } from 'react-icons/fa'
+import { FaCheckCircle, FaCreditCard, FaTimes, FaTrash } from 'react-icons/fa'
 import {
   SiAmericanexpress,
   SiDinersclub,
@@ -21,6 +21,7 @@ import {
 } from 'react-icons/si'
 import { AddPaymentMethodDialog } from './AddPaymentMethodForm'
 import { toast } from 'react-toastify'
+import clsx from 'clsx'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
@@ -57,6 +58,7 @@ const DeletePaymentMethodDialog = ({ paymentMethodId }: { paymentMethodId: strin
         { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation?.id } },
       ],
     }).then(() => {
+      toast.success('Deleted payment method')
       if (dialogRef.current) dialogRef.current.closeModal()
     })
 
@@ -96,6 +98,18 @@ const ManagePaymentMethodsDialog = () => {
   const subscriptionData: StripeSubscriptionDetails | undefined =
     data?.stripeSubscriptionDetails ?? undefined
 
+  const defaultPaymentMethod =
+    subscriptionData?.paymentMethods!.length === 1
+      ? subscriptionData?.paymentMethods[0]
+      : subscriptionData?.paymentMethods!.find((paymentMethod) => paymentMethod?.isDefault)
+
+  const nonDefaultPaymentMethods =
+    subscriptionData?.paymentMethods!.length! > 1
+      ? subscriptionData?.paymentMethods?.filter(
+          (paymentMethod) => paymentMethod?.isDefault === false
+        )
+      : []
+
   const [getSubscriptionDetails] = useLazyQuery(GetSubscriptionDetails)
   const [setDefaultPaymentMethod, { loading: setDefaultPending }] = useMutation(
     SetDefaultStripePaymentMethodOp
@@ -125,6 +139,61 @@ const ManagePaymentMethodsDialog = () => {
       </div>
     )
 
+  const PaymentMethodCard = ({ paymentMethod }: { paymentMethod: PaymentMethodDetails }) => {
+    const { isDefault } = paymentMethod
+
+    return (
+      <div
+        key={paymentMethod!.id}
+        className={clsx(
+          'p-4 rounded-lg  flex items-center justify-between shadow-sm group',
+          isDefault
+            ? 'bg-emerald-100 dark:bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20'
+            : 'bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/20'
+        )}
+      >
+        {/* Payment Info */}
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-2 items-start">
+            <div className="text-lg font-medium flex items-center gap-6 text-zinc-900 dark:text-zinc-100">
+              <div className="text-4xl">
+                <BrandIcon brand={paymentMethod?.brand!} />
+              </div>
+              <span className="font-mono">**** {paymentMethod?.last4}</span>
+            </div>
+            <div className="text-sm text-neutral-500">
+              Expires {paymentMethod?.expMonth}/{paymentMethod?.expYear}
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3">
+          {paymentMethod?.isDefault && (
+            <div className="px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-200 rounded-md dark:text-emerald-200 dark:bg-emerald-700 flex items-center gap-2">
+              <FaCheckCircle /> Default
+            </div>
+          )}
+
+          {subscriptionData?.paymentMethods!.length > 1 && !paymentMethod?.isDefault && (
+            <div className="opacity-0 group-hover:opacity-100 transition ease">
+              <Button
+                variant="secondary"
+                onClick={() => handleSetDefaultPaymentMethod(paymentMethod?.id!)}
+                isLoading={setDefaultPending}
+              >
+                Set as Default
+              </Button>
+            </div>
+          )}
+          <div className="opacity-0 group-hover:opacity-100 transition ease">
+            <DeletePaymentMethodDialog paymentMethodId={paymentMethod?.id!} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <GenericDialog
       buttonContent={
@@ -136,53 +205,21 @@ const ManagePaymentMethodsDialog = () => {
       title="Manage payment methods"
     >
       <div className="space-y-2">
+        <div className="text-neutral-500 text-sm">
+          Add or remove payment methods, and manage your default payment method
+        </div>
         <div className="space-y-4 py-4">
-          {subscriptionData.paymentMethods!.map((paymentMethod, index) => (
-            <div
-              key={paymentMethod!.id}
-              className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-lg ring-1 ring-inset ring-neutral-500/20 flex items-center justify-between shadow-sm group"
-            >
-              {/* Payment Info */}
-              <div className="flex items-center gap-4">
-                <div className="flex flex-col gap-2 items-start">
-                  <div className="text-lg font-medium flex items-center gap-6 text-zinc-900 dark:text-zinc-100">
-                    <div className="text-4xl">
-                      <BrandIcon brand={paymentMethod?.brand!} />
-                    </div>
-                    <span className="font-mono">**** {paymentMethod?.last4}</span>
-                  </div>
-                  <div className="text-sm text-neutral-500">
-                    Expires {paymentMethod?.expMonth}/{paymentMethod?.expYear}
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-3">
-                {paymentMethod?.isDefault && (
-                  <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-200 rounded-md dark:text-green-200 dark:bg-green-700">
-                    Default
-                  </span>
-                )}
-
-                {subscriptionData?.paymentMethods!.length > 1 && !paymentMethod?.isDefault && (
-                  <div className="opacity-0 group-hover:opacity-100 transition ease">
-                    <Button
-                      variant="secondary"
-                      onClick={() => handleSetDefaultPaymentMethod(paymentMethod?.id!)}
-                      isLoading={setDefaultPending}
-                    >
-                      Set as Default
-                    </Button>
-                  </div>
-                )}
-                <div className="opacity-0 group-hover:opacity-100 transition ease">
-                  <DeletePaymentMethodDialog paymentMethodId={paymentMethod?.id!} />
-                </div>
-              </div>
+          {defaultPaymentMethod && (
+            <div className="pb-4 border-b border-neutral-500/40">
+              <PaymentMethodCard paymentMethod={defaultPaymentMethod} />
             </div>
+          )}
+
+          {nonDefaultPaymentMethods?.map((paymentMethod, index) => (
+            <PaymentMethodCard key={paymentMethod!.id} paymentMethod={paymentMethod!} />
           ))}
         </div>
+
         <div className="flex justify-end">
           <AddPaymentMethodDialog onSuccess={refetchSubscription} />
         </div>
@@ -200,7 +237,11 @@ const CancelSubscriptionDialog = ({ subscriptionId }: { subscriptionId: string }
   const handleCancelSubscription = async () =>
     await cancelSubscription({
       variables: { subscriptionId, organisationId: activeOrganisation!.id },
+      refetchQueries: [
+        { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation?.id } },
+      ],
     }).then(() => {
+      toast.success('Cancelled subscription')
       if (dialogRef.current) dialogRef.current.closeModal()
     })
 
@@ -243,6 +284,11 @@ export const StripeBillingInfo = () => {
   const subscriptionData: StripeSubscriptionDetails | undefined =
     data?.stripeSubscriptionDetails ?? undefined
 
+  const defaultPaymentMethod =
+    subscriptionData?.paymentMethods!.length === 1
+      ? subscriptionData?.paymentMethods[0]
+      : subscriptionData?.paymentMethods!.find((paymentMethod) => paymentMethod?.isDefault)
+
   if (loading || !subscriptionData)
     return (
       <div className="flex items-center justify-center p-40 mx-auto">
@@ -251,30 +297,29 @@ export const StripeBillingInfo = () => {
     )
 
   return (
-    <div className="space-y-8">
-      <div>
-        <div className="font-semibold text-xl">Current Subscription</div>
-        <div className="py-4">
-          <div className="font-medium">
-            {subscriptionData.planName} ({subscriptionData.status})
-          </div>
+    <div className="space-y-6">
+      <div className="font-semibold text-xl">Current Subscription</div>
+      <div className="p-4 rounded-lg border border-neutral-500/40 border-t-8 border-t-emerald-500 bg-zinc-100 dark:bg-zinc-800">
+        <div className="font-medium pb-4">
+          {subscriptionData.planName}{' '}
+          <span className="capitalize">({subscriptionData.status})</span>
+        </div>
+        <div className="text-neutral-500 text-sm">
+          Current billing cycle:{' '}
+          {new Date(subscriptionData.currentPeriodStart! * 1000).toDateString()}
+          {' - '}
+          {new Date(subscriptionData.currentPeriodEnd! * 1000).toDateString()}
+        </div>
+
+        <div className="flex items-center justify-between">
           <div className="text-neutral-500 text-sm">
-            Current billing cycle:{' '}
-            {new Date(subscriptionData.currentPeriodStart! * 1000).toDateString()}
-            {' - '}
-            {new Date(subscriptionData.currentPeriodEnd! * 1000).toDateString()}
+            Next payment {relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}
+            {defaultPaymentMethod && ` on card ending in ${defaultPaymentMethod.last4}`}
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="text-neutral-500 text-sm">
-              Next payment in{' '}
-              {relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <ManagePaymentMethodsDialog />
-              <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
-            </div>
+          <div className="flex items-center gap-2">
+            <ManagePaymentMethodsDialog />
+            <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
           </div>
         </div>
       </div>
