@@ -7,6 +7,7 @@ import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptio
 import { DeleteStripePaymentMethod } from '@/graphql/mutations/billing/deletePaymentMethod.gql'
 import { CancelStripeSubscription } from '@/graphql/mutations/billing/cancelProSubscription.gql'
 import { SetDefaultStripePaymentMethodOp } from '@/graphql/mutations/billing/setDefaultPaymentMethod.gql'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef } from 'react'
@@ -257,11 +258,13 @@ const CancelSubscriptionDialog = ({ subscriptionId }: { subscriptionId: string }
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
   const [cancelSubscription] = useMutation(CancelStripeSubscription)
+
   const handleCancelSubscription = async () =>
     await cancelSubscription({
       variables: { subscriptionId, organisationId: activeOrganisation!.id },
       refetchQueries: [
         { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation?.id } },
+        { query: GetOrganisations },
       ],
     }).then(() => {
       toast.success('Cancelled subscription')
