@@ -89,10 +89,9 @@ const AddPaymentMethodForm = ({ onSuccess }: { onSuccess: () => void }) => {
           }}
         />
       </div>
+      <div className="text-neutral-500 text-xs">Powered by Stripe</div>
       {error && <div className="text-red-500 text-sm">{error}</div>}
-      {success && (
-        <div className="text-emerald-500 text-sm">Payment method added successfully!</div>
-      )}
+
       <div className="flex justify-end">
         <Button variant="primary" type="submit" disabled={!stripe} isLoading={loading}>
           <FaPlus /> Add Payment Method
@@ -104,6 +103,12 @@ const AddPaymentMethodForm = ({ onSuccess }: { onSuccess: () => void }) => {
 
 export const AddPaymentMethodDialog = ({ onSuccess }: { onSuccess: () => void }) => {
   const dialogRef = useRef<{ closeModal: () => void }>(null)
+
+  const handleSuccess = () => {
+    dialogRef.current?.closeModal()
+    onSuccess()
+  }
+
   return (
     <GenericDialog
       title="Add a payment method"
@@ -116,7 +121,7 @@ export const AddPaymentMethodDialog = ({ onSuccess }: { onSuccess: () => void })
       ref={dialogRef}
     >
       <Elements stripe={stripePromise}>
-        <AddPaymentMethodForm onSuccess={onSuccess} />
+        <AddPaymentMethodForm onSuccess={handleSuccess} />
       </Elements>
     </GenericDialog>
   )
