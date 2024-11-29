@@ -44,6 +44,26 @@ const BrandIcon = ({ brand }: { brand?: string }) => {
   }
 }
 
+const HiddenCardDigits = ({ brand }: { brand?: string }) => {
+  switch (brand) {
+    case 'visa':
+    case 'mastercard':
+    case 'discover':
+    case 'jcb':
+    case 'diners':
+    case 'diners_club':
+      // Format: **** **** ****
+      return <span className="text-neutral-500">**** **** **** </span>
+    case 'amex':
+    case 'american_express':
+      // Format: **** ****** *
+      return <span className="text-neutral-500">**** ****** *</span>
+    default:
+      // Generic format: **** **** ****
+      return <span className="text-neutral-500">**** **** **** </span>
+  }
+}
+
 const DeletePaymentMethodDialog = ({ paymentMethodId }: { paymentMethodId: string }) => {
   const { activeOrganisation } = useContext(organisationContext)
 
@@ -146,7 +166,7 @@ const ManagePaymentMethodsDialog = () => {
       <div
         key={paymentMethod!.id}
         className={clsx(
-          'p-4 rounded-lg  flex items-center justify-between shadow-sm group',
+          'p-4 rounded-lg  flex items-center justify-between shadow-sm group relative',
           isDefault
             ? 'bg-emerald-100 dark:bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20'
             : 'bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/20'
@@ -159,7 +179,10 @@ const ManagePaymentMethodsDialog = () => {
               <div className="text-4xl">
                 <BrandIcon brand={paymentMethod?.brand!} />
               </div>
-              <span className="font-mono">**** {paymentMethod?.last4}</span>
+              <span className="font-mono">
+                <HiddenCardDigits brand={paymentMethod.brand!} />
+                {paymentMethod?.last4}
+              </span>
             </div>
             <div className="text-sm text-neutral-500">
               Expires {paymentMethod?.expMonth}/{paymentMethod?.expYear}
@@ -170,7 +193,7 @@ const ManagePaymentMethodsDialog = () => {
         {/* Actions */}
         <div className="flex items-center gap-3">
           {paymentMethod?.isDefault && (
-            <div className="px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-200 rounded-md dark:text-emerald-200 dark:bg-emerald-700 flex items-center gap-2">
+            <div className="px-1 text-2xs font-semibold text-emerald-700 bg-emerald-200 rounded-md dark:text-emerald-200 dark:bg-emerald-700 flex items-center gap-2 absolute top-0 right-0 origin-bottom-right">
               <FaCheckCircle /> Default
             </div>
           )}
