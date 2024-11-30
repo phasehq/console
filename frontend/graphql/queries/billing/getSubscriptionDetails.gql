@@ -6,6 +6,8 @@ query GetSubscriptionDetails($organisationId: ID!) {
     currentPeriodStart
     currentPeriodEnd
     renewalDate
+    cancelAt
+    cancelAtPeriodEnd
     paymentMethods {
       id
       brand

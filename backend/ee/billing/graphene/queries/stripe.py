@@ -1,7 +1,7 @@
 from api.models import Organisation
 from api.utils.access.permissions import user_has_permission
 import graphene
-from graphene import ObjectType, String, Field
+from graphene import ObjectType, String, Boolean, List, Int
 import stripe
 from django.conf import settings
 from graphql import GraphQLError
@@ -25,14 +25,16 @@ class PaymentMethodDetails(graphene.ObjectType):
     is_default = graphene.Boolean()
 
 
-class StripeSubscriptionDetails(graphene.ObjectType):
-    subscription_id = graphene.String()
-    plan_name = graphene.String()
-    status = graphene.String()
-    current_period_start = graphene.Int()
-    current_period_end = graphene.Int()
-    renewal_date = graphene.Int()
-    payment_methods = graphene.List(PaymentMethodDetails)
+class StripeSubscriptionDetails(ObjectType):
+    subscription_id = String()
+    plan_name = String()
+    status = String()
+    current_period_start = Int()
+    current_period_end = Int()
+    renewal_date = Int()
+    cancel_at = Int()
+    cancel_at_period_end = Boolean()
+    payment_methods = List(PaymentMethodDetails)
 
 
 def resolve_stripe_checkout_details(self, info, stripe_session_id):
@@ -71,13 +73,19 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
         org = Organisation.objects.get(id=organisation_id)
         if not user_has_permission(info.context.user, "read", "Billing", org):
             raise GraphQLError("You don't have permission to view Tokens in this App")
+
         # Retrieve subscription details
         subscription = stripe.Subscription.retrieve(org.stripe_subscription_id)
+
         plan_name = subscription["items"]["data"][0]["plan"]["nickname"]
         current_period_start = subscription["current_period_start"]
         current_period_end = subscription["current_period_end"]
         renewal_date = subscription["current_period_end"]
         status = subscription["status"]
+
+        # Retrieve cancellation details
+        cancel_at = subscription.get("cancel_at")  # Timestamp of cancellation, if set
+        cancel_at_period_end = subscription.get("cancel_at_period_end")  # Boolean
 
         customer = stripe.Customer.retrieve(org.stripe_customer_id)
 
@@ -89,13 +97,6 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
         payment_methods = stripe.PaymentMethod.list(
             customer=org.stripe_customer_id, type="card"
         )
-
-        print(customer.get("invoice_settings"))
-        print(
-            "===================================== DEFAULT PAYMENT",
-            default_payment_method_id,
-        )
-        print(payment_methods)
 
         payment_methods_list = [
             PaymentMethodDetails(
@@ -116,6 +117,8 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
             current_period_start=str(current_period_start),
             current_period_end=str(current_period_end),
             renewal_date=str(renewal_date),
+            cancel_at=str(cancel_at) if cancel_at else None,
+            cancel_at_period_end=cancel_at_period_end,
             payment_methods=payment_methods_list,
         )
     except stripe.error.StripeError as e:

@@ -659,6 +659,8 @@ type StripeSubscriptionDetails {
   currentPeriodStart: Int
   currentPeriodEnd: Int
   renewalDate: Int
+  cancelAt: Int
+  cancelAtPeriodEnd: Boolean
   paymentMethods: [PaymentMethodDetails]
 }
 

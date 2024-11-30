@@ -325,7 +325,12 @@ export const StripeBillingInfo = () => {
   return (
     <div className="space-y-6">
       <div className="font-semibold text-xl">Current Subscription</div>
-      <div className="p-4 rounded-lg border border-neutral-500/40 border-t-8 border-t-emerald-500 bg-zinc-100 dark:bg-zinc-800">
+      <div
+        className={clsx(
+          'p-4 rounded-lg border border-neutral-500/40 border-t-8  bg-zinc-100 dark:bg-zinc-800',
+          subscriptionData.cancelAtPeriodEnd ? 'border-t-amber-500' : 'border-t-emerald-500'
+        )}
+      >
         <div className="font-medium pb-4">
           {subscriptionData.planName}{' '}
           <span className="capitalize">({subscriptionData.status})</span>
@@ -339,13 +344,19 @@ export const StripeBillingInfo = () => {
 
         <div className="flex items-center justify-between">
           <div className="text-neutral-500 text-sm">
-            Next payment {relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}
+            {!subscriptionData.cancelAtPeriodEnd &&
+              `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}`}
+
+            {subscriptionData.cancelAtPeriodEnd &&
+              `Cancels ${relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}`}
             {defaultPaymentMethod && ` on card ending in ${defaultPaymentMethod.last4}`}
           </div>
 
           <div className="flex items-center gap-2">
             <ManagePaymentMethodsDialog />
-            <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
+            {!subscriptionData.cancelAtPeriodEnd && (
+              <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
+            )}
           </div>
         </div>
       </div>

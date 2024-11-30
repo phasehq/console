@@ -120,14 +120,16 @@ class CancelSubscriptionMutation(Mutation):
             # Retrieve the subscription
             subscription = stripe.Subscription.retrieve(subscription_id)
 
-            # Cancel the subscription
-            canceled_subscription = stripe.Subscription.delete(subscription_id)
+            # Cancel at the end of the current billing cycle
+            updated_subscription = stripe.Subscription.modify(
+                subscription_id, cancel_at_period_end=True
+            )
 
             return CancelSubscriptionResponse(
                 success=True,
-                message="Subscription canceled successfully.",
-                canceled_at=str(canceled_subscription["canceled_at"]),
-                status=canceled_subscription["status"],
+                message="Subscription set to cancel at the end of the current billing cycle.",
+                canceled_at=None,  # The subscription is not yet canceled
+                status=updated_subscription["status"],
             )
         except stripe.error.InvalidRequestError as e:
             return CancelSubscriptionResponse(
