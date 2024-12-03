@@ -155,7 +155,7 @@ export default function DeleteAppDialog(props: {
                           required
                           maxLength={64}
                           value={typedName}
-                          placeholder="MyApp"
+                          placeholder={appName}
                           onChange={(e) => setTypedName(e.target.value)}
                         />
                       </div>
