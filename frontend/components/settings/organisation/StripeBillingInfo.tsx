@@ -293,7 +293,7 @@ const CancelSubscriptionDialog = ({ subscriptionId }: { subscriptionId: string }
         <div className="py-4">
           <p className="text-neutral-500">
             Are you sure you want to cancel your subscription of Phase Pro? You will lose access to
-            all current and future Phase Pro features.
+            all current and future Phase Pro features at the end of the current billing cycle.
           </p>
         </div>
         <div className="flex items-center justify-end">
