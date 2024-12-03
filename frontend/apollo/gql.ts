@@ -23,6 +23,7 @@ const documents = {
     "mutation CreateStripeSetupIntentOp($organisationId: ID!) {\n  createSetupIntent(organisationId: $organisationId) {\n    clientSecret\n  }\n}": types.CreateStripeSetupIntentOpDocument,
     "mutation DeleteStripePaymentMethod($organisationId: ID!, $paymentMethodId: String!) {\n  deletePaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}": types.DeleteStripePaymentMethodDocument,
     "mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}": types.InitStripeProUpgradeCheckoutDocument,
+    "mutation ResumeStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  resumeSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n    message\n    canceledAt\n    status\n  }\n}": types.ResumeStripeSubscriptionDocument,
     "mutation SetDefaultStripePaymentMethodOp($organisationId: ID!, $paymentMethodId: String!) {\n  setDefaultPaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}": types.SetDefaultStripePaymentMethodOpDocument,
     "mutation CreateApplication($id: ID!, $organisationId: ID!, $name: String!, $identityKey: String!, $appToken: String!, $appSeed: String!, $wrappedKeyShare: String!, $appVersion: Int!) {\n  createApp(\n    id: $id\n    organisationId: $organisationId\n    name: $name\n    identityKey: $identityKey\n    appToken: $appToken\n    appSeed: $appSeed\n    wrappedKeyShare: $wrappedKeyShare\n    appVersion: $appVersion\n  ) {\n    app {\n      id\n      name\n      identityKey\n    }\n  }\n}": types.CreateApplicationDocument,
     "mutation CreateOrg($id: ID!, $name: String!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!) {\n  createOrganisation(\n    id: $id\n    name: $name\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n  ) {\n    organisation {\n      id\n      name\n      memberId\n    }\n  }\n}": types.CreateOrgDocument,
@@ -179,6 +180,10 @@ export function graphql(source: "mutation DeleteStripePaymentMethod($organisatio
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}"): (typeof documents)["mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation ResumeStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  resumeSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n    message\n    canceledAt\n    status\n  }\n}"): (typeof documents)["mutation ResumeStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  resumeSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n    message\n    canceledAt\n    status\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -738,7 +738,8 @@ type Mutation {
   createLockbox(input: LockboxInput): CreateLockboxMutation
   createProUpgradeCheckoutSession(billingPeriod: String, organisationId: ID!): CreateProUpgradeCheckoutSession
   deletePaymentMethod(organisationId: ID, paymentMethodId: String): DeletePaymentMethodMutation
-  cancelSubscription(organisationId: ID, subscriptionId: String!): CancelSubscriptionResponse
+  cancelSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
+  resumeSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
   createSetupIntent(organisationId: ID): CreateSetupIntentMutation
   setDefaultPaymentMethod(
     organisationId: ID
@@ -1066,7 +1067,7 @@ type DeletePaymentMethodMutation {
   ok: Boolean
 }
 
-type CancelSubscriptionResponse {
+type UpdateSubscriptionResponse {
   success: Boolean
   message: String
   canceledAt: String

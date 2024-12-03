@@ -33,6 +33,7 @@ from ee.billing.graphene.mutations.stripe import (
     CreateProUpgradeCheckoutSession,
     CreateSetupIntentMutation,
     DeletePaymentMethodMutation,
+    ResumeSubscriptionMutation,
     SetDefaultPaymentMethodMutation,
 )
 from .graphene.mutations.lockbox import CreateLockboxMutation
@@ -893,6 +894,7 @@ class Mutation(graphene.ObjectType):
     create_pro_upgrade_checkout_session = CreateProUpgradeCheckoutSession.Field()
     delete_payment_method = DeletePaymentMethodMutation.Field()
     cancel_subscription = CancelSubscriptionMutation.Field()
+    resume_subscription = ResumeSubscriptionMutation.Field()
     create_setup_intent = CreateSetupIntentMutation.Field()
     set_default_payment_method = SetDefaultPaymentMethodMutation.Field()
 

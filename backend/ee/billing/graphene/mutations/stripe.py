@@ -7,7 +7,7 @@ from graphene import Mutation, ID, String, Boolean, ObjectType, Mutation
 from graphql import GraphQLError
 
 
-class CancelSubscriptionResponse(ObjectType):
+class UpdateSubscriptionResponse(ObjectType):
     success = Boolean()
     message = String()
     canceled_at = String()
@@ -101,7 +101,7 @@ class CancelSubscriptionMutation(Mutation):
         organisation_id = ID()
         subscription_id = String(required=True)
 
-    Output = CancelSubscriptionResponse
+    Output = UpdateSubscriptionResponse
 
     def mutate(self, info, organisation_id, subscription_id):
         stripe.api_key = settings.STRIPE["secret_key"]
@@ -125,21 +125,75 @@ class CancelSubscriptionMutation(Mutation):
                 subscription_id, cancel_at_period_end=True
             )
 
-            return CancelSubscriptionResponse(
+            return UpdateSubscriptionResponse(
                 success=True,
                 message="Subscription set to cancel at the end of the current billing cycle.",
                 canceled_at=None,  # The subscription is not yet canceled
                 status=updated_subscription["status"],
             )
         except stripe.error.InvalidRequestError as e:
-            return CancelSubscriptionResponse(
+            return UpdateSubscriptionResponse(
                 success=False,
                 message=f"Error: {str(e)}",
                 canceled_at=None,
                 status=None,
             )
         except Exception as e:
-            return CancelSubscriptionResponse(
+            return UpdateSubscriptionResponse(
+                success=False,
+                message=f"An unexpected error occurred: {str(e)}",
+                canceled_at=None,
+                status=None,
+            )
+
+
+class ResumeSubscriptionMutation(Mutation):
+    class Arguments:
+        organisation_id = ID()
+        subscription_id = String(required=True)
+
+    Output = UpdateSubscriptionResponse  # Reuse the response class for consistency
+
+    def mutate(self, info, organisation_id, subscription_id):
+        stripe.api_key = settings.STRIPE["secret_key"]
+
+        try:
+            org = Organisation.objects.get(id=organisation_id)
+
+            if not user_has_permission(info.context.user, "update", "Billing", org):
+                raise GraphQLError(
+                    "You don't have the permissions required to update Billing information in this Organisation."
+                )
+
+            if org.stripe_subscription_id != subscription_id:
+                raise GraphQLError("The subscription ID provided is not valid.")
+
+            # Retrieve the subscription
+            subscription = stripe.Subscription.retrieve(subscription_id)
+
+            if not subscription.get("cancel_at_period_end"):
+                raise GraphQLError("The subscription is not marked for cancellation.")
+
+            # Resume the subscription by updating cancel_at_period_end to False
+            updated_subscription = stripe.Subscription.modify(
+                subscription_id, cancel_at_period_end=False
+            )
+
+            return UpdateSubscriptionResponse(
+                success=True,
+                message="Subscription resumed successfully.",
+                canceled_at=None,  # Reset canceled_at since the subscription is active
+                status=updated_subscription["status"],
+            )
+        except stripe.error.InvalidRequestError as e:
+            return UpdateSubscriptionResponse(
+                success=False,
+                message=f"Error: {str(e)}",
+                canceled_at=None,
+                status=None,
+            )
+        except Exception as e:
+            return UpdateSubscriptionResponse(
                 success=False,
                 message=f"An unexpected error occurred: {str(e)}",
                 canceled_at=None,

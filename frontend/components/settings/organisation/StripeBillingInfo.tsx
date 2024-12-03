@@ -6,12 +6,13 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptionDetails.gql'
 import { DeleteStripePaymentMethod } from '@/graphql/mutations/billing/deletePaymentMethod.gql'
 import { CancelStripeSubscription } from '@/graphql/mutations/billing/cancelProSubscription.gql'
+import { ResumeStripeSubscription } from '@/graphql/mutations/billing/resumeProSubscription.gql'
 import { SetDefaultStripePaymentMethodOp } from '@/graphql/mutations/billing/setDefaultPaymentMethod.gql'
 import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef } from 'react'
-import { FaCheckCircle, FaCreditCard, FaTimes, FaTrash } from 'react-icons/fa'
+import { FaCheckCircle, FaCreditCard, FaPlay, FaTimes, FaTrash } from 'react-icons/fa'
 import {
   SiAmericanexpress,
   SiDinersclub,
@@ -23,6 +24,7 @@ import {
 import { AddPaymentMethodDialog } from './AddPaymentMethodForm'
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
+import { Alert } from '@/components/common/Alert'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
@@ -131,6 +133,8 @@ const ManagePaymentMethodsDialog = () => {
         )
       : []
 
+  const allowDelete = subscriptionData?.paymentMethods!.length! > 1
+
   const [getSubscriptionDetails] = useLazyQuery(GetSubscriptionDetails)
   const [setDefaultPaymentMethod, { loading: setDefaultPending }] = useMutation(
     SetDefaultStripePaymentMethodOp
@@ -210,9 +214,11 @@ const ManagePaymentMethodsDialog = () => {
               </Button>
             </div>
           )}
-          <div className="opacity-0 group-hover:opacity-100 transition ease">
-            <DeletePaymentMethodDialog paymentMethodId={paymentMethod?.id!} />
-          </div>
+          {allowDelete && (
+            <div className="opacity-0 group-hover:opacity-100 transition ease">
+              <DeletePaymentMethodDialog paymentMethodId={paymentMethod?.id!} />
+            </div>
+          )}
         </div>
       </div>
     )
@@ -307,8 +313,26 @@ export const StripeBillingInfo = () => {
     skip: !activeOrganisation,
   })
 
+  const [resumeSubscription, { loading: resumeIsPending }] = useMutation(ResumeStripeSubscription)
+
   const subscriptionData: StripeSubscriptionDetails | undefined =
     data?.stripeSubscriptionDetails ?? undefined
+
+  const handleResumeSubscription = async () => {
+    if (subscriptionData?.cancelAtPeriodEnd) {
+      await resumeSubscription({
+        variables: {
+          organisationId: activeOrganisation?.id,
+          subscriptionId: subscriptionData.subscriptionId,
+        },
+        refetchQueries: [
+          { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation?.id } },
+          { query: GetOrganisations },
+        ],
+      })
+      toast.success('Resumed subscription')
+    }
+  }
 
   const defaultPaymentMethod =
     subscriptionData?.paymentMethods!.length === 1
@@ -331,9 +355,19 @@ export const StripeBillingInfo = () => {
           subscriptionData.cancelAtPeriodEnd ? 'border-t-amber-500' : 'border-t-emerald-500'
         )}
       >
-        <div className="font-medium pb-4">
-          {subscriptionData.planName}{' '}
-          <span className="capitalize">({subscriptionData.status})</span>
+        <div className="flex items-center justify-between gap-4 pb-4">
+          <div className="font-medium">
+            {subscriptionData.planName}{' '}
+            <span className="capitalize">
+              ({subscriptionData.cancelAtPeriodEnd ? 'Cancelled' : subscriptionData.status})
+            </span>
+          </div>
+          {subscriptionData.cancelAtPeriodEnd && (
+            <Alert variant="warning" size="sm" icon={true}>
+              Your subscription will end{' '}
+              {relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}{' '}
+            </Alert>
+          )}
         </div>
         <div className="text-neutral-500 text-sm">
           Current billing cycle:{' '}
@@ -343,19 +377,32 @@ export const StripeBillingInfo = () => {
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="text-neutral-500 text-sm">
-            {!subscriptionData.cancelAtPeriodEnd &&
-              `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}`}
+          <div className="text-neutral-500 text-sm flex items-center gap-1">
+            {!subscriptionData.cancelAtPeriodEnd
+              ? `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}`
+              : `Ends ${relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}`}
 
-            {subscriptionData.cancelAtPeriodEnd &&
-              `Cancels ${relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}`}
-            {defaultPaymentMethod && ` on card ending in ${defaultPaymentMethod.last4}`}
+            {!subscriptionData.cancelAtPeriodEnd && (
+              <div className="flex items-center gap-2">
+                {defaultPaymentMethod && ` on card ending in ${defaultPaymentMethod.last4}`}
+                {defaultPaymentMethod && <BrandIcon brand={defaultPaymentMethod.brand!} />}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <ManagePaymentMethodsDialog />
-            {!subscriptionData.cancelAtPeriodEnd && (
+            {!subscriptionData.cancelAtPeriodEnd ? (
               <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
+            ) : (
+              <Button
+                variant="primary"
+                onClick={handleResumeSubscription}
+                isLoading={resumeIsPending}
+                title="Resume subscription"
+              >
+                <FaPlay /> Resume
+              </Button>
             )}
           </div>
         </div>
