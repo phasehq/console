@@ -1,4 +1,8 @@
-import { PaymentMethodDetails, StripeSubscriptionDetails } from '@/apollo/graphql'
+import {
+  ApiOrganisationPlanChoices,
+  PaymentMethodDetails,
+  StripeSubscriptionDetails,
+} from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import Spinner from '@/components/common/Spinner'
@@ -134,7 +138,9 @@ const ManagePaymentMethodsDialog = () => {
         )
       : []
 
-  const allowDelete = subscriptionData?.paymentMethods!.length! > 1
+  const allowDelete =
+    subscriptionData?.paymentMethods!.length! > 1 ||
+    activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr
 
   const [getSubscriptionDetails] = useLazyQuery(GetSubscriptionDetails)
   const [setDefaultPaymentMethod, { loading: setDefaultPending }] = useMutation(
@@ -349,6 +355,14 @@ export const StripeBillingInfo = () => {
       ? subscriptionData?.paymentMethods[0]
       : subscriptionData?.paymentMethods!.find((paymentMethod) => paymentMethod?.isDefault)
 
+  const topBorderColor = () => {
+    if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr) return 'border-t-neutral-500'
+    else if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr) {
+      if (subscriptionData?.cancelAtPeriodEnd) return 'border-t-amber-500'
+      else return 'border-t-emerald-500'
+    }
+  }
+
   if (loading || !subscriptionData)
     return (
       <div className="flex items-center justify-center p-40 mx-auto">
@@ -363,59 +377,71 @@ export const StripeBillingInfo = () => {
       <div className="font-semibold text-xl">Current Subscription</div>
       <div
         className={clsx(
-          'p-4 rounded-lg border border-neutral-500/40 border-t-8  bg-zinc-100 dark:bg-zinc-800',
-          subscriptionData.cancelAtPeriodEnd ? 'border-t-amber-500' : 'border-t-emerald-500'
+          'p-4 rounded-lg border border-neutral-500/40 border-t-8  bg-zinc-100 dark:bg-zinc-800 flex items-center justify-between gap-4',
+          topBorderColor()
         )}
       >
-        <div className="flex items-center justify-between gap-4 pb-4">
+        <div className="flex flex-col gap-4">
           <div className="font-medium">
             {subscriptionData.planName}{' '}
-            <span className="capitalize">
-              ({subscriptionData.cancelAtPeriodEnd ? 'Cancelled' : subscriptionData.status})
-            </span>
+            {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
+              <span className="capitalize">
+                ({subscriptionData.cancelAtPeriodEnd ? 'Cancelled' : subscriptionData.status})
+              </span>
+            )}
           </div>
+
+          {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
+            <div>
+              <div className="text-neutral-500 text-sm">
+                Current billing cycle:{' '}
+                {new Date(subscriptionData.currentPeriodStart! * 1000).toDateString()}
+                {' - '}
+                {new Date(subscriptionData.currentPeriodEnd! * 1000).toDateString()}
+              </div>
+
+              <div className="text-neutral-500 text-sm flex items-center gap-1 font-semibold">
+                {!subscriptionData.cancelAtPeriodEnd
+                  ? `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}`
+                  : `Ends ${relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}`}
+
+                {!subscriptionData.cancelAtPeriodEnd && (
+                  <div className="flex items-center gap-2">
+                    {defaultPaymentMethod && ` on card ending in ${defaultPaymentMethod.last4}`}
+                    {defaultPaymentMethod && <BrandIcon brand={defaultPaymentMethod.brand!} />}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col items-end h-full gap-4">
           {subscriptionData.cancelAtPeriodEnd && (
             <Alert variant="warning" size="sm" icon={true}>
               Your subscription will end{' '}
               {relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}{' '}
             </Alert>
           )}
-        </div>
-        <div className="text-neutral-500 text-sm">
-          Current billing cycle:{' '}
-          {new Date(subscriptionData.currentPeriodStart! * 1000).toDateString()}
-          {' - '}
-          {new Date(subscriptionData.currentPeriodEnd! * 1000).toDateString()}
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="text-neutral-500 text-sm flex items-center gap-1">
-            {!subscriptionData.cancelAtPeriodEnd
-              ? `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}`
-              : `Ends ${relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}`}
-
-            {!subscriptionData.cancelAtPeriodEnd && (
-              <div className="flex items-center gap-2">
-                {defaultPaymentMethod && ` on card ending in ${defaultPaymentMethod.last4}`}
-                {defaultPaymentMethod && <BrandIcon brand={defaultPaymentMethod.brand!} />}
-              </div>
-            )}
-          </div>
 
           {userCanUpdateBilling && (
             <div className="flex items-center gap-2">
               <ManagePaymentMethodsDialog />
-              {!subscriptionData.cancelAtPeriodEnd ? (
-                <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
-              ) : (
-                <Button
-                  variant="primary"
-                  onClick={handleResumeSubscription}
-                  isLoading={resumeIsPending}
-                  title="Resume subscription"
-                >
-                  <FaPlay /> Resume
-                </Button>
+              {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
+                <div>
+                  {!subscriptionData.cancelAtPeriodEnd ? (
+                    <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
+                  ) : (
+                    <Button
+                      variant="primary"
+                      onClick={handleResumeSubscription}
+                      isLoading={resumeIsPending}
+                      title="Resume subscription"
+                    >
+                      <FaPlay /> Resume
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           )}
