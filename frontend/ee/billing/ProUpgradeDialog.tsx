@@ -57,7 +57,7 @@ const prices: PriceOption[] = [
   },
 ]
 
-const ProUpgradeDialog = (props: { userCount: number }) => {
+const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
   const [checkoutPreview, setCheckoutPreview] = useState<BillingPeriods>('yearly')
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriods | null>(null)
 
@@ -125,10 +125,7 @@ const ProUpgradeDialog = (props: { userCount: number }) => {
     )
   return (
     <div className="space-y-2">
-      <UpgradeForm
-        billingPeriod={billingPeriod}
-        onSuccess={() => console.log('Upgrade successful!')}
-      />
+      <UpgradeForm billingPeriod={billingPeriod} onSuccess={props.onSuccess} />
       <div>
         <Button variant="secondary" onClick={() => setBillingPeriod(null)}>
           Back
