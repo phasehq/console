@@ -2,6 +2,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from ee.billing.stripe import map_stripe_plan_to_tier
 import stripe
+import logging
 from api.models import Organisation
 
 from django.conf import settings
@@ -105,7 +106,8 @@ def handle_subscription_deleted(event):
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)
     except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+        logging.error("An error occurred: %s", str(e))
+        return JsonResponse({"error": "An internal error has occurred"}, status=500)
 
 
 @csrf_exempt
