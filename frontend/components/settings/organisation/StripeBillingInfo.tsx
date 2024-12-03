@@ -25,6 +25,7 @@ import { AddPaymentMethodDialog } from './AddPaymentMethodForm'
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
 import { Alert } from '@/components/common/Alert'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
@@ -308,9 +309,18 @@ const CancelSubscriptionDialog = ({ subscriptionId }: { subscriptionId: string }
 export const StripeBillingInfo = () => {
   const { activeOrganisation } = useContext(organisationContext)
 
+  // Permission checks
+  const userCanReadBilling = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'read')
+    : false
+
+  const userCanUpdateBilling = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'update')
+    : false
+
   const { data, loading } = useQuery(GetSubscriptionDetails, {
     variables: { organisationId: activeOrganisation?.id },
-    skip: !activeOrganisation,
+    skip: !activeOrganisation || !userCanReadBilling,
   })
 
   const [resumeSubscription, { loading: resumeIsPending }] = useMutation(ResumeStripeSubscription)
@@ -345,6 +355,8 @@ export const StripeBillingInfo = () => {
         <Spinner size="md" />
       </div>
     )
+
+  if (!userCanReadBilling) return <></>
 
   return (
     <div className="space-y-6">
@@ -390,21 +402,23 @@ export const StripeBillingInfo = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <ManagePaymentMethodsDialog />
-            {!subscriptionData.cancelAtPeriodEnd ? (
-              <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
-            ) : (
-              <Button
-                variant="primary"
-                onClick={handleResumeSubscription}
-                isLoading={resumeIsPending}
-                title="Resume subscription"
-              >
-                <FaPlay /> Resume
-              </Button>
-            )}
-          </div>
+          {userCanUpdateBilling && (
+            <div className="flex items-center gap-2">
+              <ManagePaymentMethodsDialog />
+              {!subscriptionData.cancelAtPeriodEnd ? (
+                <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
+              ) : (
+                <Button
+                  variant="primary"
+                  onClick={handleResumeSubscription}
+                  isLoading={resumeIsPending}
+                  title="Resume subscription"
+                >
+                  <FaPlay /> Resume
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
