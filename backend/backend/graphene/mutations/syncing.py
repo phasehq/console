@@ -27,11 +27,6 @@ class RailwayResourceInput(graphene.InputObjectType):
     name = graphene.String(required=True)
 
 
-class VercelResourceInput(graphene.InputObjectType):
-    id = graphene.ID(required=True)
-    name = graphene.String(required=True)
-
-
 class InitEnvSync(graphene.Mutation):
     class Arguments:
         app_id = graphene.ID()

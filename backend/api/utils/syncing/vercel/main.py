@@ -108,7 +108,9 @@ def list_vercel_projects(credential_id):
 
 def get_existing_env_vars(token, project_id, team_id=None):
     """Retrieve all environment variables for a specific Vercel project."""
-    url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env?teamId={team_id}"
+    url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env"
+    if team_id is not None:
+        url += f"?teamId={team_id}"
     response = requests.get(url, headers=get_vercel_headers(token))
 
     if response.status_code != 200:
@@ -127,7 +129,9 @@ def get_existing_env_vars(token, project_id, team_id=None):
 
 def delete_env_var(token, project_id, team_id, env_var_id):
     """Delete a Vercel environment variable using its ID."""
-    url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env/{env_var_id}?teamId={team_id}"
+    url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env/{env_var_id}"
+    if team_id is not None:
+        url += f"?teamId={team_id}"
     response = requests.delete(url, headers=get_vercel_headers(token))
 
     if response.status_code != 200:
@@ -199,7 +203,9 @@ def sync_vercel_secrets(
 
         # Bulk create environment variables
         if payload:
-            url = f"{VERCEL_API_BASE_URL}/v10/projects/{project_id}/env?upsert=true&teamId={team_id}"
+            url = f"{VERCEL_API_BASE_URL}/v10/projects/{project_id}/env?upsert=true"
+            if team_id is not None:
+                url += f"&teamId={team_id}"
             response = requests.post(
                 url, headers=get_vercel_headers(token), json=payload
             )

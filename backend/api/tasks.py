@@ -800,7 +800,7 @@ def perform_vercel_sync(environment_sync):
             secrets,
             environment_sync.authentication.id,
             vercel_project["id"],
-            vercel_team["id"],
+            vercel_team["id"] if vercel_team is not None else None,
             vercel_environment,
             vercel_secret_type,
         )
