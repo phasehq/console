@@ -12,7 +12,7 @@ from backend.graphene.mutations.service_accounts import (
     UpdateServiceAccountHandlersMutation,
     UpdateServiceAccountMutation,
 )
-from api.utils.syncing.vercel.main import VercelProjectType
+from api.utils.syncing.vercel.main import VercelTeamProjectsType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
 )
@@ -309,8 +309,8 @@ class Query(graphene.ObjectType):
 
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
-    vercel_projects = graphene.List(VercelProjectType, credential_id=graphene.ID())
-    
+    vercel_projects = graphene.List(VercelTeamProjectsType, credential_id=graphene.ID())
+
     test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
