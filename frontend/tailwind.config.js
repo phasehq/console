@@ -5,6 +5,7 @@ module.exports = {
     './pages/**/*.{js,ts,jsx,tsx}',
     './components/**/*.{js,ts,jsx,tsx}',
   ],
+  safelist: ['border-t-neutral-500', 'border-t-amber-500', 'border-t-emerald-500', 'border-t-8'],
   darkMode: 'class',
   theme: {
     fontSize: {

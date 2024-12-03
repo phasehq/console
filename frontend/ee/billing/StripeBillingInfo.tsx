@@ -356,11 +356,23 @@ export const StripeBillingInfo = () => {
       : subscriptionData?.paymentMethods!.find((paymentMethod) => paymentMethod?.isDefault)
 
   const topBorderColor = () => {
-    if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr) return 'border-t-neutral-500'
-    else if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr) {
-      if (subscriptionData?.cancelAtPeriodEnd) return 'border-t-amber-500'
-      else return 'border-t-emerald-500'
+    const classMap: Record<string, string> = {
+      free: 'border-t-neutral-500', // For free plan
+      pro_active: 'border-t-emerald-500', // For active pro plan
+      pro_cancelled: 'border-t-amber-500', // For cancelled pro plan
     }
+
+    if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr) {
+      return classMap.free
+    } else if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr) {
+      if (subscriptionData?.cancelAtPeriodEnd) {
+        return classMap.pro_cancelled
+      } else {
+        return classMap.pro_active
+      }
+    }
+
+    return '' // Default case if no condition matches
   }
 
   if (loading || !subscriptionData)
@@ -377,7 +389,7 @@ export const StripeBillingInfo = () => {
       <div className="font-semibold text-xl">Current Subscription</div>
       <div
         className={clsx(
-          'p-4 rounded-lg border border-neutral-500/40 border-t-8  bg-zinc-100 dark:bg-zinc-800 flex items-center justify-between gap-4',
+          'p-4 rounded-lg border-b border-x border-t-8 border-neutral-500/40  bg-zinc-100 dark:bg-zinc-800 flex items-center justify-between gap-4',
           topBorderColor()
         )}
       >

@@ -59,7 +59,7 @@ export const UpsellDialog = ({
           ) : (
             ProUpgradeDialog && (
               <ProUpgradeDialog
-                userCount={data.organisationPlan.seatsUsed.total}
+                userCount={data.organisationPlan?.seatsUsed?.total}
                 onSuccess={closeModal}
               />
             )
