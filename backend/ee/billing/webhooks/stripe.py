@@ -61,23 +61,51 @@ def handle_subscription_deleted(event):
             settings.STRIPE["prices"]["pro_monthly"],
             settings.STRIPE["prices"]["pro_yearly"],
         ]
-        if subscription["items"]["data"][0]["price"]["id"] in pro_price_ids:
-            active_subscriptions = stripe.Subscription.list(
-                customer=organisation.stripe_customer_id, status="active"
-            )
+        free_price_id = settings.STRIPE["prices"]["free"]
 
-            has_active_pro_subscription = any(
-                item["price"]["id"] in pro_price_ids
+        # Fetch all active subscriptions for the customer
+        active_subscriptions = stripe.Subscription.list(
+            customer=organisation.stripe_customer_id, status="active"
+        )
+
+        # Check for active Pro subscriptions
+        active_pro_subscriptions = [
+            sub
+            for sub in active_subscriptions["data"]
+            if any(
+                item["price"]["id"] in pro_price_ids for item in sub["items"]["data"]
+            )
+        ]
+
+        if active_pro_subscriptions:
+            # Update the organisation's subscription ID to the first active Pro subscription
+            organisation.stripe_subscription_id = active_pro_subscriptions[0]["id"]
+        else:
+            # Check for the Free subscription
+            free_subscriptions = [
+                sub
                 for sub in active_subscriptions["data"]
-                for item in sub["items"]["data"]
-            )
+                if any(
+                    item["price"]["id"] == free_price_id
+                    for item in sub["items"]["data"]
+                )
+            ]
 
-            if not has_active_pro_subscription:
+            if free_subscriptions:
+                # Update the organisation's subscription ID to the first Free subscription
+                organisation.stripe_subscription_id = free_subscriptions[0]["id"]
                 organisation.plan = Organisation.FREE_PLAN
-                organisation.save()
+            else:
+                # If no active subscription exists, set the plan to Free and clear the subscription ID
+                organisation.plan = Organisation.FREE_PLAN
+                organisation.stripe_subscription_id = None
+
+        organisation.save()
 
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @csrf_exempt
