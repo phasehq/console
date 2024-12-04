@@ -369,7 +369,11 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   When prompted, paste the following token and press <code className="font-mono font-bold">Enter</code>:
                 </p>
               </div>
-              <code className="text-xs break-all text-blue-500 ph-no-capture">{userToken}</code>
+              <CliCommand 
+                command={userToken} 
+                prefix=""
+                wrap={true}
+              />
             </div>
           </div>
 
