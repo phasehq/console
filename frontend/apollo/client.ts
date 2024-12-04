@@ -48,7 +48,7 @@ export const graphQlClient = new ApolloClient({
   cache: new InMemoryCache(),
   defaultOptions: {
     watchQuery: {
-      skipPollAttempt: () => document.hidden || !document.hasFocus()
+      skipPollAttempt: () => document.hidden
     }
   }
 })
