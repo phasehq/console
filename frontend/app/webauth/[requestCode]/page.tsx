@@ -377,19 +377,31 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
             </div>
           </div>
 
-          <div className="space-y-2 pt-20 text-center">
-            <div className="text-neutral-500 text-sm">Still having issues? Get in touch.</div>
-            <div className="flex items-center gap-2 justify-center">
-              <a href="https://slack.phase.dev" target="_blank" rel="noreferrer">
-                <Button variant="secondary">
-                  <SiSlack /> Slack
-                </Button>
+          <div className="space-y-4 pt-16">
+            <div className="text-center">
+              <a 
+                href="https://docs.phase.dev/cli/commands#auth" 
+                target="_blank" 
+                rel="noreferrer"
+                className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                Phase CLI authentication documentation
               </a>
-              <a href="https://github.com/phasehq" target="_blank" rel="noreferrer">
-                <Button variant="secondary">
-                  <SiGithub /> GitHub
-                </Button>
-              </a>
+            </div>
+            <div className="text-center">
+              <div className="text-neutral-500 text-sm">Still having issues? Get in touch.</div>
+              <div className="flex items-center gap-2 justify-center mt-2">
+                <a href="https://slack.phase.dev" target="_blank" rel="noreferrer">
+                  <Button variant="secondary">
+                    <SiSlack /> Slack
+                  </Button>
+                </a>
+                <a href="https://github.com/phasehq" target="_blank" rel="noreferrer">
+                  <Button variant="secondary">
+                    <SiGithub /> GitHub
+                  </Button>
+                </a>
+              </div>
             </div>
           </div>
         </div>
