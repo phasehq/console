@@ -324,7 +324,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
               CLI Authentication failed
             </h1>
             <p className="text-neutral-500 text-base">
-              Something went wrong authenticating with the CLI. Please try the following steps:
+              Not able to connect to your CLI from this page. Please follow these steps to complete the authentication:
             </p>
           </div>
 
