@@ -9,8 +9,9 @@ import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
-
+import { CliCommand } from 'components/dashboard/CliCommand'
 import { copyToClipBoard } from '@/utils/clipboard'
+import { isCloudHosted } from '@/utils/appConfig'
 import {
   OrganisationKeyring,
   getUserKxPublicKey,
