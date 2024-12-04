@@ -328,30 +328,46 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
             </p>
           </div>
 
-          <ol className="text-left list-decimal list-inside text-black dark:text-white space-y-2">
-            <li>
-              Retry authentication with{' '}
-              <code
-                className="text-emerald-500 cursor-pointer"
-                onClick={() => handleCopy('phase auth --mode token')}
-              >
-                phase auth --mode token
-              </code>
-              .
-            </li>
-            <li>Paste the following token into your terminal when prompted:</li>
-          </ol>
-          <div className="py-0">
-            <div className="bg-blue-200 dark:bg-blue-400/10 shadow-inner p-3 rounded-lg">
-              <div className="w-full flex items-center justify-between pb-4">
-                <span className="uppercase text-xs tracking-widest text-gray-500">user token</span>
-                <div className="flex gap-4">
-                  {userToken && (
-                    <Button variant="outline" onClick={() => handleCopy(userToken)}>
-                      <MdContentCopy /> Copy
-                    </Button>
-                  )}
-                </div>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
+                  1
+                </span>
+                <p className="text-black dark:text-white">
+                  Exit out of the CLI by pressing <code className="font-mono font-bold">Ctrl+C</code>
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
+                  2
+                </span>
+                <p className="text-black dark:text-white">Authenticate  via a Personal Access Token (PAT):</p>
+              </div>
+              <CliCommand command="auth --mode token" />
+              <div className="pl-8 text-neutral-500 text-sm space-y-2">
+                {isCloudHosted() ? (
+                  <p>Choose your Phase instance type as: <b>☁️ Phase Cloud</b> and hit <code className="font-mono">Enter</code> <br />
+                  Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email)}>{session?.user?.email}</code> and hit <code className="font-mono">Enter</code></p>
+                ) : (
+                  <p>Choose your Phase instance type as: <b>🛠️ Self Hosted</b> and hit <code className="font-mono">Enter</code> <br />
+                  Enter the host as: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(process.env.NEXT_PUBLIC_NEXTAUTH_URL)}>{process.env.NEXT_PUBLIC_NEXTAUTH_URL}</code> <br />
+                  Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email)}>{session?.user?.email}</code> and hit <code className="font-mono">Enter</code></p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
+                  3
+                </span>
+                <p className="text-black dark:text-white">
+                  When prompted, paste the following token and press <code className="font-mono font-bold">Enter</code>:
+                </p>
               </div>
               <code className="text-xs break-all text-blue-500 ph-no-capture">{userToken}</code>
             </div>
