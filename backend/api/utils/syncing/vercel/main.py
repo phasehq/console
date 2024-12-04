@@ -106,8 +106,16 @@ def list_vercel_projects(credential_id):
         raise Exception(f"Error listing Vercel projects: {str(e)}")
 
 
-def get_existing_env_vars(token, project_id, team_id=None):
-    """Retrieve all environment variables for a specific Vercel project."""
+def get_existing_env_vars(token, project_id, team_id=None, target_environment=None):
+    """
+    Retrieve environment variables for a specific Vercel project and environment.
+    
+    Args:
+        token (str): Vercel API token
+        project_id (str): Project ID
+        team_id (str, optional): Team ID
+        target_environment (str, optional): Specific environment to filter by
+    """
     url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env"
     if team_id is not None:
         url += f"?teamId={team_id}"
@@ -116,6 +124,12 @@ def get_existing_env_vars(token, project_id, team_id=None):
     if response.status_code != 200:
         raise Exception(f"Error retrieving environment variables: {response.text}")
 
+    envs = response.json().get("envs", [])
+    
+    # Filter variables by target environment if specified
+    if target_environment:
+        envs = [env for env in envs if target_environment in env["target"]]
+
     return {
         env["key"]: {
             "id": env["id"],
@@ -123,7 +137,7 @@ def get_existing_env_vars(token, project_id, team_id=None):
             "target": env["target"],
             "comment": env.get("comment"),
         }
-        for env in response.json().get("envs", [])
+        for env in envs
     }
 
 
@@ -147,7 +161,7 @@ def sync_vercel_secrets(
     secret_type="encrypted",
 ):
     """
-    Sync secrets to a Vercel project.
+    Sync secrets to a specific Vercel project environment.
 
     Args:
         secrets (list of tuple): List of (key, value, comment) tuples to sync
@@ -170,54 +184,64 @@ def sync_vercel_secrets(
             else [environment]
         )
 
-        # Get existing environment variables
-        existing_env_vars = get_existing_env_vars(token, project_id, team_id)
+        all_updates_successful = True
+        messages = []
 
-        # Prepare payload for bulk creation
-        payload = []
-        for key, value, comment in secrets:
-            # Check if the environment variable exists and needs updating
-            if key in existing_env_vars:
-                existing_var = existing_env_vars[key]
-                if (
-                    value != existing_var["value"]
-                    or target_environments != existing_var["target"]
-                    or comment != existing_var.get("comment")
-                ):
-                    delete_env_var(token, project_id, team_id, existing_var["id"])
-
-            env_var = {
-                "key": key,
-                "value": value,
-                "type": secret_type,
-                "target": target_environments,
-            }
-            if comment:
-                env_var["comment"] = comment
-            payload.append(env_var)
-
-        # Delete environment variables not in the source
-        for key, env_var in existing_env_vars.items():
-            if not any(s[0] == key for s in secrets):
-                delete_env_var(token, project_id, team_id, env_var["id"])
-
-        # Bulk create environment variables
-        if payload:
-            url = f"{VERCEL_API_BASE_URL}/v10/projects/{project_id}/env?upsert=true"
-            if team_id is not None:
-                url += f"&teamId={team_id}"
-            response = requests.post(
-                url, headers=get_vercel_headers(token), json=payload
+        # Process each target environment separately
+        for target_env in target_environments:
+            # Get existing environment variables for this specific environment
+            existing_env_vars = get_existing_env_vars(
+                token, project_id, team_id, target_environment=target_env
             )
 
-            if response.status_code != 201:
-                raise Exception(
-                    f"Error creating environment variables: {response.text}"
+            # Prepare payload for bulk creation
+            payload = []
+            for key, value, comment in secrets:
+                # Check if the environment variable exists and needs updating
+                if key in existing_env_vars:
+                    existing_var = existing_env_vars[key]
+                    if (
+                        value != existing_var["value"]
+                        or comment != existing_var.get("comment")
+                    ):
+                        # Only delete if we're updating this specific variable
+                        delete_env_var(token, project_id, team_id, existing_var["id"])
+
+                env_var = {
+                    "key": key,
+                    "value": value,
+                    "type": secret_type,
+                    "target": [target_env],  # Set target to specific environment
+                }
+                if comment:
+                    env_var["comment"] = comment
+                payload.append(env_var)
+
+            # Delete environment variables not in the source (only for this environment)
+            for key, env_var in existing_env_vars.items():
+                if not any(s[0] == key for s in secrets):
+                    delete_env_var(token, project_id, team_id, env_var["id"])
+
+            # Bulk create environment variables
+            if payload:
+                url = f"{VERCEL_API_BASE_URL}/v10/projects/{project_id}/env?upsert=true"
+                if team_id is not None:
+                    url += f"&teamId={team_id}"
+                response = requests.post(
+                    url, headers=get_vercel_headers(token), json=payload
                 )
 
-        return True, {
-            "message": f"Successfully synced secrets to Vercel project environments: {', '.join(target_environments)}"
-        }
+                if response.status_code != 201:
+                    all_updates_successful = False
+                    messages.append(
+                        f"Failed to sync secrets for environment {target_env}: {response.text}"
+                    )
+                else:
+                    messages.append(
+                        f"Successfully synced secrets to environment: {target_env}"
+                    )
+
+        return all_updates_successful, {"message": "; ".join(messages)}
 
     except Exception as e:
         return False, {"message": f"Failed to sync secrets: {str(e)}"}
