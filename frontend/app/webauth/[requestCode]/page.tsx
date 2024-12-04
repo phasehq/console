@@ -321,7 +321,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
               <FaExclamationTriangle className="text-amber-500" size="40" />
             </div>
             <h1 className="text-black dark:text-white text-4xl font-semibold">
-              CLI Authentication error
+              CLI Authentication failed
             </h1>
             <p className="text-neutral-500 text-base">
               Something went wrong authenticating with the CLI. Please try the following steps:
