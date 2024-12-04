@@ -143,19 +143,15 @@ export default function DeleteAppDialog(props: {
                       </Alert>
 
                       <div className="flex flex-col justify-center max-w-md mx-auto">
-                        <label
-                          className="block text-gray-700 text-sm font-bold mb-2"
-                          htmlFor="appname"
-                        >
-                          Please type the App name to confirm
-                        </label>
+                        <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                          Please enter the App name <span className="text-gray-900 dark:text-white font-mono font-medium">{appName}</span> to confirm:
+                        </div>
                         <input
                           id="appname"
                           className="text-lg"
                           required
                           maxLength={64}
                           value={typedName}
-                          placeholder="MyApp"
                           onChange={(e) => setTypedName(e.target.value)}
                         />
                       </div>
