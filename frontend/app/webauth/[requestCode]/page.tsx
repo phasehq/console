@@ -388,7 +388,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                 href="https://docs.phase.dev/cli/commands#auth" 
                 target="_blank" 
                 rel="noreferrer"
-                className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                className="text-sm text-emerald-500 hover:text-emerald-400 transition ease"
               >
                 Phase CLI authentication documentation
               </a>
