@@ -22,7 +22,7 @@ export const CliInstallCommands = () => {
       styledScript: (
         <div className="space-y-1">
           <pre>
-            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> scoop bucket add
+            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> bucket add
             phasehq https://github.com/phasehq/scoop-cli.git
           </pre>
           <pre>
