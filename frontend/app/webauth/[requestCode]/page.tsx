@@ -11,7 +11,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { CliCommand } from 'components/dashboard/CliCommand'
 import { copyToClipBoard } from '@/utils/clipboard'
-import { isCloudHosted } from '@/utils/appConfig'
+import { isCloudHosted, getHostname } from '@/utils/appConfig'
 import {
   OrganisationKeyring,
   getUserKxPublicKey,
