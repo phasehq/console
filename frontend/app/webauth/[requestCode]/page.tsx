@@ -351,20 +351,29 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
               <CliCommand command="auth --mode token" />
               <div className="pl-8 text-neutral-500 text-sm space-y-2">
                 {isCloudHosted() ? (
-                  <p>
-                    Choose your Phase instance type as: <b>☁️ Phase Cloud</b> <br />
-                    Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
-                  </p>
+                  <ul className="list-disc list-inside space-y-2">
+                    <li>
+                      Choose your Phase instance type as: <b>☁️ Phase Cloud</b>
+                    </li>
+                    <li>
+                      Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
+                    </li>
+                  </ul>
                 ) : (
-                  <p>
-                    Choose your Phase instance type as: <b>🛠️ Self Hosted</b> <br />
-                    Enter the host: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(getHostname() || '')}>{getHostname()}</code> <br />
-                    Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
-                  </p>
+                  <ul className="list-disc list-inside space-y-2">
+                    <li>
+                      Choose your Phase instance type as: <b>🛠️ Self Hosted</b>
+                    </li>
+                    <li>
+                      Enter the host: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(getHostname() || '')}>{getHostname()}</code>
+                    </li>
+                    <li>
+                      Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
+                    </li>
+                  </ul>
                 )}
               </div>
             </div>
-
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
