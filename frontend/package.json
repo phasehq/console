@@ -11,7 +11,7 @@
     "codegen": "graphql-codegen --config codegen.ts"
   },
   "dependencies": {
-    "@apollo/client": "^3.8.10",
+    "@apollo/client": "^3.11.10",
     "@headlessui/react": "^1.7.18",
     "@heroicons/react": "^2.1.1",
     "@stripe/react-stripe-js": "^2.7.3",
