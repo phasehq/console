@@ -346,17 +346,21 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
                   2
                 </span>
-                <p className="text-black dark:text-white">Retry authentication manually via the <code className="font-mono">token</code> mode:</p>
+                <p className="text-black dark:text-white">Retry authentication manually via the <code className="font-mono font-bold">token</code> mode:</p>
               </div>
               <CliCommand command="auth --mode token" />
               <div className="pl-8 text-neutral-500 text-sm space-y-2">
                 {isCloudHosted() ? (
-                  <p>Choose your Phase instance type as: <b>☁️ Phase Cloud</b> and hit <code className="font-mono">Enter</code> <br />
-                  Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email)}>{session?.user?.email}</code> and hit <code className="font-mono">Enter</code></p>
+                  <p>
+                    Choose your Phase instance type as: <b>☁️ Phase Cloud</b> <br />
+                    Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
+                  </p>
                 ) : (
-                  <p>Choose your Phase instance type as: <b>🛠️ Self Hosted</b> and hit <code className="font-mono">Enter</code> <br />
-                  Enter the host as: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(process.env.NEXT_PUBLIC_NEXTAUTH_URL)}>{process.env.NEXT_PUBLIC_NEXTAUTH_URL}</code> <br />
-                  Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email)}>{session?.user?.email}</code> and hit <code className="font-mono">Enter</code></p>
+                  <p>
+                    Choose your Phase instance type as: <b>🛠️ Self Hosted</b> <br />
+                    Enter the host: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(getHostname() || '')}>{getHostname()}</code> <br />
+                    Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
+                  </p>
                 )}
               </div>
             </div>
@@ -367,7 +371,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   3
                 </span>
                 <p className="text-black dark:text-white">
-                  When prompted, paste the following token and press <code className="font-mono font-bold">Enter</code>:
+                  When prompted, paste Personal Access Token (PAT):
                 </p>
               </div>
               <CliCommand 
