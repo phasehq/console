@@ -22,7 +22,7 @@ export const CliInstallCommands = () => {
       styledScript: (
         <div className="space-y-1">
           <pre>
-            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> scoop bucket add
+            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> bucket add
             phasehq https://github.com/phasehq/scoop-cli.git
           </pre>
           <pre>
@@ -63,22 +63,23 @@ export const CliInstallCommands = () => {
     },
     {
       name: 'Python Pip',
-      rawScript: 'pip install phase',
+      rawScript: 'pip install phase-cli',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">pip3</span> install phase-cli
+          <span className="text-emerald-800 dark:text-emerald-300">pip</span> install phase-cli
         </pre>
       ),
     },
     {
       name: 'Alpine Linux',
-      rawScript: 'apk add --no-cache curl && curl -fsSL https://pkg.phase.dev/install.sh | sh',
+      rawScript: 'apk update && apk add --no-cache curl bash && curl -fsSL https://pkg.phase.dev/install.sh | bash',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">apk</span> add --no-cache curl &&
+          <span className="text-emerald-800 dark:text-emerald-300">apk</span> update &&
+          <span className="text-emerald-800 dark:text-emerald-300"> apk</span> add --no-cache curl bash &&
           <span className="text-emerald-800 dark:text-emerald-300"> curl</span> -fsSL
           https://pkg.phase.dev/install.sh |
-          <span className="text-emerald-800 dark:text-emerald-300">sh</span>
+          <span className="text-emerald-800 dark:text-emerald-300"> bash</span>
         </pre>
       ),
     },
