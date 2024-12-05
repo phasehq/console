@@ -72,13 +72,14 @@ export const CliInstallCommands = () => {
     },
     {
       name: 'Alpine Linux',
-      rawScript: 'apk add --no-cache curl && curl -fsSL https://pkg.phase.dev/install.sh | sh',
+      rawScript: 'apk update && apk add --no-cache curl bash && curl -fsSL https://pkg.phase.dev/install.sh | bash',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">apk</span> add --no-cache curl &&
+          <span className="text-emerald-800 dark:text-emerald-300">apk</span> update &&
+          <span className="text-emerald-800 dark:text-emerald-300"> apk</span> add --no-cache curl bash &&
           <span className="text-emerald-800 dark:text-emerald-300"> curl</span> -fsSL
           https://pkg.phase.dev/install.sh |
-          <span className="text-emerald-800 dark:text-emerald-300">sh</span>
+          <span className="text-emerald-800 dark:text-emerald-300"> bash</span>
         </pre>
       ),
     },
