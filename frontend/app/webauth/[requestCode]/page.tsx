@@ -341,7 +341,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-6">
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
                   2
