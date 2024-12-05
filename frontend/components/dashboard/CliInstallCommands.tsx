@@ -63,10 +63,10 @@ export const CliInstallCommands = () => {
     },
     {
       name: 'Python Pip',
-      rawScript: 'pip install phase',
+      rawScript: 'pip install phase-cli',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">pip3</span> install phase-cli
+          <span className="text-emerald-800 dark:text-emerald-300">pip</span> install phase-cli
         </pre>
       ),
     },
