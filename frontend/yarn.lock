@@ -20,18 +20,20 @@
     "@jridgewell/gen-mapping" "^0.3.0"
     "@jridgewell/trace-mapping" "^0.3.9"
 
-"@apollo/client@^3.8.10":
-  version "3.8.10"
-  resolved "https://registry.yarnpkg.com/@apollo/client/-/client-3.8.10.tgz#db6ee4378212d93c1f22b90a2aa474f6e9664b68"
-  integrity sha512-p/22RZ8ehHyvySnC20EHPPe0gdu8Xp6ZCiXOfdEe1ZORw5cUteD/TLc66tfKv8qu8NLIfbiWoa+6s70XnKvxqg==
+"@apollo/client@^3.11.10":
+  version "3.11.10"
+  resolved "https://registry.yarnpkg.com/@apollo/client/-/client-3.11.10.tgz#e16ae82ea9b16536ffd109847d24f9293fab5c4d"
+  integrity sha512-IfGc+X4il0rDqVQBBWdxIKM+ciDCiDzBq9+Bg9z4tJMi87uF6po4v+ddiac1wP0ARgVPsFwEIGxK7jhN4pW8jg==
   dependencies:
     "@graphql-typed-document-node/core" "^3.1.1"
+    "@wry/caches" "^1.0.0"
     "@wry/equality" "^0.5.6"
     "@wry/trie" "^0.5.0"
     graphql-tag "^2.12.6"
     hoist-non-react-statics "^3.3.2"
     optimism "^0.18.0"
     prop-types "^15.7.2"
+    rehackt "^0.1.0"
     response-iterator "^0.2.6"
     symbol-observable "^4.0.0"
     ts-invariant "^0.10.3"
@@ -8257,6 +8259,11 @@ regexp.prototype.flags@^1.5.1:
     call-bind "^1.0.2"
     define-properties "^1.2.0"
     set-function-name "^2.0.0"
+
+rehackt@^0.1.0:
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/rehackt/-/rehackt-0.1.0.tgz#a7c5e289c87345f70da8728a7eb878e5d03c696b"
+  integrity sha512-7kRDOuLHB87D/JESKxQoRwv4DzbIdwkAGQ7p6QKGdVlY1IZheUnVhlk/4UZlNUVxdAXpyxikE3URsG067ybVzw==
 
 relay-runtime@12.0.0:
   version "12.0.0"
