@@ -346,7 +346,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
                   2
                 </span>
-                <p className="text-black dark:text-white">Authenticate  via a Personal Access Token (PAT):</p>
+                <p className="text-black dark:text-white">Retry authentication manually via the <code className="font-mono">token</code> mode:</p>
               </div>
               <CliCommand command="auth --mode token" />
               <div className="pl-8 text-neutral-500 text-sm space-y-2">
