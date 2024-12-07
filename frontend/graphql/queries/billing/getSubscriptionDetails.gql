@@ -1,0 +1,20 @@
+query GetSubscriptionDetails($organisationId: ID!) {
+  stripeSubscriptionDetails(organisationId: $organisationId) {
+    subscriptionId
+    planName
+    status
+    currentPeriodStart
+    currentPeriodEnd
+    renewalDate
+    cancelAt
+    cancelAtPeriodEnd
+    paymentMethods {
+      id
+      brand
+      last4
+      expMonth
+      expYear
+      isDefault
+    }
+  }
+}

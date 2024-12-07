@@ -19,7 +19,12 @@ const documents = {
     "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.AddMemberToAppDocument,
     "mutation RemoveMemberFromApp($memberId: ID!, $memberType: MemberType, $appId: ID!) {\n  removeAppMember(memberId: $memberId, memberType: $memberType, appId: $appId) {\n    app {\n      id\n    }\n  }\n}": types.RemoveMemberFromAppDocument,
     "mutation UpdateEnvScope($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.UpdateEnvScopeDocument,
+    "mutation CancelStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  cancelSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n  }\n}": types.CancelStripeSubscriptionDocument,
+    "mutation CreateStripeSetupIntentOp($organisationId: ID!) {\n  createSetupIntent(organisationId: $organisationId) {\n    clientSecret\n  }\n}": types.CreateStripeSetupIntentOpDocument,
+    "mutation DeleteStripePaymentMethod($organisationId: ID!, $paymentMethodId: String!) {\n  deletePaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}": types.DeleteStripePaymentMethodDocument,
     "mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}": types.InitStripeProUpgradeCheckoutDocument,
+    "mutation ResumeStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  resumeSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n    message\n    canceledAt\n    status\n  }\n}": types.ResumeStripeSubscriptionDocument,
+    "mutation SetDefaultStripePaymentMethodOp($organisationId: ID!, $paymentMethodId: String!) {\n  setDefaultPaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}": types.SetDefaultStripePaymentMethodOpDocument,
     "mutation CreateApplication($id: ID!, $organisationId: ID!, $name: String!, $identityKey: String!, $appToken: String!, $appSeed: String!, $wrappedKeyShare: String!, $appVersion: Int!) {\n  createApp(\n    id: $id\n    organisationId: $organisationId\n    name: $name\n    identityKey: $identityKey\n    appToken: $appToken\n    appSeed: $appSeed\n    wrappedKeyShare: $wrappedKeyShare\n    appVersion: $appVersion\n  ) {\n    app {\n      id\n      name\n      identityKey\n    }\n  }\n}": types.CreateApplicationDocument,
     "mutation CreateOrg($id: ID!, $name: String!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!) {\n  createOrganisation(\n    id: $id\n    name: $name\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n  ) {\n    organisation {\n      id\n      name\n      memberId\n    }\n  }\n}": types.CreateOrgDocument,
     "mutation DeleteApplication($id: ID!) {\n  deleteApp(id: $id) {\n    ok\n  }\n}": types.DeleteApplicationDocument,
@@ -77,6 +82,7 @@ const documents = {
     "query GetAppMembers($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n  }\n}": types.GetAppMembersDocument,
     "query GetAppServiceAccounts($appId: ID!) {\n  appServiceAccounts(appId: $appId) {\n    id\n    identityKey\n    name\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n    tokens {\n      id\n      name\n    }\n  }\n}": types.GetAppServiceAccountsDocument,
     "query GetCheckoutDetails($stripeSessionId: String!) {\n  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}": types.GetCheckoutDetailsDocument,
+    "query GetSubscriptionDetails($organisationId: ID!) {\n  stripeSubscriptionDetails(organisationId: $organisationId) {\n    subscriptionId\n    planName\n    status\n    currentPeriodStart\n    currentPeriodEnd\n    renewalDate\n    cancelAt\n    cancelAtPeriodEnd\n    paymentMethods {\n      id\n      brand\n      last4\n      expMonth\n      expYear\n      isDefault\n    }\n  }\n}": types.GetSubscriptionDetailsDocument,
     "query GetAppActivityChart($appId: ID!, $period: TimeRange) {\n  appActivityChart(appId: $appId, period: $period) {\n    index\n    date\n    data\n  }\n}": types.GetAppActivityChartDocument,
     "query GetAppDetail($organisationId: ID!, $appId: ID!) {\n  apps(organisationId: $organisationId, appId: $appId) {\n    id\n    name\n    identityKey\n    createdAt\n    appToken\n    appSeed\n    appVersion\n    sseEnabled\n  }\n}": types.GetAppDetailDocument,
     "query GetAppKmsLogs($appId: ID!, $start: BigInt, $end: BigInt) {\n  logs(appId: $appId, start: $start, end: $end) {\n    kms {\n      id\n      timestamp\n      phaseNode\n      eventType\n      ipAddress\n      country\n      city\n      phSize\n    }\n  }\n  kmsLogsCount(appId: $appId)\n}": types.GetAppKmsLogsDocument,
@@ -161,7 +167,27 @@ export function graphql(source: "mutation UpdateEnvScope($memberId: ID!, $member
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation CancelStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  cancelSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n  }\n}"): (typeof documents)["mutation CancelStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  cancelSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation CreateStripeSetupIntentOp($organisationId: ID!) {\n  createSetupIntent(organisationId: $organisationId) {\n    clientSecret\n  }\n}"): (typeof documents)["mutation CreateStripeSetupIntentOp($organisationId: ID!) {\n  createSetupIntent(organisationId: $organisationId) {\n    clientSecret\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation DeleteStripePaymentMethod($organisationId: ID!, $paymentMethodId: String!) {\n  deletePaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}"): (typeof documents)["mutation DeleteStripePaymentMethod($organisationId: ID!, $paymentMethodId: String!) {\n  deletePaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}"): (typeof documents)["mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {\n  createProUpgradeCheckoutSession(\n    organisationId: $organisationId\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation ResumeStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  resumeSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n    message\n    canceledAt\n    status\n  }\n}"): (typeof documents)["mutation ResumeStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  resumeSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n    message\n    canceledAt\n    status\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation SetDefaultStripePaymentMethodOp($organisationId: ID!, $paymentMethodId: String!) {\n  setDefaultPaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}"): (typeof documents)["mutation SetDefaultStripePaymentMethodOp($organisationId: ID!, $paymentMethodId: String!) {\n  setDefaultPaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -390,6 +416,10 @@ export function graphql(source: "query GetAppServiceAccounts($appId: ID!) {\n  a
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetCheckoutDetails($stripeSessionId: String!) {\n  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}"): (typeof documents)["query GetCheckoutDetails($stripeSessionId: String!) {\n  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetSubscriptionDetails($organisationId: ID!) {\n  stripeSubscriptionDetails(organisationId: $organisationId) {\n    subscriptionId\n    planName\n    status\n    currentPeriodStart\n    currentPeriodEnd\n    renewalDate\n    cancelAt\n    cancelAtPeriodEnd\n    paymentMethods {\n      id\n      brand\n      last4\n      expMonth\n      expYear\n      isDefault\n    }\n  }\n}"): (typeof documents)["query GetSubscriptionDetails($organisationId: ID!) {\n  stripeSubscriptionDetails(organisationId: $organisationId) {\n    subscriptionId\n    planName\n    status\n    currentPeriodStart\n    currentPeriodEnd\n    renewalDate\n    cancelAt\n    cancelAtPeriodEnd\n    paymentMethods {\n      id\n      brand\n      last4\n      expMonth\n      expYear\n      isDefault\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

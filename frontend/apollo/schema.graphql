@@ -45,6 +45,7 @@ type Query {
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
+  stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
 }
 
 type OrganisationType {
@@ -657,6 +658,27 @@ type StripeCheckoutDetails {
   planName: String
 }
 
+type StripeSubscriptionDetails {
+  subscriptionId: String
+  planName: String
+  status: String
+  currentPeriodStart: Int
+  currentPeriodEnd: Int
+  renewalDate: Int
+  cancelAt: Int
+  cancelAtPeriodEnd: Boolean
+  paymentMethods: [PaymentMethodDetails]
+}
+
+type PaymentMethodDetails {
+  id: String
+  brand: String
+  last4: String
+  expMonth: Int
+  expYear: Int
+  isDefault: Boolean
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!): InviteOrganisationMemberMutation
@@ -721,6 +743,16 @@ type Mutation {
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation
   createProUpgradeCheckoutSession(billingPeriod: String, organisationId: ID!): CreateProUpgradeCheckoutSession
+  deletePaymentMethod(organisationId: ID, paymentMethodId: String): DeletePaymentMethodMutation
+  cancelSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
+  resumeSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
+  createSetupIntent(organisationId: ID): CreateSetupIntentMutation
+  setDefaultPaymentMethod(
+    organisationId: ID
+
+    """Payment Method ID to set as default"""
+    paymentMethodId: String!
+  ): SetDefaultPaymentMethodMutation
 }
 
 type CreateOrganisationMutation {
@@ -1035,4 +1067,23 @@ input LockboxInput {
 
 type CreateProUpgradeCheckoutSession {
   clientSecret: String
+}
+
+type DeletePaymentMethodMutation {
+  ok: Boolean
+}
+
+type UpdateSubscriptionResponse {
+  success: Boolean
+  message: String
+  canceledAt: String
+  status: String
+}
+
+type CreateSetupIntentMutation {
+  clientSecret: String
+}
+
+type SetDefaultPaymentMethodMutation {
+  ok: Boolean
 }

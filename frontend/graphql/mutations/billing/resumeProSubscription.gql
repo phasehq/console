@@ -1,0 +1,8 @@
+mutation ResumeStripeSubscription($organisationId: ID!, $subscriptionId: String!) {
+  resumeSubscription(organisationId: $organisationId, subscriptionId: $subscriptionId) {
+    success
+    message
+    canceledAt
+    status
+  }
+}

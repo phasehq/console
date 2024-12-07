@@ -16,13 +16,12 @@ import {
   FaCubes,
   FaTimesCircle,
   FaUser,
-  FaUsersCog,
 } from 'react-icons/fa'
 import Link from 'next/link'
 import { ActivatedPhaseLicenseType, ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { isCloudHosted } from '@/utils/appConfig'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
-import { License } from './License'
+import { License } from '../../../ee/billing/License'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { FaKey } from 'react-icons/fa6'
 import { useSearchParams } from 'next/navigation'
@@ -31,6 +30,7 @@ import { UpsellDialog } from './UpsellDialog'
 import { userHasPermission } from '@/utils/access/permissions'
 import Accordion from '@/components/common/Accordion'
 import clsx from 'clsx'
+import { StripeBillingInfo } from '../../../ee/billing/StripeBillingInfo'
 
 const plansInfo = {
   FR: {
@@ -202,6 +202,7 @@ export const PlanInfo = () => {
               )}
             </div>
             {license() && <License license={license()!} showExpiry />}
+            {isCloudHosted() && <StripeBillingInfo />}
           </div>
         </div>
 

@@ -5,7 +5,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { isCloudHosted } from '@/utils/appConfig'
 import { useQuery } from '@apollo/client'
-import { ReactNode, useContext } from 'react'
+import { ReactNode, useContext, useRef } from 'react'
 import dynamic from 'next/dynamic'
 
 export const UpsellDialog = ({
@@ -18,6 +18,10 @@ export const UpsellDialog = ({
   buttonVariant?: 'primary' | 'secondary' | 'outline' | 'danger'
 }) => {
   const { activeOrganisation } = useContext(organisationContext)
+
+  const dialogRef = useRef<{ closeModal: () => void }>(null)
+
+  const closeModal = () => dialogRef?.current?.closeModal()
 
   // Dynamically import ProUpgradeDialog only if the app is cloud-hosted
   const ProUpgradeDialog = isCloudHosted()
@@ -42,6 +46,7 @@ export const UpsellDialog = ({
       buttonContent={buttonLabel || 'Upgrade'}
       size="sm"
       onClose={() => {}}
+      ref={dialogRef}
     >
       <div className="space-y-4">
         <div className="text-neutral-500">
@@ -52,7 +57,12 @@ export const UpsellDialog = ({
           activeOrganisation.plan === ApiOrganisationPlanChoices.Pr ? (
             <UpgradeRequestForm onSuccess={() => {}} />
           ) : (
-            ProUpgradeDialog && <ProUpgradeDialog userCount={data.organisationPlan.seatsUsed.total} />
+            ProUpgradeDialog && (
+              <ProUpgradeDialog
+                userCount={data.organisationPlan?.seatsUsed?.total}
+                onSuccess={closeModal}
+              />
+            )
           )
         ) : (
           <div className="text-zinc-900 dark:text-zinc-100">

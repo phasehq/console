@@ -4,7 +4,7 @@ import { Button } from '@/components/common/Button'
 import { Dialog, Transition } from '@headlessui/react'
 import { useState, Fragment } from 'react'
 import { FaCheckCircle, FaTimes, FaTimesCircle } from 'react-icons/fa'
-import { relativeTimeFromDates } from '@/utils/time'
+import { useRouter } from 'next/navigation'
 
 export const PostCheckoutScreen = ({ stripeSessionId }: { stripeSessionId: string }) => {
   const { loading, error, data } = useQuery(GetCheckoutDetails, {
@@ -12,9 +12,22 @@ export const PostCheckoutScreen = ({ stripeSessionId }: { stripeSessionId: strin
   })
 
   const [isOpen, setIsOpen] = useState<boolean>(true)
+  const router = useRouter()
 
   const closeModal = () => {
     setIsOpen(false)
+
+    // Get the router instance
+
+    // Create a new URLSearchParams object based on the current search params
+    const params = new URLSearchParams(window.location.search)
+
+    // Remove the stripe_session_id parameter
+    params.delete('stripe_session_id')
+
+    // Update the URL without refreshing the page
+    const newUrl = `${window.location.pathname}?${params.toString()}`
+    router.replace(newUrl)
   }
 
   if (loading) return <p>Loading...</p>

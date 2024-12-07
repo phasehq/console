@@ -18,7 +18,6 @@ import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import CheckOrganisationNameAvailability from '@/graphql/queries/organisation/checkOrgNameAvailable.gql'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { setDevicePassword } from '@/utils/localStorage'
-import { License } from '@/components/settings/organisation/License'
 import { LogoMark } from '@/components/common/LogoMark'
 import {
   organisationSeed,
@@ -27,6 +26,7 @@ import {
   encryptAccountKeyring,
   encryptAccountRecovery,
 } from '@/utils/crypto'
+import { License } from '@/ee/billing/License'
 
 const bip39 = require('bip39')
 
