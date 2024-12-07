@@ -61,6 +61,9 @@ class CreateProUpgradeCheckoutSession(Mutation):
                     "trial_period_days": 30,
                 },
                 return_url=f"{settings.OAUTH_REDIRECT_URI}/{organisation.name}/settings?stripe_session_id={{CHECKOUT_SESSION_ID}}",
+                saved_payment_method_options={
+                    "allow_redisplay_filters": ["always", "limited", "unspecified"],
+                },
             )
             return CreateProUpgradeCheckoutSession(client_secret=session.client_secret)
 
@@ -220,6 +223,10 @@ class CreateSetupIntentMutation(Mutation):
         # Create a SetupIntent for the customer
         setup_intent = stripe.SetupIntent.create(
             customer=org.stripe_customer_id,
+            usage="off_session",
+            automatic_payment_methods={
+                "enabled": False,
+            },
             payment_method_types=["card"],
         )
 
@@ -252,6 +259,8 @@ class SetDefaultPaymentMethodMutation(Mutation):
                 org.stripe_customer_id,
                 invoice_settings={"default_payment_method": payment_method_id},
             )
+
+            stripe.PaymentMethod.modify(payment_method_id, allow_redisplay="limited")
 
             return SetDefaultPaymentMethodMutation(ok=True)
         except stripe.error.StripeError as e:
