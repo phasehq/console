@@ -302,6 +302,12 @@ const ManagePaymentMethodsDialog = () => {
     )
   }
 
+  if (
+    activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
+    subscriptionData?.paymentMethods?.length === 0
+  )
+    return <></>
+
   return (
     <GenericDialog
       buttonContent={
