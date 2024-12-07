@@ -1,7 +1,7 @@
 import { useMutation } from '@apollo/client'
 import { useContext, useRef, useState } from 'react'
-import { loadStripe } from '@stripe/stripe-js'
-import { CardElement, Elements, useStripe, useElements } from '@stripe/react-stripe-js'
+import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
+import { Elements, useStripe, useElements, PaymentElement } from '@stripe/react-stripe-js'
 import CreateStripeSetupIntentOp from '@/graphql/mutations/billing/createStripeSetupIntent.gql'
 
 import { Button } from '@/components/common/Button'
@@ -12,7 +12,7 @@ import { toast } from 'react-toastify'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
-const AddPaymentMethodForm = ({ onSuccess }: { onSuccess: () => void }) => {
+export const AddPaymentMethodForm = ({ onSuccess }: { onSuccess: () => void }) => {
   const { activeOrganisation } = useContext(organisationContext)
   const dialogRef = useRef<{ closeModal: () => void }>(null)
   const stripe = useStripe()
@@ -35,20 +35,22 @@ const AddPaymentMethodForm = ({ onSuccess }: { onSuccess: () => void }) => {
     setError(null)
 
     try {
+      const { error: submitError } = await elements.submit()
+      if (submitError) setError(submitError.message || 'An error occurred')
       // Fetch the client secret from the server
       const { data } = await createSetupIntent({
         variables: { organisationId: activeOrganisation!.id },
       })
       const clientSecret = data.createSetupIntent.clientSecret
 
-      // Confirm the card setup
-      const cardElement = elements.getElement(CardElement)
-      if (!cardElement) throw new Error('CardElement not found.')
-
-      const result = await stripe.confirmCardSetup(clientSecret, {
-        payment_method: {
-          card: cardElement,
+      // Confirm the payment setup
+      const result = await stripe.confirmSetup({
+        elements,
+        clientSecret,
+        confirmParams: {
+          return_url: `${window.location.origin}/${activeOrganisation?.name}/settings`,
         },
+        redirect: 'if_required',
       })
 
       if (result.error) {
@@ -72,22 +74,7 @@ const AddPaymentMethodForm = ({ onSuccess }: { onSuccess: () => void }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 py-4">
       <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-lg ring-1 ring-neutral-500/20">
-        <CardElement
-          options={{
-            style: {
-              base: {
-                fontSize: '16px',
-                color: '#a3a3a3',
-                '::placeholder': {
-                  color: '#aab7c4',
-                },
-              },
-              invalid: {
-                color: '#fa755a',
-              },
-            },
-          }}
-        />
+        <PaymentElement />
       </div>
       <div className="text-neutral-500 text-xs">Powered by Stripe</div>
       {error && <div className="text-red-500 text-sm">{error}</div>}
@@ -109,6 +96,19 @@ export const AddPaymentMethodDialog = ({ onSuccess }: { onSuccess: () => void })
     onSuccess()
   }
 
+  const elementsOptions: StripeElementsOptions = {
+    mode: 'setup',
+    currency: 'usd',
+    setupFutureUsage: 'off_session',
+    payment_method_types: ['card'],
+    appearance: {
+      theme: 'night',
+      variables: {
+        colorPrimary: '#10b981',
+      },
+    },
+  }
+
   return (
     <GenericDialog
       title="Add a payment method"
@@ -120,7 +120,7 @@ export const AddPaymentMethodDialog = ({ onSuccess }: { onSuccess: () => void })
       buttonVariant="primary"
       ref={dialogRef}
     >
-      <Elements stripe={stripePromise}>
+      <Elements stripe={stripePromise} options={elementsOptions}>
         <AddPaymentMethodForm onSuccess={handleSuccess} />
       </Elements>
     </GenericDialog>
