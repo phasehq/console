@@ -368,7 +368,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                       Enter the host: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(getHostname() || '')}>{getHostname()}</code>
                     </li>
                     <li>
-                      Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
+                      Enter your email address: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
                     </li>
                   </ul>
                 )}
