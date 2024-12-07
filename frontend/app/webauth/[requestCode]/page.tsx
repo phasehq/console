@@ -356,7 +356,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                       Choose your Phase instance type as: <b>☁️ Phase Cloud</b>
                     </li>
                     <li>
-                      Enter your Email: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
+                      Enter your email address: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
                     </li>
                   </ul>
                 ) : (
