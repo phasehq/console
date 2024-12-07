@@ -25,16 +25,19 @@ import {
   SiMastercard,
   SiVisa,
 } from 'react-icons/si'
-import { AddPaymentMethodDialog } from './AddPaymentMethodForm'
+
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
 import { Alert } from '@/components/common/Alert'
 import { userHasPermission } from '@/utils/access/permissions'
+import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
+import { Elements } from '@stripe/react-stripe-js'
+import { AddPaymentMethodDialog, AddPaymentMethodForm } from './AddPaymentMethodForm'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
     case 'visa':
-      return <SiVisa className="shrink-0 text-blue-600" />
+      return <SiVisa className="shrink-0 text-[#0000ff]" />
     case 'mastercard':
       return <SiMastercard className="shrink-0 text-red-600" />
     case 'amex':
@@ -115,6 +118,80 @@ const DeletePaymentMethodDialog = ({ paymentMethodId }: { paymentMethodId: strin
   )
 }
 
+const ResumeSubscription = ({
+  subscriptionData,
+}: {
+  subscriptionData: StripeSubscriptionDetails
+}) => {
+  const { activeOrganisation } = useContext(organisationContext)
+
+  const elementsOptions: StripeElementsOptions = {
+    mode: 'setup',
+    currency: 'usd',
+    setupFutureUsage: 'off_session',
+    payment_method_types: ['card'],
+    appearance: {
+      theme: 'night',
+      variables: {
+        colorPrimary: '#10b981',
+      },
+    },
+  }
+
+  const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
+
+  const paymentMethodExists = subscriptionData.paymentMethods!.length > 0
+
+  const [resumeSubscription, { loading: resumeIsPending }] = useMutation(ResumeStripeSubscription)
+
+  const handleResumeSubscription = async () => {
+    if (subscriptionData?.cancelAtPeriodEnd) {
+      await resumeSubscription({
+        variables: {
+          organisationId: activeOrganisation?.id,
+          subscriptionId: subscriptionData.subscriptionId,
+        },
+        refetchQueries: [
+          { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation?.id } },
+          { query: GetOrganisations },
+        ],
+      })
+      toast.success('Resumed subscription')
+    }
+  }
+
+  if (paymentMethodExists)
+    return (
+      <Button
+        variant="primary"
+        onClick={handleResumeSubscription}
+        isLoading={resumeIsPending}
+        title="Resume subscription"
+      >
+        <FaPlay /> Resume
+      </Button>
+    )
+  else
+    return (
+      <GenericDialog
+        title="Resume subscription"
+        buttonVariant="primary"
+        buttonContent={
+          <>
+            <FaPlay /> Resume
+          </>
+        }
+      >
+        <div>
+          <div className="py-4">Please add a payment method to resume your subscription.</div>
+          <Elements stripe={stripePromise} options={elementsOptions}>
+            <AddPaymentMethodForm onSuccess={handleResumeSubscription} />
+          </Elements>
+        </div>
+      </GenericDialog>
+    )
+}
+
 const ManagePaymentMethodsDialog = () => {
   const { activeOrganisation } = useContext(organisationContext)
 
@@ -126,21 +203,15 @@ const ManagePaymentMethodsDialog = () => {
   const subscriptionData: StripeSubscriptionDetails | undefined =
     data?.stripeSubscriptionDetails ?? undefined
 
-  const defaultPaymentMethod =
-    subscriptionData?.paymentMethods!.length === 1
-      ? subscriptionData?.paymentMethods[0]
-      : subscriptionData?.paymentMethods!.find((paymentMethod) => paymentMethod?.isDefault)
-
-  const nonDefaultPaymentMethods =
-    subscriptionData?.paymentMethods!.length! > 1
-      ? subscriptionData?.paymentMethods?.filter(
-          (paymentMethod) => paymentMethod?.isDefault === false
-        )
-      : []
+  const userCanDeleteBilling = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'delete')
+    : false
 
   const allowDelete =
-    subscriptionData?.paymentMethods!.length! > 1 ||
-    activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr
+    userCanDeleteBilling &&
+    (subscriptionData?.paymentMethods!.length! > 1 ||
+      subscriptionData?.cancelAtPeriodEnd ||
+      activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr)
 
   const [getSubscriptionDetails] = useLazyQuery(GetSubscriptionDetails)
   const [setDefaultPaymentMethod, { loading: setDefaultPending }] = useMutation(
@@ -205,7 +276,7 @@ const ManagePaymentMethodsDialog = () => {
         {/* Actions */}
         <div className="flex items-center gap-3">
           {paymentMethod?.isDefault && (
-            <div className="px-1 text-2xs font-semibold text-emerald-700 bg-emerald-200 rounded-md dark:text-emerald-200 dark:bg-emerald-700 flex items-center gap-2 absolute top-0 right-0 origin-bottom-right">
+            <div className="px-2 py-1 text-2xs font-semibold text-emerald-700 bg-emerald-200 rounded-md dark:text-emerald-200 dark:bg-emerald-700 flex items-center gap-2 absolute top-0 right-0 origin-bottom-right">
               <FaCheckCircle /> Default
             </div>
           )}
@@ -246,20 +317,16 @@ const ManagePaymentMethodsDialog = () => {
           Add or remove payment methods, and manage your default payment method
         </div>
         <div className="space-y-4 py-4">
-          {defaultPaymentMethod && (
-            <div className="pb-4 border-b border-neutral-500/40">
-              <PaymentMethodCard paymentMethod={defaultPaymentMethod} />
-            </div>
-          )}
-
-          {nonDefaultPaymentMethods?.map((paymentMethod, index) => (
+          {subscriptionData?.paymentMethods?.map((paymentMethod, index) => (
             <PaymentMethodCard key={paymentMethod!.id} paymentMethod={paymentMethod!} />
           ))}
         </div>
 
-        <div className="flex justify-end">
-          <AddPaymentMethodDialog onSuccess={refetchSubscription} />
-        </div>
+        {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr && (
+          <div className="flex justify-end">
+            <AddPaymentMethodDialog onSuccess={refetchSubscription} />
+          </div>
+        )}
       </div>
     </GenericDialog>
   )
@@ -329,26 +396,8 @@ export const StripeBillingInfo = () => {
     skip: !activeOrganisation || !userCanReadBilling,
   })
 
-  const [resumeSubscription, { loading: resumeIsPending }] = useMutation(ResumeStripeSubscription)
-
   const subscriptionData: StripeSubscriptionDetails | undefined =
     data?.stripeSubscriptionDetails ?? undefined
-
-  const handleResumeSubscription = async () => {
-    if (subscriptionData?.cancelAtPeriodEnd) {
-      await resumeSubscription({
-        variables: {
-          organisationId: activeOrganisation?.id,
-          subscriptionId: subscriptionData.subscriptionId,
-        },
-        refetchQueries: [
-          { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation?.id } },
-          { query: GetOrganisations },
-        ],
-      })
-      toast.success('Resumed subscription')
-    }
-  }
 
   const defaultPaymentMethod =
     subscriptionData?.paymentMethods!.length === 1
@@ -444,14 +493,7 @@ export const StripeBillingInfo = () => {
                   {!subscriptionData.cancelAtPeriodEnd ? (
                     <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
                   ) : (
-                    <Button
-                      variant="primary"
-                      onClick={handleResumeSubscription}
-                      isLoading={resumeIsPending}
-                      title="Resume subscription"
-                    >
-                      <FaPlay /> Resume
-                    </Button>
+                    <ResumeSubscription subscriptionData={subscriptionData} />
                   )}
                 </div>
               )}
