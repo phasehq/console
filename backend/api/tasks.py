@@ -93,7 +93,7 @@ def trigger_sync_tasks(env_sync):
         job_id = job.get_id()
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-       
+
     elif env_sync.service == ServiceConfig.VERCEL["id"]:
         env_sync.status = EnvironmentSync.IN_PROGRESS
         env_sync.save()
@@ -792,6 +792,7 @@ def perform_vercel_sync(environment_sync):
         vercel_sync_options = environment_sync.options
 
         vercel_project = vercel_sync_options.get("project")
+        vercel_team = vercel_sync_options.get("team")
         vercel_environment = vercel_sync_options.get("environment", "production")
         vercel_secret_type = vercel_sync_options.get("secret_type", "encrypted")
 
@@ -799,6 +800,7 @@ def perform_vercel_sync(environment_sync):
             secrets,
             environment_sync.authentication.id,
             vercel_project["id"],
+            vercel_team["id"] if vercel_team is not None else None,
             vercel_environment,
             vercel_secret_type,
         )

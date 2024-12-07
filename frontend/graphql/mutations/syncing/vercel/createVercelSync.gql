@@ -4,6 +4,8 @@ mutation CreateNewVercelSync(
   $credentialId: ID!
   $projectId: String!
   $projectName: String!
+  $teamId: String!
+  $teamName: String!
   $environment: String!
   $secretType: String!
 ) {
@@ -13,6 +15,8 @@ mutation CreateNewVercelSync(
     credentialId: $credentialId
     projectId: $projectId
     projectName: $projectName
+    teamId: $teamId
+    teamName: $teamName
     environment: $environment
     secretType: $secretType
   ) {

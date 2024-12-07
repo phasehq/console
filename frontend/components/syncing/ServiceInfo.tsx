@@ -67,13 +67,14 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
       </div>
     )
   } else if (sync.serviceInfo?.id?.includes('vercel')) {
+    const team: { id: string; name: string } | undefined = JSON.parse(sync.options)['team']
     const project: VercelProjectType = JSON.parse(sync.options)['project']
     const environment = JSON.parse(sync.options)['environment']
     const secretType = JSON.parse(sync.options)['secret_type']
 
     return (
       <div className="flex gap-2 items-center text-xs text-neutral-500">
-        {project.name} ({environment})
+        {team?.name && `${team.name} / `} {project.name} ({environment})
         {secretType === 'encrypted' && <FaLock title="Encrypted" />}
         {secretType === 'sensitive' && <FaEyeSlash title="Sensitive" />}
       </div>
