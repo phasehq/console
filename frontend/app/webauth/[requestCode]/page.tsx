@@ -380,7 +380,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   3
                 </span>
                 <p className="text-black dark:text-white">
-                  When prompted, paste Personal Access Token (PAT):
+                  When prompted, paste your Personal Access Token (PAT):
                 </p>
               </div>
               <CliCommand 
