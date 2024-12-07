@@ -6,10 +6,11 @@ import CreateNewVercelSync from '@/graphql/mutations/syncing/vercel/createVercel
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import { 
-  EnvironmentType, 
+import {
+  EnvironmentType,
   ProviderCredentialsType,
-  VercelProjectType 
+  VercelProjectType,
+  VercelTeamProjectsType,
 } from '@/apollo/graphql'
 import { Combobox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -26,11 +27,11 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
   const { appId, closeModal } = props
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
-    variables: { appId }
+    variables: { appId },
   })
 
   const { data: credentialsData } = useQuery(GetSavedCredentials, {
-    variables: { orgId: organisation!.id }
+    variables: { orgId: organisation!.id },
   })
 
   const [getVercelProjects, { loading }] = useLazyQuery(GetVercelProjects)
@@ -38,15 +39,18 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
   const [createVercelSync, { loading: creating }] = useMutation(CreateNewVercelSync)
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
-  const [vercelProjects, setVercelProjects] = useState<VercelProjectType[]>([])
+  const [vercelTeams, setVercelTeams] = useState<VercelTeamProjectsType[]>([])
+  const [vercelTeam, setVercelTeam] = useState<VercelTeamProjectsType | null>(null)
+  const [teamQuery, setTeamQuery] = useState('')
+
   const [vercelProject, setVercelProject] = useState<VercelProjectType | null>(null)
   const [projectQuery, setProjectQuery] = useState('')
-  
+
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
   const [environment, setEnvironment] = useState('production')
   const [secretType, setSecretType] = useState('encrypted')
-  
+
   const [credentialsValid, setCredentialsValid] = useState(false)
 
   // Preselect first available credential
@@ -72,10 +76,10 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
     } else if (!credentialsValid) {
       try {
         const { data: projectsData } = await getVercelProjects({
-          variables: { credentialId: credential.id }
+          variables: { credentialId: credential.id },
         })
         if (projectsData?.vercelProjects) {
-          setVercelProjects(projectsData.vercelProjects)
+          setVercelTeams(projectsData.vercelProjects)
           setCredentialsValid(true)
         }
       } catch (error: any) {
@@ -93,10 +97,12 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
             credentialId: credential.id,
             projectId: vercelProject.id,
             projectName: vercelProject.name,
+            teamId: vercelTeam?.id,
+            teamName: vercelTeam?.teamName,
             environment,
-            secretType
+            secretType,
           },
-          refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }]
+          refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
         })
 
         toast.success('Created new Sync!')
@@ -107,18 +113,23 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
     }
   }
 
+  const filteredTeams =
+    teamQuery === ''
+      ? vercelTeams
+      : vercelTeams.filter((team) => team.teamName?.toLowerCase().includes(teamQuery.toLowerCase()))
 
-  const filteredProjects = projectQuery === '' 
-    ? vercelProjects
-    : vercelProjects.filter((project) =>
-        project.name?.toLowerCase().includes(projectQuery.toLowerCase())
-      )
+  const filteredProjects =
+    projectQuery === ''
+      ? vercelTeam?.projects
+      : vercelTeam?.projects?.filter((project) =>
+          project!.name?.toLowerCase().includes(projectQuery.toLowerCase())
+        )
 
   const environments = ['production', 'preview', 'development', 'all']
   const secretTypes = [
     { value: 'plain', label: 'Plain Text' },
     { value: 'encrypted', label: 'Encrypted' },
-    { value: 'sensitive', label: 'Sensitive' }
+    { value: 'sensitive', label: 'Sensitive' },
   ]
 
   return (
@@ -128,9 +139,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
           <SiVercel className="text-2xl" />
           Vercel
         </div>
-        <div className="text-neutral-500 text-sm">
-          Sync an environment with Vercel.
-        </div>
+        <div className="text-neutral-500 text-sm">Sync an environment with Vercel.</div>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -177,11 +186,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                             checked && 'bg-zinc-700'
                           )}
                         >
-                          {checked ? (
-                            <FaDotCircle className="text-emerald-500" />
-                          ) : (
-                            <FaCircle />
-                          )}
+                          {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
                           {env.name}
                         </div>
                       )}
@@ -200,29 +205,31 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
             </div>
 
             <div className="grid grid-cols-2 gap-8">
-              <div className="relative col-span-2">
-                <Combobox value={vercelProject} onChange={setVercelProject}>
+              <div className="relative">
+                <Combobox value={vercelTeam} onChange={setVercelTeam}>
                   {({ open }) => (
                     <>
                       <div className="space-y-2">
                         <Combobox.Label as={Fragment}>
                           <label className="block text-gray-700 text-sm font-bold">
-                            Vercel Project <span className="text-red-500">*</span>
+                            Vercel Team <span className="text-red-500">*</span>
                           </label>
                         </Combobox.Label>
                         <div className="w-full relative flex items-center">
                           <Combobox.Input
                             className="w-full"
-                            onChange={(event) => setProjectQuery(event.target.value)}
-                            displayValue={(project: VercelProjectType) => project?.name!}
+                            onChange={(event) => setTeamQuery(event.target.value)}
+                            displayValue={(team: VercelTeamProjectsType) => team?.teamName!}
                             required
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
                             <Combobox.Button>
-                              <FaChevronDown className={clsx(
-                                'text-neutral-500 transform transition ease cursor-pointer',
-                                open ? 'rotate-180' : 'rotate-0'
-                              )} />
+                              <FaChevronDown
+                                className={clsx(
+                                  'text-neutral-500 transform transition ease cursor-pointer',
+                                  open ? 'rotate-180' : 'rotate-0'
+                                )}
+                              />
                             </Combobox.Button>
                           </div>
                         </div>
@@ -237,19 +244,19 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                       >
                         <Combobox.Options as={Fragment}>
                           <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full">
-                            {filteredProjects.map((project) => (
-                              <Combobox.Option key={project.id} value={project}>
+                            {filteredTeams.map((team) => (
+                              <Combobox.Option key={team.id} value={team}>
                                 {({ active }) => (
-                                  <div className={clsx(
-                                    'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
-                                    active && 'bg-zinc-400 dark:bg-zinc-700'
-                                  )}>
+                                  <div
+                                    className={clsx(
+                                      'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
+                                      active && 'bg-zinc-400 dark:bg-zinc-700'
+                                    )}
+                                  >
                                     <div className="font-semibold text-black dark:text-white">
-                                      {project.name}
+                                      {team.teamName}
                                     </div>
-                                    <div className="text-neutral-500 text-2xs">
-                                      {project.id}
-                                    </div>
+                                    <div className="text-neutral-500 text-2xs">{team.id}</div>
                                   </div>
                                 )}
                               </Combobox.Option>
@@ -261,6 +268,73 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                   )}
                 </Combobox>
               </div>
+              {vercelTeam ? (
+                <div className="relative">
+                  <Combobox value={vercelProject} onChange={setVercelProject}>
+                    {({ open }) => (
+                      <>
+                        <div className="space-y-2">
+                          <Combobox.Label as={Fragment}>
+                            <label className="block text-gray-700 text-sm font-bold">
+                              Vercel Project <span className="text-red-500">*</span>
+                            </label>
+                          </Combobox.Label>
+                          <div className="w-full relative flex items-center">
+                            <Combobox.Input
+                              className="w-full"
+                              onChange={(event) => setProjectQuery(event.target.value)}
+                              displayValue={(project: VercelProjectType) => project?.name!}
+                              required
+                            />
+                            <div className="absolute inset-y-0 right-2 flex items-center">
+                              <Combobox.Button>
+                                <FaChevronDown
+                                  className={clsx(
+                                    'text-neutral-500 transform transition ease cursor-pointer',
+                                    open ? 'rotate-180' : 'rotate-0'
+                                  )}
+                                />
+                              </Combobox.Button>
+                            </div>
+                          </div>
+                        </div>
+                        <Transition
+                          enter="transition duration-100 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-75 ease-out"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          <Combobox.Options as={Fragment}>
+                            <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full">
+                              {filteredProjects!.map((project) => (
+                                <Combobox.Option key={project!.id} value={project}>
+                                  {({ active }) => (
+                                    <div
+                                      className={clsx(
+                                        'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
+                                        active && 'bg-zinc-400 dark:bg-zinc-700'
+                                      )}
+                                    >
+                                      <div className="font-semibold text-black dark:text-white">
+                                        {project!.name}
+                                      </div>
+                                      <div className="text-neutral-500 text-2xs">{project!.id}</div>
+                                    </div>
+                                  )}
+                                </Combobox.Option>
+                              ))}
+                            </div>
+                          </Combobox.Options>
+                        </Transition>
+                      </>
+                    )}
+                  </Combobox>
+                </div>
+              ) : (
+                <div></div>
+              )}
 
               <div>
                 <RadioGroup value={environment} onChange={setEnvironment}>
@@ -273,16 +347,14 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                     {environments.map((env) => (
                       <RadioGroup.Option key={env} value={env} as={Fragment}>
                         {({ active, checked }) => (
-                          <div className={clsx(
-                            'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800 rounded-full capitalize',
-                            active && 'border-zinc-700',
-                            checked && 'bg-zinc-700'
-                          )}>
-                            {checked ? (
-                              <FaDotCircle className="text-emerald-500" />
-                            ) : (
-                              <FaCircle />
+                          <div
+                            className={clsx(
+                              'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800 rounded-full capitalize',
+                              active && 'border-zinc-700',
+                              checked && 'bg-zinc-700'
                             )}
+                          >
+                            {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
                             {env}
                           </div>
                         )}
@@ -303,16 +375,14 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                     {secretTypes.map((type) => (
                       <RadioGroup.Option key={type.value} value={type.value} as={Fragment}>
                         {({ active, checked }) => (
-                          <div className={clsx(
-                            'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800 rounded-full',
-                            active && 'border-zinc-700',
-                            checked && 'bg-zinc-700'
-                          )}>
-                            {checked ? (
-                              <FaDotCircle className="text-emerald-500" />
-                            ) : (
-                              <FaCircle />
+                          <div
+                            className={clsx(
+                              'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800 rounded-full',
+                              active && 'border-zinc-700',
+                              checked && 'bg-zinc-700'
                             )}
+                          >
+                            {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
                             {type.label}
                           </div>
                         )}

@@ -26,9 +26,6 @@ class RailwayResourceInput(graphene.InputObjectType):
     id = graphene.ID(required=True)
     name = graphene.String(required=True)
 
-class VercelResourceInput(graphene.InputObjectType):
-    id = graphene.ID(required=True)
-    name = graphene.String(required=True)
 
 class InitEnvSync(graphene.Mutation):
     class Arguments:
@@ -546,6 +543,8 @@ class CreateVercelSync(graphene.Mutation):
         env_id = graphene.ID()
         path = graphene.String()
         credential_id = graphene.ID()
+        team_id = graphene.String()
+        team_name = graphene.String()
         project_id = graphene.String()
         project_name = graphene.String()
         environment = graphene.String()
@@ -561,6 +560,8 @@ class CreateVercelSync(graphene.Mutation):
         env_id,
         path,
         credential_id,
+        team_id,
+        team_name,
         project_id,
         project_name,
         environment="production",
@@ -578,6 +579,7 @@ class CreateVercelSync(graphene.Mutation):
 
         sync_options = {
             "project": {"id": project_id, "name": project_name},
+            "team": {"id": team_id, "name": team_name},
             "environment": environment,
             "secret_type": secret_type,
         }
@@ -601,6 +603,7 @@ class CreateVercelSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateVercelSync(sync=sync)
+
 
 class DeleteSync(graphene.Mutation):
     class Arguments:
