@@ -222,7 +222,9 @@ export const HistoryDialog = ({
                                 </div>
                                 <span className="text-neutral-500 text-sm">by</span>
 
-                                {eventCreatedBy(historyItem!)}
+                                <div className="text-zinc-900 dark:text-zinc-100">
+                                  {eventCreatedBy(historyItem!)}
+                                </div>
                               </div>
                               {index > 0 && (
                                 <SecretPropertyDiffs

@@ -56,7 +56,7 @@ export const SecretPropertyDiffs = (props: {
               <div>
                 <s className=" text-red-500 ph-no-capture">{previousItem.value}</s>
               </div>
-              <div className="flex items-center justify-end">
+              <div className="flex items-center justify-end p-1">
                 <Button
                   variant="outline"
                   onClick={() => handleRestoreValue(previousItem.value)}
