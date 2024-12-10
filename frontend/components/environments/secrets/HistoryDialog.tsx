@@ -3,7 +3,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
 import { GetSecretHistory } from '@/graphql/queries/secrets/getSecretHistory.gql'
 import { useState, Fragment, useEffect, useContext } from 'react'
-import { FaHistory, FaTimes, FaKey } from 'react-icons/fa'
+import { FaHistory, FaKey, FaRobot, FaTimes } from 'react-icons/fa'
 import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 import { Button } from '../../common/Button'
 import { Dialog, Transition } from '@headlessui/react'
@@ -86,8 +86,6 @@ export const HistoryDialog = ({
 
           const { publicKey, privateKey } = await envKeyring(seed)
 
-          console.log('decrupting', data.secrets[0].id)
-
           const decryptedSecret = await decryptSecretHistory(data.secrets[0], {
             privateKey,
             publicKey,
@@ -95,7 +93,6 @@ export const HistoryDialog = ({
           })
 
           setClientSecret(decryptedSecret)
-          console.log('Decrypted secret:', decryptedSecret)
         }
       } catch (error) {
         console.error('Error fetching or decrypting secret history:', error)
@@ -103,6 +100,7 @@ export const HistoryDialog = ({
     }
 
     if (keyring && isOpen) fetchAndDecryptHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyring, isOpen, secret, getHistory])
 
   const getEventTypeColor = (eventType: ApiSecretEventEventTypeChoices) => {
@@ -117,6 +115,32 @@ export const HistoryDialog = ({
     if (eventType === ApiSecretEventEventTypeChoices.U) return 'Updated'
     if (eventType === ApiSecretEventEventTypeChoices.R) return 'Read'
     if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted'
+  }
+
+  const eventCreatedBy = (log: SecretEventType) => {
+    if (log.user)
+      return (
+        <div className="flex items-center gap-1 text-sm">
+          <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
+          {log.user.fullName || log.user.email}
+        </div>
+      )
+    else if (log.serviceToken)
+      return (
+        <div className="flex items-center gap-1 text-sm">
+          <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
+        </div>
+      )
+    else if (log.serviceAccount)
+      return (
+        <div className="flex items-center gap-1 text-sm">
+          <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-6">
+            <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
+          </div>{' '}
+          {log.serviceAccount.name}
+          {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
+        </div>
+      )
   }
 
   const secretHistory = clientSecret?.history
@@ -193,17 +217,16 @@ export const HistoryDialog = ({
                                 <div className="text-zinc-800 dark:text-zinc-200 font-semibold">
                                   {getEventTypeText(historyItem!.eventType)}
                                 </div>
-                                <div className="text-neutral-500 text-sm">
+                                <div
+                                  className="text-neutral-500 text-sm"
+                                  title={new Date(historyItem!.timestamp).toLocaleTimeString()}
+                                >
                                   {relativeTimeFromDates(new Date(historyItem!.timestamp))}
-                                </div>{' '}
-                                <div className="text-sm flex items-center gap-2 text-neutral-500">
-                                  {historyItem!.user && (
-                                    <div className="flex items-center gap-1 text-sm">
-                                      by{' '}
-                                      <Avatar imagePath={historyItem!.user.avatarUrl!} size="sm" />
-                                      {historyItem?.user.fullName || historyItem?.user.email}
-                                    </div>
-                                  )}
+                                </div>
+                                <span className="text-neutral-500 text-sm">by</span>
+
+                                <div className="text-zinc-900 dark:text-zinc-100">
+                                  {eventCreatedBy(historyItem!)}
                                 </div>
                               </div>
                               {index > 0 && (
@@ -212,6 +235,7 @@ export const HistoryDialog = ({
                                   historyItem={historyItem!}
                                   index={index}
                                   handlePropertyChange={handlePropertyChange}
+                                  onRestore={closeModal}
                                 />
                               )}
                             </div>
