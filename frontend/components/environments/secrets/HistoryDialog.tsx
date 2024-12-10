@@ -235,6 +235,7 @@ export const HistoryDialog = ({
                                   historyItem={historyItem!}
                                   index={index}
                                   handlePropertyChange={handlePropertyChange}
+                                  onRestore={closeModal}
                                 />
                               )}
                             </div>

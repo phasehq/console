@@ -4,14 +4,19 @@ import { FaRedoAlt, FaUndoAlt } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 import { Tag } from '../Tag'
 
-export const SecretPropertyDiffs = (props: {
+export const SecretPropertyDiffs = ({
+  secret,
+  historyItem,
+  index,
+  handlePropertyChange,
+  onRestore,
+}: {
   secret: SecretType
   historyItem: SecretEventType
   index: number
   handlePropertyChange: Function
+  onRestore: Function
 }) => {
-  const { secret, historyItem, index, handlePropertyChange } = props
-
   const previousItem = secret.history![index - 1]!
 
   const getAddedTags = () => {
@@ -30,6 +35,7 @@ export const SecretPropertyDiffs = (props: {
 
   const handleRestoreValue = (value: string) => {
     handlePropertyChange(secret.id, 'value', value)
+    onRestore()
   }
 
   return (
