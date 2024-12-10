@@ -86,8 +86,6 @@ export const HistoryDialog = ({
 
           const { publicKey, privateKey } = await envKeyring(seed)
 
-          console.log('decrupting', data.secrets[0].id)
-
           const decryptedSecret = await decryptSecretHistory(data.secrets[0], {
             privateKey,
             publicKey,
@@ -95,7 +93,6 @@ export const HistoryDialog = ({
           })
 
           setClientSecret(decryptedSecret)
-          console.log('Decrypted secret:', decryptedSecret)
         }
       } catch (error) {
         console.error('Error fetching or decrypting secret history:', error)
@@ -103,6 +100,7 @@ export const HistoryDialog = ({
     }
 
     if (keyring && isOpen) fetchAndDecryptHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyring, isOpen, secret, getHistory])
 
   const getEventTypeColor = (eventType: ApiSecretEventEventTypeChoices) => {
