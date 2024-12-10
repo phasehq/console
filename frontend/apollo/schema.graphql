@@ -17,7 +17,7 @@ type Query {
   appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
   appServiceAccounts(appId: ID): [ServiceAccountType]
-  secrets(envId: ID, path: String): [SecretType]
+  secrets(envId: ID, path: String, id: ID): [SecretType]
   folders(envId: ID, path: String): [SecretFolderType]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]

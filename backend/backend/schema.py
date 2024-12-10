@@ -250,8 +250,12 @@ class Query(graphene.ObjectType):
     app_service_accounts = graphene.List(ServiceAccountType, app_id=graphene.ID())
 
     secrets = graphene.List(
-        SecretType, env_id=graphene.ID(), path=graphene.String(required=False)
+        SecretType,
+        env_id=graphene.ID(),
+        path=graphene.String(required=False),
+        id=graphene.ID(required=False),
     )
+
     folders = graphene.List(
         SecretFolderType, env_id=graphene.ID(), path=graphene.String(required=False)
     )
@@ -509,7 +513,7 @@ class Query(graphene.ObjectType):
 
     resolve_app_service_accounts = resolve_app_service_accounts
 
-    def resolve_secrets(root, info, env_id, path=None):
+    def resolve_secrets(root, info, env_id, path=None, id=None):
 
         org = Environment.objects.get(id=env_id).app.organisation
         if not user_has_permission(
@@ -524,6 +528,8 @@ class Query(graphene.ObjectType):
 
         filter = {"environment_id": env_id, "deleted_at": None}
 
+        if id:
+            filter["id"] = id
         if path:
             filter["path"] = path
 
