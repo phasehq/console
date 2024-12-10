@@ -217,7 +217,10 @@ export const HistoryDialog = ({
                                 <div className="text-zinc-800 dark:text-zinc-200 font-semibold">
                                   {getEventTypeText(historyItem!.eventType)}
                                 </div>
-                                <div className="text-neutral-500 text-sm">
+                                <div
+                                  className="text-neutral-500 text-sm"
+                                  title={new Date(historyItem!.timestamp).toLocaleTimeString()}
+                                >
                                   {relativeTimeFromDates(new Date(historyItem!.timestamp))}
                                 </div>
                                 <span className="text-neutral-500 text-sm">by</span>
