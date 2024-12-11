@@ -87,11 +87,22 @@ def token_is_expired_or_deleted(auth_token):
     prefix, token_type, token_value = auth_token.split(" ")
 
     if token_type == "User":
-        token = UserToken.objects.get(token=token_value)
+        try:
+            token = UserToken.objects.get(token=token_value)
+        except UserToken.DoesNotExist:
+            return True
+
     elif token_type == "Service":
-        token = ServiceToken.objects.get(token=token_value)
+        try:
+            token = ServiceToken.objects.get(token=token_value)
+        except ServiceToken.DoesNotExist:
+            return True
+
     elif token_type == "ServiceAccount":
-        token = ServiceAccountToken.objects.get(token=token_value)
+        try:
+            token = ServiceAccountToken.objects.get(token=token_value)
+        except ServiceAccountToken.DoesNotExist:
+            return True
 
     return token.deleted_at is not None or (
         token.expires_at is not None and token.expires_at < timezone.now()
