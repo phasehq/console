@@ -383,11 +383,13 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   When prompted, paste your Personal Access Token (PAT):
                 </p>
               </div>
-              <CliCommand 
-                command={userToken} 
-                prefix=""
-                wrap={true}
-              />
+              <div className="ph-no-capture">
+                <CliCommand
+                  command={userToken}
+                  prefix=""
+                  wrap={true}
+                />
+              </div>
             </div>
           </div>
 
