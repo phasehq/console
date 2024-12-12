@@ -389,6 +389,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   prefix=""
                   wrap={true}
                 />
+              </div>
             </div>
           </div>
 
