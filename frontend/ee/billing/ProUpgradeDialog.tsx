@@ -76,7 +76,7 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
       <div className="flex items-start justify-between">
         <div className="text-zinc-900 dark:text-zinc-100">
           <span className="font-extralight text-7xl">${price.monthlyPrice}</span>
-          <span className="text-neutral-500">/mo per user</span>
+          <span className="text-neutral-500">/mo per account</span>
         </div>
         <div>
           <div className="text-neutral-500 text-xs uppercase font-medium">Billed</div>
@@ -94,7 +94,7 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
           <span>${price.unitPrice}</span>
         </div>
         <div className="flex justify-between text-zinc-900 dark:text-zinc-100">
-          <span>Number of Users:</span>
+          <span>Number of Accounts:</span>
           <span>{props.userCount}</span>
         </div>
         <hr className="my-2 border-zinc-300 dark:border-zinc-600" />
