@@ -13,6 +13,7 @@ import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FaBan } from 'react-icons/fa'
+import { FaBoxOpen } from 'react-icons/fa6'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -57,6 +58,21 @@ export default function AppsHome({ params }: { params: { team: string } }) {
           {organisation && apps && userCanCreateApps && (
             <div className="bg-zinc-100 dark:bg-neutral-800 opacity-80 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl flex flex-col gap-y-20 min-h-60">
               <NewAppDialog organisation={organisation} appCount={apps.length} ref={dialogRef} />
+            </div>
+          )}
+          {apps?.length === 0 && !userCanCreateApps && (
+            <div className="xl:col-span-2 1080p:col-span-3 justify-center p-20">
+              <EmptyState
+                title="No apps"
+                subtitle="You don't have access to any apps yet. Contact an Admin to get access."
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <FaBoxOpen />
+                  </div>
+                }
+              >
+                <></>
+              </EmptyState>
             </div>
           )}
         </div>
