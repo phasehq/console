@@ -47,8 +47,17 @@ export default function SignInButtons() {
   const searchParams = useSearchParams()
 
   const callbackUrl = searchParams?.get('callbackUrl')
+  const provider = searchParams?.get('provider')
 
   const titleText = () => (loading ? 'Logging in' : 'CONSOLE')
+
+  const handleProviderButtonClick = (providerId: string) => {
+    setLoading(true)
+    signIn(providerId, {
+      redirect: callbackUrl ? true : false,
+      callbackUrl: callbackUrl || '',
+    })
+  }
 
   useEffect(() => {
     const isDarkMode = document.documentElement.classList.contains('dark')
@@ -59,13 +68,10 @@ export default function SignInButtons() {
     if (status === 'authenticated') router.push('/')
   }, [router, status])
 
-  const handleProviderButtonClick = (providerId: string) => {
-    setLoading(true)
-    signIn(providerId, {
-      redirect: callbackUrl ? true : false,
-      callbackUrl: callbackUrl || '',
-    })
-  }
+  useEffect(() => {
+    if (provider && status === 'unauthenticated') handleProviderButtonClick(provider)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, status])
 
   return (
     <>
