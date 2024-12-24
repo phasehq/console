@@ -3,6 +3,7 @@ query GetSubscriptionDetails($organisationId: ID!) {
     subscriptionId
     planName
     status
+    nextPaymentAmount
     currentPeriodStart
     currentPeriodEnd
     renewalDate

@@ -32,72 +32,6 @@ import Accordion from '@/components/common/Accordion'
 import clsx from 'clsx'
 import { StripeBillingInfo } from '../../../ee/billing/StripeBillingInfo'
 
-const plansInfo = {
-  FR: {
-    id: ApiOrganisationPlanChoices.Fr,
-    name: 'Free',
-    description: 'Try Phase without any commitments.',
-    seats: isCloudHosted() ? '5 Users / Service Accounts' : 'Unlimited Users',
-    apps: isCloudHosted() ? '3 Apps' : 'Unlimited Apps',
-    featureSummary: [
-      'End-to-end Encryption',
-      'Google/GitHub/Gitlab SSO',
-      'Secret Versioning',
-      'Secret Referencing',
-      'Basic Access Control',
-      isCloudHosted() ? '24-hour audit log retention' : 'Unlimited Audit Log Retention',
-      'Community Support',
-    ],
-    notIncluded: [
-      ...(isCloudHosted()
-        ? [
-            '90-day audit log retention',
-            'Unlimited Users',
-            'Unlimited Apps',
-            'Unlimited Environments',
-            'Unlimited Service Tokens',
-          ]
-        : []),
-    ],
-  },
-  PR: {
-    id: ApiOrganisationPlanChoices.Pr,
-    name: 'Pro',
-    seats: 'Unlimited Users',
-    apps: 'Unlimited Apps',
-    featureSummary: [
-      'End-to-end Encryption',
-      'Google/GitHub/Gitlab SSO',
-      'Role-based Access Control',
-      'Secret Versioning',
-      'Secret Referencing',
-      isCloudHosted() ? '90-day audit log retention' : 'Unlimited Audit Log Retention',
-      'Priority Support',
-    ],
-    notIncluded: [
-      ...(isCloudHosted() ? ['Unlimited audit log retention', 'Unlimited Environments'] : []),
-    ],
-  },
-  EN: {
-    id: ApiOrganisationPlanChoices.En,
-    name: 'Enterprise',
-    description:
-      'Secure existing data in your enterprise workload. Get full onboarding and priority technical support.',
-    seats: 'Unlimited Users',
-    apps: 'Unlimited Apps',
-    featureSummary: [
-      'End-to-end Encryption',
-      'Google/GitHub/Gitlab SSO',
-      'Role-based Access Control',
-      'Secret Versioning',
-      'Secret Referencing',
-      'Dedicated support',
-      'On-boarding and Migration assistance',
-    ],
-    notIncluded: [],
-  },
-}
-
 const PlanFeatureItem = (props: {
   children: ReactNode
   iconColor: string
@@ -124,8 +58,6 @@ export const PlanInfo = () => {
     : false
 
   const searchParams = useSearchParams()
-
-  const planInfo = activeOrganisation ? plansInfo[activeOrganisation.plan] : undefined
 
   const { loading, data } = useQuery(GetOrganisationPlan, {
     variables: { organisationId: activeOrganisation?.id },
@@ -205,36 +137,6 @@ export const PlanInfo = () => {
             {isCloudHosted() && <StripeBillingInfo />}
           </div>
         </div>
-
-        {planInfo && isCloudHosted() && (
-          <div className="grid grid-cols-2 gap-8">
-            <div>
-              <PlanFeatureItem iconColor="text-emerald-500" iconType="user">
-                {license()?.seats ? `${license()?.seats} Users / Service Accounts` : planInfo.seats}
-              </PlanFeatureItem>
-              <PlanFeatureItem iconColor="text-emerald-500" iconType="app">
-                {planInfo.apps}
-              </PlanFeatureItem>
-
-              {planInfo.featureSummary.map((feature) => (
-                <PlanFeatureItem key={feature} iconColor="text-emerald-500" iconType="check">
-                  {feature}
-                </PlanFeatureItem>
-              ))}
-            </div>
-
-            {planInfo.notIncluded.length > 0 && (
-              <div>
-                <div className="text-neutral-500 font-medium text-lg py-2">Not included:</div>
-                {planInfo.notIncluded.map((feature) => (
-                  <PlanFeatureItem key={feature} iconColor="text-red-500" iconType="cross">
-                    {feature}
-                  </PlanFeatureItem>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       <div className="space-y-10 py-4">
