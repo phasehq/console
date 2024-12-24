@@ -168,12 +168,14 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
             <span>Number of Accounts:</span>
             <span>{props.userCount}</span>
           </div>
-          <div className="flex justify-between text-zinc-900 dark:text-zinc-100">
-            <span>Effective discount:</span>
-            <span className={clsx(graduatedPrice.discount.monthly === 0 ? '' : 'text-emerald-500')}>
-              {graduatedPrice.discount.monthly.toFixed(1)}%
-            </span>
-          </div>
+          {graduatedPrice.discount.monthly > 0 && (
+            <div className="flex justify-between text-zinc-900 dark:text-zinc-100">
+              <span>Effective discount:</span>
+              <span className="text-emerald-500">
+                {graduatedPrice.discount.monthly.toFixed(1)}%
+              </span>
+            </div>
+          )}
           <hr className="my-2 border-zinc-300 dark:border-zinc-600" />
           <div className="flex justify-between font-semibold text-zinc-900 dark:text-zinc-100">
             <span>Total:</span>
