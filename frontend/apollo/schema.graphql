@@ -662,6 +662,7 @@ type StripeSubscriptionDetails {
   subscriptionId: String
   planName: String
   status: String
+  nextPaymentAmount: Float
   currentPeriodStart: Int
   currentPeriodEnd: Int
   renewalDate: Int

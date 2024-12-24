@@ -469,7 +469,7 @@ export const StripeBillingInfo = () => {
 
               <div className="text-neutral-500 text-sm flex items-center gap-1 font-semibold">
                 {!subscriptionData.cancelAtPeriodEnd
-                  ? `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))}`
+                  ? `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))} for $${subscriptionData.nextPaymentAmount?.toLocaleString()}`
                   : `Ends ${relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}`}
 
                 {!subscriptionData.cancelAtPeriodEnd && (

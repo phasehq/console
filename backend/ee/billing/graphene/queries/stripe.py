@@ -1,7 +1,7 @@
 from api.models import Organisation
 from api.utils.access.permissions import user_has_permission
 import graphene
-from graphene import ObjectType, String, Boolean, List, Int
+from graphene import ObjectType, String, Boolean, List, Int, Float
 import stripe
 from django.conf import settings
 from graphql import GraphQLError
@@ -29,6 +29,7 @@ class StripeSubscriptionDetails(ObjectType):
     subscription_id = String()
     plan_name = String()
     status = String()
+    next_payment_amount = Float()
     current_period_start = Int()
     current_period_end = Int()
     renewal_date = Int()
@@ -110,6 +111,14 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
             for pm in payment_methods["data"]
         ]
 
+        # Retrieve upcoming invoice to get the amount of the next payment
+        upcoming_invoice = stripe.Invoice.upcoming(
+            customer=org.stripe_customer_id, subscription=org.stripe_subscription_id
+        )
+        next_payment_amount = upcoming_invoice[
+            "total"
+        ]  # Amount in the smallest currency unit
+
         return StripeSubscriptionDetails(
             subscription_id=org.stripe_subscription_id,
             plan_name=plan_name,
@@ -120,6 +129,7 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
             cancel_at=str(cancel_at) if cancel_at else None,
             cancel_at_period_end=cancel_at_period_end,
             payment_methods=payment_methods_list,
+            next_payment_amount=next_payment_amount,  # Add this field
         )
     except stripe.error.StripeError as e:
         return None

@@ -1793,6 +1793,7 @@ export type StripeSubscriptionDetails = {
   cancelAtPeriodEnd?: Maybe<Scalars['Boolean']['output']>;
   currentPeriodEnd?: Maybe<Scalars['Int']['output']>;
   currentPeriodStart?: Maybe<Scalars['Int']['output']>;
+  nextPaymentAmount?: Maybe<Scalars['Float']['output']>;
   paymentMethods?: Maybe<Array<Maybe<PaymentMethodDetails>>>;
   planName?: Maybe<Scalars['String']['output']>;
   renewalDate?: Maybe<Scalars['Int']['output']>;
