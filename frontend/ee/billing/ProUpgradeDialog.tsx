@@ -48,13 +48,13 @@ const UpgradeForm = (props: { onSuccess: Function; billingPeriod: BillingPeriods
 const prices: PriceOption[] = [
   {
     name: 'monthly',
-    unitPrice: 16,
-    monthlyPrice: 16,
+    unitPrice: 2,
+    monthlyPrice: 2,
   },
   {
     name: 'yearly',
-    unitPrice: 192,
-    monthlyPrice: 16,
+    unitPrice: 24,
+    monthlyPrice: 2,
   },
 ]
 
@@ -68,7 +68,7 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
   }
 
   const calculateGraduatedPrice = (seats: number) => {
-    const basePrice = 16
+    const basePrice = 2
 
     // Define graduated tiers with unit prices
     const tiers = [
