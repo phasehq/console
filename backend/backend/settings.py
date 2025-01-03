@@ -298,7 +298,7 @@ RQ_QUEUES = {
     }
 }
 
-PHASE_LICENSE = check_license(os.getenv("PHASE_LICENSE_OFFLINE"))
+PHASE_LICENSE = check_license(get_secret("PHASE_LICENSE_OFFLINE"))
 
 
 STRIPE = {}
