@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 import logging.config
+from backend.utils.secrets import get_secret
 
 from ee.licensing.verifier import check_license
 
@@ -56,9 +57,9 @@ VERSION = get_version()
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = get_secret("SECRET_KEY")
 
-SERVER_SECRET = os.getenv("SERVER_SECRET")
+SERVER_SECRET = get_secret("SERVER_SECRET")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True if os.getenv("DEBUG") == "True" else False
@@ -107,7 +108,7 @@ SOCIALACCOUNT_PROVIDERS = {
         "AUTH_PARAMS": {"access_type": "online"},
         "APP": {
             "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-            "secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+            "secret": get_secret("GOOGLE_CLIENT_SECRET"),
         },
     },
     "github": {
@@ -116,7 +117,7 @@ SOCIALACCOUNT_PROVIDERS = {
         ],
         "APP": {
             "client_id": os.getenv("GITHUB_CLIENT_ID"),
-            "secret": os.getenv("GITHUB_CLIENT_SECRET"),
+            "secret": get_secret("GITHUB_CLIENT_SECRET"),
         },
     },
     "gitlab": {
@@ -125,7 +126,7 @@ SOCIALACCOUNT_PROVIDERS = {
         ],
         "APP": {
             "client_id": os.getenv("GITLAB_CLIENT_ID"),
-            "secret": os.getenv("GITLAB_CLIENT_SECRET"),
+            "secret": get_secret("GITLAB_CLIENT_SECRET"),
             "settings": {
                 "gitlab_url": os.getenv("GITLAB_AUTH_URL") or "https://gitlab.com",
             },
@@ -146,7 +147,7 @@ EMAIL_HOST = os.getenv("SMTP_SERVER")
 EMAIL_PORT = int(os.getenv("SMTP_PORT", 587))
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv("SMTP_USERNAME")
-EMAIL_HOST_PASSWORD = os.getenv("SMTP_PASSWORD")
+EMAIL_HOST_PASSWORD = get_secret("SMTP_PASSWORD")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
 
 
@@ -216,7 +217,7 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "USER": os.getenv("DATABASE_USER"),
-        "PASSWORD": os.getenv("DATABASE_PASSWORD"),
+        "PASSWORD": get_secret("DATABASE_PASSWORD"),
         "NAME": os.getenv("DATABASE_NAME"),
         "HOST": os.getenv("DATABASE_HOST"),
         "PORT": os.getenv("DATABASE_PORT"),
@@ -274,7 +275,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CLOUDFLARE = {
     "ACCOUNT_ID": os.getenv("CF_ACCOUNT_ID"),
     "KV_NAMESPACE": os.getenv("CF_KV_NAMESPACE"),
-    "API_KEY": os.getenv("CF_API_KEY"),
+    "API_KEY": get_secret("CF_API_KEY"),
     "ZONE_ID": os.getenv("CF_ZONE_ID"),
 }
 
@@ -291,13 +292,13 @@ RQ_QUEUES = {
     "default": {
         "HOST": os.getenv("REDIS_HOST"),
         "PORT": os.getenv("REDIS_PORT"),
-        "PASSWORD": os.getenv("REDIS_PASSWORD"),
+        "PASSWORD": get_secret("REDIS_PASSWORD"),
         "SSL": os.getenv("REDIS_SSL", None),
         "DB": 0,
     }
 }
 
-PHASE_LICENSE = check_license(os.getenv("PHASE_LICENSE_OFFLINE"))
+PHASE_LICENSE = check_license(get_secret("PHASE_LICENSE_OFFLINE"))
 
 
 STRIPE = {}
