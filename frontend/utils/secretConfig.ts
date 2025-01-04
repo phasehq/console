@@ -21,7 +21,7 @@ import { readFileSync } from 'fs'
  * @param key - Name of the secret to retrieve (e.g. 'DATABASE_PASSWORD')
  * @returns The secret value or empty string if not found
  */
-export function getSecret(key: string): string {
+export function getSecret(key: string): string | undefined {
     const debug = process.env.DEBUG ? process.env.DEBUG === 'True' : false
     
     const fileEnvKey = `${key}_FILE`
@@ -45,7 +45,7 @@ export function getSecret(key: string): string {
         console.debug(`[secrets] File path specified for '${key}' but file not found: ${filePath}`)
     }
     
-    const secret = process.env[key] || ''
+    const secret = process.env[key] || undefined
     if (debug) {
         if (secret) {
             console.debug(`[secrets] Loaded secret '${key}' from environment variable`)

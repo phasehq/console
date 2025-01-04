@@ -63,7 +63,7 @@ def test_get_secret_missing_file():
 
 
 def test_get_secret_neither_exists():
-    """Test empty string returned when neither file nor env var exists"""
+    """Test None returned when neither file nor env var exists"""
     with patch.dict(os.environ, {}, clear=True):
         assert get_secret("TEST_SECRET") == None
 
