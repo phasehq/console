@@ -1,11 +1,12 @@
-# Stage 1: Build dependencies
 FROM python:3.12.1-alpine3.19
 
 ADD requirements.txt /app/requirements.txt
 ADD constraints.txt /app/constraints.txt
 
 ENV PIP_CONSTRAINT=/app/constraints.txt
-ENV SKIP_DJANGO_MIGRATIONS=false
+
+# If set to true the Django database migrations needs be run externally 
+ENV EXTERNAL_MIGRATION=false
 
 RUN set -ex \
     && apk add --no-cache --virtual .build-deps postgresql-dev build-base gcc musl-dev jpeg-dev zlib-dev libffi-dev cairo-dev pango-dev gdk-pixbuf-dev mariadb-dev python3-dev \
@@ -32,6 +33,4 @@ ENV VIRTUAL_ENV /env
 ENV PATH /env/bin:$PATH
 
 EXPOSE 8000
-
-ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-CMD ["gunicorn", "-b", "[::]:8000", "--workers", "3", "backend.wsgi:application"]
+CMD ["/app/scripts/start.sh"]
