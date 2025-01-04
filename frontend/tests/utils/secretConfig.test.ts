@@ -56,8 +56,8 @@ describe('getSecret', () => {
     expect(getSecret('TEST_SECRET')).toBe('env_secret_value')
   })
 
-  test('returns empty string when neither file nor env var exists', () => {
-    expect(getSecret('TEST_SECRET')).toBe('')
+  test('returns undefined when neither file nor env var exists', () => {
+    expect(getSecret('TEST_SECRET')).toBe(undefined)
   })
 
   test('handles empty secret file', () => {
