@@ -11,6 +11,7 @@ from api.serializers import (
 from api.models import ServiceAccountToken, ServiceToken, UserToken, CustomUser
 from api.emails import send_login_email
 from api.utils.syncing.auth import store_oauth_token
+from backend.utils.secrets import get_secret
 from backend.api.notifier import notify_slack
 from api.utils.rest import (
     get_token_type,
@@ -46,7 +47,7 @@ def github_callback(request):
     state = request.GET.get("state")
 
     client_id = os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
-    client_secret = os.getenv("GITHUB_INTEGRATION_CLIENT_SECRET")
+    client_secret = get_secret("GITHUB_INTEGRATION_CLIENT_SECRET")
 
     state_decoded = base64.b64decode(state).decode("utf-8")
     state = json.loads(state_decoded)
