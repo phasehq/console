@@ -340,6 +340,12 @@ export const decryptEnvSecretKVs = async (
         envKeys?.publicKey
       )
 
+      decryptedSecret.comment = await decryptAsymmetric(
+        secret.comment,
+        envKeys?.privateKey,
+        envKeys?.publicKey
+      )
+
       return decryptedSecret
     })
   )
