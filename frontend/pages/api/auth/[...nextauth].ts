@@ -6,6 +6,7 @@ import GitlabProvider from 'next-auth/providers/gitlab'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
 import { NextApiRequest, NextApiResponse } from 'next'
+import { getSecret } from '@/utils/secretConfig'
 
 type AccessTokenResponse = {
   access_token: string
@@ -17,35 +18,47 @@ type NextAuthOptionsCallback = (req: NextApiRequest, res: NextApiResponse) => Ne
 export const authOptions: NextAuthOptionsCallback = (_req, res) => {
   const providers = []
 
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
-    providers.push(
-      GoogleProvider({
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      })
-    )
+  if (process.env.GOOGLE_CLIENT_ID) {
+    const clientSecret = getSecret('GOOGLE_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        GoogleProvider({
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: clientSecret,
+        })
+      )
+    }
+  }
 
-  if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET)
-    providers.push(
-      GitHubProvider({
-        clientId: process.env.GITHUB_CLIENT_ID,
-        clientSecret: process.env.GITHUB_CLIENT_SECRET,
-      })
-    )
+  if (process.env.GITHUB_CLIENT_ID) {
+    const clientSecret = getSecret('GITHUB_CLIENT_SECRET') 
+    if (clientSecret) {
+      providers.push(
+        GitHubProvider({
+          clientId: process.env.GITHUB_CLIENT_ID,
+          clientSecret: clientSecret,
+        })
+      )
+    }
+  }
 
-  if (process.env.GITLAB_CLIENT_ID && process.env.GITLAB_CLIENT_SECRET)
-    providers.push(
-      GitlabProvider({
-        clientId: process.env.GITLAB_CLIENT_ID,
-        clientSecret: process.env.GITLAB_CLIENT_SECRET,
-        authorization: {
-          url: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/oauth/authorize`,
-          params: { scope: 'read_user' },
-        },
-        token: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/oauth/token`,
-        userinfo: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/api/v4/user`,
-      })
-    )
+  if (process.env.GITLAB_CLIENT_ID) {
+    const clientSecret = getSecret('GITLAB_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        GitlabProvider({
+          clientId: process.env.GITLAB_CLIENT_ID,
+          clientSecret: clientSecret,
+          authorization: {
+            url: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/oauth/authorize`,
+            params: { scope: 'read_user' },
+          },
+          token: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/oauth/token`,
+          userinfo: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/api/v4/user`,
+        })
+      )
+    }
+  }
 
   return {
     secret: process.env.NEXTAUTH_SECRET,
