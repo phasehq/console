@@ -4,6 +4,7 @@ import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments
 import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql'
 import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
+import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useState } from 'react'
 import {
@@ -19,6 +20,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import {
   FaArrowRight,
   FaBan,
+  FaBoxOpen,
   FaCheckCircle,
   FaChevronRight,
   FaCircle,
@@ -57,6 +59,7 @@ import { SplitButton } from '@/components/common/SplitButton'
 import { AppSecretRow } from './_components/AppSecretRow'
 import { AppSecret, AppFolder, EnvSecrets, EnvFolders } from './types'
 import { toast } from 'react-toastify'
+import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 
 const Environments = (props: { environments: EnvironmentType[]; appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -168,6 +171,7 @@ const Environments = (props: { environments: EnvironmentType[]; appId: string })
 export default function Secrets({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  // Permissions
   const userCanReadEnvironments = userHasPermission(
     organisation?.role?.permissions,
     'Environments',
@@ -180,7 +184,12 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     'read',
     true
   )
-  const userCanReadMembers = userHasPermission(organisation?.role?.permissions, 'Members', 'read')
+  const userCanReadSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'read',
+    true
+  )
 
   const { data } = useQuery(GetAppEnvironments, {
     variables: {
@@ -210,7 +219,43 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const { keyring } = useContext(KeyringContext)
 
-  const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]) => {
+  const unsavedChanges =
+    secretsToDelete.length > 0 ||
+    JSON.stringify(serverAppSecrets) !== JSON.stringify(clientAppSecrets)
+
+  const filteredSecrets =
+    searchQuery === ''
+      ? clientAppSecrets
+      : clientAppSecrets.filter((secret) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(secret.key)
+        })
+
+  const filteredFolders =
+    searchQuery === ''
+      ? appFolders
+      : appFolders.filter((folder) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(folder.name)
+        })
+
+  const { data: syncsData } = useQuery(GetAppSyncStatus, {
+    variables: {
+      appId: params.app,
+    },
+    skip: !userCanReadSyncs,
+    pollInterval: unsavedChanges ? 0 : 5000,
+  })
+
+  /**
+   * Fetches encrypted secrets and folders for the given application environments,
+   * decrypts them using the user's keyring, and processes the data into a unified
+   * format for managing secrets and folders in the application state.
+   *
+   * @param {EnvironmentType[]} appEnvironments - Array of application environments to fetch and decrypt secrets for.
+   * @returns {Promise<void>} Resolves once the secrets and folders are processed and state is updated.
+   */
+  const fetchAndDecryptAppEnvs = async (appEnvironments: EnvironmentType[]): Promise<void> => {
     setLoading(true)
     const envSecrets = [] as EnvSecrets[]
     const envFolders = [] as EnvFolders[]
@@ -277,22 +322,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const serverSecret = (id: string) => serverAppSecrets.find((secret) => secret.id === id)
 
-  const filteredSecrets =
-    searchQuery === ''
-      ? clientAppSecrets
-      : clientAppSecrets.filter((secret) => {
-          const searchRegex = new RegExp(searchQuery, 'i')
-          return searchRegex.test(secret.key)
-        })
-
-  const filteredFolders =
-    searchQuery === ''
-      ? appFolders
-      : appFolders.filter((folder) => {
-          const searchRegex = new RegExp(searchQuery, 'i')
-          return searchRegex.test(folder.name)
-        })
-
   const duplicateKeysExist = () => {
     const keySet = new Set<string>()
 
@@ -313,6 +342,13 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     return secretKeysToSync.includes('')
   }
 
+  /**
+   * Handles bulk updating of secrets by comparing client-side secrets with server-side secrets
+   * and determining which secrets need to be created, updated, or deleted. Secrets are encrypted
+   * using the user's keyring before being sent to the server for processing.
+   *
+   * @returns {Promise<void>} Resolves once the secrets are processed and the application state is updated.
+   */
   const handleBulkUpdateSecrets = async () => {
     const userKxKeys = {
       publicKey: await getUserKxPublicKey(keyring!.publicKey),
@@ -403,6 +439,14 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           secretsToUpdate,
           secretsToDelete,
         },
+        refetchQueries: [
+          {
+            query: GetAppSyncStatus,
+            variables: {
+              appId: params.app,
+            },
+          },
+        ],
       })
 
       if (!errors) {
@@ -415,6 +459,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     }
   }
 
+  // Wraps handleBulkUpdateSecrets with some basic validation checks, loading state updates and toasts
   const handleSaveChanges = async () => {
     setLoading(true)
 
@@ -528,19 +573,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   }
 
   const stageEnvValueForDelete = (appSecretId: string, environment: EnvironmentType) => {
-    // setClientAppSecrets((prevSecrets) =>
-    //   prevSecrets.map((appSecret) => {
-    //     if (appSecret.id === appSecretId) {
-    //       const { id, key, envs } = appSecret
-
-    //       return {
-    //         id,
-    //         key,
-    //         envs: envs.filter((env) => env.id !== environment.id),
-    //       }
-    //     } else return appSecret
-    //   })
-    // )
     const appSecret = clientAppSecrets.find((appSecret) => appSecret.id === appSecretId)
     const secretToDelete = appSecret?.envs.find((env) => env.env.id === environment.id)
     if (secretToDelete) {
@@ -571,7 +603,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     const existingSecrets = secretIds.filter((secretId) => !secretId.includes('new'))
 
     // filter out secrets that only exist client-side and can be deleted in memory
-    secretToDelete.envs = secretToDelete.envs.filter((env) => !env.secret!.id.includes('new'))
+    secretToDelete.envs = secretToDelete.envs.filter((env) => !env.secret?.id.includes('new'))
 
     // if this app secret no longer has any env-values client-side, remove it from memory entirely
     if (secretToDelete.envs.length === 0) {
@@ -599,10 +631,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     setSecretsToDelete([])
     setAppSecretsToDelete([])
   }
-
-  const unsavedChanges =
-    secretsToDelete.length > 0 ||
-    JSON.stringify(serverAppSecrets) !== JSON.stringify(clientAppSecrets)
 
   useEffect(() => {
     if (keyring !== null && data?.appEnvironments && userCanReadSecrets)
@@ -819,11 +847,11 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                   </Button>
                 )}
 
-                {/* {data.envSyncs && userCanReadSyncs && (
+                {syncsData?.syncs && userCanReadSyncs && (
                   <div>
-                    <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
+                    <EnvSyncStatus syncs={syncsData.syncs} team={params.team} app={params.app} />
                   </div>
-                )} */}
+                )}
 
                 <Button
                   variant={unsavedChanges ? 'primary' : 'secondary'}
@@ -850,7 +878,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             </div>
           </div>
 
-          {serverAppSecrets.length > 0 || appFolders.length > 0 ? (
+          {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
             <table className="table-auto w-full border border-neutral-500/40">
               <thead id="table-head" className="sticky top-0 bg-zinc-300 dark:bg-zinc-800 z-10">
                 <tr className="divide-x divide-neutral-500/40">
@@ -902,26 +930,23 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               <Spinner size="xl" />
             </div>
           ) : userCanReadEnvironments && userCanReadSecrets ? (
-            <div className="flex flex-col items-center py-40 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
-              <div className="font-semibold text-black dark:text-white text-2xl">No Secrets</div>
-              <div className="text-neutral-500">
-                There are no secrets in this app yet. Click on an environment below to start adding
-                secrets.
-              </div>
-              <div className="flex items-center gap-4 mt-8">
-                {data?.appEnvironments.map((env: EnvironmentType) => (
-                  <Link key={env.id} href={`${pathname}/environments/${env.id}`}>
-                    <Button variant="primary">
-                      <div className="flex items-center gap-2 justify-center text-xl group">
-                        {env.name}
-                        <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
-                          <FaArrowRight />
-                        </div>
-                      </div>
-                    </Button>
-                  </Link>
-                ))}
-              </div>
+            <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
+              <EmptyState
+                title="No secrets"
+                subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment.
+                secrets."
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <FaBoxOpen />
+                  </div>
+                }
+              >
+                <div>
+                  <Button variant="primary" onClick={handleAddNewClientSecret}>
+                    <FaPlus /> New Secret
+                  </Button>
+                </div>
+              </EmptyState>
             </div>
           ) : (
             <EmptyState

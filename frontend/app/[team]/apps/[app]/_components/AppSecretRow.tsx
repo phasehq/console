@@ -271,12 +271,6 @@ export const AppSecretRow = ({
     updateKey(clientAppSecret.id, sanitizedK)
   }
 
-  const handleKeyInputBlur = () => {
-    // if (key !== clientAppSecret.key) {
-    //   updateKey(clientAppSecret.id, key)
-    // }
-  }
-
   // Permisssions
   const userCanUpdateSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) || secretIsNew
@@ -296,9 +290,9 @@ export const AppSecretRow = ({
   const keyIsDuplicate = false // TODO implement
 
   const tooltipText = (env: { env: Partial<EnvironmentType>; secret: SecretType | null }) => {
-    if (env.secret === null) return `This secret is missing in ${env.env.envType}`
-    else if (env.secret.value.length === 0) return `This secret is blank in ${env.env.envType}`
-    else if (secretIsSameAsProd(env)) return `This secret is the same as PROD.`
+    if (env.secret === null) return `This secret is missing in ${env.env.name}`
+    else if (env.secret.value.length === 0) return `This secret is blank in ${env.env.name}`
+    else if (secretIsSameAsProd(env)) return `This secret is the same as Production.`
     else return 'This secret is present'
   }
 
@@ -394,7 +388,6 @@ export const AppSecretRow = ({
                   )}
                   value={key}
                   onChange={(e) => handleUpdateKey(e.target.value)}
-                  onBlur={handleKeyInputBlur}
                   onClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
                 />
