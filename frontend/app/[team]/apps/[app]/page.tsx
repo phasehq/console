@@ -50,6 +50,7 @@ import {
   decryptAsymmetric,
   getUserKxPrivateKey,
   getUserKxPublicKey,
+  arraysEqual,
 } from '@/utils/crypto'
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
 import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
@@ -220,8 +221,23 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   const { keyring } = useContext(KeyringContext)
 
   const unsavedChanges =
+    //check if any secrets are staged for delete
     secretsToDelete.length > 0 ||
-    JSON.stringify(serverAppSecrets) !== JSON.stringify(clientAppSecrets)
+    //check if any new secret keys are added
+    !arraysEqual(
+      clientAppSecrets.map((appSecret) => appSecret.key),
+      serverAppSecrets.map((appSecret) => appSecret.key)
+    ) ||
+    //check if values are modified for existing secrets
+    serverAppSecrets.some(
+      (appSecret) =>
+        !arraysEqual(
+          appSecret.envs.map((env) => env.secret?.value),
+          clientAppSecrets
+            .find((clientAppSecret) => clientAppSecret.id === appSecret.id)
+            ?.envs.map((env) => env.secret?.value) ?? []
+        )
+    )
 
   const filteredSecrets =
     searchQuery === ''
@@ -499,7 +515,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
       const appSecretEnvValue = env
 
       if (appSecretEnvValue.env.id === envId) {
-        if (!value) return null
+        if (value === null || value === undefined) return null
 
         appSecretEnvValue!.secret!.value = value
       }
