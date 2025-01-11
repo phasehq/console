@@ -776,7 +776,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white grid gap-16 relative">
       {keyring !== null && (
-        <section className="space-y-8 py-4">
+        <section className="space-y-4 py-4">
           <div className="space-y-2">
             <div className="space-y-1">
               <h1 className="h3 font-semibold text-2xl">Environments</h1>
@@ -811,7 +811,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               <h1 className="h3 font-semibold text-2xl">Secrets</h1>
               <p className="text-neutral-500">
                 An overview of Secrets across all Environments in this App. Expand a row in the
-                table below to compare values across Environments.
+                table below to compare and manage values across all Environments.
               </p>
             </div>
             <div className="flex items-center justify-end gap-4 p-4 text-neutral-500 text-xs whitespace-nowrap">
@@ -886,25 +886,26 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                   </div>
                 </Button>
               </div>
-              <div>
-                <Button variant="primary" onClick={handleAddNewClientSecret}>
-                  <FaPlus /> New Secret
-                </Button>
-              </div>
             </div>
           </div>
 
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={handleAddNewClientSecret}>
+              <FaPlus /> New Secret
+            </Button>
+          </div>
+
           {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
-            <table className="table-auto w-full border border-neutral-500/40">
-              <thead id="table-head" className="sticky top-0 bg-zinc-300 dark:bg-zinc-800 z-10">
-                <tr className="divide-x divide-neutral-500/40">
-                  <th className="px-6 py-2 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">
+            <table className="table-auto w-full">
+              <thead id="table-head" className="sticky top-0 z-10 border-b border-neutral-500/40">
+                <tr>
+                  <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
                     key
                   </th>
                   {data?.appEnvironments.map((env: EnvironmentType) => (
                     <th
                       key={env.id}
-                      className="group text-center text-sm font-semibold uppercase tracking-widest py-3 "
+                      className="group text-center text-sm font-semibold uppercase tracking-widest py-2"
                     >
                       <Link href={`${pathname}/environments/${env.id}`}>
                         <Button variant="outline">
@@ -927,6 +928,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
                 {filteredSecrets.map((appSecret, index) => (
                   <AppSecretRow
+                    index={index}
                     key={appSecret.id}
                     clientAppSecret={appSecret}
                     serverAppSecret={serverSecret(appSecret.id)}

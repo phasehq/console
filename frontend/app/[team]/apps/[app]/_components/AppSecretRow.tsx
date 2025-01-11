@@ -237,6 +237,7 @@ const EnvSecret = ({
 }
 
 export const AppSecretRow = ({
+  index,
   clientAppSecret,
   serverAppSecret,
   stagedForDelete,
@@ -247,6 +248,7 @@ export const AppSecretRow = ({
   deleteEnvValue,
   deleteKey,
 }: {
+  index: number
   clientAppSecret: AppSecret
   serverAppSecret?: AppSecret
   stagedForDelete?: boolean
@@ -343,7 +345,7 @@ export const AppSecretRow = ({
     if (stagedForDelete) return '!border-l-red-700 !dark:border-l-red-400'
     else if (secretIsNew) return '!border-l-emerald-700 !dark:border-l-emerald-200'
     else if (secretIsModified()) return '!border-l-amber-700 !dark:border-l-amber-300'
-    else return '!border-neutral-500/40'
+    else return '!border-neutral-500/20'
   }
 
   const serverEnvSecret = (id: string) => serverAppSecret?.envs.find((env) => env.env.id === id)
@@ -354,25 +356,37 @@ export const AppSecretRow = ({
         <>
           <tr
             className={clsx(
-              'group divide-x divide-neutral-500/40 border-x transition ease duration-100',
+              'group divide-x divide-neutral-500/20 border-x transition ease duration-100',
               isOpen
-                ? `${rowBgColorOpen()} ${rowBorderColor()} !border-r-neutral-500/40`
+                ? `${rowBgColorOpen()} ${rowBorderColor()} !border-r-neutral-500/20`
                 : `${rowBgColorClosed()}  border-neutral-500/40`
             )}
           >
             <td
               className={clsx(
-                `px-2 whitespace-nowrap font-mono ${rowInputColor()} flex items-center gap-2 ph-no-capture`,
+                `px-2 py-0.5 whitespace-nowrap font-mono ${rowInputColor()} flex items-center gap-2 ph-no-capture`,
                 isOpen ? 'font-bold' : 'font-medium'
               )}
             >
-              <FaChevronRight
+              <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={clsx(
-                  'transform transition ease font-light cursor-pointer',
-                  isOpen ? 'opacity-100 rotate-90' : 'opacity-0 group-hover:opacity-100 rotate-0'
-                )}
-              />
+                className="relative flex items-center justify-center"
+              >
+                <FaChevronRight
+                  className={clsx(
+                    'transform transition ease font-light cursor-pointer',
+                    isOpen ? 'opacity-100 rotate-90' : 'opacity-0 group-hover:opacity-100 rotate-0'
+                  )}
+                />
+                <span
+                  className={clsx(
+                    'text-neutral-500 font-mono absolute transition ease',
+                    isOpen ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
+                  )}
+                >
+                  {index}
+                </span>
+              </button>
               <div className="relative w-full group">
                 <input
                   disabled={stagedForDelete || !userCanUpdateSecrets}
