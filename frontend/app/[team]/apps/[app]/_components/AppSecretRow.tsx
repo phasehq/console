@@ -356,10 +356,10 @@ export const AppSecretRow = ({
         <>
           <tr
             className={clsx(
-              'group divide-x divide-neutral-500/20 border-x transition ease duration-100',
+              'group divide-x divide-neutral-500/20 border-l transition ease duration-100',
               isOpen
                 ? `${rowBgColorOpen()} ${rowBorderColor()} !border-r-neutral-500/20`
-                : `${rowBgColorClosed()}  border-neutral-500/40`
+                : `${rowBgColorClosed()}  border-neutral-500/20`
             )}
           >
             <td
@@ -384,7 +384,7 @@ export const AppSecretRow = ({
                     isOpen ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
                   )}
                 >
-                  {index}
+                  {index + 1}
                 </span>
               </button>
               <div className="relative w-full group">

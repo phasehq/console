@@ -897,7 +897,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
           {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
             <table className="table-auto w-full">
-              <thead id="table-head" className="sticky top-0 z-10 border-b border-neutral-500/40">
+              <thead id="table-head" className="sticky top-0 z-10 ">
                 <tr>
                   <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
                     key
@@ -921,7 +921,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-500/40">
+              <tbody className="divide-y divide-neutral-500/20 rounded-md">
                 {filteredFolders.map((appFolder) => (
                   <AppFolderRow key={appFolder.name} appFolder={appFolder} />
                 ))}
