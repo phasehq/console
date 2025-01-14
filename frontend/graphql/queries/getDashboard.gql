@@ -1,6 +1,7 @@
 query GetDashboard($organisationId: ID!) {
   apps(organisationId: $organisationId) {
     id
+    name
     sseEnabled
   }
   userTokens(organisationId: $organisationId) {
