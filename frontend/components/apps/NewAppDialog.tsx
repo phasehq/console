@@ -1,6 +1,7 @@
 import { Dialog, Transition } from '@headlessui/react'
 import { forwardRef, Fragment, useContext, useState, useImperativeHandle, useRef } from 'react'
 import { FaPlus, FaTimes } from 'react-icons/fa'
+import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
@@ -27,6 +28,7 @@ const NewAppDialog = forwardRef(
       'create',
       true
     )
+    // This is unused as we are not longer creating example secrets when creating an application
     const userCanCreateSecrets = userHasPermission(
       organisation.role?.permissions,
       'Secrets',
@@ -180,10 +182,19 @@ const NewAppDialog = forwardRef(
                 >
                   <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                     <Dialog.Title as="div" className="flex w-full justify-between">
-                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white">
-                        {allowNewApp() && 'Create an App'}
-                        {!allowNewApp() && !createSuccess && planDisplay()?.dialogTitle}
-                      </h3>
+                      <div className="flex items-center gap-4">
+                        <h3 className="text-lg font-medium leading-6 text-black dark:text-white">
+                          {allowNewApp() && 'Create an App'}
+                          {!allowNewApp() && !createSuccess && planDisplay()?.dialogTitle}
+                        </h3>
+                        <div
+                          className="rounded-md px-2 text-2xs font-semibold flex items-center gap-1 text-emerald-500 bg-emerald-400/10 cursor-help"
+                          title="Secrets (keys, values, comments) will be encrypted with end-to-end encryption"
+                        >
+                          <FaArrowDownUpLock />
+                          End-to-End Encrypted
+                        </div>
+                      </div>
                       <Button variant="text" onClick={closeModal}>
                         <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                       </Button>
@@ -223,9 +234,11 @@ const NewAppDialog = forwardRef(
                               />
                             </div>
 
-                            {userCanCreateEnvs && userCanCreateSecrets && (
-                              <div className="text-sm text-gray-500 italic">
-                                Your app will be initialized with Development, Staging, and Production environments.
+                            {userCanCreateEnvs && (
+                              <div className="space-y-4">
+                                <Alert variant="info" icon={true} size="sm">
+                                  Your app will be initialized with Development, Staging, and Production environments.
+                                </Alert>
                               </div>
                             )}
                           </div>
