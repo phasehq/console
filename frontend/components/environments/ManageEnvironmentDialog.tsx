@@ -260,7 +260,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
 
       {organisation && (
         <div className="flex justify-end">
-          <Link href={`/${organisation.name}/apps/${props.environment.app.id}/members`}>
+          <Link href={`/${organisation.name}/apps/${props.environment.app.id}/access/members`}>
             <Button variant="primary">
               <FaUserCog /> Manage access
             </Button>
