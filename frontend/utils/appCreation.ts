@@ -48,6 +48,16 @@ interface CreateAppOptions {
 
 export const DEV_SECRETS = [
   {
+    key: 'SATELLITE_HANDOFF_KEY',
+    value: 'hndfrk_sjdh23h2j3h2',
+    comment: '',
+  },
+  {
+    key: 'BANDWIDTH_ALLOCATION_KEY',
+    value: 'bwalloc_key_28dhj3j3',
+    comment: '',
+  },
+  {
     key: 'AWS_ACCESS_KEY_ID',
     value: 'AKIAIX4ONRSG6ODEFVJA',
     comment: '',
@@ -58,76 +68,131 @@ export const DEV_SECRETS = [
     comment: '',
   },
   {
-    key: 'JWT_SECRET',
-    value:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjMzNjIwMTcxLCJleHAiOjIyMDg5ODUyMDB9.pHnckabbMbwTHAJOkb5Z7G7B4chY6GllJf6K2m96z3A',
-    comment: '',
-  },
-  {
-    key: 'STRIPE_SECRET_KEY',
-    value: 'sk_test_EeHnL644i6zo4Iyq4v1KdV9H',
-    comment: '',
-  },
-  {
-    key: 'DJANGO_SECRET_KEY',
-    value: 'wwf*2#86t64!fgh6yav$aoeuo@u2o@fy&*gg76q!&%6x_wbduad',
-    comment: '',
-  },
-  {
-    key: 'DJANGO_DEBUG',
+    key: 'MAINTENANCE_MODE',
     value: 'True',
     comment: '',
   },
   {
+    key: 'SIGNAL_ENCRYPTION_KEY',
+    value: 'sek_starlink_dev_v1_8x8j2k',
+    comment: '',
+  },
+  {
+    key: 'FIRMWARE_UPDATE_URL',
+    value: 'https://starlink-firmware-updates-gbs-dev-1.s3.us-central-1.amazonaws.com/firmware',
+    comment: '',
+  },
+  {
+    key: 'GROUNDSTATION_CERTIFICATE_PATH',
+    value: '/etc/ssl/certs/gs_cert.pem',
+    comment: '',
+  },
+  {
+    key: 'GROUNDSTATION_PRIVATE_KEY_PATH',
+    value: '/etc/ssl/private/gs_private_key.pem',
+    comment: '',
+  },
+  {
+    key: 'WIREGUARD_KEY',
+    value: 'wg_key_HJu2xOjZTKPviO22y9KqNQMI9ejSM6TNEsACKv7kB7k=',
+    comment: '',
+  },
+  {
     key: 'POSTGRES_CONNECTION_STRING',
-    value: 'postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}',
-    comment: 'AWS RDS pgsql - us-west-1',
-  },
-  {
-    key: 'DB_USER',
-    value: 'postgres',
-    comment: '',
-  },
-  {
-    key: 'DB_HOST',
-    value: 'mc-laren-prod-db.c9ufzjtplsaq.us-west-1.rds.amazonaws.com',
-    comment: '',
-  },
-  {
-    key: 'DB_NAME',
-    value: 'XP1_LM',
-    comment: '',
-  },
-  {
-    key: 'DB_PASSWORD',
-    value: '6c37810ec6e74ec3228416d2844564fceb99ebd94b29f4334c244db011630b0e',
-    comment: '',
-  },
-  {
-    key: 'DB_PORT',
-    value: '5432',
-    comment: '',
+    value: 'postgresql://spacex_stag:c51bdc6b6e8685f113a4ab5d57481b8b20d8d06a6526f5e2e4535ffa398850a2@starlink-telemetry-db-stag.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
+    comment: 'RDS Aurora PostgreSQL - US Central - DEV',
   },
 ]
 
 export const STAG_SECRETS = [
   {
-    key: 'DJANGO_DEBUG',
+    key: 'SATELLITE_HANDOFF_KEY',
+    value: 'hndfrk_stag_k2j3h4k2j3',
+    comment: '',
+  },
+  {
+    key: 'BANDWIDTH_ALLOCATION_KEY',
+    value: 'bwalloc_key_stag_93hdk2',
+    comment: '',
+  },
+  {
+    key: 'MAINTENANCE_MODE',
     value: 'False',
+    comment: '',
+  },
+  {
+    key: 'SIGNAL_ENCRYPTION_KEY',
+    value: 'sek_starlink_stag_v1_9x9k3m',
+    comment: '',
+  },
+  {
+    key: 'FIRMWARE_UPDATE_URL',
+    value: 'https://updates-staging.spacex.com/firmware',
+    comment: '',
+  },
+  {
+    key: 'WIREGUARD_KEY',
+    value: 'wg_falcon9_stag_key_39dj3k3h3j3h3j3h3j3h3j3h3j3',
+    comment: '',
+  },
+  {
+    key: 'POSTGRES_CONNECTION_STRING',
+    value: 'postgresql://spacex_stag:7d48921fc7e85fd3339527d39557@starlink-telemetry-db-stag.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
+    comment: 'RDS Aurora PostgreSQL - US Central',
+  },
+  {
+    key: 'DISABLE_STARLINK_COORDINATES',
+    value: 'None',
     comment: '',
   },
 ]
 
 export const PROD_SECRETS = [
   {
-    key: 'STRIPE_SECRET_KEY',
-    value: 'sk_live_epISNGSkdeXov2frTey7RHAi',
-    comment: 'Stripe prod key - Stripe Atlas',
+    key: 'JWT_SECRET',
+    value:
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjMzNjIwMTcxLCJleHAiOjIyMDg5ODUyMDB9.pHnckabbMbwTHAJOkb5Z7G7B4chY6GllJf6K2m96z3A',
+    comment: '',
   },
   {
-    key: 'DJANGO_DEBUG',
+    key: 'SATELLITE_HANDOFF_KEY',
+    value: 'hndfrk_prod_p8k4m5n2',
+    comment: 'Production Satellite Handoff Key',
+  },
+  {
+    key: 'BANDWIDTH_ALLOCATION_KEY',
+    value: 'bwalloc_key_prod_74msk2',
+    comment: 'Production Bandwidth Key',
+  },
+  {
+    key: 'MAINTENANCE_MODE',
     value: 'False',
     comment: '',
+  },
+  {
+    key: 'SIGNAL_ENCRYPTION_KEY',
+    value: 'sek_starlink_prod_v2_+ScgHNaH6uZpqFRST+Q2Cq+KlaExlUEtFZrPNrgokzicou97GD/UUsEAJrjb3tfOblUt15e2dir0L671W+OwBw==',
+    comment: 'Production Signal Encryption Key',
+  },
+  {
+    key: 'FIRMWARE_UPDATE_URL',
+    value: 'https://ota.spacex.com/firmware',
+    comment: 'Production Firmware Update Endpoint',
+  },
+  {
+    key: 'WIREGUARD_KEY',
+    value: 'wg_prod_key_e4bd19c3b17cf205f969b3c2bfd69173477db64dff71a8d7f8ca3ab8b39154f8',
+    comment: 'Production WireGuard Key',
+  },
+  {
+    key: 'POSTGRES_CONNECTION_STRING',
+    value: 'postgresql://spacex_stag:268ff4edd81533a32b80645844b6afdcc48a4041ffda000c3c5ff3505777eda8@starlink-telemetry-db-prod.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
+    comment: 'RDS Aurora PostgreSQL - US Central - PROD',
+  },
+  {
+    key: 'DISABLE_STARLINK_COORDINATES',
+    value: '46.1092°N,33.6925°E,44.6166°N,33.5254°E,44.5000°N,34.1667°E',
+    comment: 'Prevent WW3 - Elon\'s orders',
   },
 ]
 
