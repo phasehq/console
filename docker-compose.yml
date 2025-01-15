@@ -31,10 +31,30 @@ services:
     networks:
       - phase-net
 
+  migrations:
+    container_name: phase-migrations
+    image: phasehq/backend:latest
+    command: python manage.py migrate
+    env_file: .env
+    environment:
+      OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
+      ALLOWED_HOSTS: "${HOST},backend"
+      ALLOWED_ORIGINS: "${HTTP_PROTOCOL}${HOST}"
+      SESSION_COOKIE_DOMAIN: "${HOST}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - phase-net
+
   backend:
     container_name: phase-backend
     restart: unless-stopped
     depends_on:
+      migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -46,6 +66,7 @@ services:
       ALLOWED_HOSTS: "${HOST},backend"
       ALLOWED_ORIGINS: "${HTTP_PROTOCOL}${HOST}"
       SESSION_COOKIE_DOMAIN: "${HOST}"
+      EXTERNAL_MIGRATION: "true"
     networks:
       - phase-net
 
@@ -53,8 +74,12 @@ services:
     container_name: phase-worker
     restart: unless-stopped
     depends_on:
-      - postgres
-      - redis
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     image: phasehq/backend:latest
     command: python manage.py rqworker default
     env_file: .env
@@ -76,7 +101,6 @@ services:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_HOST_AUTH_METHOD: "trust"
-
     volumes:
       - phase-postgres-data:/var/lib/postgresql/data
     networks:
