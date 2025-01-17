@@ -219,24 +219,29 @@ export default function Secrets({ params }: { params: { team: string; app: strin
 
   const { keyring } = useContext(KeyringContext)
 
+  const normalizeValues = (values: (string | undefined)[]) => values.map((value) => value ?? null) // Replace undefined with null for consistent comparison
+
   const unsavedChanges =
-    //check if any secrets are staged for delete
+    // Check if any secrets are staged for delete
     secretsToDelete.length > 0 ||
-    //check if any new secret keys are added
+    // Check if any new secret keys are added
     !arraysEqual(
       clientAppSecrets.map((appSecret) => appSecret.key),
       serverAppSecrets.map((appSecret) => appSecret.key)
     ) ||
-    //check if values are modified for existing secrets
-    serverAppSecrets.some(
-      (appSecret) =>
-        !arraysEqual(
-          appSecret.envs.map((env) => env.secret?.value),
-          clientAppSecrets
-            .find((clientAppSecret) => clientAppSecret.id === appSecret.id)
-            ?.envs.map((env) => env.secret?.value) ?? []
-        )
-    )
+    // Check if values are modified for existing secrets
+    serverAppSecrets.some((appSecret) => {
+      const clientSecret = clientAppSecrets.find(
+        (clientAppSecret) => clientAppSecret.id === appSecret.id
+      )
+
+      if (!clientSecret) return true // Secret is missing in client (potential deletion)
+
+      return !arraysEqual(
+        normalizeValues(appSecret.envs.map((env) => env.secret?.value)),
+        normalizeValues(clientSecret.envs.map((env) => env.secret?.value))
+      )
+    })
 
   const filteredSecrets =
     searchQuery === ''
@@ -568,18 +573,19 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             environment,
           }
 
-          const { id, key, envs } = appSecret
+          const updatedEnvs = appSecret.envs.map((env) => {
+            if (env.env.id === environment.id) {
+              return {
+                ...env,
+                secret: newSecret,
+              }
+            }
+            return env
+          })
 
           return {
-            id,
-            key,
-            envs: envs.filter((env) => {
-              if (env.env.id === environment.id) {
-                env.secret = newSecret
-              }
-
-              return env
-            }),
+            ...appSecret,
+            envs: updatedEnvs,
           }
         }
         return appSecret
