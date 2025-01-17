@@ -16,6 +16,7 @@ import {
   FaUndo,
   FaChevronDown,
   FaPlus,
+  FaExclamationCircle,
 } from 'react-icons/fa'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -138,7 +139,7 @@ const EnvSecret = ({
     <div className={`px-4 rounded-md ${bgColor()}`}>
       <div>
         <Link
-          className={`flex items-center gap-2 w-min group font-medium text-xs ${inputTextColor()}`}
+          className={`flex items-center gap-2 w-min group font-medium text-xs ${inputTextColor()} opacity-60`}
           href={`${pathname}/environments/${clientEnvSecret.env.id}${
             clientEnvSecret.secret ? `?secret=${clientEnvSecret.secret?.id}` : ``
           }`}
@@ -150,6 +151,12 @@ const EnvSecret = ({
         >
           <div>{clientEnvSecret.env.name}</div>
           <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
+          {sameAsProd && (
+            <FaExclamationCircle
+              className="text-amber-500"
+              title="This value is the same as Production"
+            />
+          )}
         </Link>
       </div>
 
@@ -163,19 +170,6 @@ const EnvSecret = ({
         </div>
       ) : (
         <div className="flex justify-between items-center w-full">
-          {/* <code
-            className={clsx(
-              'break-all whitespace-break-spaces max-w-full ph-no-capture',
-              sameAsProd ? 'text-amber-500' : 'text-emerald-500'
-            )}
-          >
-            {showValue ? (
-              <pre>{envSecret.secret.value}</pre>
-            ) : (
-              <span>{'*'.repeat(envSecret.secret.value.length)}</span>
-            )}
-          </code> */}
-
           <div className="relative w-full group">
             <div className="flex items-center gap-2">
               {isBoolean && !stagedForDelete && (
@@ -210,6 +204,7 @@ const EnvSecret = ({
                 )}
                 type={showValue ? 'text' : 'password'}
                 value={clientEnvSecret.secret.value}
+                placeholder="VALUE"
                 onChange={(e) =>
                   updateEnvValue(
                     appSecretId,
@@ -270,6 +265,8 @@ export const AppSecretRow = ({
 
   const [key, setKey] = useState(clientAppSecret.key)
   const [isOpen, setIsOpen] = useState(false)
+
+  const toggleAccordion = () => setIsOpen(!isOpen)
 
   const handleUpdateKey = (k: string) => {
     const sanitizedK = k.replace(/ /g, '_').toUpperCase()
@@ -373,7 +370,7 @@ export const AppSecretRow = ({
               )}
             >
               <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={toggleAccordion}
                 className="relative flex items-center justify-center"
               >
                 <FaChevronRight
@@ -426,7 +423,11 @@ export const AppSecretRow = ({
               </div>
             </td>
             {clientAppSecret.envs.map((env) => (
-              <td key={env.env.id} className={'px-6  whitespace-nowrap group'}>
+              <td
+                key={env.env.id}
+                className={'px-6 whitespace-nowrap group cursor-pointer'}
+                onClick={toggleAccordion}
+              >
                 <div className="flex items-center justify-center" title={tooltipText(env)}>
                   {env.secret !== null ? (
                     env.secret.value.length === 0 ? (
