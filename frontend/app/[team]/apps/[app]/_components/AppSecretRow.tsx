@@ -65,7 +65,7 @@ const EnvSecret = ({
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
 
-  const [showValue, setShowValue] = useState<boolean>(valueIsNew || false)
+  const [showValue, setShowValue] = useState<boolean>(false)
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
@@ -95,6 +95,11 @@ const EnvSecret = ({
   useEffect(() => {
     if (isBoolean) setShowValue(true)
   }, [isBoolean])
+
+  // Reveal newly added values
+  useEffect(() => {
+    if (valueIsNew) setShowValue(true)
+  }, [valueIsNew])
 
   const handleHideSecret = () => setShowValue(false)
 
