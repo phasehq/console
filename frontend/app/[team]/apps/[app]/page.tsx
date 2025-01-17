@@ -23,7 +23,6 @@ import {
   FaBoxOpen,
   FaCheckCircle,
   FaChevronRight,
-  FaCircle,
   FaCloudUploadAlt,
   FaExchangeAlt,
   FaFolder,
@@ -56,11 +55,11 @@ import { ManageEnvironmentDialog } from '@/components/environments/ManageEnviron
 import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
 import { SwapEnvOrder } from '@/graphql/mutations/environments/swapEnvironmentOrder.gql'
 import { EmptyState } from '@/components/common/EmptyState'
-import { SplitButton } from '@/components/common/SplitButton'
 import { AppSecretRow } from './_components/AppSecretRow'
 import { AppSecret, AppFolder, EnvSecrets, EnvFolders } from './types'
 import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
+import { SecretInfoLegend } from './_components/SecretInfoLegend'
 
 const Environments = (props: { environments: EnvironmentType[]; appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -588,21 +587,85 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     )
   }
 
+  /**
+   * Handles the delete action for a specific environment's value, for a given appSecret key
+   *
+   *
+   * @param {string} appSecretId
+   * @param {EnvironmentType} environment
+   */
   const stageEnvValueForDelete = (appSecretId: string, environment: EnvironmentType) => {
+    //Find the app secret and env value in local state
     const appSecret = clientAppSecrets.find((appSecret) => appSecret.id === appSecretId)
     const secretToDelete = appSecret?.envs.find((env) => env.env.id === environment.id)
+
     if (secretToDelete) {
-      // if already staged for delete, remove it from the list
-      if (secretsToDelete.includes(secretToDelete.secret!.id)) {
-        setSecretsToDelete((prevSecretsToDelete) =>
-          prevSecretsToDelete.filter((secretId) => secretId !== secretToDelete.secret!.id)
+      // Try and find the correspding values on the server
+      const serverAppSecret = serverAppSecrets.find((appSecret) => appSecret.id === appSecretId)
+      const envValueOnServer = serverAppSecret?.envs.find((env) => env.env.id === environment.id)
+
+      // Check if the value is null or undefined, which means that the value is not on server, and has been created client-side but not yet saved.
+      if (
+        envValueOnServer?.secret?.value === null ||
+        envValueOnServer?.secret?.value === undefined
+      ) {
+        // Update the local state to for this appSecret by setting the env value to null
+        setClientAppSecrets((prevSecrets) =>
+          prevSecrets.map((prevSecret) => {
+            if (prevSecret.id === appSecretId) {
+              const { id, key, envs } = prevSecret
+
+              const updatedEnvs = envs.filter((env) => {
+                if (env.env.id === environment.id) {
+                  env!.secret = null
+                }
+
+                return env
+              })
+
+              const hasNonNullValue = updatedEnvs.some((env) => env?.secret !== null)
+
+              if (!hasNonNullValue) {
+                handleStageClientSecretForDelete(appSecretId)
+              }
+
+              return {
+                id,
+                key,
+                envs: envs.filter((env) => {
+                  if (env.env.id === environment.id) {
+                    env!.secret = null
+                  }
+
+                  return env
+                }),
+              }
+            }
+
+            return prevSecret
+          })
         )
-      } else {
-        setSecretsToDelete([...secretsToDelete, secretToDelete.secret!.id])
+      }
+      // The value exists on the server, and must be qeued for a server delete
+      else {
+        // if already staged for delete, remove it from the list
+        if (secretsToDelete.includes(secretToDelete.secret!.id)) {
+          setSecretsToDelete((prevSecretsToDelete) =>
+            prevSecretsToDelete.filter((secretId) => secretId !== secretToDelete.secret!.id)
+          )
+        } else {
+          setSecretsToDelete([...secretsToDelete, secretToDelete.secret!.id])
+        }
       }
     }
   }
 
+  /**
+   * Handles the delete action for an appSecret. If the secret exists on the server, it is queued for delete, else it delete instantly from local state.
+   *
+   * @param {string} id
+   * @returns {void}
+   */
   const handleStageClientSecretForDelete = (id: string) => {
     const clonedSecrets = structuredClone(clientAppSecrets)
 
@@ -814,21 +877,6 @@ export default function Secrets({ params }: { params: { team: string; app: strin
                 table below to compare and manage values across all Environments.
               </p>
             </div>
-            <div className="flex items-center justify-end gap-4 p-4 text-neutral-500 text-xs whitespace-nowrap">
-              <div className="flex items-center gap-1">
-                <FaCheckCircle className="text-emerald-500 shrink-0" /> Secret is present
-              </div>
-              <div className="flex items-center gap-1">
-                <FaCheckCircle className="text-amber-500 shrink-0" /> Secret is the same as
-                Production
-              </div>
-              <div className="flex items-center gap-1">
-                <FaCircle className="text-neutral-500 shrink-0" /> Secret is blank
-              </div>
-              <div className="flex items-center gap-1">
-                <FaTimesCircle className="text-red-500 shrink-0" /> Secret is missing
-              </div>
-            </div>
           </div>
 
           <div className="flex items-center w-full justify-between border-b border-neutral-500/20 pb-4">
@@ -896,53 +944,56 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           </div>
 
           {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
-            <table className="table-auto w-full">
-              <thead id="table-head" className="sticky top-0 z-10 ">
-                <tr>
-                  <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
-                    key
-                  </th>
-                  {data?.appEnvironments.map((env: EnvironmentType) => (
-                    <th
-                      key={env.id}
-                      className="group text-center text-sm font-semibold uppercase tracking-widest py-2"
-                    >
-                      <Link href={`${pathname}/environments/${env.id}`}>
-                        <Button variant="outline">
-                          <div className="flex items-center gap-2 justify-center ">
-                            {env.name}
-                            <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
-                              <FaArrowRight />
-                            </div>
-                          </div>
-                        </Button>
-                      </Link>
+            <>
+              <table className="table-auto w-full">
+                <thead id="table-head" className="sticky top-0 z-10 ">
+                  <tr>
+                    <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
+                      key
                     </th>
+                    {data?.appEnvironments.map((env: EnvironmentType) => (
+                      <th
+                        key={env.id}
+                        className="group text-center text-sm font-semibold uppercase tracking-widest py-2"
+                      >
+                        <Link href={`${pathname}/environments/${env.id}`}>
+                          <Button variant="outline">
+                            <div className="flex items-center gap-2 justify-center ">
+                              {env.name}
+                              <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
+                                <FaArrowRight />
+                              </div>
+                            </div>
+                          </Button>
+                        </Link>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-500/20 rounded-md">
+                  {filteredFolders.map((appFolder) => (
+                    <AppFolderRow key={appFolder.name} appFolder={appFolder} />
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-500/20 rounded-md">
-                {filteredFolders.map((appFolder) => (
-                  <AppFolderRow key={appFolder.name} appFolder={appFolder} />
-                ))}
 
-                {filteredSecrets.map((appSecret, index) => (
-                  <AppSecretRow
-                    index={index}
-                    key={appSecret.id}
-                    clientAppSecret={appSecret}
-                    serverAppSecret={serverSecret(appSecret.id)}
-                    updateKey={handleUpdateSecretKey}
-                    addEnvValue={handleAddNewEnvValue}
-                    deleteEnvValue={stageEnvValueForDelete}
-                    updateValue={handleUpdateSecretValue}
-                    deleteKey={handleStageClientSecretForDelete}
-                    stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
-                    secretsStagedForDelete={secretsToDelete}
-                  />
-                ))}
-              </tbody>
-            </table>
+                  {filteredSecrets.map((appSecret, index) => (
+                    <AppSecretRow
+                      index={index}
+                      key={appSecret.id}
+                      clientAppSecret={appSecret}
+                      serverAppSecret={serverSecret(appSecret.id)}
+                      updateKey={handleUpdateSecretKey}
+                      addEnvValue={handleAddNewEnvValue}
+                      deleteEnvValue={stageEnvValueForDelete}
+                      updateValue={handleUpdateSecretValue}
+                      deleteKey={handleStageClientSecretForDelete}
+                      stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
+                      secretsStagedForDelete={secretsToDelete}
+                    />
+                  ))}
+                </tbody>
+              </table>
+              <SecretInfoLegend />
+            </>
           ) : loading ? (
             <div className="w-full flex justify-center py-80">
               <Spinner size="xl" />

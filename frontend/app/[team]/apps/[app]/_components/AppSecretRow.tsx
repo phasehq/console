@@ -81,7 +81,7 @@ const EnvSecret = ({
 
   const handleRevealSecret = async () => {
     setShowValue(true)
-    if (serverEnvSecret?.secret)
+    if (serverEnvSecret?.secret?.id)
       await readSecret({ variables: { ids: [serverEnvSecret.secret!.id] } })
   }
 
@@ -127,14 +127,18 @@ const EnvSecret = ({
     else return 'text-zinc-900 dark:text-zinc-100'
   }
 
-  // const handleCreateEnvValue = () => updateEnvValue(index, envSecret.env.id!, '')
-  // const handleRemoveEnvValue = () => updateEnvValue(index, envSecret.env.id!, undefined)
+  const bgColor = () => {
+    if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
+    else if (valueIsNew) return 'bg-emerald-400/40'
+    else if (valueIsModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
+    else return ''
+  }
 
   return (
-    <div className="px-4">
+    <div className={`px-4 rounded-md ${bgColor()}`}>
       <div>
         <Link
-          className="flex items-center gap-2 w-min group font-medium text-neutral-400 text-xs"
+          className={`flex items-center gap-2 w-min group font-medium text-xs ${inputTextColor()}`}
           href={`${pathname}/environments/${clientEnvSecret.env.id}${
             clientEnvSecret.secret ? `?secret=${clientEnvSecret.secret?.id}` : ``
           }`}
