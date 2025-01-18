@@ -130,7 +130,7 @@ const EnvSecret = ({
 
   const bgColor = () => {
     if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
-    else if (valueIsNew) return 'bg-emerald-400/40'
+    else if (valueIsNew) return 'bg-emerald-400/10'
     else if (valueIsModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
     else return ''
   }
@@ -152,7 +152,7 @@ const EnvSecret = ({
           <div>{clientEnvSecret.env.name}</div>
           <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
           {sameAsProd && (
-            <FaExclamationCircle
+            <FaCheckCircle
               className="text-amber-500"
               title="This value is the same as Production"
             />
