@@ -23,7 +23,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, defaultHidden }) => {
 
   return (
     <Button
-      variant="secondary"
+      variant="outline"
       onClick={() => {
         window.navigator.clipboard.writeText(value).then(() => {
           setCopyCount((count) => count + 1)
