@@ -206,11 +206,7 @@ const EnvSecret = ({
                 value={clientEnvSecret.secret.value}
                 placeholder="VALUE"
                 onChange={(e) =>
-                  updateEnvValue(
-                    appSecretId,
-                    clientEnvSecret.env.id!,
-                    e.target.value.replace(/ /g, '_')
-                  )
+                  updateEnvValue(appSecretId, clientEnvSecret.env.id!, e.target.value)
                 }
               />
             </div>
