@@ -34,7 +34,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, defaultHidden }) => {
         <span
           aria-hidden={copied}
           className={clsx(
-            'pointer-events-none flex items-center gap-0.5 text-zinc-400 transition duration-300',
+            'pointer-events-none flex items-center gap-0.5 transition duration-300',
             copied && '-translate-y-1.5 opacity-0'
           )}
         >
