@@ -257,14 +257,12 @@ export const AppSecretRow = ({
   const newEnvValueAdded = clientAppSecret.envs.some((env) => env?.secret?.id.includes('new'))
   const secretIsNew = !serverAppSecret
 
-  const [key, setKey] = useState(clientAppSecret.key)
   const [isOpen, setIsOpen] = useState(false)
 
   const toggleAccordion = () => setIsOpen(!isOpen)
 
   const handleUpdateKey = (k: string) => {
     const sanitizedK = k.replace(/ /g, '_').toUpperCase()
-    setKey(sanitizedK)
     updateKey(clientAppSecret.id, sanitizedK)
   }
 
@@ -395,7 +393,7 @@ export const AppSecretRow = ({
                         ? 'ring-1 ring-inset ring-amber-500'
                         : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500'
                   )}
-                  value={key}
+                  value={clientAppSecret.key}
                   onChange={(e) => handleUpdateKey(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
