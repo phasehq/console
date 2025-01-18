@@ -7,25 +7,19 @@ import {
   FaCircle,
   FaCheckCircle,
   FaTimesCircle,
-  FaCopy,
   FaExternalLinkAlt,
   FaRegEye,
   FaRegEyeSlash,
-  FaTrash,
   FaTrashAlt,
   FaUndo,
-  FaChevronDown,
   FaPlus,
-  FaExclamationCircle,
 } from 'react-icons/fa'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
-import { copyToClipBoard } from '@/utils/clipboard'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
-import { toast } from 'react-toastify'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { usePathname } from 'next/navigation'
 import { arraysEqual } from '@/utils/crypto'
@@ -151,7 +145,7 @@ const EnvSecret = ({
         >
           <div>{clientEnvSecret.env.name}</div>
           <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
-          {sameAsProd && (
+          {sameAsProd && clientEnvSecret?.secret?.value && (
             <FaCheckCircle
               className="text-amber-500"
               title="This value is the same as Production"
@@ -203,6 +197,7 @@ const EnvSecret = ({
                   'rounded-sm font-mono text-sm font-medium'
                 )}
                 type={showValue ? 'text' : 'password'}
+                disabled={stagedForDelete}
                 value={clientEnvSecret.secret.value}
                 placeholder="VALUE"
                 onChange={(e) =>
@@ -217,9 +212,11 @@ const EnvSecret = ({
                   {showValue ? 'Hide' : 'Show'}
                 </Button>
                 <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
-                <Button variant="danger" onClick={handleDeleteValue}>
-                  {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
-                </Button>
+                {userCanDeleteSecrets && (
+                  <Button variant="danger" onClick={handleDeleteValue}>
+                    {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -258,6 +255,8 @@ export const AppSecretRow = ({
   const secretIsNew = !serverAppSecret
 
   const [isOpen, setIsOpen] = useState(false)
+
+  const keyInputRef = useRef<HTMLInputElement>(null)
 
   const toggleAccordion = () => setIsOpen(!isOpen)
 
@@ -343,6 +342,16 @@ export const AppSecretRow = ({
 
   const serverEnvSecret = (id: string) => serverAppSecret?.envs.find((env) => env.env.id === id)
 
+  // Reveal newly created secrets by default
+  useEffect(() => {
+    if (secretIsNew) {
+      setIsOpen(true)
+      if (keyInputRef.current) {
+        keyInputRef.current.focus()
+      }
+    }
+  }, [secretIsNew])
+
   return (
     <Disclosure>
       {({ open }) => (
@@ -382,6 +391,7 @@ export const AppSecretRow = ({
               </button>
               <div className="relative w-full group">
                 <input
+                  ref={keyInputRef}
                   disabled={stagedForDelete || !userCanUpdateSecrets}
                   className={clsx(
                     INPUT_BASE_STYLE,

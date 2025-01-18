@@ -184,6 +184,12 @@ export default function Secrets({ params }: { params: { team: string; app: strin
     'read',
     true
   )
+  const userCanCreateSecrets = userHasPermission(
+    organisation?.role?.permissions,
+    'Secrets',
+    'create',
+    true
+  )
   const userCanReadSyncs = userHasPermission(
     organisation?.role?.permissions,
     'Integrations',
@@ -971,9 +977,11 @@ export default function Secrets({ params }: { params: { team: string; app: strin
           </div>
 
           <div className="flex justify-end pr-4">
-            <Button variant="primary" onClick={handleAddNewClientSecret}>
-              <FaPlus /> New Secret
-            </Button>
+            {userCanCreateSecrets && (
+              <Button variant="primary" onClick={handleAddNewClientSecret}>
+                <FaPlus /> New Secret
+              </Button>
+            )}
           </div>
 
           {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
