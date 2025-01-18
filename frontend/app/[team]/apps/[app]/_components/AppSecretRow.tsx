@@ -31,6 +31,7 @@ const INPUT_BASE_STYLE =
 
 const EnvSecret = ({
   appSecretId,
+  keyIsStagedForDelete,
   clientEnvSecret,
   serverEnvSecret,
   sameAsProd,
@@ -48,6 +49,7 @@ const EnvSecret = ({
     secret: SecretType | null
   }
   appSecretId: string
+  keyIsStagedForDelete?: boolean
   sameAsProd: boolean
   stagedForDelete?: boolean
   updateEnvValue: (id: string, envId: string, value: string | undefined) => void
@@ -157,7 +159,7 @@ const EnvSecret = ({
       {clientEnvSecret.secret === null ? (
         <div className="flex items-center gap-2">
           <span className="text-red-500 font-mono uppercase">missing</span>
-          <Button variant="secondary" onClick={handleAddValue}>
+          <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
             <FaPlus />
             Add value
           </Button>{' '}
@@ -475,6 +477,7 @@ export const AppSecretRow = ({
                     {clientAppSecret.envs.map((envSecret) => (
                       <EnvSecret
                         key={envSecret.env.id}
+                        keyIsStagedForDelete={stagedForDelete}
                         clientEnvSecret={envSecret}
                         serverEnvSecret={serverEnvSecret(envSecret.env?.id!)}
                         sameAsProd={secretIsSameAsProd(envSecret)}
