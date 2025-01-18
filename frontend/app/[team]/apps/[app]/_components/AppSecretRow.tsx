@@ -340,7 +340,7 @@ export const AppSecretRow = ({
     if (stagedForDelete) return '!border-l-red-700 !dark:border-l-red-400'
     else if (secretIsNew) return '!border-l-emerald-700 !dark:border-l-emerald-200'
     else if (secretIsModified()) return '!border-l-amber-700 !dark:border-l-amber-300'
-    else return '!border-neutral-500/20'
+    else return '!border-l-neutral-500/40 !dark:border-l-neutral-500/40'
   }
 
   const serverEnvSecret = (id: string) => serverAppSecret?.envs.find((env) => env.env.id === id)
@@ -463,7 +463,7 @@ export const AppSecretRow = ({
                 className={clsx('p-2 space-y-6 ', rowBgColorOpen())}
               >
                 <Disclosure.Panel static={true}>
-                  <div className={clsx('grid gap-2 divide-y divide-neutral-500/20')}>
+                  <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
                     {clientAppSecret.envs.map((envSecret) => (
                       <EnvSecret
                         key={envSecret.env.id}

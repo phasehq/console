@@ -775,10 +775,8 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             <Disclosure.Button
               as="tr"
               className={clsx(
-                'group divide-x divide-neutral-500/40 border-x transition ease duration-100 cursor-pointer',
-                open
-                  ? 'bg-zinc-100 dark:bg-zinc-800 !border-l-emerald-500 !border-r-neutral-500/40'
-                  : ' hover:bg-zinc-100 dark:hover:bg-zinc-800 border-neutral-500/40'
+                'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 group divide-x divide-neutral-500/40 border-x transition ease duration-100 cursor-pointer',
+                open ? ' !border-l-emerald-500 !border-r-neutral-500/20' : '  border-neutral-500/20'
               )}
             >
               <td
