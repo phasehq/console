@@ -906,7 +906,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
               />
             </div>
 
-            <div className="flex flex-col items-end gap-4">
+            <div className="flex flex-col items-end gap-4 pr-4">
               <div className="flex gap-2 items-center">
                 {unsavedChanges && (
                   <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
@@ -943,7 +943,7 @@ export default function Secrets({ params }: { params: { team: string; app: strin
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end pr-4">
             <Button variant="primary" onClick={handleAddNewClientSecret}>
               <FaPlus /> New Secret
             </Button>
