@@ -30,6 +30,7 @@ import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { usePathname } from 'next/navigation'
 import { arraysEqual } from '@/utils/crypto'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
+import CopyButton from '@/components/common/CopyButton'
 
 const INPUT_BASE_STYLE =
   'w-full font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture'
@@ -105,12 +106,6 @@ const EnvSecret = ({
 
   const toggleShowValue = () => {
     showValue ? handleHideSecret() : handleRevealSecret()
-  }
-
-  const handleCopy = async (val: string) => {
-    copyToClipBoard(val)
-    toast.info('Copied', { autoClose: 2000 })
-    await readSecret({ variables: { ids: [clientEnvSecret.secret!.id] } })
   }
 
   const handleDeleteValue = () =>
@@ -221,13 +216,11 @@ const EnvSecret = ({
             </div>
             {clientEnvSecret.secret !== null && (
               <div className="flex items-center gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
-                <Button variant="outline" onClick={() => handleCopy(clientEnvSecret.secret!.value)}>
-                  <FaCopy /> Copy
-                </Button>
                 <Button variant="outline" onClick={toggleShowValue}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
                 </Button>
+                <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
                 <Button variant="danger" onClick={handleDeleteValue}>
                   {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
                 </Button>
