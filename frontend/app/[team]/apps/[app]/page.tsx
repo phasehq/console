@@ -673,42 +673,71 @@ export default function Secrets({ params }: { params: { team: string; app: strin
    * @returns {void}
    */
   const handleStageClientSecretForDelete = (id: string) => {
-    const clonedSecrets = structuredClone(clientAppSecrets)
+    const toggleDelete = (appSecret: AppSecret | undefined): AppSecret | null => {
+      if (!appSecret) return null
 
-    const secretToDelete = clonedSecrets.find((appSecret) => appSecret?.id === id)
+      const isMarkedForDelete = appSecretsToDelete.includes(id)
 
-    if (!secretToDelete) return
+      if (isMarkedForDelete) {
+        // Restore secret by rehydrating from server state
+        const serverSecret = serverAppSecrets.find((s) => s.id === id)
+        return serverSecret ? { ...appSecret, envs: serverSecret.envs } : appSecret
+      } else {
+        // Filter out client-only secrets
+        const updatedEnvs = appSecret.envs.filter((env) => !env.secret?.id?.includes('new'))
 
-    // get all non-null secret ids for this app secret
-    const secretIds = secretToDelete.envs
-      .map((env) => env.secret?.id)
-      .filter((id): id is string => id !== undefined)
-
-    // secrets that exist on the server, and need to be deleted server-side
-    const existingSecrets = secretIds.filter((secretId) => !secretId.includes('new'))
-
-    // filter out secrets that only exist client-side and can be deleted in memory
-    secretToDelete.envs = secretToDelete.envs.filter((env) => !env.secret?.id.includes('new'))
-
-    // if this app secret no longer has any env-values client-side, remove it from memory entirely
-    if (secretToDelete.envs.length === 0) {
-      const index = clonedSecrets.indexOf(secretToDelete)
-      clonedSecrets.splice(index, 1)
+        // Remove the appSecret if no envs remain
+        return updatedEnvs.length > 0 ? { ...appSecret, envs: updatedEnvs } : null
+      }
     }
 
-    // update states
-    // if server-side secrets are already marked for delete, remove them from delete list
-    if (existingSecrets.some((existingSecretId) => secretsToDelete.includes(existingSecretId))) {
-      setSecretsToDelete(secretsToDelete.filter((secretId) => !existingSecrets.includes(secretId)))
-      setAppSecretsToDelete(
-        appSecretsToDelete.filter((appSecretId) => appSecretId !== secretToDelete.id)
-      )
-    } else {
-      setSecretsToDelete([...existingSecrets, ...secretIds])
-      setAppSecretsToDelete([...appSecretsToDelete, secretToDelete.id])
+    const updateSecretsToDelete = (): string[] => {
+      const isMarkedForDelete = appSecretsToDelete.includes(id)
+      if (isMarkedForDelete) {
+        // Remove secret IDs from deletion list
+        const serverSecretIds = getServerSecretIds(id)
+        return secretsToDelete.filter((secretId) => !serverSecretIds.includes(secretId))
+      } else {
+        // Add server-secret IDs to deletion list
+        const appSecret = clientAppSecrets.find((s) => s.id === id)
+        if (!appSecret) return secretsToDelete
+        const serverSecretIds = getServerSecretIdsFromAppSecret(appSecret)
+        return [...secretsToDelete, ...serverSecretIds]
+      }
     }
 
-    setClientAppSecrets(clonedSecrets)
+    const updateAppSecretsToDelete = (): string[] => {
+      const isMarkedForDelete = appSecretsToDelete.includes(id)
+      return isMarkedForDelete
+        ? appSecretsToDelete.filter((secretId) => secretId !== id)
+        : [...appSecretsToDelete, id]
+    }
+
+    const getServerSecretIds = (id: string): string[] => {
+      const serverSecret = serverAppSecrets.find((s) => s.id === id)
+      return serverSecret
+        ? serverSecret.envs
+            .map((env) => env.secret?.id)
+            .filter((id): id is string => id !== undefined)
+        : []
+    }
+
+    const getServerSecretIdsFromAppSecret = (appSecret: AppSecret): string[] => {
+      return appSecret.envs
+        .map((env) => env.secret?.id)
+        .filter((id) => id && !id.includes('new')) as string[]
+    }
+
+    // Update state
+    setClientAppSecrets(
+      (prevSecrets) =>
+        prevSecrets
+          .map((appSecret) => (appSecret.id === id ? toggleDelete(appSecret) : appSecret))
+          .filter(Boolean) as AppSecret[]
+    )
+
+    setSecretsToDelete(updateSecretsToDelete())
+    setAppSecretsToDelete(updateAppSecretsToDelete())
   }
 
   const handleDiscardChanges = () => {
