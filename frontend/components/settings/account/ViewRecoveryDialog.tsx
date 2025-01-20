@@ -183,7 +183,7 @@ export const ViewRecoveryDialog = () => {
                             </div>
                           </div>
                           <div>
-                            <Button type="submit" variant="primary">
+                            <Button type="submit" variant="primary" isLoading={isUnlocking}>
                               Unlock
                             </Button>
                           </div>
