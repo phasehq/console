@@ -95,7 +95,7 @@ export const ViewRecoveryDialog = () => {
         </Alert>
         <div>
           <Button variant="primary" onClick={openModal} title="View recovery">
-            <FaEye /> View recovery info
+            <FaEye /> View recovery kit
           </Button>
         </div>
       </div>
