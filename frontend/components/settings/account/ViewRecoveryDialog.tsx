@@ -19,14 +19,27 @@ export const ViewRecoveryDialog = () => {
   const [password, setPassword] = useState<string>('')
   const [showPw, setShowPw] = useState<boolean>(false)
   const [recovery, setRecovery] = useState<string>('')
+  const [isUnlocking, setIsUnlocking] = useState<boolean>(false)
 
   const handleDecryptRecovery = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
+    setIsUnlocking(true)
 
-    const deviceKey = await deviceVaultKey(password, session?.user?.email!)
+    try {
+      // Add small delay to ensure loading state is visible for UX reasons
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      const deviceKey = await deviceVaultKey(password, session?.user?.email!)
 
-    const decryptedRecovery = await decryptAccountRecovery(activeOrganisation?.recovery!, deviceKey)
-    setRecovery(decryptedRecovery)
+      const decryptedRecovery = await decryptAccountRecovery(activeOrganisation?.recovery!, deviceKey)
+      setRecovery(decryptedRecovery)
+    } catch (error) {
+      toast.error("Invalid sudo password. Please check your password and try again.", {
+        autoClose: 2000,
+      })
+    } finally {
+      setIsUnlocking(false)
+    }
   }
 
   const reset = () => {
