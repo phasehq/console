@@ -776,7 +776,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
         <>
           <table className="table-auto w-full">
-            <thead id="table-head" className="sticky top-0 z-10 ">
+            <thead
+              id="table-head"
+              className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
+            >
               <tr>
                 <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
                   key
