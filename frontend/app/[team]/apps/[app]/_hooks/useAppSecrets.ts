@@ -4,7 +4,7 @@ import { unwrapEnvSecretsForUser, decryptEnvSecretKVs } from '@/utils/crypto';
 import { AppSecret, AppFolder, EnvSecrets, EnvFolders } from '../types';
 import { GetAppSecrets } from '@/graphql/queries/secrets/getAppSecrets.gql';
 import { KeyringContext } from '@/contexts/keyringContext';
-import { EnvironmentType, SecretType } from '@/apollo/graphql';
+import { EnvironmentType } from '@/apollo/graphql';
 
 export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: number = 10000) => {
   const [appSecrets, setAppSecrets] = useState<AppSecret[]>([]);

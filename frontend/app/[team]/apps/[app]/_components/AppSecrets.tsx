@@ -47,7 +47,6 @@ import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
 import { AppSecret, AppFolder } from '../types'
 import { AppSecretRow } from './AppSecretRow'
-import { AppEnvironments } from './AppEnvironments'
 import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 
