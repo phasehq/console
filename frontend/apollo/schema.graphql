@@ -295,6 +295,8 @@ type EnvironmentType {
   wrappedSalt: String!
   createdAt: DateTime
   updatedAt: DateTime!
+  folders: [SecretFolderType]!
+  secrets: [SecretType]!
   folderCount: Int
   secretCount: Int
   members: [OrganisationMemberType]!
@@ -313,6 +315,17 @@ enum ApiEnvironmentEnvTypeChoices {
 
   """Custom"""
   CUSTOM
+}
+
+type SecretFolderType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  name: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  folderCount: Int
+  secretCount: Int
 }
 
 type EnvironmentSyncType {
@@ -395,17 +408,6 @@ enum ApiEnvironmentSyncEventStatusChoices {
 
   """Failed"""
   FAILED
-}
-
-type SecretFolderType {
-  id: String!
-  environment: EnvironmentType!
-  path: String!
-  name: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  folderCount: Int
-  secretCount: Int
 }
 
 type SecretTagType {
