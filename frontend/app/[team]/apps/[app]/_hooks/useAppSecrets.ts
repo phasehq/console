@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback, useContext } from 'react';
-import { useLazyQuery, useQuery } from '@apollo/client';
+import { useQuery } from '@apollo/client';
 import { unwrapEnvSecretsForUser, decryptEnvSecretKVs } from '@/utils/crypto';
-import { AppSecret, AppFolder, EnvFolders, EnvSecrets } from '../types';
-import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql';
-import { GetEnvSecretsKV } from '@/graphql/queries/secrets/getSecretKVs.gql';
+import { AppSecret, AppFolder, EnvSecrets, EnvFolders } from '../types';
+import { GetAppSecrets } from '@/graphql/queries/secrets/getAppSecrets.gql';
 import { KeyringContext } from '@/contexts/keyringContext';
 import { EnvironmentType, SecretType } from '@/apollo/graphql';
 
@@ -14,44 +13,44 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
 
   const { keyring } = useContext(KeyringContext);
 
-  const [getEnvSecrets] = useLazyQuery(GetEnvSecretsKV, {
-    fetchPolicy: 'network-only',
-  });
-
-  const { data, refetch } = useQuery(GetAppEnvironments, {
+  // Fetch environments and secrets in a single query with polling
+  const { data: appSecretsData, refetch: refetchAppSecrets } = useQuery(GetAppSecrets, {
     variables: { appId },
     fetchPolicy: 'cache-and-network',
     skip: !allowFetch,
-    pollInterval,
+    pollInterval, // Polling for environments and secrets
   });
 
+  // Callback for processing secrets data
   const processAppSecrets = useCallback(
-    async (appEnvironments: EnvironmentType[]) => {
+    async (appEnvironments: EnvironmentType[], secretsData: any) => {
       const envSecrets: EnvSecrets[] = [];
       const envFolders: EnvFolders[] = [];
-  
+
       for (const env of appEnvironments) {
-        const { data } = await getEnvSecrets({ variables: { envId: env.id } });
-        const { wrappedSeed, wrappedSalt } = data.environmentKeys[0];
+        const secrets = secretsData[env.id]?.secrets || [];
+        const folders = secretsData[env.id]?.folders || [];
+
+        const { wrappedSeed, wrappedSalt } = env;
+
+        // Decrypt secrets for the environment
         const { publicKey, privateKey } = await unwrapEnvSecretsForUser(wrappedSeed, wrappedSalt, keyring!);
-        const decryptedSecrets = await decryptEnvSecretKVs(data.secrets, { publicKey, privateKey });
-  
+        const decryptedSecrets = await decryptEnvSecretKVs(secrets, { publicKey, privateKey });
+
         envSecrets.push({ env, secrets: decryptedSecrets });
-        envFolders.push({ env, folders: data.folders });
+        envFolders.push({ env, folders });
       }
-  
+
+      // Combine secrets across environments and remove duplicates based on keys
       const appSecrets = Array.from(new Set(envSecrets.flatMap(env => env.secrets.map(secret => secret.key)))).map(key => {
         const envs = envSecrets.map(env => ({
           env: env.env,
           secret: env.secrets.find(secret => secret.key === key) || null,
         }));
-  
-        // Generate a unique id by combining the appId and key
-        const id = `${appId}-${key}`;
-  
-        return { id, key, envs };
+
+        return { id: `${appId}-${key}`, key, envs };
       });
-  
+
       const appFolders = Array.from(new Set(envFolders.flatMap(env => env.folders.map(folder => folder.name)))).map(name => ({
         name,
         envs: envFolders.map(env => ({
@@ -59,30 +58,42 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
           folder: env.folders.find(folder => folder.name === name) || null,
         })),
       }));
-  
+
       setAppSecrets(appSecrets);
       setAppFolders(appFolders);
       setFetching(false);
     },
-    [getEnvSecrets, keyring, appId]
+    [keyring, appId]
   );
-  
 
+  // Watch for changes in the data and process the secrets
   useEffect(() => {
-    if (keyring && data?.appEnvironments && allowFetch) {
-      setFetching(true);
-      processAppSecrets(data.appEnvironments);
-    }
-  }, [data?.appEnvironments, keyring, allowFetch, processAppSecrets]);
+    if (keyring && appSecretsData?.appEnvironments) {
+      
+      const appEnvironments = appSecretsData.appEnvironments;
 
-  // Explicitly handle refetch
+      // Process the secrets and environments once the data is available
+      const secretsData = appEnvironments.reduce((acc: any, env: EnvironmentType) => {
+        acc[env.id] = {
+          secrets: env.secrets,
+          folders: env.folders,
+        };
+        return acc;
+      }, {});
+
+      // Process secrets and folders after the data is loaded
+      processAppSecrets(appEnvironments, secretsData);
+    }
+  }, [appSecretsData, keyring, processAppSecrets]);
+
+  // Refetch handler for app secrets and environments
   const handleRefetch = async () => {
     setFetching(true);
-    const { data: refetchedData } = await refetch();
-    if (refetchedData?.appEnvironments) {
-      await processAppSecrets(refetchedData.appEnvironments);
+    const { data: refetchedAppSecretsData } = await refetchAppSecrets();
+    if (refetchedAppSecretsData?.appEnvironments) {
+      await processAppSecrets(refetchedAppSecretsData.appEnvironments, {});
     }
   };
 
-  return { appEnvironments: data?.appEnvironments, appSecrets, appFolders, fetching, refetch: handleRefetch };
+  return { appEnvironments: appSecretsData?.appEnvironments, appSecrets, appFolders, fetching, refetch: handleRefetch };
 };

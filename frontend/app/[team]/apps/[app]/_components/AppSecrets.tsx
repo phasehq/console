@@ -781,7 +781,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
                   key
                 </th>
-                {appEnvironments.map((env: EnvironmentType) => (
+                {appEnvironments?.map((env: EnvironmentType) => (
                   <th
                     key={env.id}
                     className="group text-center text-sm font-semibold uppercase tracking-widest py-2"
