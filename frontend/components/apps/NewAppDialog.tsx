@@ -5,18 +5,16 @@ import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
-import { useApolloClient, useQuery } from '@apollo/client'
-import {
-  ApiOrganisationPlanChoices,
-  OrganisationType,
-} from '@/apollo/graphql'
+import { useQuery } from '@apollo/client'
+import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 import { Alert } from '../common/Alert'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
-import { createApplication } from '@/utils/appCreation'
+import { createApplication } from '@/utils/app'
 import { userHasPermission } from '@/utils/access/permissions'
+import { Input } from '../common/Input'
 
 const NewAppDialog = forwardRef(
   (props: { appCount: number; organisation: OrganisationType }, ref) => {
@@ -42,7 +40,7 @@ const NewAppDialog = forwardRef(
     const [error, setError] = useState<Error | null>(null)
     const nameInputRef = useRef(null)
     const [createSuccess, setCreateSuccess] = useState(false)
-    const apolloClient = useApolloClient()
+
     const { keyring } = useContext(KeyringContext)
 
     const { data: orgAdminsData } = useQuery(GetGlobalAccessUsers, {
@@ -83,8 +81,7 @@ const NewAppDialog = forwardRef(
           organisation,
           keyring: keyring!,
           globalAccessUsers: orgAdminsData.organisationGlobalAccessUsers,
-          client: apolloClient,
-          createExampleSecrets: false // Only create example secrets when explicitly requested
+          createExampleSecrets: false,
         })
         setAppCreating(false)
         setCreateSuccess(true)
@@ -215,32 +212,24 @@ const NewAppDialog = forwardRef(
                                 {error.message}
                               </Alert>
                             )}
-                            <div className="flex flex-col justify-center">
-                              <label
-                                className="block text-gray-700 text-sm font-bold mb-2"
-                                htmlFor="appname"
-                              >
-                                App name
-                              </label>
-                              <input
-                                id="appname"
-                                className="text-lg"
-                                required
-                                maxLength={MAX_INPUT_STRING_LENGTH}
-                                value={name}
-                                placeholder="MyApp"
-                                onChange={(e) => setName(e.target.value)}
-                                ref={nameInputRef}
-                              />
-                            </div>
-
                             {userCanCreateEnvs && (
                               <div className="space-y-4">
                                 <Alert variant="info" icon={true} size="sm">
-                                  Your app will be initialized with Development, Staging, and Production environments.
+                                  Your app will be initialized with Development, Staging, and
+                                  Production environments.
                                 </Alert>
                               </div>
                             )}
+                            <Input
+                              value={name}
+                              setValue={setName}
+                              placeholder="MyApp"
+                              label="App name"
+                              id="appName"
+                              maxLength={MAX_INPUT_STRING_LENGTH}
+                              ref={nameInputRef}
+                              required
+                            />
                           </div>
 
                           <div className="mt-8 flex items-center w-full justify-between">

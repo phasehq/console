@@ -27,6 +27,7 @@ import {
   encryptAppSeed,
   getWrappedKeyShare,
 } from '@/utils/crypto'
+import { graphQlClient as client } from "@/apollo/client";
 
 const APP_VERSION = 1
 
@@ -42,7 +43,6 @@ interface CreateAppOptions {
   organisation: OrganisationType
   keyring: KeyringType
   globalAccessUsers: any[]
-  client: ApolloClient<any>
   createExampleSecrets?: boolean
 }
 
@@ -207,8 +207,7 @@ export const PROD_SECRETS = [
  */
 async function processSecrets(
   envs: Array<{ env: EnvironmentType; secrets: Array<Partial<SecretType>> }>,
-  keyring: KeyringType,
-  client: ApolloClient<any>
+  keyring: KeyringType
 ) {
   const userKxKeys = {
     publicKey: await getUserKxPublicKey(keyring.publicKey),
@@ -267,7 +266,7 @@ async function processSecrets(
  *
  * @throws {Error} If there are any errors during the environment initialization process.
  */
-async function initAppEnvs(appId: string, globalAccessUsers: any[], client: ApolloClient<any>) {
+async function initAppEnvs(appId: string, globalAccessUsers: any[]) {
   const mutationPayload = {
     devEnv: await createNewEnv(
       appId,
@@ -302,7 +301,7 @@ async function initAppEnvs(appId: string, globalAccessUsers: any[], client: Apol
   })
 }
 
-async function createExampleSecrets(appId: string, keyring: KeyringType, client: ApolloClient<any>) {
+async function createExampleSecrets(appId: string, keyring: KeyringType) {
   const { data: appEnvsData } = await client.query({
     query: GetAppEnvironments,
     variables: { appId },
@@ -330,7 +329,7 @@ async function createExampleSecrets(appId: string, keyring: KeyringType, client:
   ]
 
   const validEnvsToProcess = envsToProcess.filter(({ env }) => env !== undefined)
-  await processSecrets(validEnvsToProcess, keyring, client)
+  await processSecrets(validEnvsToProcess, keyring)
 }
 
 export async function createApplication({
@@ -338,7 +337,6 @@ export async function createApplication({
   organisation,
   keyring,
   globalAccessUsers,
-  client,
   createExampleSecrets: withExampleSecrets = false, // Explicitly false by default
 }: CreateAppOptions): Promise<string> {
   const appSeed = await newAppSeed()
@@ -368,10 +366,10 @@ export async function createApplication({
 
   const newAppId = data.createApp.app.id
 
-  await initAppEnvs(newAppId, globalAccessUsers, client)
+  await initAppEnvs(newAppId, globalAccessUsers)
 
   if (withExampleSecrets) {
-    await createExampleSecrets(newAppId, keyring, client)
+    await createExampleSecrets(newAppId, keyring)
   }
 
   await client.query({

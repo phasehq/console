@@ -10,7 +10,7 @@ import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-toastify'
-import { useLazyQuery, useMutation, useQuery, useApolloClient } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
@@ -26,7 +26,7 @@ import {
   encryptAccountKeyring,
   encryptAccountRecovery,
 } from '@/utils/crypto'
-import { createApplication } from '@/utils/appCreation'
+import { createApplication } from '@/utils/app'
 import { License } from '@/ee/billing/License'
 
 const bip39 = require('bip39')
@@ -49,7 +49,6 @@ const Onboard = () => {
   const [isloading, setIsLoading] = useState<boolean>(false)
   const [recoveryDownloaded, setRecoveryDownloaded] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
-  const apolloClient = useApolloClient()
 
   const router = useRouter()
 
@@ -202,7 +201,7 @@ const Onboard = () => {
         }
 
         const newOrg = result.data.createOrganisation.organisation
-        
+
         // Save password if option selected
         if (savePassword && newOrg.memberId) {
           setDevicePassword(newOrg.memberId, pw)
@@ -211,10 +210,14 @@ const Onboard = () => {
         // Create example app with environments
         try {
           const accountKeyRing = await organisationKeyring(await organisationSeed(mnemonic, orgId))
-          if (!accountKeyRing?.publicKey || !accountKeyRing?.privateKey || !accountKeyRing?.symmetricKey) {
+          if (
+            !accountKeyRing?.publicKey ||
+            !accountKeyRing?.privateKey ||
+            !accountKeyRing?.symmetricKey
+          ) {
             throw new Error('Failed to generate account keyring')
           }
-          
+
           // Ensure we have all required fields for the owner user
           if (!newOrg.memberId) {
             throw new Error('Missing member ID')
@@ -226,24 +229,23 @@ const Onboard = () => {
             identityKey: publicKey,
             role: {
               name: 'Owner',
-              permissions: []
-            }
+              permissions: [],
+            },
           }
-          
+
           await createApplication({
             name: 'example-secrets',
             organisation: newOrg,
             keyring: {
               publicKey: accountKeyRing.publicKey,
               privateKey: accountKeyRing.privateKey,
-              symmetricKey: accountKeyRing.symmetricKey
+              symmetricKey: accountKeyRing.symmetricKey,
             },
             globalAccessUsers: [ownerUser],
-            client: apolloClient,
-            createExampleSecrets: true
+            createExampleSecrets: true,
           })
         } catch (appError) {
-          console.error('Failed to create example app:', appError);
+          console.error('Failed to create example app:', appError)
           // Don't throw - allow account creation to succeed even if app creation fails
         }
 
@@ -267,14 +269,14 @@ const Onboard = () => {
         await toast.promise(handleAccountInit, {
           pending: 'Setting up your account',
           success: 'Account setup complete!',
-          error: 'Failed to setup account'
-        });
-        
+          error: 'Failed to setup account',
+        })
+
         // Only redirect after everything is successful
         router.push(`/${teamName}`)
       } catch (error) {
-        console.error('Setup failed:', error);
-        setSuccess(false);
+        console.error('Setup failed:', error)
+        setSuccess(false)
         // Error is already shown by toast
       }
     }
@@ -299,7 +301,6 @@ const Onboard = () => {
   useEffect(() => {
     setInputs([...Array(mnemonic.split(' ').length)].map(() => ''))
   }, [mnemonic])
-
 
   return (
     <main className="w-full flex flex-col justify-between h-screen">
