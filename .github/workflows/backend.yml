@@ -54,11 +54,13 @@ jobs:
         id: meta
         run: |
           if [[ "${{ inputs.is_pr }}" == "true" ]]; then
-            echo "DOCKER_TAGS=${{ inputs.is_pr == 'true' && 'phasehq/backend-staging' || 'phasehq/backend' }}:${{ inputs.version }}" >> $GITHUB_ENV
-            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/${{ inputs.is_pr == 'true' && 'backend-staging' || 'backend' }}:${{ inputs.version }}" >> $GITHUB_ENV
+            # PR build - staging image with commit hash as version tag
+            echo "DOCKER_TAGS=phasehq/backend-staging:${{ inputs.version }}" >> $GITHUB_ENV
+            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/backend-staging:${{ inputs.version }}" >> $GITHUB_ENV
           else
-            echo "DOCKER_TAGS=${{ inputs.is_pr == 'true' && 'phasehq/backend-staging' || 'phasehq/backend' }}:${{ inputs.version }},${{ inputs.is_pr == 'true' && 'phasehq/backend-staging' || 'phasehq/backend' }}:latest" >> $GITHUB_ENV
-            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/${{ inputs.is_pr == 'true' && 'backend-staging' || 'backend' }}:${{ inputs.version }},ghcr.io/${{ github.repository }}/${{ inputs.is_pr == 'true' && 'backend-staging' || 'backend' }}:latest" >> $GITHUB_ENV
+            # Release build - production image with version (vX.XX.XX) and :latest tags
+            echo "DOCKER_TAGS=phasehq/backend:${{ inputs.version }},phasehq/backend:latest" >> $GITHUB_ENV
+            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/backend:${{ inputs.version }},ghcr.io/${{ github.repository }}/backend:latest" >> $GITHUB_ENV
           fi
 
       - name: Build and push
