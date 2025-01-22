@@ -234,7 +234,7 @@ const Onboard = () => {
           }
 
           await createApplication({
-            name: 'example-secrets',
+            name: 'example-app',
             organisation: newOrg,
             keyring: {
               publicKey: accountKeyRing.publicKey,
@@ -273,7 +273,7 @@ const Onboard = () => {
         })
 
         // Only redirect after everything is successful
-        router.push(`/${teamName}`)
+        router.push(`/${teamName}/apps`)
       } catch (error) {
         console.error('Setup failed:', error)
         setSuccess(false)

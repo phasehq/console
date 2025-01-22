@@ -154,7 +154,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     clearLocalStorageKey()
   }
   // Don't count the example app setup during on-boarding
-  const userApps = data?.apps.filter((app: AppType) => app.name !== 'example-secrets')
+  const userApps = data?.apps.filter((app: AppType) => app.name !== 'example-app')
   const appCreated = userApps?.length > 0
 
   const cliSetup = data?.userTokens.length > 0
