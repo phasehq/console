@@ -140,7 +140,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   )
 
   useEffect(() => {
-    if (appSecrets.length > 0) {
+    if (appSecrets) {
       setServerAppSecrets(appSecrets)
       setClientAppSecrets(appSecrets)
     }

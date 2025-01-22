@@ -14,7 +14,7 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
   const { keyring } = useContext(KeyringContext);
 
   // Fetch environments and secrets in a single query with polling
-  const { data: appSecretsData, refetch: refetchAppSecrets } = useQuery(GetAppSecrets, {
+  const { data: appSecretsData, refetch } = useQuery(GetAppSecrets, {
     variables: { appId },
     fetchPolicy: 'cache-and-network',
     skip: !allowFetch,
@@ -86,14 +86,7 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
     }
   }, [appSecretsData, keyring, processAppSecrets]);
 
-  // Refetch handler for app secrets and environments
-  const handleRefetch = async () => {
-    setFetching(true);
-    const { data: refetchedAppSecretsData } = await refetchAppSecrets();
-    if (refetchedAppSecretsData?.appEnvironments) {
-      await processAppSecrets(refetchedAppSecretsData.appEnvironments, {});
-    }
-  };
+  
 
-  return { appEnvironments: appSecretsData?.appEnvironments, appSecrets, appFolders, fetching, refetch: handleRefetch };
+  return { appEnvironments: appSecretsData?.appEnvironments, appSecrets, appFolders, fetching, refetch };
 };
