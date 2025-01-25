@@ -130,7 +130,9 @@ class AppManager(models.Manager):
 
 class App(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
-    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
+    organisation = models.ForeignKey(
+        Organisation, related_name="apps", on_delete=models.CASCADE
+    )
     name = models.CharField(max_length=64)
     identity_key = models.CharField(max_length=256)
     app_version = models.IntegerField(null=False, blank=False, default=1)
@@ -303,7 +305,7 @@ class Environment(models.Model):
     ]
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
-    app = models.ForeignKey(App, on_delete=models.CASCADE)
+    app = models.ForeignKey(App, related_name="environments", on_delete=models.CASCADE)
     name = models.CharField(max_length=64)
     env_type = models.CharField(
         max_length=7,
