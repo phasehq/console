@@ -1,19 +1,18 @@
 from django.core.management.base import BaseCommand, CommandError
 from api.models import Organisation, SecretEvent
+from django.utils import timezone
+from datetime import timedelta
+
 
 class Command(BaseCommand):
-    help = "Purge all logs for a specific organisation or app."
+    help = "Purge all logs or keep logs newer than a specified number of days for a specific organisation or app."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "org_name",
-            type=str,
-            help="Name of the organisation"
-        )
+        parser.add_argument("org_name", type=str, help="Name of the organisation")
         parser.add_argument(
             "--keep-days",
             type=int,
-            help="Number of days of logs to keep (optional, deletes all logs if not specified)",
+            help="Number of days of logs to keep (if not specified, deletes all logs)",
         )
         parser.add_argument(
             "--app-id",
@@ -23,16 +22,21 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         org_name = options["org_name"]
-        days = options["days"]
+        keep_days = options.get("keep_days")
         app_id = options.get("app_id")
 
-        if days < 0:
-            raise CommandError("The --days argument must be a non-negative integer.")
+        if keep_days is not None and keep_days < 0:
+            raise CommandError("The --keep-days argument must be a non-negative integer.")
 
-        time_cutoff = timezone.now() - timedelta(days=days)
-        self.stdout.write(
-            f"Deleting logs older than {time_cutoff} for organisation '{org_name}'."
-        )
+        # Only calculate time_cutoff if keep_days is specified
+        time_cutoff = None
+        if keep_days is not None:
+            time_cutoff = timezone.now() - timedelta(days=keep_days)
+            self.stdout.write(
+                f"Deleting logs older than {time_cutoff} for organisation '{org_name}'."
+            )
+        else:
+            self.stdout.write(f"Deleting all logs for organisation '{org_name}'.")
 
         try:
             org = Organisation.objects.get(name=org_name)
@@ -50,11 +54,17 @@ class Command(BaseCommand):
                 )
 
             for app in apps:
-                logs = SecretEvent.objects.filter(
-                    environment__in=app.environments.all(), timestamp__lte=time_cutoff
+                # Base query for logs
+                logs_query = SecretEvent.objects.filter(
+                    environment__in=app.environments.all()
                 ).exclude(event_type=SecretEvent.CREATE)
-                count = logs.count()
-                logs.delete()
+
+                # Add time filter only if keep_days is specified
+                if time_cutoff:
+                    logs_query = logs_query.filter(timestamp__lte=time_cutoff)
+
+                count = logs_query.count()
+                logs_query.delete()
                 self.stdout.write(f"Deleted {count} logs for app '{app.name}'.")
 
             self.stdout.write(
