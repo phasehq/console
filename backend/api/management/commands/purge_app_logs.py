@@ -1,8 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
 from api.models import Organisation, SecretEvent
-from django.utils import timezone
-from datetime import timedelta
-
 
 class Command(BaseCommand):
     help = "Purge logs older than a specified number of days for a specific organisation or app."
