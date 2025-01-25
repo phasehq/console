@@ -16,7 +16,7 @@ class Command(BaseCommand):
             help="Number of days of logs to keep (optional, deletes all logs if not specified)",
         )
         parser.add_argument(
-            "--app_id",
+            "--app-id",
             type=str,
             help="ID of a specific app to delete logs for (optional)",
         )
