@@ -2,15 +2,18 @@ from django.core.management.base import BaseCommand, CommandError
 from api.models import Organisation, SecretEvent
 
 class Command(BaseCommand):
-    help = "Purge logs older than a specified number of days for a specific organisation or app."
+    help = "Purge all logs for a specific organisation or app."
 
     def add_arguments(self, parser):
-        parser.add_argument("org_name", type=str, help="Name of the organisation")
         parser.add_argument(
-            "--days",
+            "org_name",
+            type=str,
+            help="Name of the organisation"
+        )
+        parser.add_argument(
+            "--keep-days",
             type=int,
-            default=30,
-            help="Number of days to keep logs (default: 30)",
+            help="Number of days of logs to keep (optional, deletes all logs if not specified)",
         )
         parser.add_argument(
             "--app_id",
