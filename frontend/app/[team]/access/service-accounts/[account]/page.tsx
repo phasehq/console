@@ -50,6 +50,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   const { data, loading } = useQuery(GetServiceAccounts, {
     variables: { orgId: organisation?.id, id: params.account },
     skip: !organisation || !userCanReadSA,
+    fetchPolicy: 'cache-and-network',
   })
 
   const [updateAccount] = useMutation(UpdateServiceAccountOp)
