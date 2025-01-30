@@ -166,15 +166,27 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         </div>
 
         <div className="py-4 space-y-4">
+          {/* Header Section */}
           <div>
             <div className="text-xl font-semibold">Role</div>
             <div className="text-neutral-500">Manage the role for this account</div>
           </div>
-          <div>
+
+          {/* Role Selector and Description */}
+          <div className="space-y-2">
             <div className="text-lg w-max">
-              <ServiceAccountRoleSelector account={account} displayOnly={!userCanUpdateSA} />
+              <ServiceAccountRoleSelector 
+                account={account} 
+                displayOnly={!userCanUpdateSA} 
+              />
             </div>
-            <div className="text-neutral-500 text-sm">{account.role!.description}</div>
+            
+            <div className="flex flex-col gap-1">
+              <div className="text-sm font-medium text-neutral-500">Description</div>
+              <div className="text-sm text-neutral-500">
+                {account.role?.description || 'No description available for this role'}
+              </div>
+            </div>
           </div>
         </div>
 
