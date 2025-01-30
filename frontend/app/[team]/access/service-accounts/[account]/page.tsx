@@ -279,9 +279,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
         <div className="py-4">
           <div>
-            <div className="text-xl font-semibold">Tokens</div>
+            <div className="text-xl font-semibold">Access Tokens</div>
             <div className="text-neutral-500">Manage tokens for this service account</div>
           </div>
+    
           <div className="flex items-center justify-end">
             <CreateServiceAccountTokenDialog serviceAccount={account} />
           </div>
@@ -289,29 +290,58 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           {userCanReadTokens ? (
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {account.tokens!.map((token) => (
-                <div key={token!.id} className="grid grid-cols-5 gap-2 items-center p-2 group">
-                  <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <FaKey className="text-neutral-500" /> {token!.name}
+                <div key={token!.id} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center p-2 group">
+                  {/* Token Name and ID */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <FaKey className="text-neutral-500 flex-shrink-0" />
+                      <span className="font-medium text-lg text-zinc-900 dark:text-zinc-100 truncate">
+                        {token!.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
+                      <span className="font-mono">{token!.id}</span>
+                      <span className="opacity-0 group-hover/id:opacity-100 transition ease">
+                        <CopyButton value={token!.id || ''} defaultHidden />
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="text-neutral-500 text-sm flex items-center gap-1">
-                    <span>Created</span> {relativeTimeFromDates(new Date(token?.createdAt))} by{' '}
-                    <Avatar imagePath={token!.createdBy?.avatarUrl} size="sm" />
-                    <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                      {token?.createdBy?.fullName}
-                    </span>
+                  {/* Created Info */}
+                  <div className="col-span-2 text-neutral-500 text-sm flex flex-wrap items-center gap-1">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="whitespace-nowrap">Created</span>
+                      <span className="whitespace-nowrap">{relativeTimeFromDates(new Date(token?.createdAt))}</span>
+                      <span className="whitespace-nowrap">by</span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Avatar imagePath={token!.createdBy?.avatarUrl} size="sm" />
+                      <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                        {token?.createdBy?.fullName}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1 text-neutral-500 text-sm">
-                    Expires{' '}
-                    {token!.expiresAt ? relativeTimeFromDates(new Date(token?.expiresAt)) : 'never'}
+                  {/* Token Status */}
+                  <div className="space-y-2">
+                    {/* Expires */}
+                    <div className="flex items-center gap-1 text-sm text-neutral-500">
+                      <span className="whitespace-nowrap">Expires:</span>
+                      <span className="whitespace-nowrap">
+                        {token!.expiresAt ? relativeTimeFromDates(new Date(token?.expiresAt)) : 'never'}
+                      </span>
+                    </div>
+
+                    {/* Last Used */}
+                    <div className="flex items-center gap-1 text-sm text-neutral-500">
+                      <span className="whitespace-nowrap">Last used:</span>
+                      <span className="whitespace-nowrap">
+                        {token!.lastUsed ? relativeTimeFromDates(new Date(token?.lastUsed)) : 'never'}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1 text-neutral-500 text-sm">
-                    Last used{' '}
-                    {token!.lastUsed ? relativeTimeFromDates(new Date(token?.lastUsed)) : 'never'}
-                  </div>
-
+                  {/* Delete Button */}
                   <div className="flex justify-end opacity-0 group-hover:opacity-100 transition ease">
                     <DeleteServiceAccountTokenDialog token={token!} />
                   </div>
