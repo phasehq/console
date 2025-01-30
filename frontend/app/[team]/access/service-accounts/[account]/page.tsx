@@ -192,43 +192,61 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
         <div className="py-4">
           <div>
-            <div className="text-xl font-semibold">Apps</div>
+            <div className="text-xl font-semibold">App Access</div>
             <div className="text-neutral-500">
               Manage the Apps and Environments that this account has access to
             </div>
           </div>
 
           {userCanReadAppMemberships ? (
-            <div className="grid grid-cols-4 1080p:grid-cols-6 gap-4 py-4">
-              {account.appMemberships?.map((app) => (
-                <Card key={app.id}>
-                  <div className="space-y-6 relative">
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold text-2xl">{app.name}</div>
+            <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+              {account.appMemberships && account.appMemberships.length > 0 ? (
+                account.appMemberships.map((app) => (
+                  <div key={app?.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-2 group">
+                    {/* App Name and ID */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100">
+                          {app?.name}
+                        </div>
+                        <SseLabel sseEnabled={Boolean(app?.sseEnabled)} />
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
+                        <span className="font-mono">{app?.id}</span>
+                        <span className="opacity-0 group-hover/id:opacity-100 transition ease">
+                          <CopyButton value={app?.id || ''} defaultHidden />
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Environments */}
+                    <div className="col-span-2">
+                      <div className="text-2xs uppercase tracking-widest text-neutral-500 mb-1">
+                        Environments
+                      </div>
+                      <div className="text-sm text-zinc-700 dark:text-zinc-300">
+                        {app?.environments?.map((env) => env?.name).join(' + ')}
+                      </div>
+                    </div>
+
+                    {/* Manage Button */}
+                    <div className="flex justify-end">
                       <Link
                         className="opacity-0 group-hover:opacity-100 transition ease"
-                        href={`/${params.team}/apps/${app.id}/access/service-accounts`}
+                        href={`/${params.team}/apps/${app?.id}/access/service-accounts`}
                       >
-                        <Button variant="secondary">
-                          <FaCog /> Manage
+                        <Button variant="secondary" className="flex items-center gap-2">
+                          <FaCog className="h-4 w-4" />
+                          <span>Manage</span>
                         </Button>
                       </Link>
                     </div>
-                    <div>
-                      <div className="text-neutral-500 text-2xs uppercase tracking-widest">
-                        Environments
-                      </div>
-                      <div className="text-zinc-700 dark:text-zinc-300 text-sm" key={env!.id}>
-                        {app.environments.map((app) => app!.name).join(' + ')}
-                      </div>
-                    </div>
                   </div>
-                </Card>
-              ))}
-              {account.appMemberships?.length === 0 && (
-                <div className="col-span-2">
+                ))
+              ) : (
+                <div className="py-8">
                   <EmptyState
-                    title="No App memberships"
+                    title="No App associations"
                     subtitle="This Service Account does not have access to any Apps. Grant this account access from the Access tab of an App."
                     graphic={
                       <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
@@ -242,17 +260,19 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
               )}
             </div>
           ) : (
-            <EmptyState
-              title="Access restricted"
-              subtitle="You don't have the permissions required to view Service Account App memberships"
-              graphic={
-                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                  <FaBan />
-                </div>
-              }
-            >
-              <></>
-            </EmptyState>
+            <div className="py-8">
+              <EmptyState
+                title="Access restricted"
+                subtitle="You don't have the permissions required to view Service Account App memberships"
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <FaBan />
+                  </div>
+                }
+              >
+                <></>
+              </EmptyState>
+            </div>
           )}
         </div>
 
