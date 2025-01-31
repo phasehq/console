@@ -8,7 +8,6 @@ import Link from 'next/link'
 import { Fragment, useContext, useEffect } from 'react'
 import { FaChevronDown, FaKey, FaPlus } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { usePathname } from 'next/navigation'
 
 export const ProviderCredentialPicker = (props: {
   credential: ProviderCredentialsType | null
