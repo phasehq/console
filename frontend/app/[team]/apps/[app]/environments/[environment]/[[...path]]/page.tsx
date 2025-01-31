@@ -42,7 +42,7 @@ import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { Input } from '@/components/common/Input'
 import { SplitButton } from '@/components/common/SplitButton'
 import { SecretFolderRow } from '@/components/environments/folders/SecretFolderRow'
-import { MdKeyboardReturn, MdSearchOff } from 'react-icons/md'
+import { MdKeyboardReturn, MdPassword, MdSearchOff } from 'react-icons/md'
 import {
   arraysEqual,
   encryptAsymmetric,
@@ -1007,7 +1007,7 @@ export default function EnvironmentPath({
                 subtitle="Add secrets or folders here to get started"
                 graphic={
                   <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                    {searchQuery ? <MdSearchOff /> : <FaMagic />}
+                    {searchQuery ? <MdSearchOff /> : <MdPassword />}
                   </div>
                 }
               >
