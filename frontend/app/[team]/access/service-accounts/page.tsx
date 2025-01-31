@@ -83,7 +83,10 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                         <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-10">
                           <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 text-xl" />
                         </div>
-                        {account.name}
+                        <div>
+                          <div className="font-medium">{account.name}</div>
+                          <div className="text-sm text-gray-500">{account.id}</div>
+                        </div>
                       </td>
 
                       <td className="px-6 py-4">
