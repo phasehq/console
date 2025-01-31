@@ -1,7 +1,7 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useState, useEffect } from 'react'
 import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import { useQuery } from '@apollo/client'
@@ -49,15 +49,24 @@ export default function Integrations({ params }: { params: { team: string } }) {
     ? userHasPermission(organisation.role?.permissions, 'Apps', 'read')
     : false
 
+  const router = useRouter()
   const searchParams = useSearchParams()
-
-  const openCreateCredentialDialog = searchParams?.get('newCredential')
-
+  const providerFromUrl = searchParams?.get('provider')
   const { data: providersData } = useQuery(GetProviderList)
-
   const providers: ProviderType[] = providersData?.providers ?? []
-
   const [provider, setProvider] = useState<ProviderType | null>(null)
+
+  // Simplified useEffect that only handles provider param
+  useEffect(() => {
+    if (providerFromUrl && providers.length > 0) {
+      const matchingProvider = providers.find(
+        p => p.id.toLowerCase() === providerFromUrl.toLowerCase()
+      )
+      if (matchingProvider) {
+        setProvider(matchingProvider)
+      }
+    }
+  }, [providerFromUrl, providers])
 
   const { data, loading } = useQuery(GetOrganisationSyncs, {
     variables: { orgId: organisation?.id },
@@ -121,6 +130,11 @@ export default function Integrations({ params }: { params: { team: string } }) {
         )}
       </Menu>
     )
+  }
+
+  const closeDialog = () => {
+    setProvider(null)
+    router.replace(`/${params.team}/integrations`)
   }
 
   if (loading)
@@ -238,8 +252,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
                   <CreateProviderCredentialsDialog
                     showButton={!noCredentials}
                     provider={provider}
-                    defaultOpen={openCreateCredentialDialog !== null}
-                    closeDialogCallback={() => setProvider(null)}
+                    defaultOpen={!!provider}
+                    closeDialogCallback={closeDialog}
+                    key={provider?.id}
                   />
                 </div>
                 {noCredentials ? (
