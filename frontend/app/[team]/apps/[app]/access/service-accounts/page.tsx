@@ -246,7 +246,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                         <Alert variant="info" icon={true}>
                           <div className="flex flex-col gap-2">
                             <p>
-                              All organisation servuce accounts are added to this App. You can
+                              All organisation service accounts are added to this App. You can
                               create more service accounts from the organisation access page.
                             </p>
                             <Link href={`/${params.team}/access/service-accounts`}>
