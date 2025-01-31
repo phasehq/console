@@ -12,6 +12,7 @@ import { useContext, useEffect, useState } from 'react'
 import { FaBan, FaBoxOpen, FaChevronLeft, FaCog, FaEdit, FaKey, FaRobot } from 'react-icons/fa'
 import { CreateServiceAccountTokenDialog } from './_components/CreateServiceAccountTokenDialog'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
+import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
 import { ServiceAccountType } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -192,11 +193,19 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         </div>
 
         <div className="py-4">
-          <div>
-            <div className="text-xl font-semibold">App Access</div>
-            <div className="text-neutral-500">
-              Manage the Apps and Environments that this account has access to
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xl font-semibold">App Access</div>
+              <div className="text-neutral-500">
+                Manage the Apps and Environments that this account has access to
+              </div>
             </div>
+            {userCanReadAppMemberships && (
+              <AddAppButton 
+                teamSlug={params.team} 
+                serviceAccountId={params.account}
+              />
+            )}
           </div>
 
           {userCanReadAppMemberships ? (
@@ -280,18 +289,19 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         <div className="py-4">
           <div>
             <div className="text-xl font-semibold">Access Tokens</div>
-            <div className="text-neutral-500">Manage tokens for this service account</div>
+            <div className="text-neutral-500">Manage authentication tokens for this service account</div>
           </div>
-    
+
           <div className="flex items-center justify-end">
             <CreateServiceAccountTokenDialog serviceAccount={account} />
           </div>
 
           {userCanReadTokens ? (
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
-              {account.tokens!.map((token) => (
+              {account.tokens && account.tokens.length > 0 ? (
+                account.tokens.map((token) => (
                 <div key={token!.id} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center p-2 group">
-                  {/* Token Name and ID */}
+                  {/* Token Name and ID*/}
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <FaKey className="text-neutral-500 flex-shrink-0" />
@@ -346,9 +356,25 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                     <DeleteServiceAccountTokenDialog token={token!} />
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
+              ))
+            ) : (
+              <div className="py-8">
+                <EmptyState
+                  title="No tokens created"
+                  subtitle="This Service Account does not have any tokens. Create a new token to access secrets from Apps associated with this account."
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <FaKey />
+                    </div>
+                  }
+                >
+                  <></>
+                </EmptyState>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="py-8">
             <EmptyState
               title="Access restricted"
               subtitle="You don't have the permissions required to view Service Account Tokens"
@@ -360,6 +386,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             >
               <></>
             </EmptyState>
+          </div>
           )}
         </div>
 
