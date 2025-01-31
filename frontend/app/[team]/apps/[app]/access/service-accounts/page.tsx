@@ -163,6 +163,13 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
         return false
       }
 
+      // Clear just the ?new parameter before proceeding
+      if (preselectedAccountId) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('new');
+        window.history.replaceState({}, '', url.toString());
+      }
+
       const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
       const envKeyPromises = appEnvironments
@@ -221,14 +228,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
       })
 
       toast.success('Added account to App', { autoClose: 2000 })
-      closeModal();
-
-      // Clear just the ?new parameter after successful addition of the service account. This makes sure the pop up doesn't show up again.
-      if (preselectedAccountId) {
-        const url = new URL(window.location.href);
-        url.searchParams.delete('new');
-        window.history.replaceState({}, '', url.toString());
-      }
+      closeModal()
     }
 
     return (
