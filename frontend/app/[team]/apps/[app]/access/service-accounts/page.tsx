@@ -197,6 +197,18 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
       toast.success('Added account to App', { autoClose: 2000 })
     }
 
+    useEffect(() => {
+      if (preselectedAccountId && serviceAccountsData?.serviceAccounts) {
+        const preselectedAccount = serviceAccountsData.serviceAccounts.find(
+          (account: ServiceAccountType) => account.id === preselectedAccountId
+        );
+        if (preselectedAccount) {
+          setSelectedAccount(preselectedAccount);
+          setIsOpen(true);
+        }
+      }
+    }, [preselectedAccountId, serviceAccountsData]);
+
     return (
       <>
         <div className="flex items-center justify-center">
