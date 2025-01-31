@@ -19,9 +19,8 @@ import { Menu, Transition } from '@headlessui/react'
 import { FaArrowRight, FaBan, FaCubes, FaPlus } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
-import { useSearchParams } from 'next/navigation'
-import { FrameworkIntegrations } from '@/components/syncing/FrameworkIntegrations'
+import { userHasPermission } from '@/utils/access/permissions'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ProviderCard } from '@/components/syncing/CreateProviderCredentials'
 import { AppCard } from '@/components/apps/AppCard'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -282,16 +281,6 @@ export default function Integrations({ params }: { params: { team: string } }) {
         </EmptyState>
       )}
 
-      <hr className="border-neutral-500/40" />
-
-      <div className="space-y-4">
-        <div className="border-b border-neutral-500/20 pb-4">
-          <h2 className="text-black dark:text-white text-xl font-medium"> Frameworks</h2>
-          <p className="text-neutral-500">Integrate Phase with your application stack</p>
-        </div>
-
-        <FrameworkIntegrations />
-      </div>
     </div>
   )
 }
