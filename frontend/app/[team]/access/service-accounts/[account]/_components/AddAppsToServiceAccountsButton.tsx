@@ -33,9 +33,9 @@ export const AddAppButton = ({ teamSlug, serviceAccountId }: Props) => {
       {({ open }) => (
         <>
           <Menu.Button as={Fragment}>
-            <Button variant="primary" className="flex items-center gap-2">
-              <FaPlus className="h-4 w-4" />
-              Add App Access
+            <Button variant="primary">
+              <FaPlus/>
+              Add App
             </Button>
           </Menu.Button>
 
