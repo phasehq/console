@@ -9,11 +9,13 @@ export const AccessTemplateSelector = ({
   rolePolicy,
   setRolePolicy,
   isAppResource,
+  disabled,
 }: {
   resource: string
   rolePolicy: PermissionPolicy
   setRolePolicy: Dispatch<SetStateAction<PermissionPolicy | null>>
   isAppResource?: boolean
+  disabled?: boolean
 }) => {
   type AccessTemplate = {
     name: string
@@ -96,7 +98,7 @@ export const AccessTemplateSelector = ({
 
   return (
     <div className="relative">
-      <Listbox value={value} onChange={handleChange}>
+      <Listbox value={value} onChange={handleChange} disabled={disabled}>
         {({ open }) => (
           <>
             <Listbox.Button as={Fragment} aria-required>
