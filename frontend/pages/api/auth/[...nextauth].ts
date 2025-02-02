@@ -7,6 +7,7 @@ import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { getSecret } from '@/utils/secretConfig'
+import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvider'
 
 type AccessTokenResponse = {
   access_token: string
@@ -55,6 +56,32 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
           },
           token: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/oauth/token`,
           userinfo: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/api/v4/user`,
+        })
+      )
+    }
+  }
+
+  if (process.env.GOOGLE_OIDC_CLIENT_ID) {
+    const clientSecret = getSecret('GOOGLE_OIDC_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        OIDCProvider({
+          id: 'google-oidc',
+          name: 'Google OIDC',
+          type: 'oauth',
+          clientId: process.env.GOOGLE_OIDC_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: 'https://accounts.google.com',
+          wellKnown: 'https://accounts.google.com/.well-known/openid-configuration',
+          authorization: { params: { scope: 'openid email profile' } },
+          profile: (profile) => {
+            return {
+              id: profile.sub,
+              name: profile.name,
+              email: profile.email,
+              image: profile.picture,
+            }
+          },
         })
       )
     }
