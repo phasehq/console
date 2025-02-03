@@ -87,6 +87,32 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     }
   }
 
+  if (process.env.JUMPCLOUD_OIDC_CLIENT_ID) {
+    const clientSecret = getSecret('JUMPCLOUD_OIDC_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        OIDCProvider({
+          id: 'jumpcloud-oidc',
+          name: 'JumpCloud OIDC',
+          type: 'oauth',
+          clientId: process.env.JUMPCLOUD_OIDC_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: 'https://oauth.id.jumpcloud.com',
+          wellKnown: 'https://oauth.id.jumpcloud.com/.well-known/openid-configuration',
+          authorization: { params: { scope: 'openid email profile' } },
+          profile: (profile) => {
+            return {
+              id: profile.sub,
+              name: profile.name,
+              email: profile.email,
+              image: profile.picture,
+            }
+          },
+        })
+      )
+    }
+  }
+
   return {
     secret: process.env.NEXTAUTH_SECRET,
     session: {
@@ -134,6 +160,21 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               const { access_token } = account
               loginPayload = {
                 access_token: access_token,
+              }
+            } else if (account.provider === 'google-oidc' || account.provider === 'jumpcloud-oidc') {
+              const { access_token, id_token } = account
+              if (!id_token) {
+                throw new Error(`Missing ID token from ${account.provider}`)
+              }
+              
+              // Decode ID token to get profile info
+              const [_header, payload] = id_token.split('.')
+              const profile = JSON.parse(Buffer.from(payload, 'base64').toString())
+              
+              loginPayload = {
+                access_token,
+                id_token,
+                profile
               }
             }
 
