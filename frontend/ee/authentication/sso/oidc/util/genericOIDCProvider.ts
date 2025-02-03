@@ -24,9 +24,6 @@ export function OIDCProvider(config: OIDCProviderConfig): OAuthConfig<any> {
         grant_type: 'authorization_code',
       }
     },
-    userinfo: {
-      request: false
-    },
     profile(profile) {
       if (!profile.sub) {
         throw new Error('No sub claim in OIDC profile')
