@@ -17,7 +17,6 @@ export function OIDCProvider(config: OIDCProviderConfig): OAuthConfig<any> {
         response_type: 'code',
         scope: 'openid email profile',
         access_type: 'offline',
-        //prompt: 'consent',
       } 
     },
     token: {
