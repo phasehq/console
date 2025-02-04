@@ -56,11 +56,11 @@ class Command(BaseCommand):
                 )
 
             for app in apps:
-                logs = SecretEvent.objects.filter(
+                logs_to_delete = SecretEvent.objects.filter(
                     environment__in=app.environments.all(), timestamp__lte=time_cutoff
                 ).exclude(event_type=SecretEvent.CREATE)
-                count = logs.count()
-                logs.delete()
+                count = logs_to_delete.count()
+                logs_to_delete._raw_delete("default")
                 self.stdout.write(f"Deleted {count} logs for app '{app.name}' (id: {app.id})")
 
             self.stdout.write(
