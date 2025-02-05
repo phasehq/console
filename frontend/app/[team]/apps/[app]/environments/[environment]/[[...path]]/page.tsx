@@ -869,7 +869,7 @@ export default function EnvironmentPath({
               )}
             </div>
           </div>
-          <div className="space-y-0 sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
+          <div className="space-y-0 sticky top-0 z-[5] bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
             <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
               <div className="flex items-center gap-4">
                 <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
