@@ -187,6 +187,11 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ),
     "EXCEPTION_HANDLER": "backend.exceptions.custom_exception_handler",
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+        "djangorestframework_camel_case.render.CamelCaseJSONRenderer",
+    ],
 }
 
 GRAPHENE = {
