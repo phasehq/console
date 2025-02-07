@@ -152,7 +152,9 @@ class E2EESecretsView(APIView):
                         {"error": "Invalid ciphertext format"}, status=400
                     )
 
-            tags = SecretTag.objects.filter(id__in=secret["tags"])
+            tags = SecretTag.objects.filter(
+                name__in=secret["tags"], organisation=env.app.organisation
+            )
 
             try:
                 path = normalize_path_string(secret["path"])
@@ -218,7 +220,9 @@ class E2EESecretsView(APIView):
 
             secret_obj = Secret.objects.get(id=secret["id"])
 
-            tags = SecretTag.objects.filter(id__in=secret["tags"])
+            tags = SecretTag.objects.filter(
+                name__in=secret["tags"], organisation=env.app.organisation
+            )
 
             if "key" not in secret:
                 secret["key"] = secret_obj.key
