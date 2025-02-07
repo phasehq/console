@@ -132,6 +132,24 @@ SOCIALACCOUNT_PROVIDERS = {
             },
         },
     },
+    "google-oidc": {
+        "APP": {
+            "client_id": os.getenv("GOOGLE_OIDC_CLIENT_ID"),
+            "secret": get_secret("GOOGLE_OIDC_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "profile", "email"],
+        "AUTH_PARAMS": {"access_type": "offline"},
+    },
+    "jumpcloud-oidc": {
+        "APP": {
+            "client_id": os.getenv("JUMPCLOUD_OIDC_CLIENT_ID"),
+            "secret": get_secret("JUMPCLOUD_OIDC_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "profile", "email"],
+        "AUTH_PARAMS": {"access_type": "offline"},
+    },
 }
 
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
