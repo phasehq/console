@@ -32,7 +32,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
   }
 
   if (process.env.GITHUB_CLIENT_ID) {
-    const clientSecret = getSecret('GITHUB_CLIENT_SECRET') 
+    const clientSecret = getSecret('GITHUB_CLIENT_SECRET')
     if (clientSecret) {
       providers.push(
         GitHubProvider({
@@ -161,20 +161,23 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               loginPayload = {
                 access_token: access_token,
               }
-            } else if (account.provider === 'google-oidc' || account.provider === 'jumpcloud-oidc') {
+            } else if (
+              account.provider === 'google-oidc' ||
+              account.provider === 'jumpcloud-oidc'
+            ) {
               const { access_token, id_token } = account
               if (!id_token) {
                 throw new Error(`Missing ID token from ${account.provider}`)
               }
-              
+
               // Decode ID token to get profile info
               const [_header, payload] = id_token.split('.')
               const profile = JSON.parse(Buffer.from(payload, 'base64').toString())
-              
+
               loginPayload = {
                 access_token,
                 id_token,
-                profile
+                profile,
               }
             }
 
@@ -209,8 +212,11 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
 
               return token
             } catch (error) {
+              if (axios.isAxiosError(error) && error.response) {
+                throw `Error: ${error.response.status}: ${error.response.data?.error || ''}`
+              }
               console.log(error)
-              throw 'Backend error'
+              throw `Backend error: ${error}`
             }
           }
         }
