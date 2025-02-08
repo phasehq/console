@@ -81,7 +81,7 @@ export default function AppLayout({
         <div className="flex items-baseline gap-3 pb-6 group">
           <h1 className="text-3xl font-bold">{app.name}</h1>
           <div className="opacity-0 group-hover:opacity-100 transition ease">
-            <CopyButton value={app.id}>
+            <CopyButton value={app.id} buttonVariant="ghost">
               <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
             </CopyButton>
           </div>
