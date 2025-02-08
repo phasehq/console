@@ -37,7 +37,8 @@ from allauth.socialaccount.providers.gitlab.provider import GitLabProvider
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter
-
+from ee.authentication.sso.oidc.util.google.google import GoogleOpenIDConnectAdapter
+from ee.authentication.sso.oidc.util.jumpcloud.jumpcloud import JumpCloudOpenIDConnectAdapter
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -237,6 +238,20 @@ class GitHubLoginView(SocialLoginView):
 class GitLabLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = CustomGitLabOAuth2Adapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
+class OIDCLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = GoogleOpenIDConnectAdapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
+class JumpCloudLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = JumpCloudOpenIDConnectAdapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
 

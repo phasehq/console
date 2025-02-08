@@ -151,31 +151,32 @@ def check_for_duplicates_blind(secrets, environment):
     processed_secrets = set()  # Set to store processed secrets
 
     for secret in secrets:
-        try:
-            path = normalize_path_string(secret["path"])
-        except:
-            path = "/"
+        if "keyDigest" in secret:
+            try:
+                path = normalize_path_string(secret["path"])
+            except:
+                path = "/"
 
-        # Check if the secret is already processed
-        if (path, secret["keyDigest"]) in processed_secrets:
-            return True  # Found a duplicate within the list
+            # Check if the secret is already processed
+            if (path, secret["keyDigest"]) in processed_secrets:
+                return True  # Found a duplicate within the list
 
-        # Check if the secret already exists in the database
-        query_duplicates = Secret.objects.filter(
-            environment=environment,
-            path=path,
-            key_digest=secret["keyDigest"],
-            deleted_at=None,
-        )
+            # Check if the secret already exists in the database
+            query_duplicates = Secret.objects.filter(
+                environment=environment,
+                path=path,
+                key_digest=secret["keyDigest"],
+                deleted_at=None,
+            )
 
-        if "id" in secret:
-            query_duplicates = query_duplicates.exclude(id=secret["id"])
+            if "id" in secret:
+                query_duplicates = query_duplicates.exclude(id=secret["id"])
 
-        if query_duplicates.exists():
-            return True  # Found a duplicate in the database
+            if query_duplicates.exists():
+                return True  # Found a duplicate in the database
 
-        # Add the processed secret to the set
-        processed_secrets.add((path, secret["keyDigest"]))
+            # Add the processed secret to the set
+            processed_secrets.add((path, secret["keyDigest"]))
 
     return False  # No duplicates found
 

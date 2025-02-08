@@ -9,6 +9,7 @@ import { useContext, useEffect, useState } from 'react'
 import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
+import { MdPassword, MdSearchOff } from "react-icons/md";
 
 import {
   FaArrowRight,
@@ -774,56 +775,74 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
       {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
         <>
-          <table className="table-auto w-full">
-            <thead
-              id="table-head"
-              className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
-            >
-              <tr>
-                <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
-                  key
-                </th>
-                {appEnvironments?.map((env: EnvironmentType) => (
-                  <th
-                    key={env.id}
-                    className="group text-center text-sm font-semibold uppercase tracking-widest py-2"
-                  >
-                    <Link href={`${pathname}/environments/${env.id}`}>
-                      <Button variant="outline">
-                        <div className="flex items-center gap-2 justify-center ">
-                          {env.name}
-                          <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
-                            <FaArrowRight />
-                          </div>
-                        </div>
-                      </Button>
-                    </Link>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-500/20 rounded-md">
-              {filteredFolders.map((appFolder) => (
-                <AppFolderRow key={appFolder.name} appFolder={appFolder} />
-              ))}
 
-              {filteredSecrets.map((appSecret, index) => (
-                <AppSecretRow
-                  index={index}
-                  key={appSecret.id}
-                  clientAppSecret={appSecret}
-                  serverAppSecret={serverSecret(appSecret.id)}
-                  updateKey={handleUpdateSecretKey}
-                  addEnvValue={handleAddNewEnvValue}
-                  deleteEnvValue={stageEnvValueForDelete}
-                  updateValue={handleUpdateSecretValue}
-                  deleteKey={handleStageClientSecretForDelete}
-                  stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
-                  secretsStagedForDelete={secretsToDelete}
-                />
-              ))}
-            </tbody>
-          </table>
+          {(filteredSecrets.length > 0 || filteredFolders.length > 0) ? (
+            <table className="table-auto w-full">
+              <thead
+                id="table-head"
+                className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
+              >
+                <tr>
+                  <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
+                    key
+
+                  </th>
+                  {appEnvironments?.map((env: EnvironmentType) => (
+                    <th
+                      key={env.id}
+                      className="group text-center text-sm font-semibold uppercase tracking-widest py-2"
+                    >
+                      <Link href={`${pathname}/environments/${env.id}`}>
+                        <Button variant="outline">
+                          <div className="flex items-center gap-2 justify-center ">
+                            {env.name}
+                            <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
+                              <FaArrowRight />
+                            </div>
+                          </div>
+                        </Button>
+                      </Link>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-500/20 rounded-md">
+                {filteredFolders.map((appFolder) => (
+                  <AppFolderRow key={appFolder.name} appFolder={appFolder} />
+                ))}
+
+                {filteredSecrets.map((appSecret, index) => (
+                  <AppSecretRow
+                    index={index}
+                    key={appSecret.id}
+                    clientAppSecret={appSecret}
+                    serverAppSecret={serverSecret(appSecret.id)}
+                    updateKey={handleUpdateSecretKey}
+                    addEnvValue={handleAddNewEnvValue}
+                    deleteEnvValue={stageEnvValueForDelete}
+                    updateValue={handleUpdateSecretValue}
+                    deleteKey={handleStageClientSecretForDelete}
+                    stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
+                    secretsStagedForDelete={secretsToDelete}
+                  />
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
+              <EmptyState
+                title={`No results for "${searchQuery}"`}
+                subtitle="Try adjusting your search term"
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <MdSearchOff />
+                  </div>
+                }
+              >
+                <></>
+              </EmptyState>
+            </div>
+          )}
           <SecretInfoLegend />
         </>
       ) : isLoading || fetching ? (
@@ -838,7 +857,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 secrets."
             graphic={
               <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                <FaBoxOpen />
+                <MdPassword />
               </div>
             }
           >
