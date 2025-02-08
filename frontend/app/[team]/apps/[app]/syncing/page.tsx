@@ -30,17 +30,28 @@ export default function Syncing({ params }: { params: { team: string; app: strin
   return (
     <div className="w-full space-y-8 pt-8 text-black dark:text-white">
       {data?.sseEnabled === false && (
-        <div className="flex flex-col gap-4 h-96 max-w-screen-md mx-auto items-center justify-center">
-          <div className="space-y-1 text-center">
-            <div className="text-black dark:text-white text-3xl font-semibold">Enable SSE</div>
-            <p className="text-neutral-500 text-lg">
-              Server-side encryption (SSE) is not yet enabled for this app. SSE is required to allow
-              automatic syncing of secrets.
-            </p>
-            <p className="text-neutral-500 text-lg">Click the button below to enable SSE</p>
+        <>
+          <div className="flex flex-col gap-4 h-64 max-w-screen-md mx-auto items-center justify-center">
+            <div className="space-y-1 text-center">
+              <div className="text-black dark:text-white text-2xl font-semibold">Enable Secret Syncing</div>
+              <p className="text-neutral-500">
+                Server-side encryption (SSE) is not yet enabled for this app. SSE is required to allow
+                automatic syncing of secrets.
+              </p>
+            </div>
+            <EnableSSEDialog appId={params.app} />
           </div>
-          <EnableSSEDialog appId={params.app} />
-        </div>
+          {userCanCreateSyncs && (
+            <div className="cursor-not-allowed" title="Enable SSE above to start creating syncs">
+              <div className="opacity-50 pointer-events-none">
+                <SyncOptions
+                  appId={params.app}
+                  defaultOpen={openCreateSyncPanel || (data.syncs && data.syncs.length === 0)}
+                />
+              </div>
+            </div>
+          )}
+        </>
       )}
       {data?.sseEnabled === true && (
         <>
