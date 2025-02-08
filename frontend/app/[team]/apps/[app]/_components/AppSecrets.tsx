@@ -775,6 +775,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
       {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
         <>
+
           {(filteredSecrets.length > 0 || filteredFolders.length > 0) ? (
             <table className="table-auto w-full">
               <thead
@@ -784,6 +785,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 <tr>
                   <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
                     key
+
                   </th>
                   {appEnvironments?.map((env: EnvironmentType) => (
                     <th

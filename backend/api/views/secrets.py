@@ -28,6 +28,7 @@ from api.utils.rest import (
 )
 
 import json
+from api.content_negotiation import CamelCaseContentNegotiation
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
@@ -38,11 +39,13 @@ from django.utils import timezone
 from djangorestframework_camel_case.render import (
     CamelCaseJSONRenderer,
 )
+from rest_framework.renderers import JSONRenderer
 
 
 class E2EESecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated]
+    content_negotiation_class = CamelCaseContentNegotiation
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -149,7 +152,9 @@ class E2EESecretsView(APIView):
                         {"error": "Invalid ciphertext format"}, status=400
                     )
 
-            tags = SecretTag.objects.filter(id__in=secret["tags"])
+            tags = SecretTag.objects.filter(
+                name__in=secret["tags"], organisation=env.app.organisation
+            )
 
             try:
                 path = normalize_path_string(secret["path"])
@@ -213,6 +218,27 @@ class E2EESecretsView(APIView):
 
         for secret in request_body["secrets"]:
 
+            secret_obj = Secret.objects.get(id=secret["id"])
+
+            tags = SecretTag.objects.filter(
+                name__in=secret["tags"], organisation=env.app.organisation
+            )
+
+            if "key" not in secret:
+                secret["key"] = secret_obj.key
+                try:
+                    secret["keyDigest"] = secret_obj.key_digest
+                except:
+                    return JsonResponse(
+                        {"error": "Key supplied without digest"}, status=400
+                    )
+
+            if "value" not in secret:
+                secret["value"] = secret_obj.value
+
+            if "comment" not in secret:
+                secret["comment"] = secret_obj.comment
+
             # Check that all encrypted fields are valid
             encrypted_fields = [secret["key"], secret["value"], secret["comment"]]
             if "override" in secret:
@@ -223,10 +249,6 @@ class E2EESecretsView(APIView):
                     return JsonResponse(
                         {"error": "Invalid ciphertext format"}, status=400
                     )
-
-            secret_obj = Secret.objects.get(id=secret["id"])
-
-            tags = SecretTag.objects.filter(id__in=secret["tags"])
 
             secret_data = {
                 "environment": env,
