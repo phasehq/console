@@ -1,7 +1,7 @@
 import { useState, useImperativeHandle, forwardRef, ReactNode, Fragment } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { FaTimes } from 'react-icons/fa'
-import { Button } from './Button'
+import { Button, ButtonVariant } from './Button'
 import clsx from 'clsx'
 
 interface GenericDialogProps {
@@ -9,7 +9,7 @@ interface GenericDialogProps {
   onClose?: () => void
   onOpen?: () => void
   children: ReactNode
-  buttonVariant: 'primary' | 'secondary' | 'danger' | 'outline' | ''
+  buttonVariant: ButtonVariant
   buttonContent: ReactNode
   size?: 'lg' | 'md' | 'sm'
 }

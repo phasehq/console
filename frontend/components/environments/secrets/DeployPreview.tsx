@@ -207,7 +207,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
   return (
     <div>
       <GenericDialog
-        buttonVariant=""
+        buttonVariant="ghost"
         title="Preview undeployed changes"
         buttonContent={
           <Alert variant="info" size="sm" icon={true}>

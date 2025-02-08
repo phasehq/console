@@ -37,8 +37,12 @@ import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
+import { useSearchParams } from 'next/navigation'
 
 export default function ServiceAccounts({ params }: { params: { team: string; app: string } }) {
+  const searchParams = useSearchParams();
+  const preselectedAccountId = searchParams?.get('new') ?? null;
+
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -129,12 +133,41 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
       setIsOpen(true)
     }
 
+    useEffect(() => {
+      if (preselectedAccountId && serviceAccountsData?.serviceAccounts) {
+        // Check if service account is already added to the app
+        const isAlreadyAdded = data?.appServiceAccounts?.some(
+          (account: ServiceAccountType) => account.id === preselectedAccountId
+        );
+
+        if (isAlreadyAdded) {
+          // Don't open dialog if already added
+          return;
+        }
+
+        const preselectedAccount = serviceAccountsData.serviceAccounts.find(
+          (account: ServiceAccountType) => account.id === preselectedAccountId
+        );
+        if (preselectedAccount) {
+          setSelectedAccount(preselectedAccount);
+          setIsOpen(true);
+        }
+      }
+    }, [preselectedAccountId, serviceAccountsData, data?.appServiceAccounts]);
+
     const handleAddMember = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
 
       if (envScope.length === 0) {
         setShowEnvHint(true)
         return false
+      }
+
+      // Clear just the ?new parameter before proceeding
+      if (preselectedAccountId) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('new');
+        window.history.replaceState({}, '', url.toString());
       }
 
       const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
@@ -195,6 +228,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
       })
 
       toast.success('Added account to App', { autoClose: 2000 })
+      closeModal()
     }
 
     return (
