@@ -8,7 +8,6 @@ import Link from 'next/link'
 import { Fragment, useContext, useEffect } from 'react'
 import { FaChevronDown, FaKey, FaPlus } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { usePathname } from 'next/navigation'
 
 export const ProviderCredentialPicker = (props: {
   credential: ProviderCredentialsType | null
@@ -51,7 +50,7 @@ export const ProviderCredentialPicker = (props: {
   }, [providerFilter, filteredCredentials, setDefault])
 
   const NewCredentialsLink = () => (
-    <Link href={`/${organisation!.name}/integrations?newCredential=true`}>
+    <Link href={`/${organisation!.name}/integrations${providerFilter ? `?provider=${providerFilter}` : ''}`}>
       <Button variant="secondary" onClick={newCredentialCallback}>
         <div className="flex items-center gap-2">
           <FaPlus /> Add service credentials

@@ -1,7 +1,7 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useState, useEffect } from 'react'
 import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import { useQuery } from '@apollo/client'
@@ -19,9 +19,8 @@ import { Menu, Transition } from '@headlessui/react'
 import { FaArrowRight, FaBan, FaCubes, FaPlus } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
-import { useSearchParams } from 'next/navigation'
-import { FrameworkIntegrations } from '@/components/syncing/FrameworkIntegrations'
+import { userHasPermission } from '@/utils/access/permissions'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ProviderCard } from '@/components/syncing/CreateProviderCredentials'
 import { AppCard } from '@/components/apps/AppCard'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -50,15 +49,24 @@ export default function Integrations({ params }: { params: { team: string } }) {
     ? userHasPermission(organisation.role?.permissions, 'Apps', 'read')
     : false
 
+  const router = useRouter()
   const searchParams = useSearchParams()
-
-  const openCreateCredentialDialog = searchParams?.get('newCredential')
-
+  const providerFromUrl = searchParams?.get('provider')
   const { data: providersData } = useQuery(GetProviderList)
-
   const providers: ProviderType[] = providersData?.providers ?? []
-
   const [provider, setProvider] = useState<ProviderType | null>(null)
+
+  // Simplified useEffect that only handles provider param
+  useEffect(() => {
+    if (providerFromUrl && providers.length > 0) {
+      const matchingProvider = providers.find(
+        p => p.id.toLowerCase() === providerFromUrl.toLowerCase()
+      )
+      if (matchingProvider) {
+        setProvider(matchingProvider)
+      }
+    }
+  }, [providerFromUrl, providers])
 
   const { data, loading } = useQuery(GetOrganisationSyncs, {
     variables: { orgId: organisation?.id },
@@ -66,6 +74,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
     skip:
       !organisation ||
       (!userCanReadIntegrationCredentials && !userCanReadIntegrations && !userCanReadApps),
+    nextFetchPolicy: 'cache-and-network',
   })
 
   const apps = data?.apps ?? []
@@ -121,6 +130,11 @@ export default function Integrations({ params }: { params: { team: string } }) {
         )}
       </Menu>
     )
+  }
+
+  const closeDialog = () => {
+    setProvider(null)
+    router.replace(`/${params.team}/integrations`)
   }
 
   if (loading)
@@ -238,8 +252,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
                   <CreateProviderCredentialsDialog
                     showButton={!noCredentials}
                     provider={provider}
-                    defaultOpen={openCreateCredentialDialog !== null}
-                    closeDialogCallback={() => setProvider(null)}
+                    defaultOpen={!!provider}
+                    closeDialogCallback={closeDialog}
+                    key={provider?.id}
                   />
                 </div>
                 {noCredentials ? (
@@ -282,16 +297,6 @@ export default function Integrations({ params }: { params: { team: string } }) {
         </EmptyState>
       )}
 
-      <hr className="border-neutral-500/40" />
-
-      <div className="space-y-4">
-        <div className="border-b border-neutral-500/20 pb-4">
-          <h2 className="text-black dark:text-white text-xl font-medium"> Frameworks</h2>
-          <p className="text-neutral-500">Integrate Phase with your application stack</p>
-        </div>
-
-        <FrameworkIntegrations />
-      </div>
     </div>
   )
 }
