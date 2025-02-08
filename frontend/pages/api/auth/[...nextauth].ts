@@ -7,6 +7,7 @@ import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { getSecret } from '@/utils/secretConfig'
+import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvider'
 
 type AccessTokenResponse = {
   access_token: string
@@ -31,7 +32,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
   }
 
   if (process.env.GITHUB_CLIENT_ID) {
-    const clientSecret = getSecret('GITHUB_CLIENT_SECRET') 
+    const clientSecret = getSecret('GITHUB_CLIENT_SECRET')
     if (clientSecret) {
       providers.push(
         GitHubProvider({
@@ -55,6 +56,58 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
           },
           token: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/oauth/token`,
           userinfo: `${process.env.GITLAB_AUTH_URL || 'https://gitlab.com'}/api/v4/user`,
+        })
+      )
+    }
+  }
+
+  if (process.env.GOOGLE_OIDC_CLIENT_ID) {
+    const clientSecret = getSecret('GOOGLE_OIDC_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        OIDCProvider({
+          id: 'google-oidc',
+          name: 'Google OIDC',
+          type: 'oauth',
+          clientId: process.env.GOOGLE_OIDC_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: 'https://accounts.google.com',
+          wellKnown: 'https://accounts.google.com/.well-known/openid-configuration',
+          authorization: { params: { scope: 'openid email profile' } },
+          profile: (profile) => {
+            return {
+              id: profile.sub,
+              name: profile.name,
+              email: profile.email,
+              image: profile.picture,
+            }
+          },
+        })
+      )
+    }
+  }
+
+  if (process.env.JUMPCLOUD_OIDC_CLIENT_ID) {
+    const clientSecret = getSecret('JUMPCLOUD_OIDC_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        OIDCProvider({
+          id: 'jumpcloud-oidc',
+          name: 'JumpCloud OIDC',
+          type: 'oauth',
+          clientId: process.env.JUMPCLOUD_OIDC_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: 'https://oauth.id.jumpcloud.com',
+          wellKnown: 'https://oauth.id.jumpcloud.com/.well-known/openid-configuration',
+          authorization: { params: { scope: 'openid email profile' } },
+          profile: (profile) => {
+            return {
+              id: profile.sub,
+              name: profile.name,
+              email: profile.email,
+              image: profile.picture,
+            }
+          },
         })
       )
     }
@@ -108,6 +161,24 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               loginPayload = {
                 access_token: access_token,
               }
+            } else if (
+              account.provider === 'google-oidc' ||
+              account.provider === 'jumpcloud-oidc'
+            ) {
+              const { access_token, id_token } = account
+              if (!id_token) {
+                throw new Error(`Missing ID token from ${account.provider}`)
+              }
+
+              // Decode ID token to get profile info
+              const [_header, payload] = id_token.split('.')
+              const profile = JSON.parse(Buffer.from(payload, 'base64').toString())
+
+              loginPayload = {
+                access_token,
+                id_token,
+                profile,
+              }
             }
 
             try {
@@ -141,8 +212,11 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
 
               return token
             } catch (error) {
+              if (axios.isAxiosError(error) && error.response) {
+                throw `Error: ${error.response.status}: ${error.response.data?.error || ''}`
+              }
               console.log(error)
-              throw 'Backend error'
+              throw `Backend error: ${error}`
             }
           }
         }
