@@ -60,6 +60,10 @@ module.exports = {
         sans: ['var(--font-inter)'],
         mono: ['var(--font-jetbrains-mono)'],
       },
+      zIndex: {
+        1: 1,
+        5: 5,
+      },
     },
   },
   plugins: [require('@tailwindcss/typography')],
