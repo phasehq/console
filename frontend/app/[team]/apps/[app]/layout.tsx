@@ -78,13 +78,12 @@ export default function AppLayout({
         <div className="dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
       {app && (
-        <div className="flex items-baseline gap-3 pb-6">
+        <div className="flex items-baseline gap-3 pb-6 group">
           <h1 className="text-3xl font-bold">{app.name}</h1>
-          <div className="flex items-center gap-2 group">
-            <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-              <CopyButton value={app.id} />
-            </div>
+          <div className="opacity-0 group-hover:opacity-100 transition ease">
+            <CopyButton value={app.id}>
+              <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
+            </CopyButton>
           </div>
         </div>
       )}
