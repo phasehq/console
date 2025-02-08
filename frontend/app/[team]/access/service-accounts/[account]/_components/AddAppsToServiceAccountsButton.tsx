@@ -9,13 +9,15 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import Spinner from '@/components/common/Spinner'
 import { AppType, Query } from '@/apollo/graphql'
+import clsx from 'clsx'
 
-interface Props {
-  teamSlug: string;
-  serviceAccountId: string;
+interface AddAppButtonProps {
+  teamSlug: string
+  serviceAccountId: string
+  align?: 'left' | 'right'
 }
 
-export const AddAppButton = ({ teamSlug, serviceAccountId }: Props) => {
+export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButtonProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { data, loading } = useQuery<Query>(GetApps, {
@@ -26,15 +28,17 @@ export const AddAppButton = ({ teamSlug, serviceAccountId }: Props) => {
 
   if (loading) return <Spinner size="sm" />
 
+  const alignMenuRight = align === 'right'
+
   const apps = data?.apps?.filter((app): app is AppType => app !== null) || []
 
   return (
     <Menu as="div" className="relative group">
-      {({ open }) => (
+      {() => (
         <>
           <Menu.Button as={Fragment}>
             <Button variant="primary">
-              <FaPlus/>
+              <FaPlus />
               Add App
             </Button>
           </Menu.Button>
@@ -47,7 +51,10 @@ export const AddAppButton = ({ teamSlug, serviceAccountId }: Props) => {
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className="absolute z-10 right-0 origin-top-right mt-2"
+            className={clsx(
+              'absolute z-10  mt-2',
+              alignMenuRight ? 'left-0 origin-top-left' : 'right-0 origin-top-right'
+            )}
           >
             <Menu.Items as={Fragment}>
               <div className="flex flex-col w-64 divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
