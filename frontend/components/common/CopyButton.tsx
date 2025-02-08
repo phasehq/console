@@ -1,17 +1,20 @@
 import React, { ReactNode, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { FaCopy } from 'react-icons/fa'
-import { Button } from './Button'
+import { Button, ButtonVariant } from './Button'
 
 type CopyButtonProps = {
   value: string
   defaultHidden?: boolean
   children?: ReactNode
+  buttonVariant?: ButtonVariant
 }
 
-const CopyButton: React.FC<CopyButtonProps> = ({ value, children }) => {
+const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant }) => {
   const [copyCount, setCopyCount] = useState(0)
   const copied = copyCount > 0
+
+  const variant = buttonVariant || 'outline'
 
   useEffect(() => {
     if (copyCount > 0) {
@@ -24,7 +27,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, children }) => {
 
   return (
     <Button
-      variant="outline"
+      variant={variant}
       title="Copy to clipboard"
       onClick={() => {
         window.navigator.clipboard.writeText(value).then(() => {
