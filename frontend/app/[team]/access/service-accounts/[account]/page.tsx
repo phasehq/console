@@ -177,14 +177,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           {/* Role Selector and Description */}
           <div className="space-y-2">
             <div className="text-lg w-max">
-              <ServiceAccountRoleSelector 
-                account={account} 
-                displayOnly={!userCanUpdateSA} 
-              />
+              <ServiceAccountRoleSelector account={account} displayOnly={!userCanUpdateSA} />
             </div>
-            
+
             <div className="flex flex-col gap-1">
-              <div className="text-sm font-medium text-neutral-500">Description</div>
               <div className="text-sm text-neutral-500">
                 {account.role?.description || 'No description available for this role'}
               </div>
@@ -200,11 +196,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                 Manage the Apps and Environments that this account has access to
               </div>
             </div>
-            {userCanReadAppMemberships && (
-              <AddAppButton 
-                teamSlug={params.team} 
-                serviceAccountId={params.account}
-              />
+            {userCanReadAppMemberships && account.appMemberships?.length! > 0 && (
+              <AddAppButton teamSlug={params.team} serviceAccountId={params.account} />
             )}
           </div>
 
@@ -212,7 +205,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {account.appMemberships && account.appMemberships.length > 0 ? (
                 account.appMemberships.map((app) => (
-                  <div key={app?.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-2 group">
+                  <div
+                    key={app?.id}
+                    className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-2 group"
+                  >
                     {/* App Name and ID */}
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -222,10 +218,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                         <SseLabel sseEnabled={Boolean(app?.sseEnabled)} />
                       </div>
                       <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
-                        <span className="font-mono">{app?.id}</span>
-                        <span className="opacity-0 group-hover/id:opacity-100 transition ease">
-                          <CopyButton value={app?.id || ''} defaultHidden />
-                        </span>
+                        <CopyButton value={app.id} buttonVariant="ghost">
+                          <span className="text-neutral-500 text-2xs font-mono">{app.id}</span>
+                        </CopyButton>
                       </div>
                     </div>
 
@@ -256,7 +251,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
               ) : (
                 <div className="py-8">
                   <EmptyState
-                    title="No App associations"
+                    title="No Apps"
                     subtitle="This Service Account does not have access to any Apps. Grant this account access from the Access tab of an App."
                     graphic={
                       <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
@@ -264,7 +259,13 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                       </div>
                     }
                   >
-                    <></>
+                    {userCanReadAppMemberships && (
+                      <AddAppButton
+                        teamSlug={params.team}
+                        serviceAccountId={params.account}
+                        align={'right'}
+                      />
+                    )}
                   </EmptyState>
                 </div>
               )}
@@ -289,18 +290,23 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         <div className="py-4">
           <div>
             <div className="text-xl font-semibold">Access Tokens</div>
-            <div className="text-neutral-500">Manage authentication tokens for this service account</div>
+            <div className="text-neutral-500">Manage access tokens for this Service Account</div>
           </div>
 
-          <div className="flex items-center justify-end">
-            <CreateServiceAccountTokenDialog serviceAccount={account} />
-          </div>
+          {account.tokens?.length! > 0 && (
+            <div className="flex items-center justify-end">
+              <CreateServiceAccountTokenDialog serviceAccount={account} />
+            </div>
+          )}
 
           {userCanReadTokens ? (
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {account.tokens && account.tokens.length > 0 ? (
                 account.tokens.map((token) => (
-                  <div key={token!.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-2 group">
+                  <div
+                    key={token!.id}
+                    className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-2 group"
+                  >
                     {/* Token Name and ID*/}
                     <div className="md:col-span-4 space-y-1">
                       <div className="flex items-center gap-2">
@@ -310,10 +316,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
-                        <span className="font-mono">{token!.id}</span>
-                        <span className="opacity-0 group-hover/id:opacity-100 transition ease">
-                          <CopyButton value={token!.id || ''} defaultHidden />
-                        </span>
+                        <CopyButton value={token!.id} buttonVariant="ghost">
+                          <span className="text-neutral-500 text-2xs font-mono">{token!.id}</span>
+                        </CopyButton>
                       </div>
                     </div>
 
@@ -336,14 +341,18 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                       <div className="flex items-center gap-1 text-sm text-neutral-500">
                         <span className="whitespace-nowrap">Expires:</span>
                         <span className="whitespace-nowrap">
-                          {token!.expiresAt ? relativeTimeFromDates(new Date(token?.expiresAt)) : 'never'}
+                          {token!.expiresAt
+                            ? relativeTimeFromDates(new Date(token?.expiresAt))
+                            : 'never'}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-1 text-sm text-neutral-500">
                         <span className="whitespace-nowrap">Last used:</span>
                         <span className="whitespace-nowrap">
-                          {token!.lastUsed ? relativeTimeFromDates(new Date(token?.lastUsed)) : 'never'}
+                          {token!.lastUsed
+                            ? relativeTimeFromDates(new Date(token?.lastUsed))
+                            : 'never'}
                         </span>
                       </div>
                     </div>
@@ -358,14 +367,14 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                 <div className="py-8">
                   <EmptyState
                     title="No tokens created"
-                    subtitle="This Service Account does not have any tokens. Create a new token to access secrets from Apps associated with this account."
+                    subtitle="This Service Account does not have any tokens. Create a new token to access secrets from Apps associated with this Service Account."
                     graphic={
                       <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                         <FaKey />
                       </div>
                     }
                   >
-                    <></>
+                    <CreateServiceAccountTokenDialog serviceAccount={account} />
                   </EmptyState>
                 </div>
               )}
@@ -400,7 +409,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
               <div>
                 <div className="font-medium text-red-400">Delete account</div>
                 <div className="text-neutral-500">
-                  Permanently delete this service account and all associated tokens
+                  Permanently delete this Service Account and all associated tokens
                 </div>
               </div>
               <DeleteServiceAccountDialog account={account} />
