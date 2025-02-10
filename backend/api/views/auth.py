@@ -11,6 +11,7 @@ from api.serializers import (
 from api.models import ServiceAccountToken, ServiceToken, UserToken, CustomUser
 from api.emails import send_login_email
 from api.utils.syncing.auth import store_oauth_token
+from backend.utils.secrets import get_secret
 from backend.api.notifier import notify_slack
 from api.utils.rest import (
     get_token_type,
@@ -36,7 +37,8 @@ from allauth.socialaccount.providers.gitlab.provider import GitLabProvider
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter
-
+from ee.authentication.sso.oidc.util.google.google import GoogleOpenIDConnectAdapter
+from ee.authentication.sso.oidc.util.jumpcloud.jumpcloud import JumpCloudOpenIDConnectAdapter
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -46,7 +48,7 @@ def github_callback(request):
     state = request.GET.get("state")
 
     client_id = os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
-    client_secret = os.getenv("GITHUB_INTEGRATION_CLIENT_SECRET")
+    client_secret = get_secret("GITHUB_INTEGRATION_CLIENT_SECRET")
 
     state_decoded = base64.b64decode(state).decode("utf-8")
     state = json.loads(state_decoded)
@@ -236,6 +238,20 @@ class GitHubLoginView(SocialLoginView):
 class GitLabLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = CustomGitLabOAuth2Adapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
+class OIDCLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = GoogleOpenIDConnectAdapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
+class JumpCloudLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = JumpCloudOpenIDConnectAdapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
 

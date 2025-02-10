@@ -1,6 +1,9 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import get_credentials
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import (
+    user_can_access_environment,
+    user_has_permission,
+)
 from backend.quotas import PLAN_CONFIG
 import graphene
 from enum import Enum
@@ -37,6 +40,7 @@ from logs.dynamodb_models import KMSLog
 from django.utils import timezone
 from datetime import datetime
 from api.utils.access.roles import default_roles
+from graphql import GraphQLError
 
 
 class SeatsUsed(ObjectType):
@@ -303,7 +307,134 @@ class EnvironmentSyncType(DjangoObjectType):
         )
 
 
+class SecretFolderType(DjangoObjectType):
+    folder_count = graphene.Int()
+    secret_count = graphene.Int()
+
+    class Meta:
+        model = SecretFolder
+        fields = (
+            "id",
+            "environment",
+            "path",
+            "name",
+            "created_at",
+            "updated_at",
+        )
+
+    def resolve_folder_count(self, info):
+        return SecretFolder.objects.filter(folder=self).count()
+
+    def resolve_secret_count(self, info):
+        return Secret.objects.filter(folder=self).count()
+
+
+class SecretEventType(DjangoObjectType):
+    class Meta:
+        model = SecretEvent
+        fields = (
+            "id",
+            "secret",
+            "key",
+            "value",
+            "version",
+            "tags",
+            "comment",
+            "event_type",
+            "timestamp",
+            "user",
+            "service_token",
+            "service_account",
+            "service_account_token",
+            "ip_address",
+            "user_agent",
+            "environment",
+            "path",
+        )
+
+    def resolve_user(self, info):
+        # Resolve if the user has either Org or App member read permissions
+        if user_has_permission(
+            info.context.user,
+            "read",
+            "Members",
+            self.secret.environment.app.organisation,
+            True,
+        ) or user_has_permission(
+            info.context.user,
+            "read",
+            "Members",
+            self.secret.environment.app.organisation,
+            False,
+        ):
+            return self.user
+
+    def resolve_service_account(self, info):
+        if self.service_account_token:
+            return self.service_account_token.service_account
+
+
+class PersonalSecretType(DjangoObjectType):
+    class Meta:
+        model = PersonalSecret
+        fields = (
+            "id",
+            "secret",
+            "user",
+            "value",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+
+
+class SecretType(DjangoObjectType):
+    history = graphene.List(SecretEventType)
+    override = graphene.Field(PersonalSecretType)
+
+    class Meta:
+        model = Secret
+        fields = (
+            "id",
+            "key",
+            "value",
+            "folder",
+            "path",
+            "version",
+            "tags",
+            "comment",
+            "created_at",
+            "updated_at",
+            "history",
+            "override",
+            "environment",
+        )
+        # interfaces = (relay.Node, )
+
+    def resolve_history(self, info):
+        return SecretEvent.objects.filter(
+            secret_id=self.id, event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE]
+        ).order_by("timestamp")
+
+    def resolve_override(self, info):
+        if info.context.user:
+            org = self.environment.app.organisation
+            org_member = OrganisationMember.objects.get(
+                organisation=org, user=info.context.user, deleted_at=None
+            )
+
+            try:
+                override = PersonalSecret.objects.get(secret=self, user=org_member)
+
+                if override is not None:
+                    return override
+            except:
+                return None
+
+
 class EnvironmentType(DjangoObjectType):
+    folders = graphene.NonNull(graphene.List(SecretFolderType))
+    secrets = graphene.NonNull(graphene.List(SecretType))
     folder_count = graphene.Int()
     secret_count = graphene.Int()
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
@@ -323,6 +454,37 @@ class EnvironmentType(DjangoObjectType):
             "created_at",
             "updated_at",
         )
+
+    def resolve_secrets(self, info, path="/"):
+
+        org = self.app.organisation
+        if not user_has_permission(
+            info.context.user, "read", "Secrets", org, True
+        ) or not user_has_permission(
+            info.context.user, "read", "Environments", org, True
+        ):
+            raise GraphQLError("You don't have access to read secrets")
+
+        if not user_can_access_environment(info.context.user.userId, self.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        filter = {"environment": self, "deleted_at": None}
+
+        if path:
+            filter["path"] = path
+
+        return Secret.objects.filter(**filter).order_by("-created_at")
+
+    def resolve_folders(self, info, path=None):
+        if not user_can_access_environment(info.context.user.userId, self.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        filter = {"environment": self}
+
+        if path:
+            filter["path"] = path
+
+        return SecretFolder.objects.filter(**filter).order_by("created_at")
 
     def resolve_folder_count(self, info):
         return SecretFolder.objects.filter(environment=self).count()
@@ -566,135 +728,10 @@ class ServiceTokenType(DjangoObjectType):
         )
 
 
-class SecretFolderType(DjangoObjectType):
-    folder_count = graphene.Int()
-    secret_count = graphene.Int()
-
-    class Meta:
-        model = SecretFolder
-        fields = (
-            "id",
-            "environment",
-            "path",
-            "name",
-            "created_at",
-            "updated_at",
-        )
-
-    def resolve_folder_count(self, info):
-        return SecretFolder.objects.filter(folder=self).count()
-
-    def resolve_secret_count(self, info):
-        return Secret.objects.filter(folder=self).count()
-
-
 class SecretTagType(DjangoObjectType):
     class Meta:
         model = SecretTag
         fields = ("id", "name", "color")
-
-
-class SecretEventType(DjangoObjectType):
-    class Meta:
-        model = SecretEvent
-        fields = (
-            "id",
-            "secret",
-            "key",
-            "value",
-            "version",
-            "tags",
-            "comment",
-            "event_type",
-            "timestamp",
-            "user",
-            "service_token",
-            "service_account",
-            "service_account_token",
-            "ip_address",
-            "user_agent",
-            "environment",
-            "path",
-        )
-
-    def resolve_user(self, info):
-        # Resolve if the user has either Org or App member read permissions
-        if user_has_permission(
-            info.context.user,
-            "read",
-            "Members",
-            self.secret.environment.app.organisation,
-            True,
-        ) or user_has_permission(
-            info.context.user,
-            "read",
-            "Members",
-            self.secret.environment.app.organisation,
-            False,
-        ):
-            return self.user
-
-    def resolve_service_account(self, info):
-        if self.service_account_token:
-            return self.service_account_token.service_account
-
-
-class PersonalSecretType(DjangoObjectType):
-    class Meta:
-        model = PersonalSecret
-        fields = (
-            "id",
-            "secret",
-            "user",
-            "value",
-            "is_active",
-            "created_at",
-            "updated_at",
-        )
-
-
-class SecretType(DjangoObjectType):
-    history = graphene.List(SecretEventType)
-    override = graphene.Field(PersonalSecretType)
-
-    class Meta:
-        model = Secret
-        fields = (
-            "id",
-            "key",
-            "value",
-            "folder",
-            "path",
-            "version",
-            "tags",
-            "comment",
-            "created_at",
-            "updated_at",
-            "history",
-            "override",
-            "environment",
-        )
-        # interfaces = (relay.Node, )
-
-    def resolve_history(self, info):
-        return SecretEvent.objects.filter(
-            secret_id=self.id, event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE]
-        ).order_by("timestamp")
-
-    def resolve_override(self, info):
-        if info.context.user:
-            org = self.environment.app.organisation
-            org_member = OrganisationMember.objects.get(
-                organisation=org, user=info.context.user, deleted_at=None
-            )
-
-            try:
-                override = PersonalSecret.objects.get(secret=self, user=org_member)
-
-                if override is not None:
-                    return override
-            except:
-                return None
 
 
 class KMSLogType(ObjectType):

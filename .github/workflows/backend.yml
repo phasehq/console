@@ -17,6 +17,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install -r dev-requirements.txt
+
+      - name: Run tests
+        run: |
+          cd backend
+          pytest tests/ -v
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -33,6 +50,19 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate tags
+        id: meta
+        run: |
+          if [[ "${{ inputs.is_pr }}" == "true" ]]; then
+            # PR build - staging image with commit hash as version tag
+            echo "DOCKER_TAGS=phasehq/backend-staging:${{ inputs.version }}" >> $GITHUB_ENV
+            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/backend-staging:${{ inputs.version }}" >> $GITHUB_ENV
+          else
+            # Release build - production image with version (vX.XX.XX) and :latest tags
+            echo "DOCKER_TAGS=phasehq/backend:${{ inputs.version }},phasehq/backend:latest" >> $GITHUB_ENV
+            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/backend:${{ inputs.version }},ghcr.io/${{ github.repository }}/backend:latest" >> $GITHUB_ENV
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
@@ -40,7 +70,7 @@ jobs:
           push: true
           platforms: ${{ inputs.is_pr == 'true' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           tags: |
-            ${{ inputs.is_pr == 'true' && 'phasehq/backend-staging' || 'phasehq/backend' }}:${{ inputs.version }}
-            ghcr.io/${{ github.repository }}/${{ inputs.is_pr == 'true' && 'backend-staging' || 'backend' }}:${{ inputs.version }}
+            ${{ env.DOCKER_TAGS }}
+            ${{ env.GHCR_TAGS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

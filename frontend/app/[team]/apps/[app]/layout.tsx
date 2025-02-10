@@ -11,7 +11,7 @@ import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaLock, FaServer } from 'react-icons/fa'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
-import { EncryptionModeIndicator } from '@/components/apps/EncryptionModeIndicator'
+import CopyButton from '@/components/common/CopyButton'
 
 export default function AppLayout({
   params,
@@ -71,17 +71,20 @@ export default function AppLayout({
 
   return (
     <div
-      className="w-full p-8 pb-0 text-black dark:text-white flex flex-col oveflow-y-auto"
+      className="w-full p-8 pb-0 text-black dark:text-white flex flex-col overflow-y-auto"
       style={{ height: 'calc(100vh - 64px)' }}
     >
       {loading && (
         <div className="dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
       {app && (
-        <div className="flex items-center gap-2 pb-8">
+        <div className="flex items-baseline gap-3 pb-6 group">
           <h1 className="text-3xl font-bold">{app.name}</h1>
-
-          <EncryptionModeIndicator app={app} />
+          <div className="opacity-0 group-hover:opacity-100 transition ease">
+            <CopyButton value={app.id} buttonVariant="ghost">
+              <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
+            </CopyButton>
+          </div>
         </div>
       )}
 

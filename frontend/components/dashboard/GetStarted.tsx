@@ -153,8 +153,9 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     setShowGuide(true)
     clearLocalStorageKey()
   }
-
-  const appCreated = data?.apps.length > 0
+  // Don't count the example app setup during on-boarding
+  const userApps = data?.apps.filter((app: AppType) => app.name !== 'example-app')
+  const appCreated = userApps?.length > 0
 
   const cliSetup = data?.userTokens.length > 0
 
@@ -285,7 +286,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     )}
                   >
                     {appCreated ? <FaCheckCircle /> : <FaRegCircle />}
-                    Create an App
+                    Create a new App
                   </div>
                   {!appCreated && (
                     <div className="flex gap-4">

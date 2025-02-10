@@ -48,6 +48,19 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate tags
+        id: meta
+        run: |
+          if [[ "${{ inputs.is_pr }}" == "true" ]]; then
+            # PR build - staging image with commit hash as version tag
+            echo "DOCKER_TAGS=phasehq/frontend-staging:${{ inputs.version }}" >> $GITHUB_ENV
+            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/frontend-staging:${{ inputs.version }}" >> $GITHUB_ENV
+          else
+            # Release build - production image with version (vX.XX.XX) and :latest tags
+            echo "DOCKER_TAGS=phasehq/frontend:${{ inputs.version }},phasehq/frontend:latest" >> $GITHUB_ENV
+            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/frontend:${{ inputs.version }},ghcr.io/${{ github.repository }}/frontend:latest" >> $GITHUB_ENV
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
@@ -55,7 +68,7 @@ jobs:
           push: true
           platforms: ${{ inputs.is_pr == 'true' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           tags: |
-            ${{ inputs.is_pr == 'true' && 'phasehq/frontend-staging' || 'phasehq/frontend' }}:${{ inputs.version }}
-            ghcr.io/${{ github.repository }}/${{ inputs.is_pr == 'true' && 'frontend-staging' || 'frontend' }}:${{ inputs.version }}
+            ${{ env.DOCKER_TAGS }}
+            ${{ env.GHCR_TAGS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

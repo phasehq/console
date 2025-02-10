@@ -1,15 +1,20 @@
-import React, { useEffect, useState } from 'react'
+import React, { ReactNode, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { FaCopy } from 'react-icons/fa'
+import { Button, ButtonVariant } from './Button'
 
 type CopyButtonProps = {
   value: string
   defaultHidden?: boolean
+  children?: ReactNode
+  buttonVariant?: ButtonVariant
 }
 
-const CopyButton: React.FC<CopyButtonProps> = ({ value, defaultHidden }) => {
+const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant }) => {
   const [copyCount, setCopyCount] = useState(0)
   const copied = copyCount > 0
+
+  const variant = buttonVariant || 'outline'
 
   useEffect(() => {
     if (copyCount > 0) {
@@ -21,41 +26,41 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, defaultHidden }) => {
   }, [copyCount])
 
   return (
-    <button
-      type="button"
-      className={clsx(
-        ' overflow-hidden rounded-full py-1 pl-2 pr-3 text-2xs font-medium backdrop-blur transition focus:opacity-100 group-hover:opacity-100',
-        defaultHidden === false ? 'opacity-100' : 'opacity-0',
-        copied
-          ? 'bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20'
-          : 'bg-zinc-800 dark:hover:bg-zinc-700'
-      )}
+    <Button
+      variant={variant}
+      title="Copy to clipboard"
       onClick={() => {
         window.navigator.clipboard.writeText(value).then(() => {
           setCopyCount((count) => count + 1)
         })
       }}
     >
-      <span
-        aria-hidden={copied}
-        className={clsx(
-          'pointer-events-none flex items-center gap-0.5 text-zinc-400 transition duration-300',
-          copied && '-translate-y-1.5 opacity-0'
-        )}
-      >
-        <FaCopy className="h-4 w-4 transition-colors" />
-        Copy
-      </span>
-      <span
-        aria-hidden={!copied}
-        className={clsx(
-          'pointer-events-none absolute inset-0 flex items-center justify-center text-emerald-400 transition duration-300',
-          !copied && 'translate-y-1.5 opacity-0'
-        )}
-      >
-        Copied!
-      </span>
-    </button>
+      <div className="relative flex items-center justify-center">
+        <div
+          aria-hidden={copied}
+          className={clsx(
+            'pointer-events-none  transition duration-300',
+            copied && '-translate-y-1.5 opacity-0'
+          )}
+        >
+          {children || (
+            <div className="flex items-center gap-0.5">
+              <FaCopy className="h-4 w-4 transition-colors" />
+              <span>Copy</span>
+            </div>
+          )}
+        </div>
+        <span
+          aria-hidden={!copied}
+          className={clsx(
+            'pointer-events-none absolute inset-0 flex items-center justify-center text-emerald-400 transition duration-300',
+            !copied && 'translate-y-1.5 opacity-0'
+          )}
+        >
+          Copied!
+        </span>
+      </div>
+    </Button>
   )
 }
 

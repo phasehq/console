@@ -272,6 +272,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                                     setRolePolicy={setRolePolicy}
                                     resource={resource}
                                     isAppResource={false}
+                                    disabled={!allowEdit}
                                   />
                                 </td>
 
