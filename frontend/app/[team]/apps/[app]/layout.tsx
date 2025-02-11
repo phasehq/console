@@ -12,6 +12,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { FaLock, FaServer } from 'react-icons/fa'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
 import CopyButton from '@/components/common/CopyButton'
+import OneClickTemporaryToken from '@/components/common/OneClickTemporaryToken'
 
 export default function AppLayout({
   params,
@@ -78,12 +79,31 @@ export default function AppLayout({
         <div className="dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
       {app && (
-        <div className="flex items-baseline gap-3 pb-6 group">
-          <h1 className="text-3xl font-bold">{app.name}</h1>
-          <div className="opacity-0 group-hover:opacity-100 transition ease">
-            <CopyButton value={app.id} buttonVariant="ghost">
-              <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
-            </CopyButton>
+        <div className="flex items-baseline justify-between pb-6">
+          <div className="flex items-baseline gap-3 group">
+            <h1 className="text-3xl font-bold">{app.name}</h1>
+            <div className="opacity-0 group-hover:opacity-100 transition ease">
+              <CopyButton value={app.id} buttonVariant="ghost">
+                <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
+              </CopyButton>
+            </div>
+          </div>
+          <div className="flex flex-col items-end">
+            <OneClickTemporaryToken
+              organisationId={organisation!.id}
+              appId={app.id}
+              placeholder={`phase secrets list`}
+              size="sm"
+              label="CLI Access:"
+              type="cli"
+            />
+            <OneClickTemporaryToken
+              organisationId={organisation!.id}
+              appId={app.id}
+              size="sm"
+              label="REST API Access:"
+              type="api"
+            />
           </div>
         </div>
       )}
