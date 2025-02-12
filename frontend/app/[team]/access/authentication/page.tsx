@@ -3,7 +3,7 @@
 import { RevokeUserToken } from '@/graphql/mutations/users/deleteUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
 import { ServiceTokenType, UserTokenType } from '@/apollo/graphql'
-import { useLazyQuery, useMutation } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useState, useEffect, useContext, Fragment } from 'react'
 import { Button } from '@/components/common/Button'
 import { FaKey, FaTimes, FaTrashAlt, FaUserSecret } from 'react-icons/fa'
@@ -17,13 +17,19 @@ import { Avatar } from '@/components/common/Avatar'
 import { FaUserShield } from 'react-icons/fa6'
 
 export default function UserTokens({ params }: { params: { team: string } }) {
-  const [getUserTokens, { data: userTokensData }] = useLazyQuery(GetUserTokens)
-
   const [deleteUserToken] = useMutation(RevokeUserToken)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const organisationId = organisation?.id
+
+  const { data: userTokensData } = useQuery(GetUserTokens, {
+    variables: {
+      organisationId,
+    },
+    skip: !organisation,
+    fetchPolicy: 'cache-and-network',
+  })
 
   const handleDeleteUserToken = async (tokenId: string) => {
     await deleteUserToken({
@@ -38,16 +44,6 @@ export default function UserTokens({ params }: { params: { team: string } }) {
       ],
     })
   }
-
-  useEffect(() => {
-    if (organisationId) {
-      getUserTokens({
-        variables: {
-          organisationId,
-        },
-      })
-    }
-  }, [getUserTokens, organisationId])
 
   const userTokens =
     [...(userTokensData?.userTokens || [])].sort((a: UserTokenType, b: UserTokenType) => {
@@ -75,7 +71,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
         <div className="flex items-center justify-center">
           <Button variant="danger" onClick={openModal} title="Delete Token">
             <div className="text-white dark:text-red-500 flex items-center gap-1">
-              <FaTrashAlt /> Revoke
+              <FaTrashAlt /> Delete
             </div>
           </Button>
         </div>

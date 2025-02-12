@@ -1,26 +1,31 @@
 'use client'
 
-import { useContext, useState, useEffect } from 'react'
+import { useContext, useState, useEffect, Dispatch, SetStateAction } from 'react'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { getUserKxPublicKey, getUserKxPrivateKey, generateUserToken } from '@/utils/crypto'
-import { getUnixTimeStampinFuture } from '@/utils/time'
-import { Button } from './Button'
+import { getUnixTimeStampinFuture, relativeTimeFromDates } from '@/utils/time'
+
 import clsx from 'clsx'
+import { Button } from '../common/Button'
+import { CommandAuth, CommandType, generateCommand } from '@/utils/contextSnippets'
+import { getApiHost } from '@/utils/appConfig'
 
 type Size = 'sm' | 'md' | 'lg'
-type CommandType = 'cli' | 'api'
 
-interface OneClickTemporaryTokenProps {
+interface SecretsOneLinerProps {
   organisationId: string
-  appId?: string
+  appId: string
   env?: string
+  path?: string
   placeholder?: string
   size?: Size
   label?: string
   type?: CommandType
+  auth: CommandAuth | null
+  setAuth: Dispatch<SetStateAction<CommandAuth | null>>
 }
 
 const sizeClasses: Record<Size, string> = {
@@ -29,7 +34,7 @@ const sizeClasses: Record<Size, string> = {
   lg: 'text-base',
 }
 
-const StyledCommand: React.FC<{ command: string }> = ({ command }) => {
+const StyledCommand = ({ command }: { command: string }) => {
   // Split the command into parts for highlighting
   const parts = command.split(' ')
   return (
@@ -67,20 +72,21 @@ const StyledCommand: React.FC<{ command: string }> = ({ command }) => {
   )
 }
 
-const OneClickTemporaryToken: React.FC<OneClickTemporaryTokenProps> = ({
+const SecretsOneLiner = ({
   organisationId,
   appId,
   env = 'development',
+  path = '',
   placeholder = 'phase secrets list',
   size = 'md',
   label,
   type = 'cli',
-}) => {
+  auth,
+  setAuth,
+}: SecretsOneLinerProps) => {
   const { keyring } = useContext(KeyringContext)
   const [createUserToken] = useMutation(CreateNewUserToken)
-  const [token, setToken] = useState<string | null>(null)
-  const [apiToken, setApiToken] = useState<string | null>(null)
-  const [tokenExpiry, setTokenExpiry] = useState<number | null>(null)
+
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -90,40 +96,23 @@ const OneClickTemporaryToken: React.FC<OneClickTemporaryTokenProps> = ({
     }
   }, [copied])
 
-  useEffect(() => {
-    if (tokenExpiry && Date.now() > tokenExpiry) {
-      setToken(null)
-      setApiToken(null)
-      setTokenExpiry(null)
-    }
-  }, [tokenExpiry])
+  /**
+   * Returns a valid pair of tokens and an expiry unix timestamp.
+   * If valid tokens exist in the parent's state with more than 1 minute of validity, they are simply returned.
+   * Otherwise, a new set of tokens is created, set in the parent state and then returned.
+   *
+   * @returns {<CommandAuth | undefined>}
+   */
+  const getOrCreateTokens = async (): Promise<CommandAuth | undefined> => {
+    const expiryBufferMinutes = 1
 
-  const generateAndCopyToken = async () => {
     try {
-      // If we have a valid token, just copy it
-      if (token && apiToken && tokenExpiry && Date.now() < tokenExpiry) {
-        const command =
-          type === 'cli'
-            ? [
-                'PHASE_VERIFY_SSL=False',
-                'PHASE_HOST=https://localhost',
-                `PHASE_SERVICE_TOKEN=${token}`,
-                'phase secrets list',
-                `    --app-id ${appId}${env ? ` \\\n    --env ${env}` : ''}`,
-              ].join(' \\\n')
-            : [
-                'curl \\',
-                '    --request GET \\',
-                `    --url 'https://localhost/service/public/v1/secrets/?app_id=${appId}&env=${env}' \\`,
-                `    --header 'Authorization: Bearer ${apiToken}' \\`,
-                '    -k \\',
-                '    | jq .',
-              ].join('\n')
-        await navigator.clipboard.writeText(command)
-        setCopied(true)
-        return
+      // If we have a valid token with more than 1 minute remaining, return it
+      if (auth && getUnixTimeStampinFuture(0, 0, expiryBufferMinutes) < auth.expiry) {
+        return auth
       }
 
+      // Generate a new token
       if (!keyring) {
         toast.error('Keyring unavailable')
         return
@@ -149,55 +138,75 @@ const OneClickTemporaryToken: React.FC<OneClickTemporaryTokenProps> = ({
       })
 
       const newApiToken = `User ${mutationPayload.token}`
-      setToken(pssUser)
-      setApiToken(newApiToken)
-      setTokenExpiry(expiry)
 
-      const command =
-        type === 'cli'
-          ? [
-              'PHASE_VERIFY_SSL=False',
-              'PHASE_HOST=https://localhost',
-              `PHASE_SERVICE_TOKEN=${pssUser}`,
-              'phase secrets list',
-              `    --app-id ${appId}${env ? ` \\\n    --env ${env}` : ''}`,
-            ].join(' \\\n')
-          : [
-              'curl \\',
-              '    --request GET \\',
-              `    --url 'https://localhost/service/public/v1/secrets/?app_id=${appId}&env=${env}' \\`,
-              `    --header 'Authorization: Bearer ${newApiToken}' \\`,
-              '    -k \\',
-              '    | jq .',
-            ].join('\n')
-      await navigator.clipboard.writeText(command)
-      setCopied(true)
-      toast.info('Generated temporary token (expires in 5 minutes)', { autoClose: 3000 })
+      const newAuth = {
+        cliToken: pssUser,
+        apiToken: newApiToken,
+        expiry,
+      }
+
+      setAuth(newAuth)
+
+      return newAuth
     } catch (error) {
       console.error('Error generating token:', error)
       toast.error('Failed to generate token')
     }
   }
 
-  const containerClasses = clsx(
-    'flex items-center gap-2 shrink-0',
-    label ? 'justify-end' : 'justify-end'
-  )
+  /**
+   * Generates a copy-able command by first getting a set of valid tokens, then generating the command based on:
+   * - command type
+   * - auth token
+   * - appId
+   * - env
+   * - path
+   *
+   * The generated command is copied to the clipboard, and a toast is drawn indicating the remaining expiry on the auth
+   */
+  const generateAndCopyCommand = async () => {
+    try {
+      const tokens = await getOrCreateTokens()
+      if (!tokens) {
+        throw new Error('Failed to get or create tokens')
+      }
+      const { cliToken, apiToken, expiry } = tokens
+
+      const authToken = type === 'cli' ? cliToken : apiToken
+      const authExpiry = relativeTimeFromDates(new Date(expiry))
+
+      const command = generateCommand(type, authToken, appId, env, path)
+
+      await navigator.clipboard.writeText(command)
+      setCopied(true)
+      toast.info(`Generated command expires ${authExpiry}`, {
+        autoClose: 5000,
+      })
+    } catch (error) {
+      console.error('Error generating command:', error)
+      toast.error('Failed to copy command')
+    }
+  }
 
   const displayPlaceholder =
-    type === 'cli' ? placeholder : `curl -G https://api.phase.dev/v1/secrets | jq .`
+    type === 'cli' ? placeholder : `curl -G ${getApiHost()}/v1/secrets | jq .`
 
   return (
-    <div className={containerClasses}>
+    <div className="flex items-center gap-2 shrink-0 justify-between group">
       {label && (
-        <span className={clsx('text-neutral-500 whitespace-nowrap', sizeClasses[size])}>
+        <span
+          className={clsx(
+            'text-neutral-500 group-hover:text-neutral-600 dark:group-hover:text-neutral-400 transition ease whitespace-nowrap font-semibold tracking-widest ml-2',
+            sizeClasses[size]
+          )}
+        >
           {label}
         </span>
       )}
       <Button
         variant="ghost"
-        onClick={generateAndCopyToken}
-        title="Click to generate and copy command with temporary token"
+        onClick={generateAndCopyCommand}
+        title="Click to generate and copy command with a temporary token"
         classString={sizeClasses[size]}
       >
         <div className="relative flex items-center justify-center">
@@ -225,4 +234,4 @@ const OneClickTemporaryToken: React.FC<OneClickTemporaryTokenProps> = ({
   )
 }
 
-export default OneClickTemporaryToken
+export default SecretsOneLiner

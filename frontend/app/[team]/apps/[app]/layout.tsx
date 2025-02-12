@@ -9,10 +9,8 @@ import { AppType } from '@/apollo/graphql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
-import { FaLock, FaServer } from 'react-icons/fa'
-import { FaArrowDownUpLock } from 'react-icons/fa6'
 import CopyButton from '@/components/common/CopyButton'
-import OneClickTemporaryToken from '@/components/common/OneClickTemporaryToken'
+import { ProgrammaticAccessMenu } from '@/components/contextSnippets/ProgrammaticAccessMenu'
 
 export default function AppLayout({
   params,
@@ -88,22 +86,8 @@ export default function AppLayout({
               </CopyButton>
             </div>
           </div>
-          <div className="flex flex-col items-end">
-            <OneClickTemporaryToken
-              organisationId={organisation!.id}
-              appId={app.id}
-              placeholder={`phase secrets list`}
-              size="sm"
-              label="CLI Access:"
-              type="cli"
-            />
-            <OneClickTemporaryToken
-              organisationId={organisation!.id}
-              appId={app.id}
-              size="sm"
-              label="REST API Access:"
-              type="api"
-            />
+          <div>
+            <ProgrammaticAccessMenu />
           </div>
         </div>
       )}
