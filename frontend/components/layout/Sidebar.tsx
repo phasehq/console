@@ -86,8 +86,8 @@ const Sidebar = () => {
   // Add window resize handler
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth <= 930) {
-        // Collapse on screens <= 930x to accommodate split-screen layouts on larger displays
+      if (window.innerWidth <= 950) {
+        // Collapse on screens <= 950x to accommodate split-screen layouts on larger displays
         setSidebarState('collapsed')
       }
     }
