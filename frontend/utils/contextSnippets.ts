@@ -27,5 +27,4 @@ export const generateCommand = (
         '    --request GET \\',
         `    --url '${getApiHost()}/v1/secrets/?app_id=${appId}&env=${env}${path !== '' ? `&path=${path}` : ''}' \\`,
         `    --header 'Authorization: Bearer ${authToken}' \\`,
-        '    -k \\',
       ].join('\n')
