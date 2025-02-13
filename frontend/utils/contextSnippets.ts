@@ -17,7 +17,6 @@ export const generateCommand = (
 ) =>
   commandType === 'cli'
     ? [
-        'PHASE_VERIFY_SSL=False',
         `PHASE_HOST=${getHostname()}`,
         `PHASE_SERVICE_TOKEN=${authToken}`,
         'phase secrets list',
@@ -29,5 +28,4 @@ export const generateCommand = (
         `    --url '${getApiHost()}/v1/secrets/?app_id=${appId}&env=${env}${path !== '' ? `&path=${path}` : ''}' \\`,
         `    --header 'Authorization: Bearer ${authToken}' \\`,
         '    -k \\',
-        '    | jq .',
       ].join('\n')
