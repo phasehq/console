@@ -14,7 +14,7 @@ type RouteParams = {
   team: string
   app: string
   environment: string | undefined
-  path: string | undefined
+  path: string[] | undefined
 }
 
 export const ProgrammaticAccessMenu = () => {
@@ -25,12 +25,23 @@ export const ProgrammaticAccessMenu = () => {
   const [auth, setAuth] = useState<CommandAuth | null>(null)
 
   const envs: EnvironmentType[] = appEnvsData?.appEnvironments ?? []
-  const env = environment ? envs?.find((env) => env.id === environment) : undefined
+  const env = environment
+    ? envs?.find((env) => env.id === environment)
+    : envs?.length > 0
+      ? envs[0]
+      : undefined
+
+  const pathString = path?.join('/')
+  const displayPathString = pathString
+    ? pathString?.length < 25
+      ? pathString
+      : `.../${path![path!.length - 1]}`
+    : ''
 
   useEffect(() => {
-    if (app && environment) getAppEnvs({ variables: { appId: app } })
+    if (app) getAppEnvs({ variables: { appId: app } })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app, environment])
+  }, [app])
 
   if (!app || !organisation) return <></>
 
@@ -53,41 +64,72 @@ export const ProgrammaticAccessMenu = () => {
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className="absolute w-[40rem] z-20 mt-2 right-0 origin-top-right focus:outline-none"
+            className="absolute w-full min-w-[40rem] z-20 mt-2 right-0 origin-top-right focus:outline-none"
           >
             <Menu.Items as={Fragment}>
-              <div className="divide-y divide-neutral-500/20 p-2 rounded-md bg-neutral-100/40 dark:bg-neutral-500/10 backdrop-blur-sm shadow-lg ring-1 ring-inset ring-neutral-500/40">
-                <Menu.Item>
-                  <div className="py-1">
-                    <SecretsOneLiner
-                      organisationId={organisation!.id}
-                      appId={app}
-                      env={env?.name}
-                      path={path || ''}
-                      placeholder={`phase secrets list`}
-                      size="sm"
-                      label="CLI"
-                      type="cli"
-                      auth={auth}
-                      setAuth={setAuth}
-                    />
+              <div className="rounded-md bg-neutral-100/40 dark:bg-neutral-500/10 backdrop-blur-sm shadow-lg ring-1 ring-inset p-px ring-neutral-500/40">
+                <div className="p-2 flex items-center justify-between bg-neutral-100 dark:bg-neutral-900 rounded-t-md whitespace-nowrap">
+                  <div className="text-neutral-800 dark:text-neutral-200 text-xs font-semibold ">
+                    One-click secret access
                   </div>
-                </Menu.Item>
-                <Menu.Item>
-                  <div className="py-1">
-                    <SecretsOneLiner
-                      organisationId={organisation!.id}
-                      appId={app}
-                      env={env?.name}
-                      path={path || ''}
-                      size="sm"
-                      label="REST API"
-                      type="api"
-                      auth={auth}
-                      setAuth={setAuth}
-                    />
+                  <div className="flex items-center gap-2 text-xs">
+                    <div>
+                      <span className="text-zinc-500">app: </span>
+                      <span className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold">
+                        {env?.app.name}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-zinc-500">env: </span>
+                      <span className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold">
+                        {env?.name}
+                      </span>
+                    </div>
+
+                    <div>
+                      {pathString && <span className="text-zinc-500">path: </span>}
+                      <span className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold overflow-hidden text-ellipsis">
+                        {displayPathString}
+                      </span>
+                    </div>
                   </div>
-                </Menu.Item>
+                </div>
+                <div className="divide-y divide-neutral-500/20 p-2">
+                  <Menu.Item>
+                    <div className="py-1">
+                      <SecretsOneLiner
+                        organisationId={organisation!.id}
+                        appId={app}
+                        appName={env?.app.name || ''}
+                        env={env?.name}
+                        path={pathString || ''}
+                        placeholder={`phase secrets list`}
+                        size="sm"
+                        label="CLI"
+                        type="cli"
+                        auth={auth}
+                        setAuth={setAuth}
+                      />
+                    </div>
+                  </Menu.Item>
+                  <Menu.Item>
+                    <div className="py-1">
+                      <SecretsOneLiner
+                        organisationId={organisation!.id}
+                        appId={app}
+                        appName={env?.app.name || ''}
+                        env={env?.name}
+                        path={pathString || ''}
+                        size="sm"
+                        label="REST API"
+                        type="api"
+                        auth={auth}
+                        setAuth={setAuth}
+                      />
+                    </div>
+                  </Menu.Item>
+                </div>
               </div>
             </Menu.Items>
           </Transition>
