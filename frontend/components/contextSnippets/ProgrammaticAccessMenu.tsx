@@ -74,7 +74,7 @@ export const ProgrammaticAccessMenu = () => {
                       One-click secret access
                     </div>
                     <div className="text-neutral-500 text-2xs whitespace-nowrap">
-                      Generate token & commands along with <code>app</code>, <code>env</code> and <code>path</code> context
+                      Generate token & commands along with app, env and path context
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs flex-shrink-0">
