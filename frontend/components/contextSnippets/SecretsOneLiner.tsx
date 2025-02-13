@@ -178,7 +178,7 @@ const SecretsOneLiner = ({
       const authToken = type === 'cli' ? cliToken : apiToken
       const authExpiry = relativeTimeFromDates(new Date(expiry))
 
-      const command = generateCommand(type, authToken, appId, env, path)
+      const command = generateCommand(type, authToken, appId, env, path, authExpiry)
 
       await navigator.clipboard.writeText(command)
       setCopied(true)
