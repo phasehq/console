@@ -1,4 +1,4 @@
-import { getApiHost } from './appConfig'
+import { getApiHost, getHostname } from './appConfig'
 
 export type CommandAuth = {
   cliToken: string
@@ -18,7 +18,7 @@ export const generateCommand = (
   commandType === 'cli'
     ? [
         'PHASE_VERIFY_SSL=False',
-        'PHASE_HOST=https://localhost',
+        `PHASE_HOST=${getHostname()}`,
         `PHASE_SERVICE_TOKEN=${authToken}`,
         'phase secrets list',
         `    --app-id ${appId}${env ? ` \\\n    --env ${env}` : ''}${path !== '' ? ` \\\n    --path ${path}` : ''}`,
