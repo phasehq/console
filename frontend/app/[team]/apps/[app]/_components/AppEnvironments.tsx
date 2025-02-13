@@ -14,7 +14,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useContext } from 'react'
 import { BsListColumnsReverse } from 'react-icons/bs'
-import { FaArrowRight, FaBan, FaExchangeAlt } from 'react-icons/fa'
+import { FaArrowRight, FaBan, FaExchangeAlt, FaFolder, FaKey } from 'react-icons/fa'
 import { EmptyState } from '@/components/common/EmptyState'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
 
@@ -87,7 +87,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
           )}
         </div>
       </div>
-      <div className="grid grid-cols-4 gap-4 py-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 py-4">
         {appEnvironments?.map((env: EnvironmentType, index: number) => (
           <Card key={env.id}>
             <div className="group">
@@ -95,12 +95,19 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                 <div className="pt-1.5">
                   <BsListColumnsReverse className="text-black dark:text-white text-2xl" />
                 </div>
-                <div className="space-y-6 w-full">
-                  <div className="flex items-start justify-between">
-                    <Link href={`${pathname}/environments/${env.id}`} className="group">
-                      <div className="font-semibold text-lg">{env.name}</div>
-                      <div className="text-neutral-500">
-                        {env.secretCount} secrets across {env.folderCount} folders
+                <div className="space-y-6 w-full min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <Link href={`${pathname}/environments/${env.id}`} className="group min-w-0">
+                      <div className="font-semibold text-lg truncate">{env.name}</div>
+                      <div className="text-neutral-500 flex items-center gap-3">
+                        <div className="flex items-center gap-1.5" title={`${env.secretCount} secrets`}>
+                          <FaKey className="text-sm" />
+                          <span>{env.secretCount}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5" title={`${env.folderCount} folders`}>
+                          <FaFolder className="text-sm" />
+                          <span>{env.folderCount}</span>
+                        </div>
                       </div>
                     </Link>
                     <ManageEnvironmentDialog environment={env} />
