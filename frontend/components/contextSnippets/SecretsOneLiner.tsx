@@ -18,6 +18,7 @@ type Size = 'sm' | 'md' | 'lg'
 interface SecretsOneLinerProps {
   organisationId: string
   appId: string
+  appName: string
   env?: string
   path?: string
   placeholder?: string
@@ -29,9 +30,9 @@ interface SecretsOneLinerProps {
 }
 
 const sizeClasses: Record<Size, string> = {
-  sm: 'text-xs',
-  md: 'text-sm',
-  lg: 'text-base',
+  sm: 'text-2xs',
+  md: 'text-xs',
+  lg: 'text-sm',
 }
 
 const StyledCommand = ({ command }: { command: string }) => {
@@ -75,6 +76,7 @@ const StyledCommand = ({ command }: { command: string }) => {
 const SecretsOneLiner = ({
   organisationId,
   appId,
+  appName,
   env = 'development',
   path = '',
   placeholder = 'phase secrets list',
@@ -125,11 +127,12 @@ const SecretsOneLiner = ({
 
       // Set expiry to 5 minutes from now
       const expiry = getUnixTimeStampinFuture(0, 0, 5)
+      const tokenName = `one click temporary token for ${appName}:${env}`.slice(0, 64)
 
       const { pssUser, mutationPayload } = await generateUserToken(
         organisationId,
         userKxKeys,
-        'one click temporary token',
+        tokenName,
         expiry
       )
 
