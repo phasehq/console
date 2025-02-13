@@ -192,7 +192,7 @@ const SecretsOneLiner = ({
   }
 
   const displayPlaceholder =
-    type === 'cli' ? placeholder : `curl -G ${getApiHost()}/v1/secrets | jq .`
+    type === 'cli' ? placeholder : `curl -G ${getApiHost()}/v1/secrets`
 
   return (
     <div className="flex items-center gap-2 shrink-0 justify-between group">
