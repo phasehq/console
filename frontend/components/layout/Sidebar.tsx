@@ -17,7 +17,7 @@ import {
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
-import { Fragment, useContext } from 'react'
+import { Fragment, useContext, useEffect } from 'react'
 import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
@@ -82,6 +82,25 @@ const Sidebar = () => {
   const { organisations, activeOrganisation } = useContext(organisationContext)
   const showOrgsMenu = organisations && organisations.length > 1
   const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
+
+  // Add window resize handler
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth <= 930) {
+        // Collapse on screens <= 930x to accommodate split-screen layouts on larger displays
+        setSidebarState('collapsed')
+      }
+    }
+
+    // Initial check
+    handleResize()
+
+    // Add event listener
+    window.addEventListener('resize', handleResize) 
+
+    // Cleanup
+    return () => window.removeEventListener('resize', handleResize)
+  }, [setSidebarState])
 
   const OrgsMenu = () => {
     const planStyle = () => {
