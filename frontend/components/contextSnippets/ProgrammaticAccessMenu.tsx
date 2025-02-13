@@ -69,34 +69,27 @@ export const ProgrammaticAccessMenu = () => {
             <Menu.Items as={Fragment}>
               <div className="rounded-md bg-neutral-100/40 dark:bg-neutral-500/10 backdrop-blur-sm shadow-lg ring-1 ring-inset p-px ring-neutral-500/40">
                 <div className="p-2 flex items-start justify-between bg-neutral-100 dark:bg-neutral-900 rounded-t-md">
-                  <div className="flex-shrink-0 -space-y-1 max-w-[12rem]">
+                  <div className="flex-shrink-0 space-y-1 w-full">
                     <div className="text-neutral-800 dark:text-neutral-200 text-xs font-semibold truncate">
                       One-click secret access
                     </div>
-                    <div className="text-neutral-500 text-2xs whitespace-nowrap">
-                      Generate token & commands along with app, env and path context
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs flex-shrink-0 ml-4">
-                    <div className="flex items-center flex-shrink-0">
-                      <span className="text-zinc-500 flex-shrink-0 mr-0.5">app: </span>
-                      <span className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold max-w-[8rem] truncate block">
+                    <div className="text-neutral-500 text-2xs break-words">
+                      Generate a command + token one-liner to fetch secrets from app:{' '}
+                      <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
                         {env?.app.name}
                       </span>
-                    </div>
-
-                    <div className="flex-shrink-0">
-                      <span className="text-zinc-500">env: </span>
-                      <span className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold">
+                      {' '}in environment:{' '}
+                      <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
                         {env?.name}
                       </span>
-                    </div>
-
-                    <div className="flex items-center flex-shrink-0">
-                      {pathString && <span className="text-zinc-500 flex-shrink-0">path: </span>}
-                      <span className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold max-w-[8rem] truncate block">
-                        {displayPathString}
-                      </span>
+                      {pathString && (
+                        <>
+                          {' '}at path:{' '}
+                          <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
+                            {displayPathString}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
