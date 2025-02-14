@@ -125,7 +125,7 @@ export const ProgrammaticAccessMenu = () => {
                         type="api"
                         auth={auth}
                         setAuth={setAuth}
-                        requireSse={!appEnvsData.sseEnabled}
+                        requireSse={!appEnvsData?.sseEnabled}
                       />
                     </div>
                   </Menu.Item>
