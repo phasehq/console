@@ -99,14 +99,21 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                   <div className="flex items-start justify-between gap-2">
                     <Link href={`${pathname}/environments/${env.id}`} className="group min-w-0">
                       <div className="font-semibold text-lg truncate">{env.name}</div>
-                      <div className="text-neutral-500 flex items-center gap-3">
-                        <div className="flex items-center gap-1.5" title={`${env.secretCount} secrets`}>
-                          <FaKey className="text-sm" />
-                          <span>{env.secretCount}</span>
+                      <div className="text-neutral-500">
+                        {/* Text-based secrets and folder count on wider screens */}
+                        <div className="hidden md:block">
+                          {env.secretCount} secrets across {env.folderCount} folders
                         </div>
-                        <div className="flex items-center gap-1.5" title={`${env.folderCount} folders`}>
-                          <FaFolder className="text-sm" />
-                          <span>{env.folderCount}</span>
+                        {/* Icon-based secrets and folder count on narrower screens */}
+                        <div className="flex items-center gap-3 md:hidden">
+                          <div className="flex items-center gap-1.5" title={`${env.secretCount} secrets`}>
+                            <FaKey className="text-sm" />
+                            <span>{env.secretCount}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5" title={`${env.folderCount} folders`}>
+                            <FaFolder className="text-sm" />
+                            <span>{env.folderCount}</span>
+                          </div>
                         </div>
                       </div>
                     </Link>
