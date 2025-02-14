@@ -12,6 +12,7 @@ import clsx from 'clsx'
 import { Button } from '../common/Button'
 import { CommandAuth, CommandType, generateCommand } from '@/utils/contextSnippets'
 import { getApiHost } from '@/utils/appConfig'
+import { FaExclamationCircle } from 'react-icons/fa'
 
 type Size = 'sm' | 'md' | 'lg'
 
@@ -27,6 +28,7 @@ interface SecretsOneLinerProps {
   type?: CommandType
   auth: CommandAuth | null
   setAuth: Dispatch<SetStateAction<CommandAuth | null>>
+  requireSse?: boolean
 }
 
 const sizeClasses: Record<Size, string> = {
@@ -85,6 +87,7 @@ const SecretsOneLiner = ({
   type = 'cli',
   auth,
   setAuth,
+  requireSse,
 }: SecretsOneLinerProps) => {
   const { keyring } = useContext(KeyringContext)
   const [createUserToken] = useMutation(CreateNewUserToken)
@@ -191,19 +194,24 @@ const SecretsOneLiner = ({
     }
   }
 
-  const displayPlaceholder =
-    type === 'cli' ? placeholder : `curl -G ${getApiHost()}/v1/secrets`
+  const displayPlaceholder = type === 'cli' ? placeholder : `curl -G ${getApiHost()}/v1/secrets`
 
   return (
     <div className="flex items-center gap-2 shrink-0 justify-between group">
       {label && (
         <span
           className={clsx(
-            'text-neutral-500 group-hover:text-neutral-600 dark:group-hover:text-neutral-400 transition ease whitespace-nowrap font-semibold tracking-widest ml-2',
+            'text-neutral-500 group-hover:text-neutral-600 dark:group-hover:text-neutral-400 transition ease whitespace-nowrap font-semibold tracking-widest ml-2 flex items-center gap-2',
             sizeClasses[size]
           )}
         >
-          {label}
+          {label}{' '}
+          {requireSse && (
+            <FaExclamationCircle
+              className="text-amber-500"
+              title="You must enable SSE to access secrets over the REST API"
+            />
+          )}
         </span>
       )}
       <Button

@@ -77,14 +77,15 @@ export const ProgrammaticAccessMenu = () => {
                       Generate a command + token one-liner to fetch secrets from app:{' '}
                       <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
                         {env?.app.name}
-                      </span>
-                      {' '}in environment:{' '}
+                      </span>{' '}
+                      in environment:{' '}
                       <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
                         {env?.name}
                       </span>
                       {pathString && (
                         <>
-                          {' '}at path:{' '}
+                          {' '}
+                          at path:{' '}
                           <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
                             {displayPathString}
                           </span>
@@ -124,6 +125,7 @@ export const ProgrammaticAccessMenu = () => {
                         type="api"
                         auth={auth}
                         setAuth={setAuth}
+                        requireSse={!appEnvsData.sseEnabled}
                       />
                     </div>
                   </Menu.Item>
