@@ -101,11 +101,11 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                       <div className="font-semibold text-lg truncate">{env.name}</div>
                       <div className="text-neutral-500">
                         {/* Text-based secrets and folder count on wider screens */}
-                        <div className="hidden md:block">
+                        <div className="hidden lg:block">
                           {env.secretCount} secrets across {env.folderCount} folders
                         </div>
                         {/* Icon-based secrets and folder count on narrower screens */}
-                        <div className="flex items-center gap-3 md:hidden">
+                        <div className="flex items-center gap-3 lg:hidden">
                           <div className="flex items-center gap-1.5" title={`${env.secretCount} secrets`}>
                             <FaKey className="text-sm" />
                             <span>{env.secretCount}</span>
