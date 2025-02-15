@@ -689,3 +689,60 @@ class UpdateSyncAuthentication(graphene.Mutation):
         env_sync.save()
 
         return UpdateSyncAuthentication(sync=env_sync)
+
+
+class CreateCloudflareWorkersSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        worker_name = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        worker_name,
+    ):
+        service_id = "cloudflare_workers"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "worker_name": worker_name,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError(
+                    "A sync already exists for this Cloudflare Worker!"
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateCloudflareWorkersSync(sync=sync)
