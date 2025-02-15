@@ -1,0 +1,6 @@
+query GetCfWorkers($credentialId: ID!) {
+  cloudflareWorkers(credentialId: $credentialId) {
+    name
+    scriptId
+  }
+} 
