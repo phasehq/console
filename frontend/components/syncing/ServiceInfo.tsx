@@ -4,13 +4,19 @@ import { FaEyeSlash, FaLock } from 'react-icons/fa'
 export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
   const { sync } = props
 
-  if (sync.serviceInfo?.id?.includes('cloudflare')) {
+  if (sync.serviceInfo?.id?.includes('cloudflare_pages')) {
     return (
       <div className="flex gap-2">
         {JSON.parse(sync.options)['project_name']}
         <span className="text-neutral-500 font-normal">
           ({JSON.parse(sync.options)['environment']})
         </span>
+      </div>
+    )
+  } else if (sync.serviceInfo?.id?.includes('cloudflare_workers')) {
+    return (
+      <div className="flex gap-2">
+        {JSON.parse(sync.options)['worker_name']}
       </div>
     )
   } else if (sync.serviceInfo?.id?.includes('aws')) {
