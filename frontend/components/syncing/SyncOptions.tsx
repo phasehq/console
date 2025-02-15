@@ -45,7 +45,7 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
   const syncOptions =
     data?.services.map((service: ServiceType) => ({
       ...service,
-      ...{ icon: <ProviderIcon providerId={service.provider!.id} /> },
+      ...{ icon: <ProviderIcon providerId={service.id ?? ''} /> },
     })) ?? []
 
   return (

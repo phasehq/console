@@ -1,4 +1,5 @@
 from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
+from api.utils.syncing.cloudflare.workers import CloudflareWorkerType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
@@ -48,6 +49,7 @@ from .graphene.queries.syncing import (
     resolve_sse_enabled,
     resolve_saved_credentials,
     resolve_cloudflare_pages_projects,
+    resolve_cloudflare_workers,
     resolve_syncs,
     resolve_env_syncs,
     resolve_test_vault_creds,
@@ -91,6 +93,7 @@ from .graphene.mutations.environment import (
     UpdateMemberEnvScopeMutation,
 )
 from .graphene.mutations.syncing import (
+    CreateCloudflareWorkersSync,
     CreateAWSSecretsManagerSync,
     CreateCloudflarePagesSync,
     CreateGitHubActionsSync,
@@ -182,6 +185,8 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
 from django.utils import timezone
+from api.utils.crypto import get_server_keypair, decrypt_asymmetric
+from api.utils.syncing.cloudflare.workers import list_cloudflare_workers
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -307,6 +312,12 @@ class Query(graphene.ObjectType):
         credential_id=graphene.ID(),
     )
 
+
+    cloudflare_workers = graphene.List(
+        CloudflareWorkerType,
+        credential_id=graphene.ID(),
+    )
+
     aws_secrets = graphene.List(
         AWSSecretType,
         credential_id=graphene.ID(),
@@ -355,6 +366,8 @@ class Query(graphene.ObjectType):
     resolve_env_syncs = resolve_env_syncs
 
     resolve_cloudflare_pages_projects = resolve_cloudflare_pages_projects
+
+    resolve_cloudflare_workers = resolve_cloudflare_workers
 
     resolve_aws_secrets = resolve_aws_secret_manager_secrets
 
@@ -846,8 +859,11 @@ class Mutation(graphene.ObjectType):
     update_provider_credentials = UpdateProviderCredentials.Field()
     delete_provider_credentials = DeleteProviderCredentials.Field()
 
-    # Cloudflare
+    # Cloudflare Pages
     create_cloudflare_pages_sync = CreateCloudflarePagesSync.Field()
+
+    # Cloudflare Workers
+    create_cloudflare_workers_sync = CreateCloudflareWorkersSync.Field()
 
     # AWS
     create_aws_secret_sync = CreateAWSSecretsManagerSync.Field()

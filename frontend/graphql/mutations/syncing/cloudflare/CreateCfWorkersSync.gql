@@ -1,0 +1,19 @@
+mutation CreateNewCfWorkersSync($envId: ID!, $path: String!, $workerName: String!, $credentialId: ID!) {
+  createCloudflareWorkersSync(envId: $envId, path: $path, workerName: $workerName, credentialId: $credentialId) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+} 
