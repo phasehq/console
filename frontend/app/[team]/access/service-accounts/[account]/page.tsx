@@ -293,11 +293,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <div className="text-neutral-500">Manage access tokens for this Service Account</div>
           </div>
 
-          {account.tokens?.length! > 0 && (
-            <div className="flex items-center justify-end">
-              <CreateServiceAccountTokenDialog serviceAccount={account} />
-            </div>
-          )}
+          <div className="flex items-center justify-end">
+            <CreateServiceAccountTokenDialog serviceAccount={account} />
+          </div>
 
           {userCanReadTokens ? (
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
