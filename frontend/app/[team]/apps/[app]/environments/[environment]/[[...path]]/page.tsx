@@ -549,6 +549,7 @@ export default function EnvironmentPath({
 
   const NewFolderMenu = () => {
     const [name, setName] = useState<string>('')
+    const inputRef = useRef(null)
 
     // Regular expression to match only alphanumeric characters
     const regex = /^[a-zA-Z0-9]*$/
@@ -604,7 +605,7 @@ export default function EnvironmentPath({
     return (
       <>
         <Transition appear show={folderMenuIsOpen} as={Fragment}>
-          <Dialog as="div" className="relative z-10" onClose={handleClose}>
+          <Dialog as="div" className="relative z-10" onClose={handleClose} initialFocus={inputRef}>
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
@@ -658,6 +659,7 @@ export default function EnvironmentPath({
                           setValue={handleUpdateName}
                           label="Folder name"
                           required
+                          ref={inputRef}
                           maxLength={32}
                         />
 

@@ -74,12 +74,12 @@ export const StatusIndicator = () => {
   if (!isCloudHosted()) return <></>
 
   return (
-    <Link href={STATUS_PAGE_BASE_URL} target="_blank">
-      <Button variant="secondary">
+    <Link href={STATUS_PAGE_BASE_URL} target="_blank" className="hidden lg:block">
+      <Button variant="secondary" className="whitespace-nowrap">
         <span
           className={clsx('h-2 w-2 mr-1 rounded-full', statusColor(), isLoading && 'animate-pulse')}
         ></span>
-        {status?.description || 'Loading'}
+        <span className="truncate">{status?.description || 'Loading'}</span>
       </Button>
     </Link>
   )
