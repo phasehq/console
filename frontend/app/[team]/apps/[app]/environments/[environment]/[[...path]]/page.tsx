@@ -30,6 +30,7 @@ import {
   FaMagic,
   FaCloudUploadAlt,
   FaBan,
+  FaFileImport,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -60,6 +61,7 @@ import SortMenu from '@/components/environments/secrets/SortMenu'
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
+import ImportSecretsDialog from '@/components/environments/secrets/ImportSecretsDialog'
 
 export default function EnvironmentPath({
   params,
@@ -81,6 +83,8 @@ export default function EnvironmentPath({
   const [isLoading, setIsloading] = useState(false)
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
+
+  const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const [sort, setSort] = useState<SortOption>('-created')
 
@@ -205,6 +209,10 @@ export default function EnvironmentPath({
     start
       ? setClientSecrets([newSecret, ...clientSecrets])
       : setClientSecrets([...clientSecrets, newSecret])
+  }
+
+  const bulkAddSecrets = (secrets: SecretType[]) => {
+    setClientSecrets([...secrets, ...clientSecrets])
   }
 
   const handleBulkUpdateSecrets = async () => {
@@ -757,10 +765,16 @@ export default function EnvironmentPath({
         variant="primary"
         onClick={() => handleAddSecret(true)}
         menuContent={
-          <div className="w-max">
+          <div className="w-max flex flex-col gap-1">
             <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
               <div className="flex items-center gap-2">
                 <FaFolderPlus /> New Folder
+              </div>
+            </Button>
+
+            <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
+              <div className="flex items-center gap-2">
+                <FaFileImport /> Import secrets
               </div>
             </Button>
           </div>
@@ -957,6 +971,12 @@ export default function EnvironmentPath({
                       </div>
                     </Button>
                     <NewSecretMenu />
+                    <ImportSecretsDialog
+                      environment={environment}
+                      path={'/'}
+                      addSecrets={bulkAddSecrets}
+                      ref={importDialogRef}
+                    />
                   </div>
                 </div>
               </div>

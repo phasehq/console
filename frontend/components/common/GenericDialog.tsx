@@ -9,14 +9,22 @@ interface GenericDialogProps {
   onClose?: () => void
   onOpen?: () => void
   children: ReactNode
-  buttonVariant: ButtonVariant
-  buttonContent: ReactNode
+  buttonVariant?: ButtonVariant
+  buttonContent?: ReactNode
   size?: 'lg' | 'md' | 'sm'
 }
 
 const GenericDialog = forwardRef(
   (
-    { title, onClose, onOpen, children, buttonVariant, buttonContent, size }: GenericDialogProps,
+    {
+      title,
+      onClose,
+      onOpen,
+      children,
+      buttonVariant = 'primary',
+      buttonContent,
+      size,
+    }: GenericDialogProps,
     ref
   ) => {
     const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -32,6 +40,7 @@ const GenericDialog = forwardRef(
     }
 
     useImperativeHandle(ref, () => ({
+      openModal,
       closeModal,
     }))
 
@@ -45,11 +54,13 @@ const GenericDialog = forwardRef(
 
     return (
       <>
-        <div className="flex items-center justify-center">
-          <Button variant={buttonVariant} onClick={openModal} title={title}>
-            {buttonContent}
-          </Button>
-        </div>
+        {buttonContent && (
+          <div className="flex items-center justify-center">
+            <Button variant={buttonVariant} onClick={openModal} title={title}>
+              {buttonContent}
+            </Button>
+          </div>
+        )}
 
         <Transition appear show={isOpen} as={Fragment}>
           <Dialog as="div" className="relative z-10" onClose={closeModal}>

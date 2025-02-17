@@ -26,7 +26,11 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>((props, r
         ref={ref} // Attach the forwarded ref here
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className={clsx('w-full', props.readOnly || props.disabled ? 'opacity-60' : '')}
+        className={clsx(
+          'w-full',
+          props.readOnly || props.disabled ? 'opacity-60' : '',
+          props.className
+        )}
       />
     </div>
   )
