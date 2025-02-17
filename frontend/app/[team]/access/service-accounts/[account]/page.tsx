@@ -8,9 +8,18 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useEffect, useState } from 'react'
-import { FaBan, FaBoxOpen, FaChevronLeft, FaCog, FaEdit, FaKey, FaRobot } from 'react-icons/fa'
-import { CreateServiceAccountTokenDialog } from './_components/CreateServiceAccountTokenDialog'
+import { useContext, useEffect, useRef, useState } from 'react'
+import {
+  FaBan,
+  FaBoxOpen,
+  FaChevronLeft,
+  FaCog,
+  FaEdit,
+  FaKey,
+  FaPlus,
+  FaRobot,
+} from 'react-icons/fa'
+import CreateServiceAccountTokenDialog from './_components/CreateServiceAccountTokenDialog'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
 import { ServiceAccountType } from '@/apollo/graphql'
@@ -27,6 +36,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [name, setName] = useState('')
+  const tokenDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+
+  const openTokenDialog = () => tokenDialogRef.current?.openModal()
 
   const userCanReadSA = organisation
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
@@ -293,9 +305,13 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <div className="text-neutral-500">Manage access tokens for this Service Account</div>
           </div>
 
+          <CreateServiceAccountTokenDialog serviceAccount={account} ref={tokenDialogRef} />
+
           {account.tokens?.length! > 0 && (
             <div className="flex items-center justify-end">
-              <CreateServiceAccountTokenDialog serviceAccount={account} />
+              <Button variant="primary" onClick={openTokenDialog}>
+                <FaPlus /> Create token
+              </Button>
             </div>
           )}
 
@@ -374,7 +390,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                       </div>
                     }
                   >
-                    <CreateServiceAccountTokenDialog serviceAccount={account} />
+                    <Button variant="primary" onClick={openTokenDialog}>
+                      <FaPlus /> Create token
+                    </Button>
                   </EmptyState>
                 </div>
               )}
