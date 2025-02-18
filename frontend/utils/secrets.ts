@@ -140,3 +140,12 @@ export const processEnvFile = (
 
   return newSecrets
 }
+
+export const envFilePlaceholder = `# Paste your .env here
+
+# Comments before a key-value pair will be parsed
+FOO=BAR
+
+API_BASE_URL=https://api.myapp.com # Inline comments will also be parsed
+
+HEALTH_CHECK_URL=$\{API_BASE_URL} # You can also reference secrets`

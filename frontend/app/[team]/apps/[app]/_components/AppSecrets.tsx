@@ -5,16 +5,15 @@ import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcess
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useMutation, useQuery } from '@apollo/client'
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { MdPassword, MdSearchOff } from "react-icons/md";
+import { MdPassword, MdSearchOff } from 'react-icons/md'
 
 import {
   FaArrowRight,
   FaBan,
-  FaBoxOpen,
   FaCheckCircle,
   FaChevronRight,
   FaCloudUploadAlt,
@@ -50,6 +49,8 @@ import { AppSecret, AppFolder } from '../types'
 import { AppSecretRow } from './AppSecretRow'
 import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
+import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
+import { TbDownload } from 'react-icons/tb'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -99,12 +100,13 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
   const [appSecretsToDelete, setAppSecretsToDelete] = useState<string[]>([])
 
-  //const [appFolders, setAppFolders] = useState<AppFolder[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
   const [bulkProcessSecrets, { loading: bulkUpdatePending }] = useMutation(BulkProcessSecrets)
 
   const [isLoading, setIsLoading] = useState(false)
+
+  const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const savingAndFetching = bulkUpdatePending || isLoading
 
@@ -387,6 +389,13 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       },
       ...clientAppSecrets,
     ])
+  }
+
+  const bulkAddNewClientSecrets = (newSecrets: AppSecret[]) => {
+    setClientAppSecrets((prevSecrets) => {
+      const updatedSecrets = [...newSecrets, ...prevSecrets]
+      return updatedSecrets
+    })
   }
 
   const handleAddNewEnvValue = (appSecretId: string, environment: EnvironmentType) => {
@@ -765,18 +774,30 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         </div>
       </div>
 
-      <div className="flex justify-end pr-4">
-        {userCanCreateSecrets && (
-          <Button variant="primary" onClick={handleAddNewClientSecret}>
-            <FaPlus /> New Secret
+      {appEnvironments && (
+        <MultiEnvImportDialog
+          environments={appEnvironments}
+          addSecrets={bulkAddNewClientSecrets}
+          ref={importDialogRef}
+        />
+      )}
+
+      {filteredSecrets.length > 0 && (
+        <div className="flex justify-end pr-4 gap-4">
+          <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
+            <TbDownload /> Import secrets
           </Button>
-        )}
-      </div>
+          {userCanCreateSecrets && (
+            <Button variant="primary" onClick={handleAddNewClientSecret}>
+              <FaPlus /> New Secret
+            </Button>
+          )}
+        </div>
+      )}
 
       {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
         <>
-
-          {(filteredSecrets.length > 0 || filteredFolders.length > 0) ? (
+          {filteredSecrets.length > 0 || filteredFolders.length > 0 ? (
             <table className="table-auto w-full">
               <thead
                 id="table-head"
@@ -785,7 +806,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 <tr>
                   <th className="pl-10 text-left text-sm font-medium text-gray-500 uppercase tracking-wide">
                     key
-
                   </th>
                   {appEnvironments?.map((env: EnvironmentType) => (
                     <th
@@ -861,7 +881,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               </div>
             }
           >
-            <div>
+            <div className="flex items-center gap-4">
+              <Button variant="outline" onClick={() => importDialogRef.current?.openModal()}>
+                <TbDownload /> Import secrets
+              </Button>
               <Button variant="primary" onClick={handleAddNewClientSecret}>
                 <FaPlus /> New Secret
               </Button>

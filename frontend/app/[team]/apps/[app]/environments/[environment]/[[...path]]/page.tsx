@@ -9,7 +9,7 @@ import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
-
+import { TbDownload } from 'react-icons/tb'
 import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -61,8 +61,8 @@ import SortMenu from '@/components/environments/secrets/SortMenu'
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
-import ImportSecretsDialog from '@/components/environments/secrets/ImportSecretsDialog'
-import EnvFileDropZone from '@/components/environments/secrets/EnvFileDropZone'
+import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
+import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 
 export default function EnvironmentPath({
   params,
@@ -766,7 +766,7 @@ export default function EnvironmentPath({
         variant="primary"
         onClick={() => handleAddSecret(true)}
         menuContent={
-          <div className="w-max flex flex-col gap-1">
+          <div className="w-max flex flex-col items-start gap-1">
             <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
               <div className="flex items-center gap-2">
                 <FaFolderPlus /> New Folder
@@ -775,7 +775,7 @@ export default function EnvironmentPath({
 
             <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
               <div className="flex items-center gap-2">
-                <FaFileImport /> Import secrets
+                <TbDownload /> Import secrets
               </div>
             </Button>
           </div>
@@ -957,7 +957,7 @@ export default function EnvironmentPath({
               </div>
             </div>
 
-            <ImportSecretsDialog
+            <SingleEnvImportDialog
               environment={environment}
               path={'/'}
               addSecrets={bulkAddSecrets}
