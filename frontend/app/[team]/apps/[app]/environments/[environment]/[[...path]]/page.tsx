@@ -62,7 +62,7 @@ import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import ImportSecretsDialog from '@/components/environments/secrets/ImportSecretsDialog'
-import EnvFileDropZone from '@/components/environments/secrets/EnvFileSelector'
+import EnvFileDropZone from '@/components/environments/secrets/EnvFileDropZone'
 
 export default function EnvironmentPath({
   params,

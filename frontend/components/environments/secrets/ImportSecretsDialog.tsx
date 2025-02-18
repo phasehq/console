@@ -16,7 +16,6 @@ interface ImportSecretsDialogProps {
 const ImportSecretsDialog = forwardRef(
   ({ environment, path = '/', addSecrets }: ImportSecretsDialogProps, ref) => {
     const [envFileString, setEnvFileString] = useState('')
-    const [dragOver, setDragOver] = useState(false)
     const [withValues, setWithValues] = useState(true)
     const [withComments, setWithComments] = useState(true)
 
