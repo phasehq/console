@@ -74,7 +74,8 @@ export default function Integrations({ params }: { params: { team: string } }) {
     skip:
       !organisation ||
       (!userCanReadIntegrationCredentials && !userCanReadIntegrations && !userCanReadApps),
-    nextFetchPolicy: 'cache-and-network',
+    fetchPolicy: 'cache-and-network',
+    nextFetchPolicy: 'cache-and-network'
   })
 
   const apps = data?.apps ?? []
