@@ -1,4 +1,4 @@
-import { SecretType } from '@/apollo/graphql'
+import { EnvironmentType, SecretType } from '@/apollo/graphql'
 
 export type SortOption =
   | 'key'
@@ -84,4 +84,59 @@ export const sortSecrets = (secrets: SecretType[], sort: SortOption): SecretType
         return 0
     }
   })
+}
+
+/**
+ * Processes a .env format string into a list of secrets.
+ *
+ * @param envFileString - the input string
+ * @param environment
+ * @param path
+ * @param withValues - whether to parse values from the file
+ * @param withComments - whether to parse comments from the file
+ * @returns {SecretType[]}
+ */
+export const processEnvFile = (
+  envFileString: string,
+  environment: EnvironmentType,
+  path: string,
+  withValues: boolean = true,
+  withComments: boolean = true
+): SecretType[] => {
+  const lines = envFileString.split('\n')
+  const newSecrets: SecretType[] = []
+  let lastComment = ''
+
+  lines.forEach((line) => {
+    let trimmed = line.trim()
+    if (!trimmed) return // Skip empty lines
+
+    if (trimmed.startsWith('#')) {
+      lastComment = trimmed.slice(1).trim()
+      return
+    }
+
+    const [key, ...valueParts] = trimmed.split('=')
+    if (!key) return // Skip malformed lines
+
+    let valueWithComment = valueParts.join('=')
+    let [parsedValue, inlineComment] = valueWithComment.split('#').map((part) => part.trim())
+
+    let value = withValues ? parsedValue.replace(/^['"]|['"]$/g, '') : ''
+
+    newSecrets.push({
+      id: `new-${crypto.randomUUID()}`,
+      updatedAt: null,
+      version: 1,
+      key: key.trim().toUpperCase(),
+      value,
+      tags: [],
+      comment: withComments ? lastComment || inlineComment || '' : '',
+      path,
+      environment,
+    })
+    lastComment = '' // Reset lastComment after assigning it
+  })
+
+  return newSecrets
 }

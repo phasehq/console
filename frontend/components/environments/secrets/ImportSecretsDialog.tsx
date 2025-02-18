@@ -3,7 +3,9 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Textarea } from '@/components/common/TextArea'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
+import { processEnvFile } from '@/utils/secrets'
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import EnvFileDropZone from './EnvFileDropZone'
 
 interface ImportSecretsDialogProps {
   environment: EnvironmentType
@@ -13,7 +15,8 @@ interface ImportSecretsDialogProps {
 
 const ImportSecretsDialog = forwardRef(
   ({ environment, path = '/', addSecrets }: ImportSecretsDialogProps, ref) => {
-    const [envFile, setEnvFile] = useState('')
+    const [envFileString, setEnvFileString] = useState('')
+    const [dragOver, setDragOver] = useState(false)
     const [withValues, setWithValues] = useState(true)
     const [withComments, setWithComments] = useState(true)
 
@@ -28,61 +31,38 @@ const ImportSecretsDialog = forwardRef(
     }))
 
     const processImport = () => {
-      const lines = envFile.split('\n')
-      const newSecrets: SecretType[] = []
-      let lastComment = ''
-
-      lines.forEach((line) => {
-        let trimmed = line.trim()
-        if (!trimmed) return // Skip empty lines
-
-        if (trimmed.startsWith('#')) {
-          lastComment = trimmed.slice(1).trim()
-          return
-        }
-
-        const [key, ...valueParts] = trimmed.split('=')
-        if (!key) return // Skip malformed lines
-
-        let valueWithComment = valueParts.join('=')
-        let [parsedValue, inlineComment] = valueWithComment.split('#').map((part) => part.trim())
-
-        let value = withValues ? parsedValue.replace(/^['"]|['"]$/g, '') : ''
-
-        newSecrets.push({
-          id: `new-${crypto.randomUUID()}`,
-          updatedAt: null,
-          version: 1,
-          key: key.trim().toUpperCase(),
-          value,
-          tags: [],
-          comment: withComments ? lastComment || inlineComment || '' : '',
-          path,
-          environment,
-        })
-        lastComment = '' // Reset lastComment after assigning it
-      })
+      const newSecrets: SecretType[] = processEnvFile(
+        envFileString,
+        environment,
+        path,
+        withValues,
+        withComments
+      )
 
       if (newSecrets.length) {
         addSecrets(newSecrets)
-        setEnvFile('') // Clear textarea after import
+        setEnvFileString('') // Clear textarea after import
         if (dialogRef.current) dialogRef.current.closeModal()
       }
     }
+
+    const handleFileSelection = (fileString: string) => setEnvFileString(fileString)
 
     return (
       <GenericDialog title="Import secrets" buttonVariant="secondary" ref={dialogRef}>
         <div className="space-y-2">
           <p className="text-neutral-500">
-            Paste your .env file here to import secrets into your environment
+            Drop, select or paste your .env here to import secrets into your environment
           </p>
+          <EnvFileDropZone onFileProcessed={(content) => handleFileSelection(content)} />
+
           <div className="py-4">
             <Textarea
-              value={envFile}
-              setValue={setEnvFile}
-              placeholder="FOO=BAR"
+              value={envFileString}
+              setValue={setEnvFileString}
+              placeholder="# Paste.env here"
               rows={20}
-              className="font-mono text-zinc-700 dark:text-zinc-300 text-sm"
+              className="font-mono text-zinc-700 dark:text-zinc-300 text-sm placeholder:text-neutral-500/40"
             />
           </div>
 
@@ -110,7 +90,7 @@ const ImportSecretsDialog = forwardRef(
                 />
               </div>
             </div>
-            <Button variant="primary" onClick={processImport}>
+            <Button variant="primary" onClick={processImport} disabled={!envFileString}>
               Import secrets
             </Button>
           </div>

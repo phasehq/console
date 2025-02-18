@@ -55,13 +55,14 @@ import {
   EnvKeyring,
 } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
-import { SortOption, sortSecrets } from '@/utils/secrets'
+import { processEnvFile, SortOption, sortSecrets } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import ImportSecretsDialog from '@/components/environments/secrets/ImportSecretsDialog'
+import EnvFileDropZone from '@/components/environments/secrets/EnvFileSelector'
 
 export default function EnvironmentPath({
   params,
@@ -809,6 +810,15 @@ export default function EnvironmentPath({
       </div>
     )
 
+  const EmptyStateFileImport = () => {
+    const handleFileSelection = (fileString: string) => {
+      const secrets: SecretType[] = processEnvFile(fileString, environment, '/')
+      bulkAddSecrets(secrets)
+    }
+
+    return <EnvFileDropZone onFileProcessed={(content) => handleFileSelection(content)} />
+  }
+
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
@@ -947,6 +957,13 @@ export default function EnvironmentPath({
               </div>
             </div>
 
+            <ImportSecretsDialog
+              environment={environment}
+              path={'/'}
+              addSecrets={bulkAddSecrets}
+              ref={importDialogRef}
+            />
+
             {(clientSecrets.length > 0 || folders.length > 0) && (
               <div className="flex items-center w-full">
                 <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
@@ -971,12 +988,6 @@ export default function EnvironmentPath({
                       </div>
                     </Button>
                     <NewSecretMenu />
-                    <ImportSecretsDialog
-                      environment={environment}
-                      path={'/'}
-                      addSecrets={bulkAddSecrets}
-                      ref={importDialogRef}
-                    />
                   </div>
                 </div>
               </div>
@@ -1032,6 +1043,11 @@ export default function EnvironmentPath({
                 }
               >
                 <NewSecretMenu />
+                {!searchQuery && (
+                  <div className="w-full max-w-screen-sm h-40 rounded-lg">
+                    <EmptyStateFileImport />
+                  </div>
+                )}
               </EmptyState>
             )}
           </div>
