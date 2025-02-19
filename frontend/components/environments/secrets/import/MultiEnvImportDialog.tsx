@@ -60,14 +60,16 @@ const MultiEnvImportDialog = forwardRef(
     const processImport = () => {
       const secretsByKey = new Map<string, AppSecret>()
 
-      selectedEnvs.forEach((env) => {
-        const secrets = processEnvFile(
-          envFileString,
-          env,
-          path,
-          envConfigs[env.id].withValues,
-          envConfigs[env.id].withComments
-        )
+      environments.forEach((env) => {
+        const secrets = selectedEnvs.includes(env)
+          ? processEnvFile(
+              envFileString,
+              env,
+              path,
+              envConfigs[env.id].withValues,
+              envConfigs[env.id].withComments
+            )
+          : []
 
         secrets.forEach((secret) => {
           if (!secretsByKey.has(secret.key)) {
@@ -79,6 +81,13 @@ const MultiEnvImportDialog = forwardRef(
           }
           secretsByKey.get(secret.key)?.envs.push({ env, secret })
         })
+
+        // Ensure the environment is included with a null secret if not selected
+        if (!selectedEnvs.includes(env)) {
+          secretsByKey.forEach((appSecret) => {
+            appSecret.envs.push({ env, secret: null })
+          })
+        }
       })
 
       const newSecrets = Array.from(secretsByKey.values())
