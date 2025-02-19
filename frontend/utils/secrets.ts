@@ -1,4 +1,5 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
+import { AppSecret } from '@/app/[team]/apps/[app]/types'
 
 export type SortOption =
   | 'key'
@@ -139,6 +140,19 @@ export const processEnvFile = (
   })
 
   return newSecrets
+}
+
+export const duplicateKeysExist = (secrets: SecretType[] | AppSecret[]) => {
+  const keySet = new Set<string>()
+
+  for (const secret of secrets) {
+    if (keySet.has(secret.key)) {
+      return true // Duplicate key found
+    }
+    keySet.add(secret.key)
+  }
+
+  return false // No duplicate keys found
 }
 
 export const envFilePlaceholder = `# Paste your .env here
