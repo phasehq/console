@@ -5,13 +5,15 @@ import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcess
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useMutation, useQuery } from '@apollo/client'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { createRef, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
 
 import {
+  FaAngleDoubleDown,
+  FaAngleDoubleUp,
   FaArrowRight,
   FaBan,
   FaCheckCircle,
@@ -46,7 +48,7 @@ import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
 import { AppSecret, AppFolder } from '../types'
-import { AppSecretRow } from './AppSecretRow'
+import AppSecretRow from './AppSecretRow'
 import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
@@ -173,6 +175,23 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     skip: !userCanReadSyncs,
     pollInterval: unsavedChanges ? 0 : 5000,
   })
+
+  const disclosureRefs = useMemo(() => {
+    return new Map(
+      filteredSecrets.map((appSecret) => [
+        appSecret.id,
+        createRef<{ isOpen: Boolean; open: () => void; close: () => void }>(),
+      ])
+    )
+  }, [filteredSecrets])
+
+  const toggleAllExpanded = (expand: boolean) => {
+    disclosureRefs.forEach((ref) => {
+      if (ref.current) {
+        expand ? ref.current.open() : ref.current.close()
+      }
+    })
+  }
 
   const serverSecret = (id: string) => serverAppSecrets.find((secret) => secret.id === id)
 
@@ -771,15 +790,27 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       )}
 
       {filteredSecrets.length > 0 && (
-        <div className="flex justify-end pr-4 gap-4">
-          <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
-            <TbDownload /> Import secrets
-          </Button>
-          {userCanCreateSecrets && (
-            <Button variant="primary" onClick={handleAddNewClientSecret}>
-              <FaPlus /> New Secret
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="secondary" onClick={() => toggleAllExpanded(true)}>
+              <FaAngleDoubleDown /> Expand all
             </Button>
-          )}
+
+            <Button variant="secondary" onClick={() => toggleAllExpanded(false)}>
+              <FaAngleDoubleUp />
+              Collapse all
+            </Button>
+          </div>
+          <div className="flex justify-end pr-4 gap-4">
+            <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
+              <TbDownload /> Import secrets
+            </Button>
+            {userCanCreateSecrets && (
+              <Button variant="primary" onClick={handleAddNewClientSecret}>
+                <FaPlus /> New Secret
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -832,6 +863,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                     deleteKey={handleStageClientSecretForDelete}
                     stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
                     secretsStagedForDelete={secretsToDelete}
+                    ref={disclosureRefs.get(appSecret.id)}
                   />
                 ))}
               </tbody>

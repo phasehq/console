@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fa'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
@@ -228,18 +228,7 @@ const EnvSecret = ({
   )
 }
 
-export const AppSecretRow = ({
-  index,
-  clientAppSecret,
-  serverAppSecret,
-  stagedForDelete,
-  secretsStagedForDelete,
-  updateKey,
-  updateValue,
-  addEnvValue,
-  deleteEnvValue,
-  deleteKey,
-}: {
+interface AppSecretRowProps {
   index: number
   clientAppSecret: AppSecret
   serverAppSecret?: AppSecret
@@ -250,255 +239,288 @@ export const AppSecretRow = ({
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteKey: (id: string) => void
-}) => {
-  const { activeOrganisation: organisation } = useContext(organisationContext)
+}
 
-  const newEnvValueAdded = clientAppSecret.envs.some((env) => env?.secret?.id.includes('new'))
-  const secretIsNew = !serverAppSecret
+const AppSecretRow = forwardRef(
+  (
+    {
+      index,
+      clientAppSecret,
+      serverAppSecret,
+      stagedForDelete,
+      secretsStagedForDelete,
+      updateKey,
+      updateValue,
+      addEnvValue,
+      deleteEnvValue,
+      deleteKey,
+    }: AppSecretRowProps,
+    ref
+  ) => {
+    const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [isOpen, setIsOpen] = useState(false)
+    const newEnvValueAdded = clientAppSecret.envs.some((env) => env?.secret?.id.includes('new'))
+    const secretIsNew = !serverAppSecret
 
-  const keyInputRef = useRef<HTMLInputElement>(null)
+    const [isOpen, setIsOpen] = useState(false)
 
-  const toggleAccordion = () => setIsOpen(!isOpen)
+    useImperativeHandle(ref, () => ({
+      isOpen,
+      open: () => setIsOpen(true),
+      close: () => setIsOpen(false),
+    }))
 
-  const handleUpdateKey = (k: string) => {
-    const sanitizedK = k.replace(/ /g, '_').toUpperCase()
-    updateKey(clientAppSecret.id, sanitizedK)
-  }
+    const keyInputRef = useRef<HTMLInputElement>(null)
 
-  // Permisssions
-  const userCanUpdateSecrets =
-    userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) || secretIsNew
-  const userCanDeleteSecrets =
-    userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) || secretIsNew
+    const toggleAccordion = () => setIsOpen(!isOpen)
 
-  const prodSecret = clientAppSecret.envs.find(
-    (env) => env.env.envType?.toLowerCase() === 'prod'
-  )?.secret
-
-  const secretIsSameAsProd = (env: { env: Partial<EnvironmentType>; secret: SecretType | null }) =>
-    prodSecret !== null &&
-    env.secret?.value === prodSecret?.value &&
-    env.env.envType?.toLowerCase() !== 'prod'
-
-  const keyIsBlank = clientAppSecret.key === ''
-  const keyIsDuplicate = false // TODO implement
-
-  const tooltipText = (env: { env: Partial<EnvironmentType>; secret: SecretType | null }) => {
-    if (env.secret === null) return `This secret is missing in ${env.env.name}`
-    else if (env.secret.value.length === 0) return `This secret is blank in ${env.env.name}`
-    else if (secretIsSameAsProd(env)) return `This secret is the same as Production.`
-    else return 'This secret is present'
-  }
-
-  const envValuesAreStagedForDelete = () => {
-    const envSecretIds = clientAppSecret.envs.map((env) => env.secret?.id)
-    return envSecretIds.some((id) => (id ? secretsStagedForDelete.includes(id) : false))
-  }
-
-  const secretIsModified = () => {
-    if (serverAppSecret) {
-      const serverEnvVales = serverAppSecret.envs.map((env) => env.secret?.value)
-      const clientEnvVales = clientAppSecret.envs.map((env) => env.secret?.value)
-      if (
-        serverAppSecret.key !== clientAppSecret.key ||
-        !arraysEqual(serverEnvVales, clientEnvVales) ||
-        envValuesAreStagedForDelete() ||
-        newEnvValueAdded
-      ) {
-        return true
-      }
+    const handleUpdateKey = (k: string) => {
+      const sanitizedK = k.replace(/ /g, '_').toUpperCase()
+      updateKey(clientAppSecret.id, sanitizedK)
     }
 
-    return false
-  }
+    // Permisssions
+    const userCanUpdateSecrets =
+      userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) || secretIsNew
+    const userCanDeleteSecrets =
+      userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) || secretIsNew
 
-  const rowBgColorOpen = () => {
-    if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
-    else if (secretIsNew) return 'bg-emerald-400/40'
-    else if (secretIsModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
-    else return 'bg-zinc-100 dark:bg-zinc-800'
-  }
+    const prodSecret = clientAppSecret.envs.find(
+      (env) => env.env.envType?.toLowerCase() === 'prod'
+    )?.secret
 
-  const rowBgColorClosed = () => {
-    if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
-    if (secretIsNew) return 'bg-emerald-400/20 dark:bg-emerald-400/ hover:bg-emerald-400/40'
-    else if (secretIsModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
-    else return 'bg-zinc-100 dark:bg-zinc-800'
-  }
+    const secretIsSameAsProd = (env: {
+      env: Partial<EnvironmentType>
+      secret: SecretType | null
+    }) =>
+      prodSecret !== null &&
+      env.secret?.value === prodSecret?.value &&
+      env.env.envType?.toLowerCase() !== 'prod'
 
-  const rowInputColor = () => {
-    if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
-    else if (secretIsNew) return 'text-emerald-700 dark:text-emerald-200'
-    else if (secretIsModified()) return 'text-amber-700 dark:text-amber-300'
-    else return 'text-zinc-900 dark:text-zinc-100'
-  }
+    const keyIsBlank = clientAppSecret.key === ''
+    const keyIsDuplicate = false // TODO implement
 
-  const rowBorderColor = () => {
-    if (stagedForDelete) return '!border-l-red-700 !dark:border-l-red-400'
-    else if (secretIsNew) return '!border-l-emerald-700 !dark:border-l-emerald-200'
-    else if (secretIsModified()) return '!border-l-amber-700 !dark:border-l-amber-300'
-    else return '!border-l-neutral-500/40 !dark:border-l-neutral-500/40'
-  }
-
-  const serverEnvSecret = (id: string) => serverAppSecret?.envs.find((env) => env.env.id === id)
-
-  // Reveal newly created secrets by default
-  useEffect(() => {
-    if (secretIsNew) {
-      setIsOpen(true)
-      if (keyInputRef.current) {
-        keyInputRef.current.focus()
-      }
+    const tooltipText = (env: { env: Partial<EnvironmentType>; secret: SecretType | null }) => {
+      if (env.secret === null) return `This secret is missing in ${env.env.name}`
+      else if (env.secret.value.length === 0) return `This secret is blank in ${env.env.name}`
+      else if (secretIsSameAsProd(env)) return `This secret is the same as Production.`
+      else return 'This secret is present'
     }
-  }, [secretIsNew])
 
-  return (
-    <Disclosure>
-      {({ open }) => (
-        <>
-          <tr
-            className={clsx(
-              'group divide-x divide-neutral-500/20 border-l transition ease duration-100',
-              isOpen
-                ? `${rowBgColorOpen()} ${rowBorderColor()} !border-r-neutral-500/20`
-                : `${rowBgColorClosed()}  border-neutral-500/20`
-            )}
-          >
-            <td
+    const envValuesAreStagedForDelete = () => {
+      const envSecretIds = clientAppSecret.envs.map((env) => env.secret?.id)
+      return envSecretIds.some((id) => (id ? secretsStagedForDelete.includes(id) : false))
+    }
+
+    const secretIsModified = () => {
+      if (serverAppSecret) {
+        const serverEnvVales = serverAppSecret.envs.map((env) => env.secret?.value)
+        const clientEnvVales = clientAppSecret.envs.map((env) => env.secret?.value)
+        if (
+          serverAppSecret.key !== clientAppSecret.key ||
+          !arraysEqual(serverEnvVales, clientEnvVales) ||
+          envValuesAreStagedForDelete() ||
+          newEnvValueAdded
+        ) {
+          return true
+        }
+      }
+
+      return false
+    }
+
+    const rowBgColorOpen = () => {
+      if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
+      else if (secretIsNew) return 'bg-emerald-400/40'
+      else if (secretIsModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
+      else return 'bg-zinc-100 dark:bg-zinc-800'
+    }
+
+    const rowBgColorClosed = () => {
+      if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
+      if (secretIsNew) return 'bg-emerald-400/20 dark:bg-emerald-400/ hover:bg-emerald-400/40'
+      else if (secretIsModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
+      else return 'bg-zinc-100 dark:bg-zinc-800'
+    }
+
+    const rowInputColor = () => {
+      if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
+      else if (secretIsNew) return 'text-emerald-700 dark:text-emerald-200'
+      else if (secretIsModified()) return 'text-amber-700 dark:text-amber-300'
+      else return 'text-zinc-900 dark:text-zinc-100'
+    }
+
+    const rowBorderColor = () => {
+      if (stagedForDelete) return '!border-l-red-700 !dark:border-l-red-400'
+      else if (secretIsNew) return '!border-l-emerald-700 !dark:border-l-emerald-200'
+      else if (secretIsModified()) return '!border-l-amber-700 !dark:border-l-amber-300'
+      else return '!border-l-neutral-500/40 !dark:border-l-neutral-500/40'
+    }
+
+    const serverEnvSecret = (id: string) => serverAppSecret?.envs.find((env) => env.env.id === id)
+
+    // Reveal newly created secrets by default
+    useEffect(() => {
+      if (secretIsNew) {
+        setIsOpen(true)
+        if (keyInputRef.current) {
+          keyInputRef.current.focus()
+        }
+      }
+    }, [secretIsNew])
+
+    return (
+      <Disclosure>
+        {({ open }) => (
+          <>
+            <tr
               className={clsx(
-                `px-2 py-0.5 whitespace-nowrap font-mono ${rowInputColor()} flex items-center gap-2 ph-no-capture`,
-                isOpen ? 'font-bold' : 'font-medium'
+                'group divide-x divide-neutral-500/20 border-l transition ease duration-100',
+                isOpen
+                  ? `${rowBgColorOpen()} ${rowBorderColor()} !border-r-neutral-500/20`
+                  : `${rowBgColorClosed()}  border-neutral-500/20`
               )}
             >
-              <button
-                onClick={toggleAccordion}
-                className="relative flex items-center justify-center"
+              <td
+                className={clsx(
+                  `px-2 py-0.5 whitespace-nowrap font-mono ${rowInputColor()} flex items-center gap-2 ph-no-capture`,
+                  isOpen ? 'font-bold' : 'font-medium'
+                )}
               >
-                <FaChevronRight
-                  className={clsx(
-                    'transform transition ease font-light cursor-pointer',
-                    isOpen ? 'opacity-100 rotate-90' : 'opacity-0 group-hover:opacity-100 rotate-0'
-                  )}
-                />
-                <span
-                  className={clsx(
-                    'text-neutral-500 font-mono absolute transition ease',
-                    isOpen ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
-                  )}
+                <button
+                  onClick={toggleAccordion}
+                  className="relative flex items-center justify-center"
                 >
-                  {index + 1}
-                </span>
-              </button>
-              <div className="relative w-full group">
-                <input
-                  ref={keyInputRef}
-                  disabled={stagedForDelete || !userCanUpdateSecrets}
-                  className={clsx(
-                    INPUT_BASE_STYLE,
-                    rowInputColor(),
-                    'rounded-sm',
-                    keyIsBlank
-                      ? 'ring-1 ring-inset ring-red-500'
-                      : keyIsDuplicate
-                        ? 'ring-1 ring-inset ring-amber-500'
-                        : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500'
-                  )}
-                  value={clientAppSecret.key}
-                  onChange={(e) => handleUpdateKey(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onFocus={(e) => e.stopPropagation()}
-                />
-                <div className="absolute inset-y-0 right-2 flex gap-1 items-center opacity-0 group-hover:opacity-100 transition ease">
-                  {userCanDeleteSecrets && (
-                    <Button
-                      title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
-                      variant="danger"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteKey(clientAppSecret.id)
-                      }}
-                    >
-                      {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </td>
-            {clientAppSecret.envs.map((env) => (
-              <td
-                key={env.env.id}
-                className={'px-6 whitespace-nowrap group cursor-pointer'}
-                onClick={toggleAccordion}
-              >
-                <div className="flex items-center justify-center" title={tooltipText(env)}>
-                  {env.secret !== null ? (
-                    env.secret.value.length === 0 ? (
-                      <FaCircle className="text-neutral-500 shrink-0" />
-                    ) : (
-                      <FaCheckCircle
-                        className={clsx(
-                          'shrink-0',
-                          secretIsSameAsProd(env) ? 'text-amber-500' : 'text-emerald-500'
-                        )}
-                      />
-                    )
-                  ) : (
-                    <FaTimesCircle className="text-red-500 shrink-0" />
-                  )}
-                </div>
-              </td>
-            ))}
-          </tr>
-          <Transition
-            as="tr"
-            show={isOpen}
-            enter="transition duration-100 ease-out"
-            enterFrom="transform scale-95 opacity-0"
-            enterTo="transform scale-100 opacity-100"
-            leave="transition duration-75 ease-out"
-            leaveFrom="transform scale-100 opacity-100"
-            leaveTo="transform scale-95 opacity-0"
-            className={clsx(
-              'border-x',
-              isOpen
-                ? `${rowBorderColor()} !border-r-neutral-500/40 shadow-xl`
-                : 'border-neutral-500/40'
-            )}
-          >
-            {isOpen && (
-              <td
-                colSpan={clientAppSecret.envs.length + 1}
-                className={clsx('p-2 space-y-6 ', rowBgColorOpen())}
-              >
-                <Disclosure.Panel static={true}>
-                  <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
-                    {clientAppSecret.envs.map((envSecret) => (
-                      <EnvSecret
-                        key={envSecret.env.id}
-                        keyIsStagedForDelete={stagedForDelete}
-                        clientEnvSecret={envSecret}
-                        serverEnvSecret={serverEnvSecret(envSecret.env?.id!)}
-                        sameAsProd={secretIsSameAsProd(envSecret)}
-                        appSecretId={clientAppSecret.id}
-                        updateEnvValue={updateValue}
-                        stagedForDelete={
-                          envSecret.secret
-                            ? secretsStagedForDelete.includes(envSecret.secret?.id)
-                            : false
-                        }
-                        addEnvValue={addEnvValue}
-                        deleteEnvValue={deleteEnvValue}
-                      />
-                    ))}
+                  <FaChevronRight
+                    className={clsx(
+                      'transform transition ease font-light cursor-pointer',
+                      isOpen
+                        ? 'opacity-100 rotate-90'
+                        : 'opacity-0 group-hover:opacity-100 rotate-0'
+                    )}
+                  />
+                  <span
+                    className={clsx(
+                      'text-neutral-500 font-mono absolute transition ease',
+                      isOpen ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
+                    )}
+                  >
+                    {index + 1}
+                  </span>
+                </button>
+                <div className="relative w-full group">
+                  <input
+                    ref={keyInputRef}
+                    disabled={stagedForDelete || !userCanUpdateSecrets}
+                    className={clsx(
+                      INPUT_BASE_STYLE,
+                      rowInputColor(),
+                      'rounded-sm',
+                      keyIsBlank
+                        ? 'ring-1 ring-inset ring-red-500'
+                        : keyIsDuplicate
+                          ? 'ring-1 ring-inset ring-amber-500'
+                          : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500'
+                    )}
+                    value={clientAppSecret.key}
+                    onChange={(e) => handleUpdateKey(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
+                  />
+                  <div className="absolute inset-y-0 right-2 flex gap-1 items-center opacity-0 group-hover:opacity-100 transition ease">
+                    {userCanDeleteSecrets && (
+                      <Button
+                        title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
+                        variant="danger"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteKey(clientAppSecret.id)
+                        }}
+                      >
+                        {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+                      </Button>
+                    )}
                   </div>
-                </Disclosure.Panel>
+                </div>
               </td>
-            )}
-          </Transition>
-        </>
-      )}
-    </Disclosure>
-  )
-}
+              {clientAppSecret.envs.map((env) => (
+                <td
+                  key={env.env.id}
+                  className={'px-6 whitespace-nowrap group cursor-pointer'}
+                  onClick={toggleAccordion}
+                >
+                  <div className="flex items-center justify-center" title={tooltipText(env)}>
+                    {env.secret !== null ? (
+                      env.secret.value.length === 0 ? (
+                        <FaCircle className="text-neutral-500 shrink-0" />
+                      ) : (
+                        <FaCheckCircle
+                          className={clsx(
+                            'shrink-0',
+                            secretIsSameAsProd(env) ? 'text-amber-500' : 'text-emerald-500'
+                          )}
+                        />
+                      )
+                    ) : (
+                      <FaTimesCircle className="text-red-500 shrink-0" />
+                    )}
+                  </div>
+                </td>
+              ))}
+            </tr>
+            <Transition
+              as="tr"
+              show={isOpen}
+              enter="transition duration-100 ease-out"
+              enterFrom="transform scale-95 opacity-0"
+              enterTo="transform scale-100 opacity-100"
+              leave="transition duration-75 ease-out"
+              leaveFrom="transform scale-100 opacity-100"
+              leaveTo="transform scale-95 opacity-0"
+              className={clsx(
+                'border-x',
+                isOpen
+                  ? `${rowBorderColor()} !border-r-neutral-500/40 shadow-xl`
+                  : 'border-neutral-500/40'
+              )}
+            >
+              {isOpen && (
+                <td
+                  colSpan={clientAppSecret.envs.length + 1}
+                  className={clsx('p-2 space-y-6 ', rowBgColorOpen())}
+                >
+                  <Disclosure.Panel static={true}>
+                    <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
+                      {clientAppSecret.envs.map((envSecret) => (
+                        <EnvSecret
+                          key={envSecret.env.id}
+                          keyIsStagedForDelete={stagedForDelete}
+                          clientEnvSecret={envSecret}
+                          serverEnvSecret={serverEnvSecret(envSecret.env?.id!)}
+                          sameAsProd={secretIsSameAsProd(envSecret)}
+                          appSecretId={clientAppSecret.id}
+                          updateEnvValue={updateValue}
+                          stagedForDelete={
+                            envSecret.secret
+                              ? secretsStagedForDelete.includes(envSecret.secret?.id)
+                              : false
+                          }
+                          addEnvValue={addEnvValue}
+                          deleteEnvValue={deleteEnvValue}
+                        />
+                      ))}
+                    </div>
+                  </Disclosure.Panel>
+                </td>
+              )}
+            </Transition>
+          </>
+        )}
+      </Disclosure>
+    )
+  }
+)
+
+AppSecretRow.displayName = 'AppSecretRow'
+
+export default AppSecretRow
