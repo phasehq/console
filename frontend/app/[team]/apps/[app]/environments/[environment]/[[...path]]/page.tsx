@@ -55,7 +55,7 @@ import {
   EnvKeyring,
 } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
-import { processEnvFile, SortOption, sortSecrets } from '@/utils/secrets'
+import { duplicateKeysExist, processEnvFile, SortOption, sortSecrets } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
@@ -458,19 +458,6 @@ export default function EnvironmentPath({
     return changedElements
   }
 
-  const duplicateKeysExist = () => {
-    const keySet = new Set<string>()
-
-    for (const secret of clientSecrets) {
-      if (keySet.has(secret.key)) {
-        return true // Duplicate key found
-      }
-      keySet.add(secret.key)
-    }
-
-    return false // No duplicate keys found
-  }
-
   const handleSaveChanges = async () => {
     setIsloading(true)
     const changedSecrets = getUpdatedSecrets()
@@ -480,7 +467,7 @@ export default function EnvironmentPath({
       return false
     }
 
-    if (duplicateKeysExist()) {
+    if (duplicateKeysExist(clientSecrets)) {
       toast.error('Secret keys cannot be repeated!')
       setIsloading(false)
       return false

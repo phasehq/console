@@ -51,6 +51,7 @@ import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
+import { duplicateKeysExist } from '@/utils/secrets'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -174,19 +175,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   })
 
   const serverSecret = (id: string) => serverAppSecrets.find((secret) => secret.id === id)
-
-  const duplicateKeysExist = () => {
-    const keySet = new Set<string>()
-
-    for (const secret of clientAppSecrets) {
-      if (keySet.has(secret.key)) {
-        return true // Duplicate key found
-      }
-      keySet.add(secret.key)
-    }
-
-    return false // No duplicate keys found
-  }
 
   const blankKeysExist = () => {
     const secretKeysToSync = clientAppSecrets
@@ -323,7 +311,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       return false
     }
 
-    if (duplicateKeysExist()) {
+    if (duplicateKeysExist(clientAppSecrets)) {
       toast.error('Secret keys cannot be repeated!')
       setIsLoading(false)
       return false

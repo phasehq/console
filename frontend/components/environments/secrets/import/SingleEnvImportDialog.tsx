@@ -3,9 +3,10 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Textarea } from '@/components/common/TextArea'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import { envFilePlaceholder, processEnvFile } from '@/utils/secrets'
+import { duplicateKeysExist, envFilePlaceholder, processEnvFile } from '@/utils/secrets'
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import EnvFileDropZone from './EnvFileDropZone'
+import { toast } from 'react-toastify'
 
 interface SingleEnvImportDialogProps {
   environment: EnvironmentType
@@ -43,6 +44,11 @@ const SingleEnvImportDialog = forwardRef(
         withValues,
         withComments
       )
+
+      if (duplicateKeysExist(newSecrets)) {
+        toast.error('File contains duplicate keys!')
+        return
+      }
 
       if (newSecrets.length) {
         addSecrets(newSecrets)

@@ -3,11 +3,12 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Textarea } from '@/components/common/TextArea'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import { envFilePlaceholder, processEnvFile } from '@/utils/secrets'
+import { duplicateKeysExist, envFilePlaceholder, processEnvFile } from '@/utils/secrets'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import EnvFileDropZone from './EnvFileDropZone'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 import clsx from 'clsx'
+import { toast } from 'react-toastify'
 
 interface MultiEnvImportDialogProps {
   environments: EnvironmentType[]
@@ -60,35 +61,43 @@ const MultiEnvImportDialog = forwardRef(
     const processImport = () => {
       const secretsByKey = new Map<string, AppSecret>()
 
-      environments.forEach((env) => {
-        const secrets = selectedEnvs.includes(env)
-          ? processEnvFile(
-              envFileString,
-              env,
-              path,
-              envConfigs[env.id].withValues,
-              envConfigs[env.id].withComments
-            )
-          : []
+      try {
+        environments.forEach((env) => {
+          const secrets = selectedEnvs.includes(env)
+            ? processEnvFile(
+                envFileString,
+                env,
+                path,
+                envConfigs[env.id].withValues,
+                envConfigs[env.id].withComments
+              )
+            : []
 
-        secrets.forEach((secret) => {
-          if (!secretsByKey.has(secret.key)) {
-            secretsByKey.set(secret.key, {
-              id: crypto.randomUUID(),
-              key: secret.key,
-              envs: [],
+          if (duplicateKeysExist(secrets)) {
+            throw 'File contains duplicate keys!'
+          }
+
+          secrets.forEach((secret) => {
+            if (!secretsByKey.has(secret.key)) {
+              secretsByKey.set(secret.key, {
+                id: crypto.randomUUID(),
+                key: secret.key,
+                envs: [],
+              })
+            }
+            secretsByKey.get(secret.key)?.envs.push({ env, secret })
+          })
+
+          // Ensure the environment is included with a null secret if not selected
+          if (!selectedEnvs.includes(env)) {
+            secretsByKey.forEach((appSecret) => {
+              appSecret.envs.push({ env, secret: null })
             })
           }
-          secretsByKey.get(secret.key)?.envs.push({ env, secret })
         })
-
-        // Ensure the environment is included with a null secret if not selected
-        if (!selectedEnvs.includes(env)) {
-          secretsByKey.forEach((appSecret) => {
-            appSecret.envs.push({ env, secret: null })
-          })
-        }
-      })
+      } catch (error) {
+        toast.error(error as string)
+      }
 
       const newSecrets = Array.from(secretsByKey.values())
 
