@@ -213,8 +213,19 @@ export default function EnvironmentPath({
   }
 
   const bulkAddSecrets = (secrets: SecretType[]) => {
-    setClientSecrets([...secrets, ...clientSecrets])
+    const secretsWithImportFlag = secrets.map((secret) => ({
+      ...secret,
+      isImported: true,
+    }))
+    setClientSecrets((prev) => [...prev, ...secretsWithImportFlag])
   }
+
+  // Set the global reveal to true if there are no secrets
+  // Newly created secrets are revealed by default, so this is a better default in this case
+  useEffect(() => {
+    if (serverSecrets.length === 0) setGloballyRevealed(true)
+    else setGloballyRevealed(false)
+  }, [serverSecrets])
 
   const handleBulkUpdateSecrets = async () => {
     const secretsToCreate: SecretInput[] = []
