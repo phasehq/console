@@ -9,6 +9,7 @@ interface EnvFileDropZoneProps {
 
 const EnvFileDropZone = ({ onFileProcessed }: EnvFileDropZoneProps) => {
   const [dragOver, setDragOver] = useState(false)
+  const dragCounter = useRef(0) // Track nested drag events
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileUpload = (file: File | null) => {
@@ -23,7 +24,11 @@ const EnvFileDropZone = ({ onFileProcessed }: EnvFileDropZoneProps) => {
     reader.onload = (e) => {
       if (e.target?.result) {
         onFileProcessed(e.target.result as string)
+        fileInputRef.current!.value = '' // Reset input to allow re-uploading the same file
       }
+    }
+    reader.onerror = () => {
+      toast.error('Failed to read the file. Please try again.')
     }
     reader.readAsText(file)
   }
@@ -34,16 +39,22 @@ const EnvFileDropZone = ({ onFileProcessed }: EnvFileDropZoneProps) => {
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
-    setDragOver(true)
+    event.stopPropagation()
+    if (dragCounter.current === 0) setDragOver(true)
+    dragCounter.current++
   }
 
   const handleDragLeave = () => {
-    setDragOver(false)
+    dragCounter.current--
+    if (dragCounter.current === 0) setDragOver(false)
   }
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
+    event.stopPropagation()
     setDragOver(false)
+    dragCounter.current = 0
+
     if (event.dataTransfer.files.length > 0) {
       handleFileUpload(event.dataTransfer.files[0])
     }

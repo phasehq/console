@@ -124,18 +124,12 @@ const MultiEnvImportDialog = forwardRef(
       )
     }
 
+    // reset the component state if the environments are updated
     useEffect(() => {
       if (environments) {
-        setEnvConfigs(
-          environments.reduce(
-            (acc, env, index) => {
-              acc[env.id] = { withValues: index === 0, withComments: index === 0 }
-              return acc
-            },
-            {} as Record<string, { withValues: boolean; withComments: boolean }>
-          )
-        )
+        reset()
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [environments])
 
     return (
