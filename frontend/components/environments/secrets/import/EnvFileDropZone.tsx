@@ -70,10 +70,10 @@ const EnvFileDropZone = ({ onFileProcessed }: EnvFileDropZoneProps) => {
   return (
     <div
       className={clsx(
-        'w-full h-full p-4 border border-dashed rounded flex flex-col gap-2 items-center justify-center text-neutral-500 cursor-pointer transition ease',
+        'w-full h-full p-4 border border-dashed rounded flex flex-col gap-2 items-center justify-center text-neutral-500 cursor-pointer transition-all duration-200 ease-in-out',
         dragOver
-          ? 'border-emerald-400/20 bg-emerald-400/10'
-          : 'border-neutral-500/40 bg-neutral-200 dark:bg-neutral-800 hover:bg-emerald-400/20 dark:hover:bg-emerald-400/10'
+          ? 'border-emerald-500/30 bg-emerald-500/5'
+          : 'border-neutral-600/30 dark:border-neutral-500/30 bg-neutral-100/50 dark:bg-neutral-900/50 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/50'
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
