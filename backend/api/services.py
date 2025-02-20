@@ -93,12 +93,12 @@ class ServiceConfig:
         "resource_type": "project",
     }
 
-    # CLOUDFLARE_WORKERS = {
-    #     "id": "cloudflare_workers",
-    #     "name": "Cloudflare Workers",
-    #     "provider": Providers.CLOUDFLARE,
-    #     "resource_type": "project",
-    # }
+    CLOUDFLARE_WORKERS = {
+        "id": "cloudflare_workers",
+        "name": "Cloudflare Workers",
+        "provider": Providers.CLOUDFLARE,
+        "resource_type": "worker",
+    }
 
     AWS_SECRETS_MANAGER = {
         "id": "aws_secrets_manager",
