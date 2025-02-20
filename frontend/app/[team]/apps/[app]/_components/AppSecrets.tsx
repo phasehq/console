@@ -794,18 +794,22 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       {filteredSecrets.length > 0 && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {!allRowsAreExpanded && (
-              <Button variant="secondary" onClick={() => toggleAllExpanded(true)}>
-                <FaAngleDoubleDown /> Expand all
-              </Button>
-            )}
+            <Button
+              variant="secondary"
+              disabled={!allRowsAreExpanded}
+              onClick={() => toggleAllExpanded(true)}
+            >
+              <FaAngleDoubleDown /> Expand all
+            </Button>
 
-            {!allRowsAreCollapsed && (
-              <Button variant="secondary" onClick={() => toggleAllExpanded(false)}>
-                <FaAngleDoubleUp />
-                Collapse all
-              </Button>
-            )}
+            <Button
+              variant="secondary"
+              disabled={!allRowsAreCollapsed}
+              onClick={() => toggleAllExpanded(false)}
+            >
+              <FaAngleDoubleUp />
+              Collapse all
+            </Button>
           </div>
           <div className="flex justify-end pr-4 gap-4">
             <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
