@@ -7,6 +7,8 @@ interface EnvFileDropZoneProps {
   onFileProcessed: (content: string) => void
 }
 
+const MAX_FILE_SIZE = 100 * 1024 // 100KB
+
 const EnvFileDropZone = ({ onFileProcessed }: EnvFileDropZoneProps) => {
   const [dragOver, setDragOver] = useState(false)
   const dragCounter = useRef(0) // Track nested drag events
@@ -17,6 +19,11 @@ const EnvFileDropZone = ({ onFileProcessed }: EnvFileDropZoneProps) => {
 
     if (!/\.env(\..+)?$/.test(file.name)) {
       toast.error('Invalid file type. Please upload a valid .env file.')
+      return
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('File size exceeds 100KB limit.')
       return
     }
 
