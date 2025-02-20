@@ -5,7 +5,7 @@ import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcess
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useMutation, useQuery } from '@apollo/client'
-import { createRef, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
@@ -48,7 +48,7 @@ import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
 import { AppSecret, AppFolder } from '../types'
-import AppSecretRow from './AppSecretRow'
+import { AppSecretRow } from './AppSecretRow'
 import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
@@ -103,6 +103,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
   const [appSecretsToDelete, setAppSecretsToDelete] = useState<string[]>([])
 
+  const [expandedSecrets, setExpandedSecrets] = useState<string[]>([])
+
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [initAppEnvironments] = useMutation(InitAppEnvironments)
   const [bulkProcessSecrets, { loading: bulkUpdatePending }] = useMutation(BulkProcessSecrets)
@@ -116,6 +118,17 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { keyring } = useContext(KeyringContext)
 
   const normalizeValues = (values: (string | undefined)[]) => values.map((value) => value ?? null) // Replace undefined with null for consistent comparison
+
+  const handleExpandRow = (secretId: string) => {
+    if (!expandedSecrets.includes(secretId)) setExpandedSecrets([...expandedSecrets, secretId])
+  }
+
+  const handleCollapseRow = (secretId: string) => {
+    setExpandedSecrets(expandedSecrets.filter((id) => id !== secretId))
+  }
+
+  const allRowsAreExpanded = clientAppSecrets.every((secret) => expandedSecrets.includes(secret.id))
+  const allRowsAreCollapsed = expandedSecrets.length === 0
 
   const unsavedChanges =
     // Check if any secrets are staged for delete
@@ -176,21 +189,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     pollInterval: unsavedChanges ? 0 : 5000,
   })
 
-  const disclosureRefs = useMemo(() => {
-    return new Map(
-      filteredSecrets.map((appSecret) => [
-        appSecret.id,
-        createRef<{ isOpen: Boolean; open: () => void; close: () => void }>(),
-      ])
-    )
-  }, [filteredSecrets])
-
   const toggleAllExpanded = (expand: boolean) => {
-    disclosureRefs.forEach((ref) => {
-      if (ref.current) {
-        expand ? ref.current.open() : ref.current.close()
-      }
-    })
+    expand
+      ? setExpandedSecrets(clientAppSecrets.map((appSecret) => appSecret.id))
+      : setExpandedSecrets([])
   }
 
   const serverSecret = (id: string) => serverAppSecrets.find((secret) => secret.id === id)
@@ -792,14 +794,18 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       {filteredSecrets.length > 0 && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="secondary" onClick={() => toggleAllExpanded(true)}>
-              <FaAngleDoubleDown /> Expand all
-            </Button>
+            {!allRowsAreExpanded && (
+              <Button variant="secondary" onClick={() => toggleAllExpanded(true)}>
+                <FaAngleDoubleDown /> Expand all
+              </Button>
+            )}
 
-            <Button variant="secondary" onClick={() => toggleAllExpanded(false)}>
-              <FaAngleDoubleUp />
-              Collapse all
-            </Button>
+            {!allRowsAreCollapsed && (
+              <Button variant="secondary" onClick={() => toggleAllExpanded(false)}>
+                <FaAngleDoubleUp />
+                Collapse all
+              </Button>
+            )}
           </div>
           <div className="flex justify-end pr-4 gap-4">
             <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
@@ -853,6 +859,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 {filteredSecrets.map((appSecret, index) => (
                   <AppSecretRow
                     index={index}
+                    isExpanded={expandedSecrets.includes(appSecret.id)}
+                    expand={handleExpandRow}
+                    collapse={handleCollapseRow}
                     key={appSecret.id}
                     clientAppSecret={appSecret}
                     serverAppSecret={serverSecret(appSecret.id)}
@@ -863,7 +872,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                     deleteKey={handleStageClientSecretForDelete}
                     stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
                     secretsStagedForDelete={secretsToDelete}
-                    ref={disclosureRefs.get(appSecret.id)}
                   />
                 ))}
               </tbody>
