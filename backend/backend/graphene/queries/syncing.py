@@ -31,6 +31,7 @@ from api.utils.syncing.vercel.main import (
     test_vercel_creds,
     list_vercel_projects
 )
+from api.utils.syncing.cloudflare.workers import list_cloudflare_workers
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -93,6 +94,28 @@ def resolve_cloudflare_pages_projects(root, info, credential_id):
     try:
         projects = list_cloudflare_pages(decrypted_account_id, decrypted_access_token)
         return projects
+    except Exception as ex:
+        raise GraphQLError(ex)
+
+
+def resolve_cloudflare_workers(root, info, credential_id):
+    pk, sk = get_server_keypair()
+
+    credential = ProviderCredentials.objects.get(id=credential_id)
+
+    if credential.provider != "cloudflare":
+        raise GraphQLError("These credentials can't be used to sync with Cloudflare!")
+
+    decrypted_account_id = decrypt_asymmetric(
+        credential.credentials["account_id"], sk.hex(), pk.hex()
+    )
+    decrypted_access_token = decrypt_asymmetric(
+        credential.credentials["access_token"], sk.hex(), pk.hex()
+    )
+
+    try:
+        workers = list_cloudflare_workers(decrypted_account_id, decrypted_access_token)
+        return workers
     except Exception as ex:
         raise GraphQLError(ex)
 

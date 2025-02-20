@@ -46,6 +46,7 @@ type Query {
   testNomadCreds(credentialId: ID): Boolean
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
+  cloudflareWorkers(credentialId: ID): [CloudflareWorkerType]
 }
 
 type OrganisationType {
@@ -682,6 +683,11 @@ type PaymentMethodDetails {
   isDefault: Boolean
 }
 
+type CloudflareWorkerType {
+  name: String
+  scriptId: String
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   inviteOrganisationMember(apps: [String], email: String!, orgId: ID!): InviteOrganisationMemberMutation
@@ -756,6 +762,7 @@ type Mutation {
     """Payment Method ID to set as default"""
     paymentMethodId: String!
   ): SetDefaultPaymentMethodMutation
+  createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
 }
 
 type CreateOrganisationMutation {
@@ -1089,4 +1096,8 @@ type CreateSetupIntentMutation {
 
 type SetDefaultPaymentMethodMutation {
   ok: Boolean
+}
+
+type CreateCloudflareWorkersSync {
+  sync: EnvironmentSyncType
 }
