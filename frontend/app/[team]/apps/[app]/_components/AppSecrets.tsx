@@ -824,11 +824,11 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             <Button variant="secondary" onClick={handleToggleExpand}>
               {isAllExpanded ? (
                 <>
-                  <FaChevronUp className="text-lg" /> Collapse Secrets
+                  <FaChevronUp className="text-lg" /> Collapse secrets
                 </>
               ) : (
                 <>
-                  <FaChevronDown className="text-lg" /> Expand Secrets
+                  <FaChevronDown className="text-lg" /> Expand secrets
                 </>
               )}
             </Button>
