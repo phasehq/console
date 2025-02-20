@@ -239,11 +239,18 @@ interface AppSecretRowProps {
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteKey: (id: string) => void
+  onToggle: (isOpen: boolean) => void
 }
 
-const AppSecretRow = forwardRef(
-  (
-    {
+type AppSecretRowRef = {
+  isOpen: boolean
+  open: () => void
+  close: () => void
+}
+
+const AppSecretRow = forwardRef<AppSecretRowRef, AppSecretRowProps>(
+  (props, ref) => {
+    const {
       index,
       clientAppSecret,
       serverAppSecret,
@@ -254,9 +261,9 @@ const AppSecretRow = forwardRef(
       addEnvValue,
       deleteEnvValue,
       deleteKey,
-    }: AppSecretRowProps,
-    ref
-  ) => {
+      onToggle,
+    } = props
+
     const { activeOrganisation: organisation } = useContext(organisationContext)
 
     const newEnvValueAdded = clientAppSecret.envs.some((env) => env?.secret?.id.includes('new'))
@@ -266,13 +273,23 @@ const AppSecretRow = forwardRef(
 
     useImperativeHandle(ref, () => ({
       isOpen,
-      open: () => setIsOpen(true),
-      close: () => setIsOpen(false),
+      open: () => {
+        setIsOpen(true)
+        onToggle(true)
+      },
+      close: () => {
+        setIsOpen(false)
+        onToggle(false)
+      },
     }))
 
     const keyInputRef = useRef<HTMLInputElement>(null)
 
-    const toggleAccordion = () => setIsOpen(!isOpen)
+    const toggleAccordion = () => {
+      const newIsOpen = !isOpen;
+      setIsOpen(newIsOpen);
+      onToggle(newIsOpen);
+    }
 
     const handleUpdateKey = (k: string) => {
       const sanitizedK = k.replace(/ /g, '_').toUpperCase()
@@ -363,11 +380,12 @@ const AppSecretRow = forwardRef(
     useEffect(() => {
       if (secretIsNew) {
         setIsOpen(true)
+        onToggle(true)
         if (keyInputRef.current) {
           keyInputRef.current.focus()
         }
       }
-    }, [secretIsNew])
+    }, [secretIsNew, onToggle])
 
     return (
       <Disclosure>

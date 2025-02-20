@@ -12,12 +12,12 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
 
 import {
-  FaAngleDoubleDown,
-  FaAngleDoubleUp,
   FaArrowRight,
   FaBan,
   FaCheckCircle,
   FaChevronRight,
+  FaChevronDown,
+  FaChevronUp,
   FaCloudUploadAlt,
   FaFolder,
   FaPlus,
@@ -180,10 +180,27 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     return new Map(
       filteredSecrets.map((appSecret) => [
         appSecret.id,
-        createRef<{ isOpen: Boolean; open: () => void; close: () => void }>(),
+        createRef<{ isOpen: boolean; open: () => void; close: () => void }>(),
       ])
     )
   }, [filteredSecrets])
+
+  const [expandedRows, setExpandedRows] = useState(new Set<string>());
+
+  const isAllExpanded = useMemo(() => {
+    return filteredSecrets.length > 0 && expandedRows.size === filteredSecrets.length;
+  }, [expandedRows.size, filteredSecrets.length]);
+
+  const handleToggleExpand = () => {
+    const newExpandState = !isAllExpanded;
+    toggleAllExpanded(newExpandState);
+    
+    if (newExpandState) {
+      setExpandedRows(new Set(filteredSecrets.map(secret => secret.id)));
+    } else {
+      setExpandedRows(new Set());
+    }
+  };
 
   const toggleAllExpanded = (expand: boolean) => {
     disclosureRefs.forEach((ref) => {
@@ -192,6 +209,18 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       }
     })
   }
+
+  const handleRowToggle = (id: string, isOpen: boolean) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (isOpen) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
 
   const serverSecret = (id: string) => serverAppSecrets.find((secret) => secret.id === id)
 
@@ -792,13 +821,16 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       {filteredSecrets.length > 0 && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="secondary" onClick={() => toggleAllExpanded(true)}>
-              <FaAngleDoubleDown /> Expand all
-            </Button>
-
-            <Button variant="secondary" onClick={() => toggleAllExpanded(false)}>
-              <FaAngleDoubleUp />
-              Collapse all
+            <Button variant="secondary" onClick={handleToggleExpand}>
+              {isAllExpanded ? (
+                <>
+                  <FaChevronUp className="text-lg" /> Collapse Secrets
+                </>
+              ) : (
+                <>
+                  <FaChevronDown className="text-lg" /> Expand Secrets
+                </>
+              )}
             </Button>
           </div>
           <div className="flex justify-end pr-4 gap-4">
@@ -864,6 +896,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                     stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
                     secretsStagedForDelete={secretsToDelete}
                     ref={disclosureRefs.get(appSecret.id)}
+                    onToggle={(isOpen) => handleRowToggle(appSecret.id, isOpen)}
                   />
                 ))}
               </tbody>
