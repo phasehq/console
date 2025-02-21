@@ -15,6 +15,10 @@ from .utils.syncing.cloudflare.pages import (
     get_cf_pages_credentials,
     sync_cloudflare_secrets,
 )
+from .utils.syncing.cloudflare.workers import (
+    get_cf_workers_credentials,
+    sync_cloudflare_worker_secrets,
+)
 from django.apps import apps
 from .utils.syncing.secrets import get_environment_secrets
 from django_rq import job
@@ -36,6 +40,15 @@ def trigger_sync_tasks(env_sync):
         env_sync.save()
 
         job = perform_cloudflare_pages_sync.delay(env_sync)
+        job_id = job.get_id()
+
+        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+
+    elif env_sync.service == ServiceConfig.CLOUDFLARE_WORKERS["id"]:
+        env_sync.status = EnvironmentSync.IN_PROGRESS
+        env_sync.save()
+
+        job = perform_cloudflare_workers_sync.delay(env_sync)
         job_id = job.get_id()
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
@@ -851,6 +864,77 @@ def perform_vercel_sync(environment_sync):
             sync_event.meta = sync_data
         except:
             pass
+        sync_event.save()
+
+        environment_sync.last_sync = timezone.now()
+        environment_sync.status = EnvironmentSync.FAILED
+        environment_sync.save()
+
+
+@job("default", timeout=3600)
+def perform_cloudflare_workers_sync(environment_sync):
+    try:
+        EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+        EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
+
+        secrets = get_environment_secrets(
+            environment_sync.environment, environment_sync.path
+        )
+
+        if environment_sync.authentication is None:
+            sync_data = (
+                False,
+                {"message": "No authentication credentials for this sync"},
+            )
+            raise Exception("No authentication credentials for this sync")
+
+        account_id, access_token = get_cf_workers_credentials(environment_sync)
+
+        worker_info = environment_sync.options
+
+        success, sync_data = sync_cloudflare_worker_secrets(
+            secrets,
+            account_id,
+            access_token,
+            worker_info["worker_name"],
+        )
+
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if success:
+            sync_event.status = EnvironmentSync.COMPLETED
+            sync_event.completed_at = timezone.now()
+            sync_event.meta = sync_data
+            sync_event.save()
+
+            environment_sync.last_sync = timezone.now()
+            environment_sync.status = EnvironmentSync.COMPLETED
+            environment_sync.save()
+
+        else:
+            sync_event.status = EnvironmentSync.FAILED
+            sync_event.completed_at = timezone.now()
+            sync_event.meta = sync_data
+            sync_event.save()
+
+            environment_sync.last_sync = timezone.now()
+            environment_sync.status = EnvironmentSync.FAILED
+            environment_sync.save()
+
+    except Exception as e:
+        sync_event = (
+            EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
+            .order_by("-created_at")
+            .first()
+        )
+
+        sync_event.status = EnvironmentSync.FAILED
+        sync_event.completed_at = timezone.now()
+        sync_event.meta = {"message": str(e)}
         sync_event.save()
 
         environment_sync.last_sync = timezone.now()

@@ -11,6 +11,7 @@ import { CreateNomadSync } from './Nomad/CreateNomadSync'
 import { CreateGitLabCISync } from './GitLab/CreateGitLabCISync'
 import { CreateRailwaySync } from './Railway/CreateRailwaySync'
 import { CreateVercelSync } from './Vercel/CreateVercelSync'
+import { CreateCloudflareWorkersSync } from './Cloudflare/CreateCloudflareWorkersSync'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
@@ -66,6 +67,8 @@ export const CreateSyncDialog = (props: {
         return <CreateRailwaySync appId={props.appId} closeModal={closeModal} />
       case 'vercel':
         return <CreateVercelSync appId={props.appId} closeModal={closeModal} />
+      case 'cloudflare_workers':
+        return <CreateCloudflareWorkersSync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null
