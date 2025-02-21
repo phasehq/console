@@ -356,7 +356,7 @@ export const AppSecretRow = ({
 
   // Reveal newly created secrets by default
   useEffect(() => {
-    if (secretIsNew) {
+    if (secretIsNew && !clientAppSecret.isImported) {
       handleOpen()
       if (keyInputRef.current) {
         keyInputRef.current.focus()

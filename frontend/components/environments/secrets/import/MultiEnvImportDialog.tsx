@@ -81,6 +81,7 @@ const MultiEnvImportDialog = forwardRef(
             if (!secretsByKey.has(secret.key)) {
               secretsByKey.set(secret.key, {
                 id: crypto.randomUUID(),
+                isImported: true,
                 key: secret.key,
                 envs: [],
               })
@@ -131,6 +132,8 @@ const MultiEnvImportDialog = forwardRef(
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [environments])
+
+    const disabled = !envFileString || selectedEnvs.length === 0
 
     return (
       <GenericDialog title="Import secrets" ref={dialogRef} onClose={reset}>
@@ -239,7 +242,7 @@ const MultiEnvImportDialog = forwardRef(
           )}
 
           <div className="flex justify-end">
-            <Button variant="primary" onClick={processImport} disabled={!envFileString}>
+            <Button variant="primary" onClick={processImport} disabled={disabled}>
               Preview Import
             </Button>
           </div>
