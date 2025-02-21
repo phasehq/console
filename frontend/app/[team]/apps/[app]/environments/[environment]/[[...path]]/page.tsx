@@ -9,7 +9,7 @@ import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
-
+import { TbDownload } from 'react-icons/tb'
 import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
@@ -30,6 +30,7 @@ import {
   FaMagic,
   FaCloudUploadAlt,
   FaBan,
+  FaFileImport,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -54,12 +55,14 @@ import {
   EnvKeyring,
 } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
-import { SortOption, sortSecrets } from '@/utils/secrets'
+import { duplicateKeysExist, processEnvFile, SortOption, sortSecrets } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
+import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
+import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 
 export default function EnvironmentPath({
   params,
@@ -81,6 +84,8 @@ export default function EnvironmentPath({
   const [isLoading, setIsloading] = useState(false)
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
+
+  const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const [sort, setSort] = useState<SortOption>('-created')
 
@@ -206,6 +211,21 @@ export default function EnvironmentPath({
       ? setClientSecrets([newSecret, ...clientSecrets])
       : setClientSecrets([...clientSecrets, newSecret])
   }
+
+  const bulkAddSecrets = (secrets: SecretType[]) => {
+    const secretsWithImportFlag = secrets.map((secret) => ({
+      ...secret,
+      isImported: true,
+    }))
+    setClientSecrets((prev) => [...prev, ...secretsWithImportFlag])
+  }
+
+  // Set the global reveal to true if there are no secrets
+  // Newly created secrets are revealed by default, so this is a better default in this case
+  useEffect(() => {
+    if (serverSecrets.length === 0) setGloballyRevealed(true)
+    else setGloballyRevealed(false)
+  }, [serverSecrets])
 
   const handleBulkUpdateSecrets = async () => {
     const secretsToCreate: SecretInput[] = []
@@ -449,19 +469,6 @@ export default function EnvironmentPath({
     return changedElements
   }
 
-  const duplicateKeysExist = () => {
-    const keySet = new Set<string>()
-
-    for (const secret of clientSecrets) {
-      if (keySet.has(secret.key)) {
-        return true // Duplicate key found
-      }
-      keySet.add(secret.key)
-    }
-
-    return false // No duplicate keys found
-  }
-
   const handleSaveChanges = async () => {
     setIsloading(true)
     const changedSecrets = getUpdatedSecrets()
@@ -471,7 +478,7 @@ export default function EnvironmentPath({
       return false
     }
 
-    if (duplicateKeysExist()) {
+    if (duplicateKeysExist(clientSecrets)) {
       toast.error('Secret keys cannot be repeated!')
       setIsloading(false)
       return false
@@ -759,10 +766,16 @@ export default function EnvironmentPath({
         variant="primary"
         onClick={() => handleAddSecret(true)}
         menuContent={
-          <div className="w-max">
+          <div className="w-max flex flex-col items-start gap-1">
             <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
               <div className="flex items-center gap-2">
                 <FaFolderPlus /> New Folder
+              </div>
+            </Button>
+
+            <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
+              <div className="flex items-center gap-2">
+                <TbDownload /> Import secrets
               </div>
             </Button>
           </div>
@@ -796,6 +809,15 @@ export default function EnvironmentPath({
         </EmptyState>
       </div>
     )
+
+  const EmptyStateFileImport = () => {
+    const handleFileSelection = (fileString: string) => {
+      const secrets: SecretType[] = processEnvFile(fileString, environment, '/')
+      bulkAddSecrets(secrets)
+    }
+
+    return <EnvFileDropZone onFileProcessed={(content) => handleFileSelection(content)} />
+  }
 
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
@@ -935,6 +957,13 @@ export default function EnvironmentPath({
               </div>
             </div>
 
+            <SingleEnvImportDialog
+              environment={environment}
+              path={'/'}
+              addSecrets={bulkAddSecrets}
+              ref={importDialogRef}
+            />
+
             {(clientSecrets.length > 0 || folders.length > 0) && (
               <div className="flex items-center w-full">
                 <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
@@ -1014,6 +1043,11 @@ export default function EnvironmentPath({
                 }
               >
                 <NewSecretMenu />
+                {!searchQuery && (
+                  <div className="w-full max-w-screen-sm h-40 rounded-lg">
+                    <EmptyStateFileImport />
+                  </div>
+                )}
               </EmptyState>
             )}
           </div>

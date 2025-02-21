@@ -1,4 +1,4 @@
-import { EnvironmentType, SecretType, SecretFolderType } from "@/apollo/graphql"
+import { EnvironmentType, SecretType, SecretFolderType } from '@/apollo/graphql'
 
 export type EnvSecrets = {
   env: EnvironmentType
@@ -13,6 +13,7 @@ export type EnvFolders = {
 export type AppSecret = {
   id: string
   key: string
+  isImported?: boolean
   envs: Array<{
     env: Partial<EnvironmentType>
     secret: SecretType | null
