@@ -20,7 +20,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 
 export default function SecretRow(props: {
   orgId: string
-  secret: SecretType
+  secret: SecretType & { isImported?: boolean }
   environment: EnvironmentType
   cannonicalSecret: SecretType | undefined
   secretNames: Array<Partial<SecretType>>
@@ -54,7 +54,7 @@ export default function SecretRow(props: {
 
   const booleanValue = secret.value.toLowerCase() === 'true'
 
-  const [isRevealed, setIsRevealed] = useState<boolean>(false)
+  const [isRevealed, setIsRevealed] = useState<boolean>(cannonicalSecret === undefined)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
 
@@ -72,19 +72,20 @@ export default function SecretRow(props: {
     if (isBoolean) setIsRevealed(true)
   }, [isBoolean])
 
-  // Reveal newly created secrets by default
+  // Focus and reveal newly created secrets
+  // The setTimeout is a hack to override the initial state change based on the value of  globallyRevealed
   useEffect(() => {
     if (cannonicalSecret === undefined) {
-      setIsRevealed(true)
-      if (keyInputRef.current) {
+      setTimeout(() => setIsRevealed(true), 100)
+      if (keyInputRef.current && !secret.isImported) {
         keyInputRef.current.focus()
       }
     }
-  }, [cannonicalSecret])
+  }, [cannonicalSecret, secret.isImported])
 
   // Handle global reveal
   useEffect(() => {
-    if ((!isBoolean || globallyRevealed) && cannonicalSecret) setIsRevealed(globallyRevealed)
+    if (!isBoolean || globallyRevealed) setIsRevealed(globallyRevealed)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globallyRevealed, isBoolean])
 

@@ -62,7 +62,7 @@ const EnvSecret = ({
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
 
-  const [showValue, setShowValue] = useState<boolean>(false)
+  const [showValue, setShowValue] = useState<boolean>(valueIsNew || false)
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
@@ -92,11 +92,6 @@ const EnvSecret = ({
   useEffect(() => {
     if (isBoolean) setShowValue(true)
   }, [isBoolean])
-
-  // Reveal newly added values
-  useEffect(() => {
-    if (valueIsNew) setShowValue(true)
-  }, [valueIsNew])
 
   const handleHideSecret = () => setShowValue(false)
 
@@ -131,29 +126,39 @@ const EnvSecret = ({
     else return ''
   }
 
+  const EnvLabel = () => (
+    <div
+      className={`flex items-center gap-2 w-min group font-medium text-xs ${inputTextColor()} opacity-60`}
+    >
+      <div>{clientEnvSecret.env.name}</div>
+      {!valueIsNew && (
+        <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
+      )}
+      {sameAsProd && clientEnvSecret?.secret?.value && (
+        <FaCheckCircle className="text-amber-500" title="This value is the same as Production" />
+      )}
+    </div>
+  )
+
   return (
     <div className={`px-4 rounded-md ${bgColor()}`}>
       <div>
-        <Link
-          className={`flex items-center gap-2 w-min group font-medium text-xs ${inputTextColor()} opacity-60`}
-          href={`${pathname}/environments/${clientEnvSecret.env.id}${
-            clientEnvSecret.secret ? `?secret=${clientEnvSecret.secret?.id}` : ``
-          }`}
-          title={
-            clientEnvSecret.secret
-              ? `View this secret in ${clientEnvSecret.env.name}`
-              : `Manage ${clientEnvSecret.env.name}`
-          }
-        >
-          <div>{clientEnvSecret.env.name}</div>
-          <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
-          {sameAsProd && clientEnvSecret?.secret?.value && (
-            <FaCheckCircle
-              className="text-amber-500"
-              title="This value is the same as Production"
-            />
-          )}
-        </Link>
+        {valueIsNew ? (
+          <EnvLabel />
+        ) : (
+          <Link
+            href={`${pathname}/environments/${clientEnvSecret.env.id}${
+              clientEnvSecret.secret ? `?secret=${clientEnvSecret.secret?.id}` : ``
+            }`}
+            title={
+              clientEnvSecret.secret
+                ? `View this secret in ${clientEnvSecret.env.name}`
+                : `Manage ${clientEnvSecret.env.name}`
+            }
+          >
+            <EnvLabel />
+          </Link>
+        )}
       </div>
 
       {clientEnvSecret.secret === null ? (
@@ -228,19 +233,11 @@ const EnvSecret = ({
   )
 }
 
-export const AppSecretRow = ({
-  index,
-  clientAppSecret,
-  serverAppSecret,
-  stagedForDelete,
-  secretsStagedForDelete,
-  updateKey,
-  updateValue,
-  addEnvValue,
-  deleteEnvValue,
-  deleteKey,
-}: {
+interface AppSecretRowProps {
   index: number
+  isExpanded: boolean
+  expand: (id: string) => void
+  collapse: (id: string) => void
   clientAppSecret: AppSecret
   serverAppSecret?: AppSecret
   stagedForDelete?: boolean
@@ -250,17 +247,35 @@ export const AppSecretRow = ({
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteKey: (id: string) => void
-}) => {
+}
+
+export const AppSecretRow = ({
+  index,
+  isExpanded,
+  expand,
+  collapse,
+  clientAppSecret,
+  serverAppSecret,
+  stagedForDelete,
+  secretsStagedForDelete,
+  updateKey,
+  updateValue,
+  addEnvValue,
+  deleteEnvValue,
+  deleteKey,
+}: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const { id } = clientAppSecret
+  const handleOpen = () => expand(id)
+  const handleClose = () => collapse(id)
 
   const newEnvValueAdded = clientAppSecret.envs.some((env) => env?.secret?.id.includes('new'))
   const secretIsNew = !serverAppSecret
 
-  const [isOpen, setIsOpen] = useState(false)
-
   const keyInputRef = useRef<HTMLInputElement>(null)
 
-  const toggleAccordion = () => setIsOpen(!isOpen)
+  const toggleAccordion = () => (isExpanded ? handleClose() : handleOpen())
 
   const handleUpdateKey = (k: string) => {
     const sanitizedK = k.replace(/ /g, '_').toUpperCase()
@@ -346,13 +361,16 @@ export const AppSecretRow = ({
 
   // Reveal newly created secrets by default
   useEffect(() => {
-    if (secretIsNew) {
-      setIsOpen(true)
+    if (secretIsNew && !clientAppSecret.isImported) {
+      handleOpen()
       if (keyInputRef.current) {
         keyInputRef.current.focus()
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretIsNew])
+
+  const envs = clientAppSecret.envs.sort((a, b) => a.env.index! - b.env.index!)
 
   return (
     <Disclosure>
@@ -361,7 +379,7 @@ export const AppSecretRow = ({
           <tr
             className={clsx(
               'group divide-x divide-neutral-500/20 border-l transition ease duration-100',
-              isOpen
+              isExpanded
                 ? `${rowBgColorOpen()} ${rowBorderColor()} !border-r-neutral-500/20`
                 : `${rowBgColorClosed()}  border-neutral-500/20`
             )}
@@ -369,7 +387,7 @@ export const AppSecretRow = ({
             <td
               className={clsx(
                 `px-2 py-0.5 whitespace-nowrap font-mono ${rowInputColor()} flex items-center gap-2 ph-no-capture`,
-                isOpen ? 'font-bold' : 'font-medium'
+                isExpanded ? 'font-bold' : 'font-medium'
               )}
             >
               <button
@@ -379,13 +397,15 @@ export const AppSecretRow = ({
                 <FaChevronRight
                   className={clsx(
                     'transform transition ease font-light cursor-pointer',
-                    isOpen ? 'opacity-100 rotate-90' : 'opacity-0 group-hover:opacity-100 rotate-0'
+                    isExpanded
+                      ? 'opacity-100 rotate-90'
+                      : 'opacity-0 group-hover:opacity-100 rotate-0'
                   )}
                 />
                 <span
                   className={clsx(
                     'text-neutral-500 font-mono absolute transition ease',
-                    isOpen ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
+                    isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
                   )}
                 >
                   {index + 1}
@@ -426,7 +446,7 @@ export const AppSecretRow = ({
                 </div>
               </div>
             </td>
-            {clientAppSecret.envs.map((env) => (
+            {envs.map((env) => (
               <td
                 key={env.env.id}
                 className={'px-6 whitespace-nowrap group cursor-pointer'}
@@ -453,28 +473,28 @@ export const AppSecretRow = ({
           </tr>
           <Transition
             as="tr"
-            show={isOpen}
-            enter="transition duration-100 ease-out"
-            enterFrom="transform scale-95 opacity-0"
-            enterTo="transform scale-100 opacity-100"
-            leave="transition duration-75 ease-out"
-            leaveFrom="transform scale-100 opacity-100"
-            leaveTo="transform scale-95 opacity-0"
+            show={isExpanded}
+            enter="transition duration-150 ease-out"
+            enterFrom="transform  opacity-0"
+            enterTo="transform  opacity-100"
+            leave="transition duration-100 ease-out"
+            leaveFrom="transform  opacity-100"
+            leaveTo="transform  opacity-0"
             className={clsx(
               'border-x',
-              isOpen
+              isExpanded
                 ? `${rowBorderColor()} !border-r-neutral-500/40 shadow-xl`
                 : 'border-neutral-500/40'
             )}
           >
-            {isOpen && (
+            {isExpanded && (
               <td
                 colSpan={clientAppSecret.envs.length + 1}
                 className={clsx('p-2 space-y-6 ', rowBgColorOpen())}
               >
                 <Disclosure.Panel static={true}>
                   <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
-                    {clientAppSecret.envs.map((envSecret) => (
+                    {envs.map((envSecret) => (
                       <EnvSecret
                         key={envSecret.env.id}
                         keyIsStagedForDelete={stagedForDelete}
