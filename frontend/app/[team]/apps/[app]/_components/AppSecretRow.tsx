@@ -375,6 +375,8 @@ export const AppSecretRow = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretIsNew])
 
+  const envs = clientAppSecret.envs.sort((a, b) => a.env.index! - b.env.index!)
+
   return (
     <Disclosure>
       {({ open }) => (
@@ -449,7 +451,7 @@ export const AppSecretRow = ({
                 </div>
               </div>
             </td>
-            {clientAppSecret.envs.map((env) => (
+            {envs.map((env) => (
               <td
                 key={env.env.id}
                 className={'px-6 whitespace-nowrap group cursor-pointer'}
@@ -497,7 +499,7 @@ export const AppSecretRow = ({
               >
                 <Disclosure.Panel static={true}>
                   <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
-                    {clientAppSecret.envs.map((envSecret) => (
+                    {envs.map((envSecret) => (
                       <EnvSecret
                         key={envSecret.env.id}
                         keyIsStagedForDelete={stagedForDelete}
