@@ -17,7 +17,7 @@ import {
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
-import { Fragment, useContext, useEffect } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
@@ -76,31 +76,27 @@ const SidebarLink = ({
 }
 
 const Sidebar = () => {
-  const { sidebarState, setSidebarState } = useContext(SidebarContext)
-  const collapsed = sidebarState === 'collapsed'
+  const { sidebarState, setUserPreference } = useContext(SidebarContext)
+  const [isAutoCollapsed, setIsAutoCollapsed] = useState(false)
+  const collapsed = isAutoCollapsed || sidebarState === 'collapsed'
   const team = usePathname()?.split('/')[1]
   const { organisations, activeOrganisation } = useContext(organisationContext)
   const showOrgsMenu = organisations && organisations.length > 1
   const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
 
-  // Add window resize handler
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth <= 950) {
-        // Collapse on screens <= 950x to accommodate split-screen layouts on larger displays
-        setSidebarState('collapsed')
+        setIsAutoCollapsed(true) // Auto-collapse
+      } else {
+        setIsAutoCollapsed(false) // Reset auto-collapse
       }
     }
 
-    // Initial check
     handleResize()
-
-    // Add event listener
-    window.addEventListener('resize', handleResize) 
-
-    // Cleanup
+    window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [setSidebarState])
+  }, [])
 
   const OrgsMenu = () => {
     const planStyle = () => {
@@ -279,7 +275,7 @@ const Sidebar = () => {
         {/* Bottom section with collapse/expand button */}
         <div className="p-4 w-full">
           <button
-            onClick={() => setSidebarState(collapsed ? 'expanded' : 'collapsed')}
+            onClick={() => setUserPreference(collapsed ? 'expanded' : 'collapsed')}
             className="flex items-center justify-center p-3 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
