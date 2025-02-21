@@ -131,29 +131,39 @@ const EnvSecret = ({
     else return ''
   }
 
+  const EnvLabel = () => (
+    <div
+      className={`flex items-center gap-2 w-min group font-medium text-xs ${inputTextColor()} opacity-60`}
+    >
+      <div>{clientEnvSecret.env.name}</div>
+      {!valueIsNew && (
+        <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
+      )}
+      {sameAsProd && clientEnvSecret?.secret?.value && (
+        <FaCheckCircle className="text-amber-500" title="This value is the same as Production" />
+      )}
+    </div>
+  )
+
   return (
     <div className={`px-4 rounded-md ${bgColor()}`}>
       <div>
-        <Link
-          className={`flex items-center gap-2 w-min group font-medium text-xs ${inputTextColor()} opacity-60`}
-          href={`${pathname}/environments/${clientEnvSecret.env.id}${
-            clientEnvSecret.secret ? `?secret=${clientEnvSecret.secret?.id}` : ``
-          }`}
-          title={
-            clientEnvSecret.secret
-              ? `View this secret in ${clientEnvSecret.env.name}`
-              : `Manage ${clientEnvSecret.env.name}`
-          }
-        >
-          <div>{clientEnvSecret.env.name}</div>
-          <FaExternalLinkAlt className="opacity-0 group-hover:opacity-100 transition ease" />
-          {sameAsProd && clientEnvSecret?.secret?.value && (
-            <FaCheckCircle
-              className="text-amber-500"
-              title="This value is the same as Production"
-            />
-          )}
-        </Link>
+        {valueIsNew ? (
+          <EnvLabel />
+        ) : (
+          <Link
+            href={`${pathname}/environments/${clientEnvSecret.env.id}${
+              clientEnvSecret.secret ? `?secret=${clientEnvSecret.secret?.id}` : ``
+            }`}
+            title={
+              clientEnvSecret.secret
+                ? `View this secret in ${clientEnvSecret.env.name}`
+                : `Manage ${clientEnvSecret.env.name}`
+            }
+          >
+            <EnvLabel />
+          </Link>
+        )}
       </div>
 
       {clientEnvSecret.secret === null ? (
