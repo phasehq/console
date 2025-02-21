@@ -114,7 +114,7 @@ export const NavBar = (props: { team: string }) => {
       <div className="flex gap-4 items-center justify-end">
         <StatusIndicator />
 
-        <Link href="https://docs.phase.dev" target="_blank">
+        <Link href="https://docs.phase.dev" target="_blank" className="hidden lg:block">
           <Button variant="secondary">Docs</Button>
         </Link>
         <UserMenu />

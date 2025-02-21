@@ -247,8 +247,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
       <div className="flex justify-end">
         <DismissButton />
       </div>
-      <div className="flex gap-6">
-        <div className="space-y-6 w-2/3">
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="space-y-6 w-full lg:w-2/3">
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-black dark:text-white font-semibold text-2xl">Getting started</h1>
@@ -494,7 +494,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
             </div>
           )}
         </div>
-        <div className="w-1/3 pl-4 border-l border-neutral-500/40 space-y-6">
+        <div className="w-full lg:w-1/3 lg:pl-4 lg:border-l border-neutral-500/40 space-y-6">
           <div>
             <h1 className="text-black dark:text-white font-semibold text-2xl">Resources</h1>
             <p className="text-neutral-500">
