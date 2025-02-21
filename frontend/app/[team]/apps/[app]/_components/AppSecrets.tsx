@@ -796,7 +796,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           <div className="flex items-center gap-4">
             <Button
               variant="secondary"
-              disabled={!allRowsAreExpanded}
+              disabled={allRowsAreExpanded}
               onClick={() => toggleAllExpanded(true)}
             >
               <FaAngleDoubleDown /> Expand all
@@ -804,7 +804,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
             <Button
               variant="secondary"
-              disabled={!allRowsAreCollapsed}
+              disabled={allRowsAreCollapsed}
               onClick={() => toggleAllExpanded(false)}
             >
               <FaAngleDoubleUp />
