@@ -73,7 +73,7 @@ const EnvFileDropZone = ({ onFileProcessed }: EnvFileDropZoneProps) => {
         'w-full h-full p-4 border border-dashed rounded flex flex-col gap-2 items-center justify-center text-neutral-500 cursor-pointer transition ease',
         dragOver
           ? 'border-emerald-400/20 bg-emerald-400/10'
-          : 'border-neutral-500/40 bg-neutral-200 dark:bg-neutral-800 hover:bg-emerald-400/20 dark:hover:bg-emerald-400/10'
+          : 'border-neutral-500/40 hover:border-emerald-400/20 bg-neutral-200 dark:bg-neutral-900/50 hover:bg-emerald-400/20 dark:hover:bg-emerald-400/10'
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
