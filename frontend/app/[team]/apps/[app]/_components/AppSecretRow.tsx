@@ -62,7 +62,7 @@ const EnvSecret = ({
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
 
-  const [showValue, setShowValue] = useState<boolean>(false)
+  const [showValue, setShowValue] = useState<boolean>(valueIsNew || false)
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
@@ -92,11 +92,6 @@ const EnvSecret = ({
   useEffect(() => {
     if (isBoolean) setShowValue(true)
   }, [isBoolean])
-
-  // Reveal newly added values
-  useEffect(() => {
-    if (valueIsNew) setShowValue(true)
-  }, [valueIsNew])
 
   const handleHideSecret = () => setShowValue(false)
 
@@ -479,12 +474,12 @@ export const AppSecretRow = ({
           <Transition
             as="tr"
             show={isExpanded}
-            enter="transition duration-100 ease-out"
-            enterFrom="transform scale-95 opacity-0"
-            enterTo="transform scale-100 opacity-100"
-            leave="transition duration-75 ease-out"
-            leaveFrom="transform scale-100 opacity-100"
-            leaveTo="transform scale-95 opacity-0"
+            enter="transition duration-150 ease-out"
+            enterFrom="transform  opacity-0"
+            enterTo="transform  opacity-100"
+            leave="transition duration-100 ease-out"
+            leaveFrom="transform  opacity-100"
+            leaveTo="transform  opacity-0"
             className={clsx(
               'border-x',
               isExpanded
