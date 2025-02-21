@@ -62,16 +62,17 @@ const MultiEnvImportDialog = forwardRef(
       const secretsByKey = new Map<string, AppSecret>()
 
       try {
+        // First pass: Process only selected environments
         environments.forEach((env) => {
-          const secrets = selectedEnvs.includes(env)
-            ? processEnvFile(
-                envFileString,
-                env,
-                path,
-                envConfigs[env.id].withValues,
-                envConfigs[env.id].withComments
-              )
-            : []
+          if (!selectedEnvs.includes(env)) return
+
+          const secrets = processEnvFile(
+            envFileString,
+            env,
+            path,
+            envConfigs[env.id].withValues,
+            envConfigs[env.id].withComments
+          )
 
           if (duplicateKeysExist(secrets)) {
             throw 'File contains duplicate keys!'
@@ -88,13 +89,15 @@ const MultiEnvImportDialog = forwardRef(
             }
             secretsByKey.get(secret.key)?.envs.push({ env, secret })
           })
+        })
 
-          // Ensure the environment is included with a null secret if not selected
-          if (!selectedEnvs.includes(env)) {
-            secretsByKey.forEach((appSecret) => {
+        // Second pass: Ensure all environments exist (including unselected)
+        environments.forEach((env) => {
+          secretsByKey.forEach((appSecret) => {
+            if (!appSecret.envs.some((e) => e.env === env)) {
               appSecret.envs.push({ env, secret: null })
-            })
-          }
+            }
+          })
         })
       } catch (error) {
         toast.error(error as string)
@@ -205,6 +208,7 @@ const MultiEnvImportDialog = forwardRef(
                         <div className="flex p-2 items-center justify-center">
                           <ToggleSwitch
                             value={envConfigs[env.id].withValues}
+                            disabled={!selectedEnvs.includes(env)}
                             onToggle={() =>
                               setEnvConfigs((prev) => ({
                                 ...prev,
@@ -222,6 +226,7 @@ const MultiEnvImportDialog = forwardRef(
                         <div className="flex p-2 items-center justify-center">
                           <ToggleSwitch
                             value={envConfigs[env.id].withComments}
+                            disabled={!selectedEnvs.includes(env)}
                             onToggle={() =>
                               setEnvConfigs((prev) => ({
                                 ...prev,
