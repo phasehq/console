@@ -70,8 +70,8 @@ const SingleEnvImportDialog = forwardRef(
             Drop, select or paste your .env here to import secrets into your environment
           </p>
 
-          <div>
-            <div className="py-4">
+          <div className="py-4 space-y-4">
+            <div>
               <Textarea
                 value={envFileString}
                 setValue={setEnvFileString}
@@ -86,31 +86,33 @@ const SingleEnvImportDialog = forwardRef(
           </div>
 
           <div className="flex items-end justify-between">
-            {envFileString && (
-              <div className="flex flex-col w-48 gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <label
-                    className="block text-neutral-600 dark:text-neutral-400 text-sm mb-2"
-                    htmlFor="role"
-                  >
-                    Import values
-                  </label>
-                  <ToggleSwitch value={withValues} onToggle={() => setWithValues(!withValues)} />
+            <div>
+              {envFileString && (
+                <div className="flex flex-col w-48 gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      className="block text-neutral-600 dark:text-neutral-400 text-sm mb-2"
+                      htmlFor="role"
+                    >
+                      Import values
+                    </label>
+                    <ToggleSwitch value={withValues} onToggle={() => setWithValues(!withValues)} />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      className="block text-neutral-600 dark:text-neutral-400 text-sm mb-2"
+                      htmlFor="role"
+                    >
+                      Import comments
+                    </label>
+                    <ToggleSwitch
+                      value={withComments}
+                      onToggle={() => setWithComments(!withComments)}
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <label
-                    className="block text-neutral-600 dark:text-neutral-400 text-sm mb-2"
-                    htmlFor="role"
-                  >
-                    Import comments
-                  </label>
-                  <ToggleSwitch
-                    value={withComments}
-                    onToggle={() => setWithComments(!withComments)}
-                  />
-                </div>
-              </div>
-            )}
+              )}
+            </div>
             <Button variant="primary" onClick={processImport} disabled={!envFileString}>
               Preview Import
             </Button>
