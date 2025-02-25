@@ -25,6 +25,7 @@ import { usePathname } from 'next/navigation'
 import { arraysEqual } from '@/utils/crypto'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
+import { motion } from 'framer-motion'
 
 const INPUT_BASE_STYLE =
   'w-full font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture'
@@ -447,10 +448,12 @@ export const AppSecretRow = ({
               </div>
             </td>
             {envs.map((env) => (
-              <td
+              <motion.td
                 key={env.env.id}
                 className={'px-6 whitespace-nowrap group cursor-pointer'}
                 onClick={toggleAccordion}
+                layout
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
               >
                 <div className="flex items-center justify-center" title={tooltipText(env)}>
                   {env.secret !== null ? (
@@ -468,18 +471,18 @@ export const AppSecretRow = ({
                     <FaTimesCircle className="text-red-500 shrink-0" />
                   )}
                 </div>
-              </td>
+              </motion.td>
             ))}
           </tr>
-          <Transition
-            as="tr"
-            show={isExpanded}
-            enter="transition duration-150 ease-out"
-            enterFrom="transform  opacity-0"
-            enterTo="transform  opacity-100"
-            leave="transition duration-100 ease-out"
-            leaveFrom="transform  opacity-100"
-            leaveTo="transform  opacity-0"
+          <motion.tr
+            initial={{ opacity: 0, y: -5, maxHeight: 0 }}
+            animate={{
+              opacity: isExpanded ? 1 : 0,
+              y: isExpanded ? 0 : -5,
+              maxHeight: isExpanded ? '500px' : '0px',
+            }}
+            exit={{ opacity: 0, y: -5, maxHeight: '0px' }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
             className={clsx(
               'border-x',
               isExpanded
@@ -490,33 +493,37 @@ export const AppSecretRow = ({
             {isExpanded && (
               <td
                 colSpan={clientAppSecret.envs.length + 1}
-                className={clsx('p-2 space-y-6 ', rowBgColorOpen())}
+                className={clsx('p-2 space-y-6', rowBgColorOpen())}
               >
-                <Disclosure.Panel static={true}>
-                  <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
-                    {envs.map((envSecret) => (
-                      <EnvSecret
-                        key={envSecret.env.id}
-                        keyIsStagedForDelete={stagedForDelete}
-                        clientEnvSecret={envSecret}
-                        serverEnvSecret={serverEnvSecret(envSecret.env?.id!)}
-                        sameAsProd={secretIsSameAsProd(envSecret)}
-                        appSecretId={clientAppSecret.id}
-                        updateEnvValue={updateValue}
-                        stagedForDelete={
-                          envSecret.secret
-                            ? secretsStagedForDelete.includes(envSecret.secret?.id)
-                            : false
-                        }
-                        addEnvValue={addEnvValue}
-                        deleteEnvValue={deleteEnvValue}
-                      />
-                    ))}
-                  </div>
-                </Disclosure.Panel>
+                <div
+                  //initial={{ opacity: 0 }}
+                  //animate={{ opacity: 1 }}
+                  //exit={{ opacity: 0 }}
+                  //transition={{ duration: 0.1, ease: 'easeOut' }}
+                  className="grid gap-2 divide-y divide-neutral-500/10"
+                >
+                  {envs.map((envSecret) => (
+                    <EnvSecret
+                      key={envSecret.env.id}
+                      keyIsStagedForDelete={stagedForDelete}
+                      clientEnvSecret={envSecret}
+                      serverEnvSecret={serverEnvSecret(envSecret.env?.id!)}
+                      sameAsProd={secretIsSameAsProd(envSecret)}
+                      appSecretId={clientAppSecret.id}
+                      updateEnvValue={updateValue}
+                      stagedForDelete={
+                        envSecret.secret
+                          ? secretsStagedForDelete.includes(envSecret.secret?.id)
+                          : false
+                      }
+                      addEnvValue={addEnvValue}
+                      deleteEnvValue={deleteEnvValue}
+                    />
+                  ))}
+                </div>
               </td>
             )}
-          </Transition>
+          </motion.tr>
         </>
       )}
     </Disclosure>
