@@ -332,9 +332,15 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                           {token!.name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
-                        <span className="text-neutral-500 text-2xs flex items-center">Token ID:</span>
-                        <CopyButton value={token!.id} buttonVariant="ghost">
+                      <div className="flex items-center gap-2 text-sm text-neutral-500">
+                        <span className="text-neutral-500 text-xs flex items-center">
+                          Token ID:
+                        </span>
+                        <CopyButton
+                          value={token!.id}
+                          buttonVariant="ghost"
+                          title="Copy Token ID to clipboard"
+                        >
                           <span className="text-neutral-500 text-2xs font-mono">{token!.id}</span>
                         </CopyButton>
                       </div>
