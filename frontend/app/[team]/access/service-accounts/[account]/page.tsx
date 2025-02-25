@@ -230,7 +230,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                         <SseLabel sseEnabled={Boolean(app?.sseEnabled)} />
                       </div>
                       <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
-                        <span className="text-neutral-500 text-2xs">App ID:</span>
+                        <span className="text-neutral-500 text-2xs flex items-center">App ID:</span>
                         <CopyButton value={app.id} buttonVariant="ghost">
                           <span className="text-neutral-500 text-2xs font-mono">{app.id}</span>
                         </CopyButton>
@@ -333,7 +333,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
-                        <span className="text-neutral-500 text-2xs">Token ID:</span>
+                        <span className="text-neutral-500 text-2xs flex items-center">Token ID:</span>
                         <CopyButton value={token!.id} buttonVariant="ghost">
                           <span className="text-neutral-500 text-2xs font-mono">{token!.id}</span>
                         </CopyButton>
