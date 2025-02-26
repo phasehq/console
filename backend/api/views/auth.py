@@ -38,7 +38,9 @@ from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter
 from ee.authentication.sso.oidc.util.google.google import GoogleOpenIDConnectAdapter
-from ee.authentication.sso.oidc.util.jumpcloud.jumpcloud import JumpCloudOpenIDConnectAdapter
+from ee.authentication.sso.oidc.util.jumpcloud.jumpcloud import (
+    JumpCloudOpenIDConnectAdapter,
+)
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -303,7 +305,7 @@ def secrets_tokens(request):
     auth_token = request.headers["authorization"]
 
     if token_is_expired_or_deleted(auth_token):
-        return HttpResponse(status=403)
+        return JsonResponse({"error": "Token expired or deleted"}, status=403)
 
     token_type = get_token_type(auth_token)
 
@@ -312,4 +314,4 @@ def secrets_tokens(request):
     elif token_type == "User":
         return user_token_kms(request)
     else:
-        return HttpResponse(status=403)
+        return JsonResponse({"error": "Invalid token type"}, status=403)
