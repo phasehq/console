@@ -1020,7 +1020,7 @@ export default function EnvironmentPath({
                   )}
                   key={secret.id}
                   layout
-                  transition={{ duration: 0.3, ease: 'easeInOut' }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
                 >
                   <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
                   <SecretRow
