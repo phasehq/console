@@ -185,7 +185,7 @@ const SecretsOneLiner = ({
 
       await navigator.clipboard.writeText(command)
       setCopied(true)
-      toast.info(`Generated command expires ${authExpiry}`, {
+      toast.info(`Copied command & token expires ${authExpiry}`, {
         autoClose: 5000,
       })
     } catch (error) {

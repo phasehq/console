@@ -52,7 +52,7 @@ export const ProgrammaticAccessMenu = () => {
           <Menu.Button as={Fragment}>
             <Button variant="secondary" title="One-click programmatic access">
               <FaTerminal className="text-emerald-500" />
-              <span className="font-mono">Access</span>
+             One-click Access
             </Button>
           </Menu.Button>
 

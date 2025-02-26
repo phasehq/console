@@ -548,6 +548,8 @@ export default function EnvironmentPath({
       a.download = `${environment.app.name}.${environment.name.toLowerCase()}${formattedSecretPath}.env`
     }
 
+    logGlobalReveals()
+
     document.body.appendChild(a)
     a.click()
 
