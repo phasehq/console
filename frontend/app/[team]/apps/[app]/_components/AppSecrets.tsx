@@ -54,6 +54,7 @@ import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
 import { duplicateKeysExist } from '@/utils/secrets'
+import { motion } from 'framer-motion'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -837,9 +838,11 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                     key
                   </th>
                   {appEnvironments?.map((env: EnvironmentType) => (
-                    <th
+                    <motion.th
                       key={env.id}
                       className="group text-center text-sm font-semibold uppercase tracking-widest py-2"
+                      layout
+                      transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
                     >
                       <Link href={`${pathname}/environments/${env.id}`}>
                         <Button variant="outline">
@@ -851,7 +854,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                           </div>
                         </Button>
                       </Link>
-                    </th>
+                    </motion.th>
                   ))}
                 </tr>
               </thead>

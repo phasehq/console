@@ -1,6 +1,6 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
 import { userHasPermission } from '@/utils/access/permissions'
-import { Disclosure, Switch, Transition } from '@headlessui/react'
+import { Disclosure, Switch } from '@headlessui/react'
 import clsx from 'clsx'
 import {
   FaChevronRight,
@@ -453,7 +453,7 @@ export const AppSecretRow = ({
                 className={'px-6 whitespace-nowrap group cursor-pointer'}
                 onClick={toggleAccordion}
                 layout
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
               >
                 <div className="flex items-center justify-center" title={tooltipText(env)}>
                   {env.secret !== null ? (
@@ -482,7 +482,7 @@ export const AppSecretRow = ({
               maxHeight: isExpanded ? '500px' : '0px',
             }}
             exit={{ opacity: 0, y: -5, maxHeight: '0px' }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
             className={clsx(
               'border-x',
               isExpanded

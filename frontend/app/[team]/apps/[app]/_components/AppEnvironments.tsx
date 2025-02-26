@@ -1,7 +1,5 @@
 'use client'
 
-import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { SwapEnvOrder } from '@/graphql/mutations/environments/swapEnvironmentOrder.gql'
 import { EnvironmentType, ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
@@ -9,10 +7,9 @@ import { CreateEnvironmentDialog } from '@/components/environments/CreateEnviron
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
-import { useMutation } from '@apollo/client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useContext, useEffect, useState } from 'react'
+import { useContext } from 'react'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { FaArrowRight, FaBan, FaExchangeAlt, FaFolder, FaKey } from 'react-icons/fa'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -44,52 +41,16 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
     true
   )
 
-  const { appEnvironments, swapEnvironments } = useAppSecrets(
+  const { appEnvironments, swapEnvironments, fetching } = useAppSecrets(
     appId,
     userCanReadEnvironments,
     10000 // Poll every 10 seconds
   )
 
-  // const [localEnvironments, setLocalEnvironments] = useState<EnvironmentType[]>(
-  //   appEnvironments || []
-  // )
-
-  // // Sync local state with fetched environments
-  // useEffect(() => {
-  //   if (!fetching) {
-  //     setLocalEnvironments(appEnvironments)
-  //   }
-  // }, [appEnvironments, fetching])
-
   const allowReordering =
     organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
 
   const pathname = usePathname()
-
-  const [swapEnvs, { loading }] = useMutation(SwapEnvOrder)
-
-  // const handleSwapEnvironments = async (env1: EnvironmentType, env2: EnvironmentType) => {
-  //   // Optimistically update local state
-  //   setLocalEnvironments((prev) => {
-  //     const newEnvs = [...prev]
-  //     const idx1 = newEnvs.findIndex((e) => e.id === env1.id)
-  //     const idx2 = newEnvs.findIndex((e) => e.id === env2.id)
-
-  //     if (idx1 !== -1 && idx2 !== -1) {
-  //       ;[newEnvs[idx1], newEnvs[idx2]] = [newEnvs[idx2], newEnvs[idx1]] // Swap items
-  //     }
-
-  //     return newEnvs
-  //   })
-
-  //   // Trigger mutation
-  //   setTimeout(async () => {
-  //     await swapEnvs({
-  //       variables: { environment1Id: env1.id, environment2Id: env2.id },
-  //       refetchQueries: [{ query: GetAppEnvironments, variables: { appId } }],
-  //     })
-  //   }, 300)
-  // }
 
   return (
     <section className="space-y-4 py-4">
@@ -117,7 +78,11 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 py-4">
         {appEnvironments?.map((env: EnvironmentType, index: number) => (
-          <motion.div key={env.id} layout transition={{ duration: 0.3, ease: 'easeInOut' }}>
+          <motion.div
+            key={env.id}
+            layout
+            transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
+          >
             <Card>
               <div className="group">
                 <div className="flex gap-4">
@@ -170,7 +135,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                       {index !== 0 && (
                         <Button
                           variant="secondary"
-                          disabled={loading}
+                          disabled={fetching}
                           title={`Swap with ${appEnvironments[index - 1].name}`}
                           onClick={() => swapEnvironments(env.id, appEnvironments[index - 1].id)}
                         >
@@ -182,7 +147,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                       {index !== appEnvironments.length - 1 && (
                         <Button
                           variant="secondary"
-                          disabled={loading}
+                          disabled={fetching}
                           title={`Swap with ${appEnvironments[index + 1].name}`}
                           onClick={() => swapEnvironments(env.id, appEnvironments[index + 1].id)}
                         >

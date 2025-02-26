@@ -95,38 +95,18 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
       // Process secrets and folders after the data is loaded
       processAppSecrets(appEnvironments, secretsData)
 
-      // Update local environments only if they're empty (to persist order)
-      setLocalEnvironments((prev) => (prev.length === 0 ? appEnvironments : prev))
+      // Update local environments
+      setLocalEnvironments(appEnvironments)
     }
   }, [appSecretsData, keyring, processAppSecrets])
 
-  // Utility function to swap environment positions
-  const swapEnvironments = (environment1Id: string, environment2Id: string) => {
-    setLocalEnvironments((prev) => {
-      const newEnvs = [...prev]
-      const idx1 = newEnvs.findIndex((e) => e.id === environment1Id)
-      const idx2 = newEnvs.findIndex((e) => e.id === environment2Id)
-
-      if (idx1 !== -1 && idx2 !== -1) {
-        // Swap the positions in the array
-        ;[newEnvs[idx1], newEnvs[idx2]] = [newEnvs[idx2], newEnvs[idx1]]
-
-        // Swap their index values
-        const tempIndex = newEnvs[idx1].index
-        newEnvs[idx1] = { ...newEnvs[idx1], index: newEnvs[idx2].index }
-        newEnvs[idx2] = { ...newEnvs[idx2], index: tempIndex }
-      }
-
-      return newEnvs.sort((a, b) => a.index! - b.index!)
+  const swapEnvironments = async (environment1Id: string, environment2Id: string) => {
+    setFetching(true)
+    await swapEnvs({
+      variables: { environment1Id, environment2Id },
+      refetchQueries: [{ query: GetAppSecrets, variables: { appId } }],
     })
-
-    //Trigger mutation
-    setTimeout(async () => {
-      await swapEnvs({
-        variables: { environment1Id, environment2Id },
-        refetchQueries: [{ query: GetAppSecrets, variables: { appId } }],
-      })
-    }, 300)
+    setFetching(false)
   }
 
   return {
