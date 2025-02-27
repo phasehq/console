@@ -18,7 +18,7 @@ const documents = {
     "mutation UpdateRole($id: ID!, $name: String!, $description: String!, $color: String!, $permissions: JSONString!) {\n  updateCustomRole(\n    id: $id\n    name: $name\n    description: $description\n    color: $color\n    permissions: $permissions\n  ) {\n    role {\n      id\n    }\n  }\n}": types.UpdateRoleDocument,
     "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.AddMemberToAppDocument,
     "mutation RemoveMemberFromApp($memberId: ID!, $memberType: MemberType, $appId: ID!) {\n  removeAppMember(memberId: $memberId, memberType: $memberType, appId: $appId) {\n    app {\n      id\n    }\n  }\n}": types.RemoveMemberFromAppDocument,
-    "mutation UpdateAppName($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}": types.UpdateAppNameDocument,
+    "mutation UpdateAppNameOp($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}": types.UpdateAppNameOpDocument,
     "mutation UpdateEnvScope($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.UpdateEnvScopeDocument,
     "mutation CancelStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  cancelSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n  }\n}": types.CancelStripeSubscriptionDocument,
     "mutation CreateStripeSetupIntentOp($organisationId: ID!) {\n  createSetupIntent(organisationId: $organisationId) {\n    clientSecret\n  }\n}": types.CreateStripeSetupIntentOpDocument,
@@ -168,7 +168,7 @@ export function graphql(source: "mutation RemoveMemberFromApp($memberId: ID!, $m
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation UpdateAppName($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}"): (typeof documents)["mutation UpdateAppName($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}"];
+export function graphql(source: "mutation UpdateAppNameOp($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}"): (typeof documents)["mutation UpdateAppNameOp($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
