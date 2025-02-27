@@ -123,6 +123,7 @@ from .graphene.mutations.app import (
     MemberType,
     RemoveAppMemberMutation,
     RotateAppKeysMutation,
+    UpdateAppNameMutation,
 )
 from .graphene.mutations.organisation import (
     CreateOrganisationMemberMutation,
@@ -822,6 +823,7 @@ class Mutation(graphene.ObjectType):
     create_app = CreateAppMutation.Field()
     rotate_app_keys = RotateAppKeysMutation.Field()
     delete_app = DeleteAppMutation.Field()
+    update_app_name = UpdateAppNameMutation.Field()
     add_app_member = AddAppMemberMutation.Field()
     remove_app_member = RemoveAppMemberMutation.Field()
     update_member_environment_scope = UpdateMemberEnvScopeMutation.Field()
