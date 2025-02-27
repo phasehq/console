@@ -63,6 +63,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
+import { motion } from 'framer-motion'
 
 export default function EnvironmentPath({
   params,
@@ -1010,7 +1011,7 @@ export default function EnvironmentPath({
 
             {organisation &&
               filteredAndSortedSecrets.map((secret, index: number) => (
-                <div
+                <motion.div
                   ref={secretToHighlight === secret.id ? highlightedRef : null}
                   className={clsx(
                     'flex items-center gap-2 py-1 px-3 rounded-md',
@@ -1018,6 +1019,8 @@ export default function EnvironmentPath({
                       'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/10'
                   )}
                   key={secret.id}
+                  layout
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
                 >
                   <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
                   <SecretRow
@@ -1031,7 +1034,7 @@ export default function EnvironmentPath({
                     globallyRevealed={globallyRevealed}
                     stagedForDelete={secretsToDelete.includes(secret.id)}
                   />
-                </div>
+                </motion.div>
               ))}
 
             {filteredAndSortedSecrets.length === 0 && filteredFolders.length === 0 && (
