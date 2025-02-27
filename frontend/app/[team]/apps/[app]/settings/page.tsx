@@ -1,21 +1,24 @@
 'use client'
 
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
-import { useQuery } from '@apollo/client'
+import { useQuery, useMutation } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { useContext } from 'react'
+import { useContext, useState, useEffect } from 'react'
 import DeleteAppDialog from '@/components/apps/DeleteAppDialog'
 import { organisationContext } from '@/contexts/organisationContext'
-import { FaCheckCircle, FaCube, FaServer } from 'react-icons/fa'
+import { FaCube, FaEdit, FaServer } from 'react-icons/fa'
 import CopyButton from '@/components/common/CopyButton'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import Link from 'next/link'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { userHasPermission } from '@/utils/access/permissions'
-import app from 'next/app'
+import { UpdateAppNameOp } from '@/graphql/mutations/apps/updateAppName.gql'
+import { Button } from '@/components/common/Button'
+import { toast } from 'react-toastify'
 
 export default function AppSettings({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const [name, setName] = useState('')
 
   const { data } = useQuery(GetAppDetail, {
     variables: {
@@ -37,6 +40,49 @@ export default function AppSettings({ params }: { params: { team: string; app: s
   const userCanUpdateSSE = organisation
     ? userHasPermission(organisation.role?.permissions, 'EncryptionMode', 'update', true)
     : false
+  const userCanUpdateApps = organisation
+    ? userHasPermission(organisation.role?.permissions, 'Apps', 'update')
+    : false
+
+  const [updateAppName] = useMutation(UpdateAppNameOp)
+
+  const nameUpdated = app ? app.name !== name : false
+
+  const updateName = async () => {
+    if (!userCanUpdateApps) {
+      toast.error("You don't have the permissions required to update Apps")
+      return
+    }
+    
+    if (!name || name.trim() === '') {
+      toast.error("App name cannot be blank")
+      return
+    }
+    
+    await updateAppName({
+      variables: {
+        id: app.id,
+        name,
+      },
+      refetchQueries: [
+        { 
+          query: GetAppDetail, 
+          variables: {
+            organisationId: organisation?.id, 
+            appId: params.app
+          } 
+        },
+      ],
+    })
+
+    toast.success('Updated app name!')
+  }
+
+  const resetName = () => setName(app.name)
+
+  useEffect(() => {
+    if (app) setName(app.name)
+  }, [app])
 
   return (
     <div className="max-w-screen-lg mx-auto space-y-10 divide-y divide-neutral-500/40 p-8 w-full text-black dark:text-white mt-6">
@@ -49,8 +95,31 @@ export default function AppSettings({ params }: { params: { team: string; app: s
           </div>
           <div className="flex items-center gap-4">
             <FaCube className="shrink-0 text-neutral-500" size={60} />
-            <div className="flex flex-col gap-1">
-              <span className="text-2xl font-medium">{app.name}</span>
+            <div className="flex flex-col gap-1 w-full">
+              <h3 className="relative group w-full max-w-md">
+                <input
+                  className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-2xl font-medium"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  readOnly={!userCanUpdateApps}
+                  maxLength={64}
+                />
+                {nameUpdated ? (
+                  <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
+                    <Button variant="secondary" onClick={resetName}>
+                      <span className="text-2xs">Discard</span>
+                    </Button>
+
+                    <Button variant="primary" onClick={updateName}>
+                      <span className="text-2xs">Save</span>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center inset-y-0 gap-1 absolute right-2 opacity-0 group-hover:opacity-100 transition ease ">
+                    <FaEdit className="text-neutral-500 text-base" />
+                  </div>
+                )}
+              </h3>
 
               <div className="flex items-center gap-4 text-neutral-500">
                 <div className="text-base ">Created</div>
