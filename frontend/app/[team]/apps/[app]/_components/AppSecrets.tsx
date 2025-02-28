@@ -604,15 +604,17 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   }) => {
     const { envFolder } = props
 
+    const fullPath = `${envFolder.folder?.path}/${envFolder.folder?.name}`.replace(/^\/+/, '')
+
     return (
       <div className="py-2 px-4">
         {envFolder.folder === null ? (
           <span className="text-red-500 font-mono">missing</span>
         ) : (
           <Link
-            className="flex items-center gap-2 w-min group font-medium text-sm tracking-wider"
+            className="flex items-center gap-2  group font-medium text-sm tracking-wider"
             href={`${pathname}/environments/${envFolder.env.id}${
-              envFolder.folder ? `/${envFolder.folder.name}` : ``
+              envFolder.folder ? `/${fullPath}` : ``
             }`}
             title={
               envFolder.folder
@@ -620,9 +622,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 : `Manage ${envFolder.env.envType}`
             }
           >
-            <div className="flex items-center gap-4">
-              <span className="text-gray-500">{envFolder.env.envType}</span>{' '}
-              <span className="text-emerald-500">/{envFolder.folder.name}</span>
+            <div>
+              <div className="text-gray-500">{envFolder.env.envType}</div>{' '}
+              <div className="text-emerald-500 group-hover:text-emerald-600 transition ease flex items-center gap-2">
+                <FaFolder />
+                {fullPath}
+              </div>
             </div>
           </Link>
         )}
@@ -640,6 +645,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       if (env.folder === null) return `This folder is missing in ${env.env.envType}`
       else return 'This folder is present'
     }
+
+    const fullPath = `${appFolder.path}/${appFolder.name}`.replace(/^\/+/, '')
 
     return (
       <Disclosure>
@@ -659,7 +666,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 )}
               >
                 <FaFolder className="text-emerald-500" />
-                {appFolder.name}
+
+                {fullPath}
                 <FaChevronRight
                   className={clsx(
                     'transform transition ease font-light',
