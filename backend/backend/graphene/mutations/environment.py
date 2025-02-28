@@ -9,7 +9,7 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.audit_logging import log_secret_event
-from api.utils.secrets import normalize_path_string
+from api.utils.secrets import create_environment_folder_structure, normalize_path_string
 
 from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
@@ -792,12 +792,7 @@ class BulkCreateSecretMutation(graphene.Mutation):
 
             folder = None
             if path != "/":
-                folder_name = path.split("/")[-1]
-                folder_path, _, _ = path.rpartition("/" + folder_name)
-                folder_path = folder_path if folder_path else "/"
-                folder = SecretFolder.objects.get(
-                    environment_id=env.id, path=folder_path, name=folder_name
-                )
+                folder = create_environment_folder_structure(path, secret_data.env_id)
 
             secret_obj_data = {
                 "environment_id": env.id,
