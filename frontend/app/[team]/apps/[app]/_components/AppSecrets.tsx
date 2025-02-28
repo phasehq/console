@@ -618,12 +618,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             }`}
             title={
               envFolder.folder
-                ? `View this folder in ${envFolder.env.envType}`
-                : `Manage ${envFolder.env.envType}`
+                ? `View this folder in ${envFolder.env.name}`
+                : `Manage ${envFolder.env.name}`
             }
           >
             <div>
-              <div className="text-gray-500">{envFolder.env.envType}</div>{' '}
+              <div className="text-gray-500">{envFolder.env.name}</div>{' '}
               <div className="text-emerald-500 group-hover:text-emerald-600 transition ease flex items-center gap-2">
                 <FaFolder />
                 {fullPath}
@@ -642,7 +642,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       env: Partial<EnvironmentType>
       folder: SecretFolderType | null
     }) => {
-      if (env.folder === null) return `This folder is missing in ${env.env.envType}`
+      if (env.folder === null) return `This folder is missing in ${env.env.name}`
       else return 'This folder is present'
     }
 
