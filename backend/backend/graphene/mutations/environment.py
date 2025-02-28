@@ -623,21 +623,13 @@ class CreateSecretFolderMutation(graphene.Mutation):
         ).exists():
             raise GraphQLError("A folder with that name already exists at this path!")
 
-        folder = None
+        subfolder = None
 
-        if normalized_path != "/":
-
-            folder_name = normalized_path.split("/")[-1]
-
-            folder_path, _, _ = normalized_path.rpartition("/" + folder_name)
-            folder_path = folder_path if folder_path else "/"
-
-            folder = SecretFolder.objects.get(
-                environment_id=env_id, path=folder_path, name=folder_name
-            )
+        if path != "/":
+            subfolder = create_environment_folder_structure(path, env_id)
 
         folder = SecretFolder.objects.create(
-            environment_id=env_id, folder=folder, path=normalized_path, name=name
+            environment_id=env_id, folder=subfolder, path=normalized_path, name=name
         )
 
         return CreateSecretFolderMutation(folder=folder)
