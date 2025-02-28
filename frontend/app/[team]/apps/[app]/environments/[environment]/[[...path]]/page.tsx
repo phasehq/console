@@ -180,7 +180,7 @@ export default function EnvironmentPath({
   const [deleteFolder] = useMutation(DeleteFolder)
 
   const envPath = (env: EnvironmentType) => {
-    return `/${params.team}/apps/${params.app}/environments/${env.id}`
+    return `/${params.team}/apps/${params.app}/environments/${env.id}${secretPath}`
   }
 
   const environment = data?.appEnvironments[0] as EnvironmentType
