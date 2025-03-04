@@ -18,7 +18,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--num-workers",
             type=int,
-            default=3,
+            default=1,
             help="Number of workers to spawn",
         )
 
