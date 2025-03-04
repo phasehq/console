@@ -318,7 +318,14 @@ RQ_QUEUES = {
         "PASSWORD": get_secret("REDIS_PASSWORD"),
         "SSL": os.getenv("REDIS_SSL", None),
         "DB": 0,
-    }
+    },
+    "scheduled-jobs": {
+        "HOST": os.getenv("REDIS_HOST"),
+        "PORT": os.getenv("REDIS_PORT"),
+        "PASSWORD": get_secret("REDIS_PASSWORD"),
+        "SSL": os.getenv("REDIS_SSL", None),
+        "DB": 0,
+    },
 }
 
 PHASE_LICENSE = check_license(get_secret("PHASE_LICENSE_OFFLINE"))
