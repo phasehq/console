@@ -22,6 +22,7 @@ export type AppSecret = {
 
 export type AppFolder = {
   name: string
+  path: string
   envs: Array<{
     env: Partial<EnvironmentType>
     folder: SecretFolderType | null
