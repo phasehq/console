@@ -39,12 +39,18 @@ def handle_subscription_updated(event):
             stripe_customer_id=subscription["customer"]
         )
 
-        # Update the plan and subscription ID
-        organisation.plan = map_stripe_plan_to_tier(
+        # Check what plan tier this update event is for
+        event_plan_tier = map_stripe_plan_to_tier(
             subscription["items"]["data"][0]["price"]["id"]
         )
-        organisation.stripe_subscription_id = subscription["id"]
-        organisation.save()
+
+        # We don't update the org if this event relates to the free plan
+        # Updates to the free plan are usually just a billing cycle update which we can ignore
+        # Downgrades to free are handled separately
+        if event_plan_tier != Organisation.FREE_PLAN:
+            organisation.plan = event_plan_tier
+            organisation.stripe_subscription_id = subscription["id"]
+            organisation.save()
 
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)
