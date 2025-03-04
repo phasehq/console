@@ -58,7 +58,6 @@ rq==2.1.0
 rq-scheduler==0.14.0
 s3transfer==0.8.2
 service-identity==21.1.0
-setuptools==75.3.0
 six==1.16.0
 sqlparse==0.5.0
 stripe==10.5.0
