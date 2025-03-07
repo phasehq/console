@@ -493,8 +493,8 @@ export type EnvironmentType = {
   secrets: Array<Maybe<SecretType>>;
   syncs: Array<Maybe<EnvironmentSyncType>>;
   updatedAt: Scalars['DateTime']['output'];
-  wrappedSalt: Scalars['String']['output'];
-  wrappedSeed: Scalars['String']['output'];
+  wrappedSalt?: Maybe<Scalars['String']['output']>;
+  wrappedSeed?: Maybe<Scalars['String']['output']>;
 };
 
 export type GitHubRepoType = {
@@ -2702,7 +2702,7 @@ export type GetAppEnvironmentsQueryVariables = Exact<{
 }>;
 
 
-export type GetAppEnvironmentsQuery = { __typename?: 'Query', sseEnabled?: boolean | null, serverPublicKey?: string | null, appEnvironments?: Array<{ __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices, identityKey: string, wrappedSeed: string, wrappedSalt: string, createdAt?: any | null, secretCount?: number | null, folderCount?: number | null, index: number, app: { __typename?: 'AppType', name: string, id: string }, members: Array<{ __typename?: 'OrganisationMemberType', email?: string | null, fullName?: string | null, avatarUrl?: string | null } | null> } | null> | null };
+export type GetAppEnvironmentsQuery = { __typename?: 'Query', sseEnabled?: boolean | null, serverPublicKey?: string | null, appEnvironments?: Array<{ __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices, identityKey: string, wrappedSeed?: string | null, wrappedSalt?: string | null, createdAt?: any | null, secretCount?: number | null, folderCount?: number | null, index: number, app: { __typename?: 'AppType', name: string, id: string }, members: Array<{ __typename?: 'OrganisationMemberType', email?: string | null, fullName?: string | null, avatarUrl?: string | null } | null> } | null> | null };
 
 export type GetAppSecretsQueryVariables = Exact<{
   appId: Scalars['ID']['input'];
@@ -2711,7 +2711,7 @@ export type GetAppSecretsQueryVariables = Exact<{
 }>;
 
 
-export type GetAppSecretsQuery = { __typename?: 'Query', sseEnabled?: boolean | null, serverPublicKey?: string | null, appEnvironments?: Array<{ __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices, identityKey: string, wrappedSeed: string, wrappedSalt: string, createdAt?: any | null, secretCount?: number | null, folderCount?: number | null, index: number, app: { __typename?: 'AppType', name: string, id: string }, members: Array<{ __typename?: 'OrganisationMemberType', email?: string | null, fullName?: string | null, avatarUrl?: string | null } | null>, folders: Array<{ __typename?: 'SecretFolderType', id: string, name: string, path: string } | null>, secrets: Array<{ __typename?: 'SecretType', id: string, key: string, value: string, comment: string, path: string } | null> } | null> | null };
+export type GetAppSecretsQuery = { __typename?: 'Query', sseEnabled?: boolean | null, serverPublicKey?: string | null, appEnvironments?: Array<{ __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices, identityKey: string, wrappedSeed?: string | null, wrappedSalt?: string | null, createdAt?: any | null, secretCount?: number | null, folderCount?: number | null, index: number, app: { __typename?: 'AppType', name: string, id: string }, members: Array<{ __typename?: 'OrganisationMemberType', email?: string | null, fullName?: string | null, avatarUrl?: string | null } | null>, folders: Array<{ __typename?: 'SecretFolderType', id: string, name: string, path: string } | null>, secrets: Array<{ __typename?: 'SecretType', id: string, key: string, value: string, comment: string, path: string } | null> } | null> | null };
 
 export type GetAppSecretsLogsQueryVariables = Exact<{
   appId: Scalars['ID']['input'];

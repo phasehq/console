@@ -439,6 +439,8 @@ class EnvironmentType(DjangoObjectType):
     secret_count = graphene.Int()
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
     syncs = graphene.NonNull(graphene.List(EnvironmentSyncType))
+    wrapped_seed = graphene.String(required=False)
+    wrapped_salt = graphene.String(required=False)
 
     class Meta:
         model = Environment
@@ -497,21 +499,26 @@ class EnvironmentType(DjangoObjectType):
             user=info.context.user, organisation=self.app.organisation, deleted_at=None
         )
 
-        user_env_key = EnvironmentKey.objects.get(
-            environment=self, user=org_member, deleted_at=None
-        )
-
-        return user_env_key.wrapped_seed
+        try:
+            user_env_key = EnvironmentKey.objects.get(
+                environment=self, user=org_member, deleted_at=None
+            )
+            return user_env_key.wrapped_seed
+        except EnvironmentKey.DoesNotExist:
+            return None
 
     def resolve_wrapped_salt(self, info):
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self.app.organisation, deleted_at=None
         )
-        user_env_key = EnvironmentKey.objects.get(
-            environment=self, user=org_member, deleted_at=None
-        )
 
-        return user_env_key.wrapped_salt
+        try:
+            user_env_key = EnvironmentKey.objects.get(
+                environment=self, user=org_member, deleted_at=None
+            )
+            return user_env_key.wrapped_salt
+        except EnvironmentKey.DoesNotExist:
+            return None
 
     def resolve_members(self, info):
         return [

@@ -292,8 +292,8 @@ type EnvironmentType {
   envType: ApiEnvironmentEnvTypeChoices!
   index: Int!
   identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
+  wrappedSeed: String
+  wrappedSalt: String
   createdAt: DateTime
   updatedAt: DateTime!
   folders: [SecretFolderType]!
