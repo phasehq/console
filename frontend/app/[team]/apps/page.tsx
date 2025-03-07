@@ -38,6 +38,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
       organisationId: organisation?.id,
     },
     skip: !organisation || !userCanViewApps,
+    fetchPolicy: 'cache-and-network',
   })
 
   const apps = data?.apps as AppType[]

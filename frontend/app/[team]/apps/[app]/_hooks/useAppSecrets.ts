@@ -35,8 +35,8 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
 
         // Decrypt secrets for the environment
         const { publicKey, privateKey } = await unwrapEnvSecretsForUser(
-          wrappedSeed,
-          wrappedSalt,
+          wrappedSeed!,
+          wrappedSalt!,
           keyring!
         )
         const decryptedSecrets = await decryptEnvSecretKVs(secrets, { publicKey, privateKey })

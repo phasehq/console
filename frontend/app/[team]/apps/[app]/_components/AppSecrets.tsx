@@ -248,7 +248,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         const serverSecret = serverSecrets.find((secret) => secret.id === id)
 
         const salt = await decryptAsymmetric(
-          clientSecret.environment.wrappedSalt,
+          clientSecret.environment.wrappedSalt!,
           userKxKeys.privateKey!,
           userKxKeys.publicKey!
         )

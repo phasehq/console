@@ -12,7 +12,6 @@ import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
 import { OrganisationMemberType, EnvironmentType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
-import { relativeTimeFromDates } from '@/utils/time'
 import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
 import {
   FaArrowRight,
@@ -23,7 +22,6 @@ import {
   FaPlus,
   FaSquare,
   FaTimes,
-  FaUserCog,
   FaUserTimes,
 } from 'react-icons/fa'
 import clsx from 'clsx'
@@ -31,14 +29,13 @@ import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasGlobalAccess, userHasPermission, userIsAdmin } from '@/utils/access/permissions'
+import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
-import loading from '@/app/loading'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { keyring } = useContext(KeyringContext)
