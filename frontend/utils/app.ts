@@ -27,7 +27,7 @@ import {
   encryptAppSeed,
   getWrappedKeyShare,
 } from '@/utils/crypto'
-import { graphQlClient as client } from "@/apollo/client";
+import { graphQlClient as client } from '@/apollo/client'
 
 const APP_VERSION = 1
 
@@ -99,7 +99,8 @@ export const DEV_SECRETS = [
   },
   {
     key: 'POSTGRES_CONNECTION_STRING',
-    value: 'postgresql://spacex_stag:c51bdc6b6e8685f113a4ab5d57481b8b20d8d06a6526f5e2e4535ffa398850a2@starlink-telemetry-db-stag.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
+    value:
+      'postgresql://spacex_stag:c51bdc6b6e8685f113a4ab5d57481b8b20d8d06a6526f5e2e4535ffa398850a2@starlink-telemetry-db-stag.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
     comment: 'RDS Aurora PostgreSQL - US Central - DEV',
   },
 ]
@@ -137,7 +138,8 @@ export const STAG_SECRETS = [
   },
   {
     key: 'POSTGRES_CONNECTION_STRING',
-    value: 'postgresql://spacex_stag:7d48921fc7e85fd3339527d39557@starlink-telemetry-db-stag.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
+    value:
+      'postgresql://spacex_stag:7d48921fc7e85fd3339527d39557@starlink-telemetry-db-stag.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
     comment: 'RDS Aurora PostgreSQL - US Central',
   },
   {
@@ -171,7 +173,8 @@ export const PROD_SECRETS = [
   },
   {
     key: 'SIGNAL_ENCRYPTION_KEY',
-    value: 'sek_starlink_prod_v2_+ScgHNaH6uZpqFRST+Q2Cq+KlaExlUEtFZrPNrgokzicou97GD/UUsEAJrjb3tfOblUt15e2dir0L671W+OwBw==',
+    value:
+      'sek_starlink_prod_v2_+ScgHNaH6uZpqFRST+Q2Cq+KlaExlUEtFZrPNrgokzicou97GD/UUsEAJrjb3tfOblUt15e2dir0L671W+OwBw==',
     comment: 'Production Signal Encryption Key',
   },
   {
@@ -186,13 +189,14 @@ export const PROD_SECRETS = [
   },
   {
     key: 'POSTGRES_CONNECTION_STRING',
-    value: 'postgresql://spacex_stag:268ff4edd81533a32b80645844b6afdcc48a4041ffda000c3c5ff3505777eda8@starlink-telemetry-db-prod.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
+    value:
+      'postgresql://spacex_stag:268ff4edd81533a32b80645844b6afdcc48a4041ffda000c3c5ff3505777eda8@starlink-telemetry-db-prod.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
     comment: 'RDS Aurora PostgreSQL - US Central - PROD',
   },
   {
     key: 'DISABLE_STARLINK_COORDINATES',
     value: '46.1092°N,33.6925°E,44.6166°N,33.5254°E,44.5000°N,34.1667°E',
-    comment: 'Prevent WW3 - Elon\'s orders',
+    comment: "Prevent WW3 - Elon's orders",
   },
 ]
 
@@ -219,7 +223,7 @@ async function processSecrets(
   await Promise.all(
     envs.map(async ({ env, secrets }) => {
       const envSalt = await decryptAsymmetric(
-        env.wrappedSalt,
+        env.wrappedSalt!,
         userKxKeys.privateKey,
         userKxKeys.publicKey
       )
