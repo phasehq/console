@@ -8,6 +8,7 @@ import { FaGithub, FaGitlab, FaGoogle } from 'react-icons/fa'
 import Spinner from '../common/Spinner'
 import { LogoWordMark } from '../common/LogoWordMark'
 import { JumpCloudLogo } from '../common/logos/JumpCloudLogo'
+import { EntraIDLogo } from '../common/logos/EntraIDLogo'
 
 type ProviderButton = { id: string; name: string; icon: ReactNode; style: string }
 
@@ -48,6 +49,13 @@ const providerButtons: ProviderButton[] = [
     icon: <JumpCloudLogo />,
     style:
       'bg-[#1a3158]/10 hover:bg-[#1a3158]/20 hover:ring-[#1ca7a1] text-[#1ca7a1]/90 hover:text-[#1ca7a1] ring-[#1ca7a1]/60',
+  },
+  {
+    id: 'entra-id-oidc',
+    name: 'Entra ID OIDC',
+    icon: <EntraIDLogo />,
+    style:
+      'bg-[#0078d4]/10 hover:bg-[#0078d4]/20 hover:ring-[#0078d4] text-[#0078d4]/90 hover:text-[#0078d4] ring-[#0078d4]/60',
   },
 ]
 

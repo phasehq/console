@@ -150,7 +150,15 @@ SOCIALACCOUNT_PROVIDERS = {
         "SCOPE": ["openid", "profile", "email"],
         "AUTH_PARAMS": {"access_type": "offline"},
     },
+    "entra-id-oidc": {
+        "APP": {
+            "client_id": os.getenv("ENTRA_ID_OIDC_CLIENT_ID"),
+            "secret": get_secret("ENTRA_ID_OIDC_CLIENT_SECRET"),
+            "key": "",
+        }
+    },
 }
+
 
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_REQUIRED = True

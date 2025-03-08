@@ -8,6 +8,7 @@ import { UrlUtils } from '@/utils/auth'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { getSecret } from '@/utils/secretConfig'
 import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvider'
+import { EntraIDProvider } from '@/ee/authentication/sso/oidc/util/entraidProvider'
 
 type AccessTokenResponse = {
   access_token: string
@@ -113,6 +114,24 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     }
   }
 
+  if (process.env.ENTRA_ID_OIDC_CLIENT_ID) {
+    const clientSecret = getSecret('ENTRA_ID_OIDC_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        EntraIDProvider({
+          id: 'entra-id-oidc',
+          name: 'Entra ID',
+          clientId: process.env.ENTRA_ID_OIDC_CLIENT_ID,
+          clientSecret: clientSecret,
+          tenantId: process.env.ENTRA_ID_OIDC_TENANT_ID,
+          issuer: `https://login.microsoftonline.com/${process.env.ENTRA_ID_OIDC_TENANT_ID || 'common'}/v2.0`,
+          profilePhotoSize: 120,
+          authorization: { params: { scope: 'openid email profile User.Read' } }
+        })
+      )
+    }
+  }
+
   return {
     secret: process.env.NEXTAUTH_SECRET,
     session: {
@@ -163,7 +182,8 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               }
             } else if (
               account.provider === 'google-oidc' ||
-              account.provider === 'jumpcloud-oidc'
+              account.provider === 'jumpcloud-oidc' ||
+              account.provider === 'entra-id-oidc'
             ) {
               const { access_token, id_token } = account
               if (!id_token) {
