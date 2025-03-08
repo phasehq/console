@@ -41,6 +41,7 @@ from ee.authentication.sso.oidc.util.google.google import GoogleOpenIDConnectAda
 from ee.authentication.sso.oidc.util.jumpcloud.jumpcloud import (
     JumpCloudOpenIDConnectAdapter,
 )
+from ee.authentication.sso.oidc.util.entraid.entraid import EntraIDOpenIDConnectAdapter
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -254,6 +255,13 @@ class OIDCLoginView(SocialLoginView):
 class JumpCloudLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = JumpCloudOpenIDConnectAdapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
+class EntraIDLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = EntraIDOpenIDConnectAdapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
 
