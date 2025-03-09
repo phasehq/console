@@ -6,13 +6,23 @@ import { ProviderIcon } from '../syncing/ProviderIcon'
 import { Avatar } from '../common/Avatar'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { EncryptionModeIndicator } from './EncryptionModeIndicator'
+import clsx from 'clsx'
+import { ReactNode } from 'react'
 
 interface AppCardProps {
   app: AppType
+  variant: 'normal' | 'compact'
 }
 
-export const AppCard = (props: AppCardProps) => {
-  const { name, id, members, serviceAccounts, environments } = props.app
+interface AppCardMetaProps {
+  icon: React.ReactElement
+  count: number
+  itemType: string
+  children: ReactNode
+}
+
+export const AppCard = ({ app, variant }: AppCardProps) => {
+  const { name, id, members, serviceAccounts, environments } = app
 
   const totalSyncCount = environments
     ? environments.reduce((acc, env) => acc + (env!.syncs?.length || 0), 0)
@@ -38,103 +48,115 @@ export const AppCard = (props: AppCardProps) => {
 
   const surplusSynCount = providers.length > 5 ? providers.length - 5 : 0
 
+  const AppCardMeta: React.FC<AppCardMetaProps> = ({ icon, count, itemType, children }) => {
+    return (
+      <div className="space-y-1">
+        <div className={clsx(variant === 'normal' ? 'space-y-1' : 'flex items-center gap-4')}>
+          <div
+            className={clsx(
+              'flex items-center gap-2',
+              variant === 'normal' ? 'text-xl' : 'text-sm'
+            )}
+          >
+            {icon}
+            <span className="font-light">{count}</span>
+          </div>
+          <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
+            {count === 1 ? itemType : `${itemType}s`}
+          </span>
+        </div>
+        <div className="lg:flex items-center gap-1 text-base hidden">{children}</div>
+      </div>
+    )
+  }
+
   return (
     <Card>
-      <div className="rounded-xl p-4 flex flex-col w-full gap-10 justify-between">
+      <div
+        className={clsx(
+          'rounded-xl  flex w-full  justify-between',
+          variant === 'normal' ? 'flex-col p-4 gap-8' : 'gap-6 lg:gap-10 flex-col lg:flex-row'
+        )}
+      >
         <div className="space-y-1">
-          <div className="text-2xl font-semibold flex items-center gap-2 text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease">
-            {name} <EncryptionModeIndicator app={props.app} />
+          <div
+            className={clsx(
+              'font-semibold flex items-center gap-2 text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease',
+              variant === 'normal' ? 'text-2xl' : 'text-lg'
+            )}
+          >
+            {name} <EncryptionModeIndicator app={app} />
           </div>
           <div className="text-2xs font-mono text-neutral-500 w-full break-all text-left">{id}</div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-2xl">
-              <FaUsers />
-              <span className="font-light">{members.length}</span>
-            </div>
-            <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
-              {members.length > 1 ? 'Members' : 'Member'}
-            </span>
-            <div className="flex items-center gap-1 text-base">
-              {members.slice(0, 5).map((member) => (
-                <Avatar key={member!.id} imagePath={member!.avatarUrl} size="sm" />
-              ))}
-              {surplusMemberCount > 0 && (
-                <span className="text-neutral-500 text-xs">+{surplusMemberCount}</span>
-              )}
-            </div>
-          </div>
+        <div
+          className={clsx(
+            variant === 'normal'
+              ? 'flex items-center justify-between gap-10'
+              : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-10 w-full lg:w-2/3'
+          )}
+        >
+          <AppCardMeta itemType="Member" count={members.length} icon={<FaUsers />}>
+            {members.slice(0, 5).map((member) => (
+              <div key={member!.id}>
+                <Avatar imagePath={member!.avatarUrl} size="sm" />
+              </div>
+            ))}
+            {surplusMemberCount > 0 && (
+              <span className="text-neutral-500 text-xs">+{surplusMemberCount}</span>
+            )}
+          </AppCardMeta>
 
           {serviceAccounts.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-2xl">
-                <FaRobot />
-                <span className="font-light">{serviceAccounts.length}</span>
-              </div>
-              <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
-                {serviceAccounts.length > 1 ? 'Service Accounts' : 'Service Account'}
-              </span>
-              <div className="flex items-center gap-1 text-base">
-                {serviceAccounts.slice(0, 5).map((account) => (
-                  <div
-                    key={account!.id}
-                    className="rounded-full flex items-center bg-neutral-500/40 justify-center size-5 p-1"
-                  >
-                    <span className="text-2xs font-semibold text-zinc-900 dark:text-zinc-100">
-                      {account?.name.slice(0, 1)}
-                    </span>
-                  </div>
-                ))}
-                {surplusMemberCount > 0 && (
-                  <span className="text-neutral-500 text-xs">+{surplusMemberCount}</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-2xl">
-              <BsListColumnsReverse />
-              <span className="font-light">{environments.length}</span>
-            </div>
-            <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
-              {environments.length > 1 ? 'Environments' : 'Environment'}
-            </span>
-            <div className="flex items-center gap-1 text-base">
-              {environments.slice(0, 5).map((env) => (
+            <AppCardMeta
+              itemType="Service Account"
+              count={serviceAccounts.length}
+              icon={<FaRobot />}
+            >
+              {serviceAccounts.slice(0, 5).map((account, index) => (
                 <div
-                  key={env!.id}
-                  className="bg-neutral-400/10 ring-1 inset-inset ring-neutral-400/20 rounded-full px-2 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold"
+                  key={account!.id}
+                  className={clsx(
+                    'rounded-full flex items-center shrink-0 bg-indigo-500/20 shadow-xl justify-center size-6 p-1 text-2xs font-semibold text-zinc-900 dark:text-zinc-100'
+                  )}
                 >
-                  {env!.name.slice(0, 1)}
+                  {account?.name.slice(0, 1)}
                 </div>
               ))}
-              {surplusEnvCount > 0 && (
-                <span className="text-neutral-500 text-xs">+{surplusEnvCount}</span>
+              {surplusServiceAccountsCount > 0 && (
+                <span className="text-neutral-500 text-xs">+{surplusServiceAccountsCount}</span>
               )}
-            </div>
-          </div>
+            </AppCardMeta>
+          )}
+
+          <AppCardMeta
+            itemType="Environment"
+            count={environments.length}
+            icon={<BsListColumnsReverse />}
+          >
+            {environments.slice(0, 5).map((env) => (
+              <div
+                key={env!.id}
+                className="bg-sky-400/20 rounded-full size-6 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold"
+              >
+                {env!.name.slice(0, 1)}
+              </div>
+            ))}
+            {surplusEnvCount > 0 && (
+              <span className="text-neutral-500 text-xs">+{surplusEnvCount}</span>
+            )}
+          </AppCardMeta>
 
           {totalSyncCount > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-2xl">
-                <FaProjectDiagram />
-                <span className="font-light">{totalSyncCount}</span>
-              </div>
-              <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
-                {totalSyncCount > 1 ? 'Integrations' : 'Integration'}
-              </span>
-              <div className="flex items-center gap-2 text-base">
-                {providers.slice(0, 5).map((providerId) => (
-                  <ProviderIcon key={providerId} providerId={providerId} />
-                ))}
-                {surplusSynCount > 0 && (
-                  <span className="text-neutral-500 text-xs">+{surplusSynCount}</span>
-                )}
-              </div>
-            </div>
+            <AppCardMeta itemType="Integration" count={totalSyncCount} icon={<FaProjectDiagram />}>
+              {providers.slice(0, 5).map((providerId) => (
+                <ProviderIcon key={providerId} providerId={providerId} />
+              ))}
+              {surplusSynCount > 0 && (
+                <span className="text-neutral-500 text-xs">+{surplusSynCount}</span>
+              )}
+            </AppCardMeta>
           )}
         </div>
       </div>
