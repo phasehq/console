@@ -83,41 +83,44 @@ export default function AppsHome({ params }: { params: { team: string } }) {
       {userCanCreateApps && organisation && (
         <NewAppDialog
           organisation={organisation}
-          appCount={apps.length}
+          appCount={apps?.length}
           ref={dialogRef}
           showButton={false}
         />
       )}
       {userCanViewApps ? (
         <>
-          {apps.length > 0 && (
-            <div className="flex justify-between items-end">
-              <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-                <div className="">
-                  <FaSearch className="text-neutral-500" />
-                </div>
-                <input
-                  placeholder="Search"
-                  className="custom bg-zinc-100 dark:bg-zinc-800"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <FaTimesCircle
-                  className={clsx(
-                    'cursor-pointer text-neutral-500 transition-opacity ease',
-                    searchQuery ? 'opacity-100' : 'opacity-0'
-                  )}
-                  role="button"
-                  onClick={() => setSearchQuery('')}
-                />
-              </div>
-              <div className="space-y-4">
+          {apps?.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex justify-end">
                 {organisation && apps && userCanCreateApps && (
                   <Button variant="primary" onClick={openNewAppDialog}>
                     <FaPlus />
                     Create an App{' '}
                   </Button>
                 )}
+              </div>
+              <div className="flex justify-between">
+                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+                  <div className="">
+                    <FaSearch className="text-neutral-500" />
+                  </div>
+                  <input
+                    placeholder="Search"
+                    className="custom bg-zinc-100 dark:bg-zinc-800"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <FaTimesCircle
+                    className={clsx(
+                      'cursor-pointer text-neutral-500 transition-opacity ease',
+                      searchQuery ? 'opacity-100' : 'opacity-0'
+                    )}
+                    role="button"
+                    onClick={() => setSearchQuery('')}
+                  />
+                </div>
+
                 <div className="flex items-center justify-end gap-2">
                   <Button
                     variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
@@ -140,7 +143,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
           <div
             className={clsx(
               'grid grid-cols-1',
-              viewMode === 'grid' ? 'xl:grid-cols-2 1080p:grid-cols-3 gap-8' : 'gap-4'
+              viewMode === 'grid' ? 'xl:grid-cols-2 1080p:grid-cols-3 gap-6' : 'gap-4'
             )}
           >
             {filteredApps?.map((app) => (

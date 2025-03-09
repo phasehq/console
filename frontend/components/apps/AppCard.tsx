@@ -61,7 +61,7 @@ export const AppCard = ({ app, variant }: AppCardProps) => {
             {icon}
             <span className="font-light">{count}</span>
           </div>
-          <span className="text-neutral-500 font-medium text-2xs uppercase tracking-widest">
+          <span className="text-neutral-500 font-medium text-[0.6rem] uppercase tracking-widest">
             {count === 1 ? itemType : `${itemType}s`}
           </span>
         </div>
@@ -75,7 +75,7 @@ export const AppCard = ({ app, variant }: AppCardProps) => {
       <div
         className={clsx(
           'rounded-xl  flex w-full  justify-between',
-          variant === 'normal' ? 'flex-col p-4 gap-8' : 'gap-6 lg:gap-10 flex-col lg:flex-row'
+          variant === 'normal' ? 'flex-col gap-8' : 'gap-6 lg:gap-10 flex-col lg:flex-row'
         )}
       >
         <div className="space-y-1">
@@ -93,13 +93,22 @@ export const AppCard = ({ app, variant }: AppCardProps) => {
         <div
           className={clsx(
             variant === 'normal'
-              ? 'flex items-center justify-between gap-10'
+              ? 'flex items-center justify-between p-2 gap-6'
               : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-10 w-full lg:w-2/3'
           )}
         >
           <AppCardMeta itemType="Member" count={members.length} icon={<FaUsers />}>
-            {members.slice(0, 5).map((member) => (
-              <div key={member!.id}>
+            {members.slice(0, 5).map((member, index) => (
+              <div
+                key={member!.id}
+                className={clsx(
+                  index !== 0 && '-ml-3 shadow-lg',
+                  index === 1 && 'z-[1]',
+                  index === 2 && 'z-[2]',
+                  index === 3 && 'z-[3]',
+                  index === 4 && 'z-[4]'
+                )}
+              >
                 <Avatar imagePath={member!.avatarUrl} size="sm" />
               </div>
             ))}
@@ -118,14 +127,22 @@ export const AppCard = ({ app, variant }: AppCardProps) => {
                 <div
                   key={account!.id}
                   className={clsx(
-                    'rounded-full flex items-center shrink-0 bg-indigo-500/20 shadow-xl justify-center size-6 p-1 text-2xs font-semibold text-zinc-900 dark:text-zinc-100'
+                    'rounded-full flex items-center shrink-0 bg-indigo-200 dark:bg-indigo-900 ring-1 ring-inset ring-indigo-500/20 shadow-xl justify-center size-6 p-1 text-2xs font-semibold text-zinc-900 dark:text-zinc-100',
+
+                    index !== 0 && '-ml-3 shadow-lg',
+                    index === 1 && 'z-[1]',
+                    index === 2 && 'z-[2]',
+                    index === 3 && 'z-[3]',
+                    index === 4 && 'z-[4]'
                   )}
                 >
                   {account?.name.slice(0, 1)}
                 </div>
               ))}
               {surplusServiceAccountsCount > 0 && (
-                <span className="text-neutral-500 text-xs">+{surplusServiceAccountsCount}</span>
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
+                  +{surplusServiceAccountsCount}
+                </span>
               )}
             </AppCardMeta>
           )}
@@ -135,16 +152,25 @@ export const AppCard = ({ app, variant }: AppCardProps) => {
             count={environments.length}
             icon={<BsListColumnsReverse />}
           >
-            {environments.slice(0, 5).map((env) => (
+            {environments.slice(0, 5).map((env, index) => (
               <div
                 key={env!.id}
-                className="bg-sky-400/20 rounded-full size-6 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold"
+                className={clsx(
+                  'bg-sky-200 dark:bg-sky-900 ring-1 ring-inset ring-sky-500/20 rounded-full size-6 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
+                  index !== 0 && '-ml-3 shadow-lg',
+                  index === 1 && 'z-[1]',
+                  index === 2 && 'z-[2]',
+                  index === 3 && 'z-[3]',
+                  index === 4 && 'z-[4]'
+                )}
               >
                 {env!.name.slice(0, 1)}
               </div>
             ))}
             {surplusEnvCount > 0 && (
-              <span className="text-neutral-500 text-xs">+{surplusEnvCount}</span>
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
+                +{surplusEnvCount}
+              </span>
             )}
           </AppCardMeta>
 
@@ -154,7 +180,9 @@ export const AppCard = ({ app, variant }: AppCardProps) => {
                 <ProviderIcon key={providerId} providerId={providerId} />
               ))}
               {surplusSynCount > 0 && (
-                <span className="text-neutral-500 text-xs">+{surplusSynCount}</span>
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
+                  +{surplusSynCount}
+                </span>
               )}
             </AppCardMeta>
           )}
