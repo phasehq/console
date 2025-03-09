@@ -76,58 +76,67 @@ export default function AppsHome({ params }: { params: { team: string } }) {
       <div className="space-y-1">
         <h1 className="text-3xl font-bold capitalize col-span-4">Apps</h1>
         <p className="text-neutral-500">
-          All Apps in that you have access to in the {organisation?.name} organisation
+          All Apps that you have access to in the {organisation?.name} organisation
         </p>
       </div>
+
+      {userCanCreateApps && organisation && (
+        <NewAppDialog
+          organisation={organisation}
+          appCount={apps.length}
+          ref={dialogRef}
+          showButton={false}
+        />
+      )}
       {userCanViewApps ? (
         <>
-          <div className="flex justify-between items-end">
-            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-              <div className="">
-                <FaSearch className="text-neutral-500" />
-              </div>
-              <input
-                placeholder="Search"
-                className="custom bg-zinc-100 dark:bg-zinc-800"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <FaTimesCircle
-                className={clsx(
-                  'cursor-pointer text-neutral-500 transition-opacity ease',
-                  searchQuery ? 'opacity-100' : 'opacity-0'
-                )}
-                role="button"
-                onClick={() => setSearchQuery('')}
-              />
-            </div>
-            <div className="space-y-4">
-              {organisation && apps && userCanCreateApps && (
-                <NewAppDialog
-                  organisation={organisation}
-                  appCount={apps.length}
-                  ref={dialogRef}
-                  showButton={apps.length > 0}
+          {apps.length > 0 && (
+            <div className="flex justify-between items-end">
+              <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+                <div className="">
+                  <FaSearch className="text-neutral-500" />
+                </div>
+                <input
+                  placeholder="Search"
+                  className="custom bg-zinc-100 dark:bg-zinc-800"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
-              )}
-              <div className="flex items-center justify-end gap-2">
-                <Button
-                  variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-                  onClick={() => setViewMode('grid')}
-                  title="Grid layout"
-                >
-                  <BsFillGrid3X3GapFill />
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                  onClick={() => setViewMode('list')}
-                  title="List layout"
-                >
-                  <FaList />
-                </Button>
+                <FaTimesCircle
+                  className={clsx(
+                    'cursor-pointer text-neutral-500 transition-opacity ease',
+                    searchQuery ? 'opacity-100' : 'opacity-0'
+                  )}
+                  role="button"
+                  onClick={() => setSearchQuery('')}
+                />
+              </div>
+              <div className="space-y-4">
+                {organisation && apps && userCanCreateApps && (
+                  <Button variant="primary" onClick={openNewAppDialog}>
+                    <FaPlus />
+                    Create an App{' '}
+                  </Button>
+                )}
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                    onClick={() => setViewMode('grid')}
+                    title="Grid layout"
+                  >
+                    <BsFillGrid3X3GapFill />
+                  </Button>
+                  <Button
+                    variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                    onClick={() => setViewMode('list')}
+                    title="List layout"
+                  >
+                    <FaList />
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
           <div
             className={clsx(
               'grid grid-cols-1',
