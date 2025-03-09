@@ -34,7 +34,7 @@ export const EncryptionModeIndicator = (props: { app: AppType; asMenu?: boolean 
     true
   )
 
-  if (asMenu === false) return <SseLabel sseEnabled={app.sseEnabled!} />
+  if (!asMenu) return <SseLabel sseEnabled={app.sseEnabled!} />
 
   if (!userCanReadEncMode) return <></>
 
