@@ -12,7 +12,7 @@ from api.views.kms import kms
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 urlpatterns = [
-    re_path(r"^accounts", include("allauth.urls")),
+    path("accounts/", include("allauth.urls")),
     path("auth/", include("dj_rest_auth.urls")),
     path("social/login/", include("api.urls")),
     path("logout/", csrf_exempt(logout_view)),

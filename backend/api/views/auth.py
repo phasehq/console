@@ -20,10 +20,10 @@ from api.utils.rest import (
 
 from django.conf import settings
 from django.contrib.auth import logout
-from django.views.decorators.csrf import csrf_exempt
+
 from django.shortcuts import redirect
 from django.http import JsonResponse
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -38,16 +38,19 @@ from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
-from allauth.socialaccount.providers.microsoft.provider import MicrosoftGraphProvider
-from allauth.socialaccount.models import SocialApp
-from ee.authentication.sso.oidc.util.google.google import GoogleOpenIDConnectAdapter
-from ee.authentication.sso.oidc.util.jumpcloud.jumpcloud import (
+
+
+from allauth.socialaccount.adapter import get_adapter
+from ee.authentication.sso.oidc.util.google.views import (
+    GoogleOpenIDConnectAdapter,
+)
+from ee.authentication.sso.oidc.util.jumpcloud.views import (
     JumpCloudOpenIDConnectAdapter,
 )
-from ee.authentication.sso.oidc.util.entraid.entraid import EntraIDOpenIDConnectAdapter
+
 from django.contrib.sites.models import Site
-from dj_rest_auth.registration.serializers import SocialLoginSerializer
-from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+
+from jwt.algorithms import RSAAlgorithm
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -86,7 +89,7 @@ def github_callback(request):
 
 
 # for custom gitlab adapter class
-def _check_errors(response):
+def _check_gitlab_errors(response):
     #  403 error's are presented as user-facing errors
     if response.status_code == 403:
         msg = response.content
@@ -112,6 +115,24 @@ def _check_errors(response):
     if "id" not in data:
         # If the id is not present, the output is not usable (no UID)
         raise OAuth2Error("Invalid data from GitLab API: %r" % (data))
+
+    return data
+
+
+def _check_microsoft_errors(response):
+    try:
+        data = response.json()
+    except json.decoder.JSONDecodeError:
+        raise OAuth2Error(
+            "Invalid JSON from Microsoft Graph API: {}".format(response.text)
+        )
+
+    if "id" not in data:
+        error_message = "Error retrieving Microsoft profile"
+        microsoft_error_message = data.get("error", {}).get("message")
+        if microsoft_error_message:
+            error_message = ": ".join((error_message, microsoft_error_message))
+        raise OAuth2Error(error_message)
 
     return data
 
@@ -208,7 +229,7 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
 
     def complete_login(self, request, app, token, response):
         response = requests.get(self.profile_url, params={"access_token": token.token})
-        data = _check_errors(response)
+        data = _check_gitlab_errors(response)
         login = self.get_provider().sociallogin_from_response(request, data)
 
         email = login.email_addresses[0]
@@ -231,82 +252,88 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
 
 
 class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
-    def __init__(self, *args, **kwargs):
-        self.request = kwargs.pop('request', None)
-        super().__init__(*args, **kwargs)
-        # Override the tenant setting from our configuration
-        ms_settings = app_settings.PROVIDERS.get('microsoft', {}).get('APPS', [{}])[0].get('settings', {})
-        self.tenant = ms_settings.get('tenant', 'organizations')
-        
-        # Update URLs based on tenant
-        provider_base_url = "https://login.microsoftonline.com/{0}".format(self.tenant)
-        self.access_token_url = "{0}/oauth2/v2.0/token".format(provider_base_url)
-        self.authorize_url = "{0}/oauth2/v2.0/authorize".format(provider_base_url)
-    
-    def get_provider(self):
-        return MicrosoftGraphProvider(self.request)
 
-    def get_current_site(self, request=None):
-        """Get the current Site object"""
-        if getattr(settings, 'SITE_ID', None):
-            site_id = settings.SITE_ID
-            return Site.objects.get(pk=site_id)
-        if request is None:
-            request = self.request
-        return Site.objects.get_current(request)
+    MICROSOFT_JWKS_URL = f"https://login.microsoftonline.com/{os.getenv("ENTRA_ID_OIDC_TENANT_ID")}/discovery/v2.0/keys"
+    EXPECTED_ISSUER = f"https://login.microsoftonline.com/{os.getenv("ENTRA_ID_OIDC_TENANT_ID")}/v2.0"  # Replace {tenant_id}
+    EXPECTED_AUDIENCE = os.getenv("ENTRA_ID_OIDC_CLIENT_ID", "")
 
-    def get_app(self, request, provider_id=None, config=''):
-        """
-        Create a SocialApp instance dynamically instead of retrieving from DB
-        """
-        provider_id = provider_id or self.provider_id
-        
-        # Get microsoft app settings from SOCIALACCOUNT_PROVIDERS
-        # First try to get from 'microsoft' settings as configured in the template
-        ms_apps = app_settings.PROVIDERS.get('microsoft', {}).get('APPS', [])
-        
-        if ms_apps:
-            # Use the first app configuration
-            app_config = ms_apps[0]
-            client_id = app_config.get('client_id')
-            secret = app_config.get('secret')
-        else:
-            # Fallback to environment variables
-            client_id = os.getenv("ENTRA_ID_OIDC_CLIENT_ID", "")
-            secret = get_secret("ENTRA_ID_OIDC_CLIENT_SECRET")
-            
-        app = SocialApp(
-            provider=provider_id,
-            name='Microsoft',
-            client_id=client_id,
-            secret=secret,
+    def get_microsoft_public_keys(self):
+        """Fetch Microsoft JWKS and return the keys as a dictionary."""
+        response = requests.get(self.MICROSOFT_JWKS_URL)
+        response.raise_for_status()
+        return {
+            key["kid"]: RSAAlgorithm.from_jwk(key) for key in response.json()["keys"]
+        }
+
+    def verify_microsoft_jwt(self, token):
+        """Verify and decode the JWT using the correct public key."""
+        headers = jwt.get_unverified_header(token)
+        kid = headers.get("kid")
+
+        decoded = jwt.decode(token, options={"verify_signature": False})
+
+        print("Decoded Token Issuer (iss):", decoded.get("iss"))
+        print("Decoded Token Audience (aud):", decoded.get("aud"))
+        print("Expected Issuer:", self.EXPECTED_ISSUER)
+        print("Expected Audience:", self.EXPECTED_AUDIENCE)
+
+        if not kid:
+            raise ValueError("No 'kid' found in token header.")
+
+        public_keys = self.get_microsoft_public_keys()
+
+        print("PUBLIC KEYS", public_keys)
+
+        if kid not in public_keys:
+            raise ValueError("Invalid 'kid', no matching public key found.")
+
+        public_key = public_keys[kid]
+
+        return jwt.decode(
+            token,
+            public_key,
+            algorithms=["RS256"],
+            audience=self.EXPECTED_AUDIENCE,
+            issuer=self.EXPECTED_ISSUER.format(
+                tenant_id=os.getenv("ENTRA_ID_OIDC_CLIENT_ID", "")
+            ),
         )
-        
-        # We only need to save/create the app to database if it doesn't exist
-        # For this implementation, we'll create a dynamic app instance
-        # that doesn't need to be stored in the database
-        
-        return app
 
     def complete_login(self, request, app, token, **kwargs):
-        login = super().complete_login(request, app, token, **kwargs)
-        email = login.user.email
-        print ("USER_EMAIL: ", email)
-        full_name = login.account.extra_data.get("displayName", email)
 
-        if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
-            try:
-                # Notify Slack
-                notify_slack(f"New user signup: {full_name} - {email}")
-            except Exception as e:
-                print(f"Error notifying Slack: {e}")
+        headers = {"Authorization": "Bearer {0}".format(token.token)}
+        response = (
+            get_adapter()
+            .get_requests_session()
+            .get(
+                self.profile_url,
+                params=self.profile_url_params,
+                headers=headers,
+            )
+        )
 
         try:
-            send_login_email(request, email, full_name, "Microsoft")
-        except Exception as e:
-            print(f"Error sending email: {e}")
+            decoded_token = self.verify_microsoft_jwt(token.token)
+            print("Decoded JWT:", decoded_token)
+        except jwt.ExpiredSignatureError:
+            print("Token has expired")
+        except jwt.InvalidTokenError as e:
+            print("Invalid token:", str(e))
 
-        return login
+        try:
+            claims = jwt.decode(token.token, options={"verify_signature": False})
+
+            email = claims.get("email") or claims.get(
+                "preferred_username"
+            )  # Microsoft may use "preferred_username"
+            if email:
+                print("USER_EMAIL: ", email)
+        except jwt.DecodeError as ex:
+            print(ex)
+            pass  # Handle decoding errors if necessary
+        extra_data = _check_microsoft_errors(response)
+
+        return self.get_provider().sociallogin_from_response(request, extra_data)
 
 
 class GoogleLoginView(SocialLoginView):
@@ -344,48 +371,20 @@ class JumpCloudLoginView(SocialLoginView):
     client_class = OAuth2Client
 
 
-class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
-    """Custom social account adapter that doesn't require a SocialApp database entry"""
-    
-    def get_app(self, request, provider_id, config=None):
-        """Get the SocialApp without requiring a database entry"""
-        if provider_id == 'microsoft':
-            # Get microsoft app settings from SOCIALACCOUNT_PROVIDERS
-            ms_apps = app_settings.PROVIDERS.get('microsoft', {}).get('APPS', [])
-            
-            if ms_apps:
-                # Use the first app configuration
-                app_config = ms_apps[0]
-                client_id = app_config.get('client_id')
-                secret = app_config.get('secret')
-            else:
-                # Fallback to environment variables
-                client_id = os.getenv("ENTRA_ID_OIDC_CLIENT_ID", "")
-                secret = get_secret("ENTRA_ID_OIDC_CLIENT_SECRET")
-                
-            app = SocialApp(
-                provider=provider_id,
-                name='Microsoft',
-                client_id=client_id,
-                secret=secret,
-            )
-            return app
-        return super().get_app(request, provider_id, config)
-
-
 class EntraIDLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = CustomMicrosoftGraphOAuth2Adapter
+    # adapter_class = MicrosoftGraphOAuth2Adapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
-    
+
     def get_adapter(self, request):
         """
         Initialize the adapter with the request
         """
         adapter = self.adapter_class(request=request)
         return adapter
-        
+
     def post(self, request, *args, **kwargs):
         """Override to ensure adapter initialization is correct"""
         self.request = request

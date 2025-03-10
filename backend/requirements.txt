@@ -1,5 +1,5 @@
 aniso8601==9.0.1
-asgiref==3.6.0
+asgiref==3.8.1
 async-timeout==4.0.3
 attrs==22.2.0
 autobahn==23.1.2
@@ -15,9 +15,9 @@ constantly==15.1.0
 crontab==1.0.1
 cryptography==42.0.4
 defusedxml==0.7.1
-dj-rest-auth==3.0.0
-Django==4.2.15
-django-allauth==0.52.0
+dj-rest-auth==7.0.1
+Django==4.2.16
+django-allauth==65.4.1
 django-cors-headers==3.14.0
 django-filter==23.1
 django-rq==3.0.0

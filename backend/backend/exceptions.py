@@ -1,12 +1,17 @@
 from rest_framework.views import exception_handler
 from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse, HttpResponse
+import traceback
+import os
 
 
 def custom_exception_handler(exc, context):
     """
     Custom exception handler to modify 'PermissionDenied' responses.
     """
+    if os.getenv("DEBUG") == "True":
+        print(traceback.format_exc())
+
     # Handle PermissionDenied
     if isinstance(exc, PermissionDenied):
         # Extract the custom message and replace the key
