@@ -37,11 +37,17 @@ from allauth.socialaccount.providers.gitlab.provider import GitLabProvider
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter
+from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
+from allauth.socialaccount.providers.microsoft.provider import MicrosoftGraphProvider
+from allauth.socialaccount.models import SocialApp
 from ee.authentication.sso.oidc.util.google.google import GoogleOpenIDConnectAdapter
 from ee.authentication.sso.oidc.util.jumpcloud.jumpcloud import (
     JumpCloudOpenIDConnectAdapter,
 )
 from ee.authentication.sso.oidc.util.entraid.entraid import EntraIDOpenIDConnectAdapter
+from django.contrib.sites.models import Site
+from dj_rest_auth.registration.serializers import SocialLoginSerializer
+from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -224,6 +230,85 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
         return login
 
 
+class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+        # Override the tenant setting from our configuration
+        ms_settings = app_settings.PROVIDERS.get('microsoft', {}).get('APPS', [{}])[0].get('settings', {})
+        self.tenant = ms_settings.get('tenant', 'organizations')
+        
+        # Update URLs based on tenant
+        provider_base_url = "https://login.microsoftonline.com/{0}".format(self.tenant)
+        self.access_token_url = "{0}/oauth2/v2.0/token".format(provider_base_url)
+        self.authorize_url = "{0}/oauth2/v2.0/authorize".format(provider_base_url)
+    
+    def get_provider(self):
+        return MicrosoftGraphProvider(self.request)
+
+    def get_current_site(self, request=None):
+        """Get the current Site object"""
+        if getattr(settings, 'SITE_ID', None):
+            site_id = settings.SITE_ID
+            return Site.objects.get(pk=site_id)
+        if request is None:
+            request = self.request
+        return Site.objects.get_current(request)
+
+    def get_app(self, request, provider_id=None, config=''):
+        """
+        Create a SocialApp instance dynamically instead of retrieving from DB
+        """
+        provider_id = provider_id or self.provider_id
+        
+        # Get microsoft app settings from SOCIALACCOUNT_PROVIDERS
+        # First try to get from 'microsoft' settings as configured in the template
+        ms_apps = app_settings.PROVIDERS.get('microsoft', {}).get('APPS', [])
+        
+        if ms_apps:
+            # Use the first app configuration
+            app_config = ms_apps[0]
+            client_id = app_config.get('client_id')
+            secret = app_config.get('secret')
+        else:
+            # Fallback to environment variables
+            client_id = os.getenv("ENTRA_ID_OIDC_CLIENT_ID", "")
+            secret = get_secret("ENTRA_ID_OIDC_CLIENT_SECRET")
+            
+        app = SocialApp(
+            provider=provider_id,
+            name='Microsoft',
+            client_id=client_id,
+            secret=secret,
+        )
+        
+        # We only need to save/create the app to database if it doesn't exist
+        # For this implementation, we'll create a dynamic app instance
+        # that doesn't need to be stored in the database
+        
+        return app
+
+    def complete_login(self, request, app, token, **kwargs):
+        login = super().complete_login(request, app, token, **kwargs)
+        email = login.user.email
+        print ("USER_EMAIL: ", email)
+        full_name = login.account.extra_data.get("displayName", email)
+
+        if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
+            try:
+                # Notify Slack
+                notify_slack(f"New user signup: {full_name} - {email}")
+            except Exception as e:
+                print(f"Error notifying Slack: {e}")
+
+        try:
+            send_login_email(request, email, full_name, "Microsoft")
+        except Exception as e:
+            print(f"Error sending email: {e}")
+
+        return login
+
+
 class GoogleLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = CustomGoogleOAuth2Adapter
@@ -259,11 +344,52 @@ class JumpCloudLoginView(SocialLoginView):
     client_class = OAuth2Client
 
 
+class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
+    """Custom social account adapter that doesn't require a SocialApp database entry"""
+    
+    def get_app(self, request, provider_id, config=None):
+        """Get the SocialApp without requiring a database entry"""
+        if provider_id == 'microsoft':
+            # Get microsoft app settings from SOCIALACCOUNT_PROVIDERS
+            ms_apps = app_settings.PROVIDERS.get('microsoft', {}).get('APPS', [])
+            
+            if ms_apps:
+                # Use the first app configuration
+                app_config = ms_apps[0]
+                client_id = app_config.get('client_id')
+                secret = app_config.get('secret')
+            else:
+                # Fallback to environment variables
+                client_id = os.getenv("ENTRA_ID_OIDC_CLIENT_ID", "")
+                secret = get_secret("ENTRA_ID_OIDC_CLIENT_SECRET")
+                
+            app = SocialApp(
+                provider=provider_id,
+                name='Microsoft',
+                client_id=client_id,
+                secret=secret,
+            )
+            return app
+        return super().get_app(request, provider_id, config)
+
+
 class EntraIDLoginView(SocialLoginView):
     authentication_classes = []
-    adapter_class = EntraIDOpenIDConnectAdapter
+    adapter_class = CustomMicrosoftGraphOAuth2Adapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
+    
+    def get_adapter(self, request):
+        """
+        Initialize the adapter with the request
+        """
+        adapter = self.adapter_class(request=request)
+        return adapter
+        
+    def post(self, request, *args, **kwargs):
+        """Override to ensure adapter initialization is correct"""
+        self.request = request
+        return super().post(request, *args, **kwargs)
 
 
 def logout_view(request):
