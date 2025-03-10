@@ -7,5 +7,5 @@ urlpatterns = [
     path("gitlab/", GitLabLoginView.as_view(), name="gitlab"),
     path("google-oidc/", OIDCLoginView.as_view(), name="google-oidc"),
     path("jumpcloud-oidc/", JumpCloudLoginView.as_view(), name="jumpcloud-oidc"),
-    path("entra-id-oidc/", EntraIDLoginView.as_view(), name="entra-id-oidc"),
+    path("entra-id-oidc/", EntraIDLoginView.as_view(), name="microsoft"),
 ]
