@@ -167,7 +167,7 @@ SOCIALACCOUNT_PROVIDERS = {
                     "tenant": os.getenv("ENTRA_ID_OIDC_TENANT_ID"),
                     "login_url": "https://login.microsoftonline.com",
                     "graph_url": "https://graph.microsoft.com",
-                }
+                },
             }
         ]
     },
@@ -177,7 +177,7 @@ SOCIALACCOUNT_PROVIDERS = {
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_REQUIRED = True
 SOCIALACCOUNT_QUERY_EMAIL = True
-SOCIALACCOUNT_ADAPTER = "api.views.auth.CustomSocialAccountAdapter"
+
 
 OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI")
 
@@ -204,6 +204,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "djangorestframework_camel_case.middleware.CamelCaseMiddleWare",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 USE_X_FORWARDED_HOST = True
