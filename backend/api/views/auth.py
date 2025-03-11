@@ -134,6 +134,9 @@ def _check_microsoft_errors(response):
             error_message = ": ".join((error_message, microsoft_error_message))
         raise OAuth2Error(error_message)
 
+    data["name"] = data.get("displayName")
+    if data["name"] is None:
+        data["name"] = f"{data.get("givenName")} {data.get("surName")}"
     return data
 
 
@@ -282,8 +285,6 @@ class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
 
         public_keys = self.get_microsoft_public_keys()
 
-        print("PUBLIC KEYS", public_keys)
-
         if kid not in public_keys:
             raise ValueError("Invalid 'kid', no matching public key found.")
 
@@ -312,6 +313,10 @@ class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
             )
         )
 
+        extra_data = _check_microsoft_errors(response)
+
+        login = self.get_provider().sociallogin_from_response(request, extra_data)
+
         try:
             decoded_token = self.verify_microsoft_jwt(token.token)
             print("Decoded JWT:", decoded_token)
@@ -327,13 +332,19 @@ class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
                 "preferred_username"
             )  # Microsoft may use "preferred_username"
             if email:
-                print("USER_EMAIL: ", email)
+                login.user.email = email
         except jwt.DecodeError as ex:
             print(ex)
             pass  # Handle decoding errors if necessary
-        extra_data = _check_microsoft_errors(response)
 
-        return self.get_provider().sociallogin_from_response(request, extra_data)
+        try:
+            email = login.user.email
+            full_name = extra_data.get("name", "")
+            send_login_email(request, email, full_name, "Microsoft Entra ID")
+        except Exception as e:
+            print(f"Error sending email: {e}")
+
+        return login
 
 
 class GoogleLoginView(SocialLoginView):
