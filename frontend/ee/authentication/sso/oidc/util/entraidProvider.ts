@@ -8,15 +8,15 @@ export interface EntraIDProfile extends Record<string, any> {
 }
 
 type EntraIDProviderConfig = Omit<OAuthUserConfig<EntraIDProfile>, 'clientId'> & {
-  clientId: string;
-  clientSecret: string;
-  profilePhotoSize?: 48 | 64 | 96 | 120 | 240 | 360 | 432 | 504 | 648;
-  tenantId?: string;
-};
+  clientId: string
+  clientSecret: string
+  profilePhotoSize?: 48 | 64 | 96 | 120 | 240 | 360 | 432 | 504 | 648
+  tenantId?: string
+}
 
 export function EntraIDProvider(options: EntraIDProviderConfig): OAuthConfig<EntraIDProfile> {
   const tenant = options.tenantId || process.env.ENTRA_ID_OIDC_TENANT_ID || 'common'
-  const profilePhotoSize = options.profilePhotoSize || 48
+  //const profilePhotoSize = options.profilePhotoSize || 48
 
   const config: OAuthConfig<EntraIDProfile> = {
     id: options.id || 'entra-id-oidc',
@@ -26,7 +26,7 @@ export function EntraIDProvider(options: EntraIDProviderConfig): OAuthConfig<Ent
     clientSecret: options.clientSecret,
     wellKnown: `https://login.microsoftonline.com/${tenant}/v2.0/.well-known/openid-configuration?appid=${options.clientId}`,
     authorization: {
-      params: { scope: 'openid email profile User.Read' }
+      params: { scope: 'openid email profile User.Read' },
     },
     idToken: true,
     checks: ['pkce', 'state', 'nonce'],
@@ -34,10 +34,9 @@ export function EntraIDProvider(options: EntraIDProviderConfig): OAuthConfig<Ent
       // Get the profile photo from the Microsoft Graph API
       let image
       try {
-        const response = await fetch(
-          `https://graph.microsoft.com/v1.0/me/photos/${profilePhotoSize}x${profilePhotoSize}/$value`,
-          { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-        )
+        const response = await fetch(`https://graph.microsoft.com/v1.0/me/photo/$value`, {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        })
 
         // Convert ArrayBuffer to base64 if response is OK
         if (response.ok) {
@@ -53,9 +52,9 @@ export function EntraIDProvider(options: EntraIDProviderConfig): OAuthConfig<Ent
         id: profile.sub,
         name: profile.name || '',
         email: profile.email || '',
-        image: image || profile.picture || ''
+        image: image || profile.picture || '',
       }
-    }
+    },
   }
 
   return config

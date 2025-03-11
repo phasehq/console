@@ -17,7 +17,6 @@ from api.utils.rest import (
     get_token_type,
     token_is_expired_or_deleted,
 )
-
 from django.conf import settings
 from django.contrib.auth import logout
 
@@ -37,20 +36,15 @@ from allauth.socialaccount.providers.gitlab.provider import GitLabProvider
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter
-from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
-
-
-from allauth.socialaccount.adapter import get_adapter
+from django.conf import settings
 from ee.authentication.sso.oidc.util.google.views import (
     GoogleOpenIDConnectAdapter,
 )
 from ee.authentication.sso.oidc.util.jumpcloud.views import (
     JumpCloudOpenIDConnectAdapter,
 )
+from ee.authentication.sso.oidc.entraid.views import CustomMicrosoftGraphOAuth2Adapter
 
-from django.contrib.sites.models import Site
-
-from jwt.algorithms import RSAAlgorithm
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -116,27 +110,6 @@ def _check_gitlab_errors(response):
         # If the id is not present, the output is not usable (no UID)
         raise OAuth2Error("Invalid data from GitLab API: %r" % (data))
 
-    return data
-
-
-def _check_microsoft_errors(response):
-    try:
-        data = response.json()
-    except json.decoder.JSONDecodeError:
-        raise OAuth2Error(
-            "Invalid JSON from Microsoft Graph API: {}".format(response.text)
-        )
-
-    if "id" not in data:
-        error_message = "Error retrieving Microsoft profile"
-        microsoft_error_message = data.get("error", {}).get("message")
-        if microsoft_error_message:
-            error_message = ": ".join((error_message, microsoft_error_message))
-        raise OAuth2Error(error_message)
-
-    data["name"] = data.get("displayName")
-    if data["name"] is None:
-        data["name"] = f"{data.get("givenName")} {data.get("surName")}"
     return data
 
 
@@ -254,99 +227,6 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
         return login
 
 
-class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
-
-    MICROSOFT_JWKS_URL = f"https://login.microsoftonline.com/{os.getenv("ENTRA_ID_OIDC_TENANT_ID")}/discovery/v2.0/keys"
-    EXPECTED_ISSUER = f"https://login.microsoftonline.com/{os.getenv("ENTRA_ID_OIDC_TENANT_ID")}/v2.0"  # Replace {tenant_id}
-    EXPECTED_AUDIENCE = os.getenv("ENTRA_ID_OIDC_CLIENT_ID", "")
-
-    def get_microsoft_public_keys(self):
-        """Fetch Microsoft JWKS and return the keys as a dictionary."""
-        response = requests.get(self.MICROSOFT_JWKS_URL)
-        response.raise_for_status()
-        return {
-            key["kid"]: RSAAlgorithm.from_jwk(key) for key in response.json()["keys"]
-        }
-
-    def verify_microsoft_jwt(self, token):
-        """Verify and decode the JWT using the correct public key."""
-        headers = jwt.get_unverified_header(token)
-        kid = headers.get("kid")
-
-        decoded = jwt.decode(token, options={"verify_signature": False})
-
-        print("Decoded Token Issuer (iss):", decoded.get("iss"))
-        print("Decoded Token Audience (aud):", decoded.get("aud"))
-        print("Expected Issuer:", self.EXPECTED_ISSUER)
-        print("Expected Audience:", self.EXPECTED_AUDIENCE)
-
-        if not kid:
-            raise ValueError("No 'kid' found in token header.")
-
-        public_keys = self.get_microsoft_public_keys()
-
-        if kid not in public_keys:
-            raise ValueError("Invalid 'kid', no matching public key found.")
-
-        public_key = public_keys[kid]
-
-        return jwt.decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            audience=self.EXPECTED_AUDIENCE,
-            issuer=self.EXPECTED_ISSUER.format(
-                tenant_id=os.getenv("ENTRA_ID_OIDC_CLIENT_ID", "")
-            ),
-        )
-
-    def complete_login(self, request, app, token, **kwargs):
-
-        headers = {"Authorization": "Bearer {0}".format(token.token)}
-        response = (
-            get_adapter()
-            .get_requests_session()
-            .get(
-                self.profile_url,
-                params=self.profile_url_params,
-                headers=headers,
-            )
-        )
-
-        extra_data = _check_microsoft_errors(response)
-
-        login = self.get_provider().sociallogin_from_response(request, extra_data)
-
-        try:
-            decoded_token = self.verify_microsoft_jwt(token.token)
-            print("Decoded JWT:", decoded_token)
-        except jwt.ExpiredSignatureError:
-            print("Token has expired")
-        except jwt.InvalidTokenError as e:
-            print("Invalid token:", str(e))
-
-        try:
-            claims = jwt.decode(token.token, options={"verify_signature": False})
-
-            email = claims.get("email") or claims.get(
-                "preferred_username"
-            )  # Microsoft may use "preferred_username"
-            if email:
-                login.user.email = email
-        except jwt.DecodeError as ex:
-            print(ex)
-            pass  # Handle decoding errors if necessary
-
-        try:
-            email = login.user.email
-            full_name = extra_data.get("name", "")
-            send_login_email(request, email, full_name, "Microsoft Entra ID")
-        except Exception as e:
-            print(f"Error sending email: {e}")
-
-        return login
-
-
 class GoogleLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = CustomGoogleOAuth2Adapter
@@ -385,7 +265,6 @@ class JumpCloudLoginView(SocialLoginView):
 class EntraIDLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = CustomMicrosoftGraphOAuth2Adapter
-    # adapter_class = MicrosoftGraphOAuth2Adapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
 
