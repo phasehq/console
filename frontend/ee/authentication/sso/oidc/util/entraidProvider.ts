@@ -48,7 +48,7 @@ export function EntraIDProvider(options: EntraIDProviderConfig): OAuthConfig<Ent
         console.error('Error fetching Entra ID profile photo:', error)
       }
       
-      if (!profile.email) throw ("User does not have a valid email")
+      if (!profile.email) throw new Error("User does not have a valid email")
 
       return {
         id: profile.sub,
