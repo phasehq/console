@@ -2,13 +2,14 @@
 
 import clsx from 'clsx'
 import { signIn, useSession } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ReactNode, useEffect, useState } from 'react'
 import { FaGithub, FaGitlab, FaGoogle } from 'react-icons/fa'
 import Spinner from '../common/Spinner'
 import { LogoWordMark } from '../common/LogoWordMark'
 import { JumpCloudLogo } from '../common/logos/JumpCloudLogo'
 import { EntraIDLogo } from '../common/logos/EntraIDLogo'
+import { toast } from 'react-toastify'
 
 type ProviderButton = { id: string; name: string; icon: ReactNode; style: string }
 
@@ -68,6 +69,16 @@ export default function SignInButtons() {
   const router = useRouter()
 
   const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const error = searchParams?.get('error')
+    if (error) {
+      toast.error(
+        'Something went wrong. Please contact your server admin or check the server logs for more information.',
+        { autoClose: 5000 }
+      )
+    }
+  }, [searchParams])
 
   const callbackUrl = searchParams?.get('callbackUrl')
 
