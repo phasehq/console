@@ -47,11 +47,13 @@ export function EntraIDProvider(options: EntraIDProviderConfig): OAuthConfig<Ent
       } catch (error) {
         console.error('Error fetching Entra ID profile photo:', error)
       }
+      
+      if (!profile.email) throw ("User does not have a valid email")
 
       return {
         id: profile.sub,
         name: profile.name || '',
-        email: profile.email || '',
+        email: profile.email,
         image: image || profile.picture || '',
       }
     },
