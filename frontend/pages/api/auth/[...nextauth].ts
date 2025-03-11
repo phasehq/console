@@ -126,7 +126,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
           tenantId: process.env.ENTRA_ID_OIDC_TENANT_ID,
           issuer: `https://login.microsoftonline.com/${process.env.ENTRA_ID_OIDC_TENANT_ID || 'common'}/v2.0`,
           profilePhotoSize: 120,
-          authorization: { params: { scope: 'openid email profile User.Read' } }
+          authorization: { params: { scope: 'openid email profile User.Read' } },
         })
       )
     }
@@ -235,7 +235,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               if (axios.isAxiosError(error) && error.response) {
                 throw `Error: ${error.response.status}: ${error.response.data?.error || ''}`
               }
-              console.log(error)
+              console.error(error)
               throw `Backend error: ${error}`
             }
           }
