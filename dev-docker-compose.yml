@@ -48,6 +48,36 @@ services:
     networks:
       - phase-net-dev
 
+  rqworker:
+    container_name: phase-rqworker-dev
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - redis
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    command: python manage.py rqworker default
+    volumes:
+      - ./backend/:/app/
+    env_file: .env.dev
+    networks:
+      - phase-net-dev
+
+  pgweb:
+    container_name: phase-pgweb-dev
+    image: sosedoff/pgweb
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - DATABASE_URL=postgres://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - phase-net-dev
+
   postgres:
     container_name: phase-postgres
     image: postgres:15.4-alpine3.17
@@ -77,23 +107,6 @@ services:
       - "6379:6379"
     networks:
       - phase-net-dev
-
-  rqworker:
-    container_name: phase-rqworker-dev
-    restart: unless-stopped
-    depends_on:
-      - backend
-      - redis
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    command: python manage.py rqworker default #overrides CMD in the dockerfile
-    volumes:
-      - ./backend/:/app/
-    env_file: .env.dev
-    networks:
-      - phase-net-dev
-
 
 volumes:
   phase-postgres-data-dev:
