@@ -17,13 +17,12 @@ from api.utils.rest import (
     get_token_type,
     token_is_expired_or_deleted,
 )
-
 from django.conf import settings
 from django.contrib.auth import logout
-from django.views.decorators.csrf import csrf_exempt
+
 from django.shortcuts import redirect
 from django.http import JsonResponse
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -37,10 +36,15 @@ from allauth.socialaccount.providers.gitlab.provider import GitLabProvider
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter
-from ee.authentication.sso.oidc.util.google.google import GoogleOpenIDConnectAdapter
-from ee.authentication.sso.oidc.util.jumpcloud.jumpcloud import (
+from django.conf import settings
+from ee.authentication.sso.oidc.util.google.views import (
+    GoogleOpenIDConnectAdapter,
+)
+from ee.authentication.sso.oidc.util.jumpcloud.views import (
     JumpCloudOpenIDConnectAdapter,
 )
+from ee.authentication.sso.oidc.entraid.views import CustomMicrosoftGraphOAuth2Adapter
+
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -79,7 +83,7 @@ def github_callback(request):
 
 
 # for custom gitlab adapter class
-def _check_errors(response):
+def _check_gitlab_errors(response):
     #  403 error's are presented as user-facing errors
     if response.status_code == 403:
         msg = response.content
@@ -166,7 +170,16 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
         resp.raise_for_status()
         extra_data = resp.json()
         if app_settings.QUERY_EMAIL and not extra_data.get("email"):
-            extra_data["email"] = self.get_email(headers)
+            emails = self.get_emails(headers)
+            if emails:
+                # First try to get primary email
+                for email_obj in emails:
+                    if email_obj.get('primary'):
+                        extra_data["email"] = email_obj['email']
+                        break
+                # If no primary email found, use the first one
+                if not extra_data.get("email") and len(emails) > 0:
+                    extra_data["email"] = emails[0]['email']
 
         email = extra_data["email"]
 
@@ -201,7 +214,7 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
 
     def complete_login(self, request, app, token, response):
         response = requests.get(self.profile_url, params={"access_token": token.token})
-        data = _check_errors(response)
+        data = _check_gitlab_errors(response)
         login = self.get_provider().sociallogin_from_response(request, data)
 
         email = login.email_addresses[0]
@@ -256,6 +269,25 @@ class JumpCloudLoginView(SocialLoginView):
     adapter_class = JumpCloudOpenIDConnectAdapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
+
+
+class EntraIDLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = CustomMicrosoftGraphOAuth2Adapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+    def get_adapter(self, request):
+        """
+        Initialize the adapter with the request
+        """
+        adapter = self.adapter_class(request=request)
+        return adapter
+
+    def post(self, request, *args, **kwargs):
+        """Override to ensure adapter initialization is correct"""
+        self.request = request
+        return super().post(request, *args, **kwargs)
 
 
 def logout_view(request):
