@@ -178,7 +178,7 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
                         extra_data["email"] = email_obj['email']
                         break
                 # If no primary email found, use the first one
-                if not extra_data.get("email") and emails:
+                if not extra_data.get("email") and len(emails) > 0:
                     extra_data["email"] = emails[0]['email']
 
         email = extra_data["email"]
