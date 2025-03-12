@@ -123,7 +123,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
                 organisation_id=org_id, user__email=email, deleted_at=None
             ).exists()
             if user_already_exists:
-                raise GraphQLError("This user is already a member if your organisation")
+                raise GraphQLError("This user is already a member of your organisation")
 
             if OrganisationMemberInvite.objects.filter(
                 organisation_id=org_id,
@@ -132,7 +132,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
                 expires_at__gte=timezone.now(),
             ).exists():
                 raise GraphQLError(
-                    "An active invitiation already exists for this user."
+                    "An active invitation already exists for this user."
                 )
 
             invited_by = OrganisationMember.objects.get(

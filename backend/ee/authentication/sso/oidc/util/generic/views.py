@@ -76,20 +76,51 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
             logger.error(f"ID token validation failed: {e}")
             raise OAuth2Error(f"Invalid ID token: {e}")
 
-    def complete_login(self, request, app, token, **kwargs):
+    def pre_social_login(self, request, sociallogin):
+        User = get_user_model()
 
+        # Extract email from social login
+        email = sociallogin.account.extra_data.get("email")
+        if not email:
+            logger.error("OIDC login failed: No email provided.")
+            return
+
+        try:
+            user = User.objects.get(email=email)
+            sociallogin.user = user  # Attach the existing user
+        except User.DoesNotExist:
+            # Create new user
+            user = User.objects.create_user(
+                email=email,
+                username=email,
+                password=None,
+            )
+            sociallogin.user = user  # Attach the new user
+
+        # Ensure social account is linked correctly
+        social_account, created = SocialAccount.objects.get_or_create(
+            provider=sociallogin.account.provider,
+            uid=sociallogin.account.uid,
+            defaults={"user": user, "extra_data": sociallogin.account.extra_data},
+        )
+
+        if not created:
+            social_account.extra_data = sociallogin.account.extra_data
+            social_account.save()
+
+    def complete_login(self, request, app, token, **kwargs):
         if settings.APP_HOST == "cloud":
             error = "OIDC is not available in cloud mode"
             logger.error(f"OIDC login failed: {str(error)}")
             raise OAuth2Error(str(error))
 
-        # Check if a valid license env var or pre-activated valid license already exists for this instance
+        # Check for a valid license
         activated_license_exists = ActivatedPhaseLicense.objects.filter(
             expires_at__gte=timezone.now()
         ).exists()
 
         if not activated_license_exists and not settings.PHASE_LICENSE:
-            error = f"You need a license to login via OIDC."
+            error = "You need a license to login via OIDC."
             logger.error(f"OIDC login failed: {str(error)}")
             raise OAuth2Error(str(error))
 
@@ -103,44 +134,9 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
                 f"User authentication data received for email: {extra_data.get('email')}"
             )
 
-            # Get or create user
-            User = get_user_model()
-            try:
-                user = User.objects.get(email=extra_data["email"])
-            except User.DoesNotExist:
-                user = User.objects.create_user(
-                    email=extra_data["email"],
-                    username=extra_data["email"],
-                    password=None,
-                )
-
-            extra_data["display_name"] = extra_data.get("name", "")
-
-            # Create or update social account
-            social_account, created = SocialAccount.objects.get_or_create(
-                provider=self.provider_id,
-                uid=extra_data["sub"],
-                defaults={"user": user, "extra_data": extra_data},
-            )
-
-            if not created:
-                social_account.extra_data = extra_data
-                social_account.save()
-
-            try:
-                send_login_email(
-                    request,
-                    extra_data["email"],
-                    extra_data.get("name", ""),
-                    self.get_provider().name,
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to send login email to {extra_data['email']}: {str(e)}"
-                )
-
+            # Create social login object without creating user
             login = self.get_provider().sociallogin_from_response(request, extra_data)
-            login.user = user
+
             return login
 
         except Exception as e:
