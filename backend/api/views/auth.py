@@ -170,7 +170,16 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
         resp.raise_for_status()
         extra_data = resp.json()
         if app_settings.QUERY_EMAIL and not extra_data.get("email"):
-            extra_data["email"] = self.get_email(headers)
+            emails = self.get_emails(headers)
+            if emails:
+                # First try to get primary email
+                for email_obj in emails:
+                    if email_obj.get('primary'):
+                        extra_data["email"] = email_obj['email']
+                        break
+                # If no primary email found, use the first one
+                if not extra_data.get("email") and len(emails) > 0:
+                    extra_data["email"] = emails[0]['email']
 
         email = extra_data["email"]
 
