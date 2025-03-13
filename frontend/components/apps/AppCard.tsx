@@ -59,7 +59,7 @@ export const AppCard = (props: AppCardProps) => {
             </span>
             <div className="flex items-center gap-1 text-base">
               {members.slice(0, 5).map((member) => (
-                <Avatar key={member!.id} imagePath={member!.avatarUrl} size="sm" />
+                <Avatar key={member!.id} member={member || undefined} size="sm" />
               ))}
               {surplusMemberCount > 0 && (
                 <span className="text-neutral-500 text-xs">+{surplusMemberCount}</span>

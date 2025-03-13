@@ -187,7 +187,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                 {token.__typename === 'ServiceTokenType' && (
                   <div className="flex items-center gap-2">
                     <span>by</span>
-                    <Avatar imagePath={token.createdBy?.avatarUrl!} size="sm" />
+                    <Avatar member={token.createdBy!} size="sm" />
                     {token.createdBy?.self
                       ? 'You'
                       : token.createdBy?.fullName || token.createdBy?.email}

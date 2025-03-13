@@ -820,7 +820,7 @@ export default function Members({ params }: { params: { team: string } }) {
                 {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
                   <tr key={member.id}>
                     <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                      <Avatar imagePath={member.avatarUrl!} size="lg" />
+                      <Avatar member={member} size="lg" />
                       <div className="flex flex-col">
                         <span className="text-lg font-medium">
                           {member.fullName || member.email}
