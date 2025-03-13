@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.github",
     "allauth.socialaccount.providers.gitlab",
+    "allauth.socialaccount.providers.microsoft",
     "api.config.APIConfig",
     "logs",
     "graphene_django",
@@ -150,11 +151,26 @@ SOCIALACCOUNT_PROVIDERS = {
         "SCOPE": ["openid", "profile", "email"],
         "AUTH_PARAMS": {"access_type": "offline"},
     },
+    "microsoft": {
+        "APPS": [
+            {
+                "client_id": os.getenv("ENTRA_ID_OIDC_CLIENT_ID"),
+                "secret": get_secret("ENTRA_ID_OIDC_CLIENT_SECRET"),
+                "settings": {
+                    "tenant": os.getenv("ENTRA_ID_OIDC_TENANT_ID"),
+                    "login_url": "https://login.microsoftonline.com",
+                    "graph_url": "https://graph.microsoft.com",
+                },
+            }
+        ]
+    },
 }
+
 
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_REQUIRED = True
 SOCIALACCOUNT_QUERY_EMAIL = True
+
 
 OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI")
 
@@ -181,6 +197,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "djangorestframework_camel_case.middleware.CamelCaseMiddleWare",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 USE_X_FORWARDED_HOST = True
