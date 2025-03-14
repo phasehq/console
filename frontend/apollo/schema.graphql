@@ -187,6 +187,7 @@ type OrganisationMemberInviteType {
   id: String!
   organisation: OrganisationType!
   apps: [AppType!]!
+  role: RoleType
   invitedBy: OrganisationMemberType!
   inviteeEmail: String!
   valid: Boolean!
@@ -690,7 +691,7 @@ type PaymentMethodDetails {
 
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
-  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!): InviteOrganisationMemberMutation
+  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, roleId: ID!): InviteOrganisationMemberMutation
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
   updateOrganisationMemberRole(memberId: ID!, roleId: ID!): UpdateOrganisationMemberRole
