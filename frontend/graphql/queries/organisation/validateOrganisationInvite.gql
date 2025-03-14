@@ -7,12 +7,12 @@ query VerifyInvite($inviteId: ID!) {
     }
     inviteeEmail
     invitedBy {
+      fullName
       email
     }
     apps {
       id
       name
     }
-    
   }
 }
