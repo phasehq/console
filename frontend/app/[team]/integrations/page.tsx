@@ -60,7 +60,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
   useEffect(() => {
     if (providerFromUrl && providers.length > 0) {
       const matchingProvider = providers.find(
-        p => p.id.toLowerCase() === providerFromUrl.toLowerCase()
+        (p) => p.id.toLowerCase() === providerFromUrl.toLowerCase()
       )
       if (matchingProvider) {
         setProvider(matchingProvider)
@@ -75,7 +75,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
       !organisation ||
       (!userCanReadIntegrationCredentials && !userCanReadIntegrations && !userCanReadApps),
     fetchPolicy: 'cache-and-network',
-    nextFetchPolicy: 'cache-and-network'
+    nextFetchPolicy: 'cache-and-network',
   })
 
   const apps = data?.apps ?? []
@@ -193,7 +193,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-3">
                 {apps?.map((app: AppType) => (
                   <Link href={`/${params.team}/apps/${app.id}/syncing`} key={app.id}>
-                    <AppCard app={app} />
+                    <AppCard app={app} variant="normal" />
                   </Link>
                 ))}
               </div>
@@ -297,7 +297,6 @@ export default function Integrations({ params }: { params: { team: string } }) {
           <></>
         </EmptyState>
       )}
-
     </div>
   )
 }
