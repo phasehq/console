@@ -9,5 +9,10 @@ query GetInvites($orgId: ID!) {
       self
     }
     inviteeEmail
+    role {
+      id
+      name
+      description
+    }
   }
 }
