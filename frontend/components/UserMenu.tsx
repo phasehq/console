@@ -26,7 +26,7 @@ export default function UserMenu() {
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button as="div">
           <Button variant="secondary">
-            <Avatar imagePath={session?.user?.image} size="sm" />
+            <Avatar user={session?.user} size="sm" />
             <div className="flex flex-col">{firstName}</div>
           </Button>
         </Menu.Button>
@@ -43,7 +43,7 @@ export default function UserMenu() {
             <Menu.Item>
               <div className="py-4 flex items-start gap-2 p-2">
                 <div className="py-1.5">
-                  <Avatar imagePath={session?.user?.image!} size="md" />
+                  <Avatar user={session?.user} size="md" />
                 </div>
                 <div className="flex flex-col flex-grow min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

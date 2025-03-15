@@ -112,7 +112,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                         <p className="text-neutral-500">Account information and recovery.</p>
                       </div>
                       <div className="py-4 whitespace-nowrap flex items-center gap-2">
-                        <Avatar imagePath={session?.user?.image} size="xl" />
+                        <Avatar user={session?.user} size="xl" />
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-col">
                             <span className="text-lg font-medium">{session?.user?.name}</span>

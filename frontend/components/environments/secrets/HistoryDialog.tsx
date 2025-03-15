@@ -121,7 +121,7 @@ export const HistoryDialog = ({
     if (log.user)
       return (
         <div className="flex items-center gap-1 text-sm">
-          <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
+          <Avatar member={log.user} size="sm" />
           {log.user.fullName || log.user.email}
         </div>
       )
