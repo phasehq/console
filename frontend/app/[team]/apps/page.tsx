@@ -123,7 +123,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
     return (
       <div className="w-full bg-white dark:bg-neutral-900 rounded-md overflow-hidden shadow">
         <table className="w-full border-collapse">
-          <thead className="bg-zinc-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 text-xs uppercase tracking-wider">
+          <thead className="bg-neutral-100/50 dark:bg-neutral-900/60 text-neutral-500 dark:text-neutral-400 text-xs uppercase tracking-wider border-b-2 border-neutral-500/20 backdrop-blur-sm">
             <tr>
               <th className="px-4 py-3 text-left font-medium">App Name</th>
               {!isMobile && (
@@ -160,7 +160,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
               return (
                 <tr 
                   key={app.id} 
-                  className="hover:bg-zinc-50 dark:hover:bg-neutral-800 cursor-pointer group"
+                  className="hover:bg-zinc-50 dark:hover:bg-neutral-700/30 cursor-pointer group border-b border-neutral-500/20"
                   onClick={(e) => handleRowClick(app.id, e)}
                 >
                   <td className="px-4 py-3">
