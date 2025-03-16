@@ -49,7 +49,7 @@ export const NavBar = (props: { team: string }) => {
   const activeEnv = activeApp ? envs.find((env) => env.id === envId) : undefined
 
   return (
-    <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-sm bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
+    <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-20 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-sm bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         <Link href="/" className="shrink-0">
           <LogoMark className="size-8 fill-black dark:fill-white" />
