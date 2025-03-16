@@ -92,8 +92,13 @@ export default function AppsHome({ params }: { params: { team: string } }) {
     app.name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || []
 
-  const handleRowClick = (appId: string) => {
-    router.push(`/${params.team}/apps/${appId}`)
+  const handleRowClick = (appId: string, e?: React.MouseEvent) => {
+    // If ctrl/cmd key was pressed, open in new tab
+    if (e && (e.ctrlKey || e.metaKey)) {
+      window.open(`/${params.team}/apps/${appId}`, '_blank')
+    } else {
+      router.push(`/${params.team}/apps/${appId}`)
+    }
   }
 
   const renderListView = () => {
@@ -156,11 +161,11 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                 <tr 
                   key={app.id} 
                   className="hover:bg-zinc-50 dark:hover:bg-neutral-800 cursor-pointer group"
-                  onClick={() => handleRowClick(app.id)}
+                  onClick={(e) => handleRowClick(app.id, e)}
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{app.name}</span>
+                      <span className="font-medium group-hover:underline">{app.name}</span>
                     </div>
                   </td>
                   {!isMobile && (
