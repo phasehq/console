@@ -170,7 +170,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                   </td>
                   {!isMobile && (
                     <>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <EncryptionModeIndicator app={app} />
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
