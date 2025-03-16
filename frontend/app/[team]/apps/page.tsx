@@ -102,7 +102,8 @@ export default function AppsHome({ params }: { params: { team: string } }) {
   }
 
   const renderListView = () => {
-    if (!filteredApps.length) {
+    // When user has searched but found nothing
+    if (searchTerm && filteredApps.length === 0) {
       return (
         <div className="w-full">
           <EmptyState
@@ -119,174 +120,195 @@ export default function AppsHome({ params }: { params: { team: string } }) {
         </div>
       )
     }
+    
+    // When user has apps to display
+    if (filteredApps.length > 0) {
+      return (
+        <div className="w-full bg-white dark:bg-neutral-900 rounded-md overflow-hidden shadow">
+          <div className="overflow-auto">
+            <table className="w-full border-collapse">
+              <thead className="bg-neutral-100/50 dark:bg-neutral-900/60 text-neutral-500 dark:text-neutral-400 text-xs uppercase tracking-wider border-b-2 border-neutral-500/20 backdrop-blur-sm sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">App Name</th>
+                  {!isMobile && (
+                    <>
+                      <th className="px-4 py-3 text-left font-medium">Encryption</th>
+                      <th className="px-4 py-3 text-left font-medium">ID</th>
+                      <th className="px-4 py-3 text-left font-medium">Members</th>
+                      <th className="px-4 py-3 text-left font-medium">Service Accounts</th>
+                      <th className="px-4 py-3 text-left font-medium">Environments</th>
+                      <th className="px-4 py-3 text-left font-medium">Integrations</th>
+                      <th className="px-4 py-3 text-left font-medium"></th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-200 dark:divide-neutral-800">
+                {filteredApps.map((app, index) => {
+                  const totalSyncCount = app.environments
+                    ? app.environments.reduce((acc, env) => acc + (env!.syncs?.length || 0), 0)
+                    : 0
 
-    return (
-      <div className="w-full bg-white dark:bg-neutral-900 rounded-md overflow-hidden shadow">
-        <div className="overflow-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-neutral-100/50 dark:bg-neutral-900/60 text-neutral-500 dark:text-neutral-400 text-xs uppercase tracking-wider border-b-2 border-neutral-500/20 backdrop-blur-sm sticky top-0 z-10">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">App Name</th>
-                {!isMobile && (
-                  <>
-                    <th className="px-4 py-3 text-left font-medium">Encryption</th>
-                    <th className="px-4 py-3 text-left font-medium">ID</th>
-                    <th className="px-4 py-3 text-left font-medium">Members</th>
-                    <th className="px-4 py-3 text-left font-medium">Service Accounts</th>
-                    <th className="px-4 py-3 text-left font-medium">Environments</th>
-                    <th className="px-4 py-3 text-left font-medium">Integrations</th>
-                    <th className="px-4 py-3 text-left font-medium"></th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-neutral-800">
-              {filteredApps.map((app, index) => {
-                const totalSyncCount = app.environments
-                  ? app.environments.reduce((acc, env) => acc + (env!.syncs?.length || 0), 0)
-                  : 0
-
-                const providers: string[] = app.environments
-                  ? app.environments
-                      .flatMap((env) => {
-                        return env!.syncs.map((sync) => {
-                          const serviceInfo = sync!.serviceInfo
-                          const providerId = serviceInfo!.provider!.id
-                          return providerId
+                  const providers: string[] = app.environments
+                    ? app.environments
+                        .flatMap((env) => {
+                          return env!.syncs.map((sync) => {
+                            const serviceInfo = sync!.serviceInfo
+                            const providerId = serviceInfo!.provider!.id
+                            return providerId
+                          })
                         })
-                      })
-                      .filter((id, index, array) => array.indexOf(id) === index)
-                  : []
+                        .filter((id, index, array) => array.indexOf(id) === index)
+                    : []
 
-                return (
-                  <tr 
-                    key={app.id} 
-                    className="hover:bg-zinc-50 dark:hover:bg-neutral-700/30 cursor-pointer group border-b border-neutral-500/20"
-                    onClick={(e) => handleRowClick(app.id, e)}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium group-hover:underline">{app.name}</span>
-                      </div>
-                    </td>
-                    {!isMobile && (
-                      <>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <EncryptionModeIndicator app={app} />
-                        </td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <CopyButton 
-                            value={app.id} 
-                            buttonVariant="ghost" 
-                            title="Copy App ID"
-                          >
-                            <span className="text-2xs font-mono text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">{app.id}</span>
-                          </CopyButton>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link 
-                            href={`/${params.team}/apps/${app.id}/access/members`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 hover:underline"
-                          >
-                            <span className="mr-1 text-xs">{app.members.length}</span>
-                            {app.members.slice(0, 3).map((member) => (
-                              <Avatar key={member!.id} imagePath={member!.avatarUrl} size="sm" />
-                            ))}
-                            {app.members.length > 3 && (
-                              <span className="text-neutral-500 text-xs">+{app.members.length - 3}</span>
-                            )}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3">
-                          {app.serviceAccounts.length > 0 ? (
+                  return (
+                    <tr 
+                      key={app.id} 
+                      className="hover:bg-zinc-50 dark:hover:bg-neutral-700/30 cursor-pointer group border-b border-neutral-500/20"
+                      onClick={(e) => handleRowClick(app.id, e)}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium group-hover:underline">{app.name}</span>
+                        </div>
+                      </td>
+                      {!isMobile && (
+                        <>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <EncryptionModeIndicator app={app} />
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <CopyButton 
+                              value={app.id} 
+                              buttonVariant="ghost" 
+                              title="Copy App ID"
+                            >
+                              <span className="text-2xs font-mono text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">{app.id}</span>
+                            </CopyButton>
+                          </td>
+                          <td className="px-4 py-3">
                             <Link 
-                              href={`/${params.team}/apps/${app.id}/access/service-accounts`}
+                              href={`/${params.team}/apps/${app.id}/access/members`}
                               onClick={(e) => e.stopPropagation()}
                               className="flex items-center gap-1 hover:underline"
                             >
-                              <span className="mr-1 text-xs">{app.serviceAccounts.length}</span>
-                              {app.serviceAccounts.slice(0, 3).map((account) => (
+                              <span className="mr-1 text-xs">{app.members.length}</span>
+                              {app.members.slice(0, 3).map((member) => (
+                                <Avatar key={member!.id} imagePath={member!.avatarUrl} size="sm" />
+                              ))}
+                              {app.members.length > 3 && (
+                                <span className="text-neutral-500 text-xs">+{app.members.length - 3}</span>
+                              )}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            {app.serviceAccounts.length > 0 ? (
+                              <Link 
+                                href={`/${params.team}/apps/${app.id}/access/service-accounts`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1 hover:underline"
+                              >
+                                <span className="mr-1 text-xs">{app.serviceAccounts.length}</span>
+                                {app.serviceAccounts.slice(0, 3).map((account) => (
+                                  <div
+                                    key={account!.id}
+                                    className="rounded-full flex items-center bg-neutral-500/40 justify-center size-5 p-1"
+                                  >
+                                    <span className="text-2xs font-semibold text-zinc-900 dark:text-zinc-100">
+                                      {account?.name.slice(0, 1)}
+                                    </span>
+                                  </div>
+                                ))}
+                                {app.serviceAccounts.length > 3 && (
+                                  <span className="text-neutral-500 text-xs">+{app.serviceAccounts.length - 3}</span>
+                                )}
+                              </Link>
+                            ) : (
+                              <span className="text-neutral-500 text-xs">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Link 
+                              href={`/${params.team}/apps/${app.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-1 hover:underline"
+                            >
+                              <span className="mr-1 text-xs">{app.environments.length}</span>
+                              {app.environments.slice(0, 3).map((env) => (
                                 <div
-                                  key={account!.id}
-                                  className="rounded-full flex items-center bg-neutral-500/40 justify-center size-5 p-1"
+                                  key={env!.id}
+                                  className="bg-neutral-400/10 ring-1 ring-neutral-400/20 rounded-full px-2 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold"
                                 >
-                                  <span className="text-2xs font-semibold text-zinc-900 dark:text-zinc-100">
-                                    {account?.name.slice(0, 1)}
-                                  </span>
+                                  {env!.name.slice(0, 1)}
                                 </div>
                               ))}
-                              {app.serviceAccounts.length > 3 && (
-                                <span className="text-neutral-500 text-xs">+{app.serviceAccounts.length - 3}</span>
+                              {app.environments.length > 3 && (
+                                <span className="text-neutral-500 text-xs">+{app.environments.length - 3}</span>
                               )}
                             </Link>
-                          ) : (
-                            <span className="text-neutral-500 text-xs">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link 
-                            href={`/${params.team}/apps/${app.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 hover:underline"
-                          >
-                            <span className="mr-1 text-xs">{app.environments.length}</span>
-                            {app.environments.slice(0, 3).map((env) => (
-                              <div
-                                key={env!.id}
-                                className="bg-neutral-400/10 ring-1 ring-neutral-400/20 rounded-full px-2 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold"
+                          </td>
+                          <td className="px-4 py-3">
+                            {totalSyncCount > 0 ? (
+                              <Link 
+                                href={`/${params.team}/apps/${app.id}/syncing`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1 hover:underline"
                               >
-                                {env!.name.slice(0, 1)}
-                              </div>
-                            ))}
-                            {app.environments.length > 3 && (
-                              <span className="text-neutral-500 text-xs">+{app.environments.length - 3}</span>
+                                <span className="mr-1 text-xs">{totalSyncCount}</span>
+                                {providers.slice(0, 3).map((providerId) => (
+                                  <ProviderIcon key={providerId} providerId={providerId} />
+                                ))}
+                                {providers.length > 3 && (
+                                  <span className="text-neutral-500 text-xs">+{providers.length - 3}</span>
+                                )}
+                              </Link>
+                            ) : (
+                              <span className="text-neutral-500 text-xs">-</span>
                             )}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3">
-                          {totalSyncCount > 0 ? (
-                            <Link 
-                              href={`/${params.team}/apps/${app.id}/syncing`}
+                          </td>
+                          <td className="px-4 py-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Link
+                              href={`/${params.team}/apps/${app.id}/settings`}
                               onClick={(e) => e.stopPropagation()}
-                              className="flex items-center gap-1 hover:underline"
                             >
-                              <span className="mr-1 text-xs">{totalSyncCount}</span>
-                              {providers.slice(0, 3).map((providerId) => (
-                                <ProviderIcon key={providerId} providerId={providerId} />
-                              ))}
-                              {providers.length > 3 && (
-                                <span className="text-neutral-500 text-xs">+{providers.length - 3}</span>
-                              )}
+                              <Button variant="secondary">
+                                Settings <FaChevronRight />
+                              </Button>
                             </Link>
-                          ) : (
-                            <span className="text-neutral-500 text-xs">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Link
-                            href={`/${params.team}/apps/${app.id}/settings`}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Button variant="secondary">
-                              Settings <FaChevronRight />
-                            </Button>
-                          </Link>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
+      )
+    }
+    
+    // Default case: User has no apps
+    return (
+      <div className="w-full">
+        <EmptyState
+          title="No apps"
+          subtitle="You don't have access to any apps yet. Contact an Admin to get access."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBoxOpen />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
       </div>
     )
   }
 
   const renderGridView = () => {
-    if (!filteredApps.length) {
+    // When user has searched but found nothing
+    if (searchTerm && filteredApps.length === 0) {
       return (
         <div className="xl:col-span-2 1080p:col-span-3 justify-center p-20">
           <EmptyState
@@ -303,14 +325,34 @@ export default function AppsHome({ params }: { params: { team: string } }) {
         </div>
       )
     }
-
+    
+    // When user has apps to display
+    if (filteredApps.length > 0) {
+      return (
+        <div className="grid grid-cols-1 xl:grid-cols-2 1080p:grid-cols-3 gap-8">
+          {filteredApps.map((app) => (
+            <Link href={`/${params.team}/apps/${app.id}`} key={app.id}>
+              <AppCard app={app} />
+            </Link>
+          ))}
+        </div>
+      )
+    }
+    
+    // Default case: User has no apps
     return (
-      <div className="grid grid-cols-1 xl:grid-cols-2 1080p:grid-cols-3 gap-8">
-        {filteredApps.map((app) => (
-          <Link href={`/${params.team}/apps/${app.id}`} key={app.id}>
-            <AppCard app={app} />
-          </Link>
-        ))}
+      <div className="xl:col-span-2 1080p:col-span-3 justify-center p-20">
+        <EmptyState
+          title="No apps"
+          subtitle="You don't have access to any apps yet. Contact an Admin to get access."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBoxOpen />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
       </div>
     )
   }
@@ -374,23 +416,6 @@ export default function AppsHome({ params }: { params: { team: string } }) {
         <div className="flex-1 min-h-0 overflow-auto">
           {/* Render view based on selected mode */}
           {viewMode === 'grid' ? renderGridView() : renderListView()}
-
-          {/* Empty state when no apps exist at all */}
-          {apps?.length === 0 && !userCanCreateApps && (
-            <div className="justify-center p-20">
-              <EmptyState
-                title="No apps"
-                subtitle="You don't have access to any apps yet. Contact an Admin to get access."
-                graphic={
-                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                    <FaBoxOpen />
-                  </div>
-                }
-              >
-                <></>
-              </EmptyState>
-            </div>
-          )}
         </div>
       ) : (
         <EmptyState
