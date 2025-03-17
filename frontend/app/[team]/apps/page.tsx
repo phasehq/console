@@ -22,13 +22,15 @@ import { BsFillGrid3X3GapFill } from 'react-icons/bs'
 import { MdSearchOff } from 'react-icons/md'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
+  type ViewMode = 'grid' | 'list'
+
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // Permissions
   const userCanViewApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
   const userCanCreateApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'create')
 
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [searchQuery, setSearchQuery] = useState('')
 
   const dialogRef = useRef<{ openModal: () => void }>(null)
@@ -45,8 +47,13 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth <= 950) {
+      if (window.innerWidth <= 1024) {
         setViewMode('list') // Auto-collapse
+      } else {
+        const savedViewMode = localStorage.getItem('apps-view-mode') as ViewMode
+        if (savedViewMode) {
+          setViewMode(savedViewMode === 'list' ? 'list' : 'grid')
+        } else setViewMode('grid')
       }
     }
 
@@ -67,6 +74,21 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   const filteredApps =
     searchQuery === '' ? apps : apps.filter((app) => app?.name?.toLowerCase().includes(searchQuery))
+
+  // Load saved view preference
+  useEffect(() => {
+    const savedViewMode = localStorage.getItem('apps-view-mode') as ViewMode
+    if (savedViewMode) {
+      setViewMode(savedViewMode === 'list' ? 'list' : 'grid')
+    }
+  }, [])
+
+  // Save view preference when it changes
+  const handleViewModeChange = () => {
+    const newMode = viewMode === 'grid' ? 'list' : 'grid'
+    setViewMode(newMode)
+    localStorage.setItem('apps-view-mode', newMode)
+  }
 
   return (
     <div
@@ -100,8 +122,8 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                   </Button>
                 )}
               </div>
-              <div className="flex justify-between">
-                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+              <div className="flex justify-between gap-2">
+                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
                   <div className="">
                     <FaSearch className="text-neutral-500" />
                   </div>
@@ -121,20 +143,14 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2">
+                <div className="lg:flex items-center justify-end gap-2 hidden">
                   <Button
-                    variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-                    onClick={() => setViewMode('grid')}
-                    title="Grid layout"
+                    variant={'secondary'}
+                    onClick={handleViewModeChange}
+                    title={`View as ${viewMode === 'grid' ? 'list' : 'grid'}`}
                   >
-                    <BsFillGrid3X3GapFill />
-                  </Button>
-                  <Button
-                    variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                    onClick={() => setViewMode('list')}
-                    title="List layout"
-                  >
-                    <FaList />
+                    {viewMode === 'grid' ? 'List view' : 'Grid view'}
+                    {viewMode === 'grid' ? <FaList /> : <BsFillGrid3X3GapFill />}
                   </Button>
                 </div>
               </div>
@@ -143,13 +159,34 @@ export default function AppsHome({ params }: { params: { team: string } }) {
           <div
             className={clsx(
               'grid grid-cols-1',
-              viewMode === 'grid' ? 'xl:grid-cols-2 1080p:grid-cols-3 gap-6' : 'gap-4'
+              viewMode === 'grid'
+                ? 'xl:grid-cols-2 1080p:grid-cols-3 gap-6'
+                : 'divide-y divide-neutral-500/20'
             )}
           >
+            {viewMode === 'list' && (
+              <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 pl-3 border-b border-neutral-500/40 pb-2">
+                {['App', 'Members', 'Service Accounts', 'Environments', 'Integrations'].map(
+                  (heading, index) => (
+                    <div
+                      key={heading}
+                      className={clsx(
+                        index === 0 ? 'col-span-2' : 'hidden lg:block',
+                        'text-neutral-500 text-2xs uppercase tracking-widest font-semibold'
+                      )}
+                    >
+                      {heading}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
             {filteredApps?.map((app) => (
-              <Link key={app.id} href={`/${params.team}/apps/${app.id}`}>
-                <AppCard app={app} variant={viewMode === 'grid' ? 'normal' : 'compact'} />
-              </Link>
+              <AppCard
+                key={app.id}
+                app={app}
+                variant={viewMode === 'grid' ? 'normal' : 'compact'}
+              />
             ))}
 
             {filteredApps?.length === 0 && searchQuery && (
