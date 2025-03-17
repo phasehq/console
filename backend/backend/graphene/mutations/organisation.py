@@ -107,11 +107,12 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
         org_id = graphene.ID(required=True)
         email = graphene.String(required=True)
         apps = graphene.List(graphene.String)
+        role_id = graphene.ID(required=True)
 
     invite = graphene.Field(OrganisationMemberInviteType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, email, apps):
+    def mutate(cls, root, info, org_id, email, apps, role_id):
 
         org = Organisation.objects.get(id=org_id)
 
@@ -131,9 +132,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
                 valid=True,
                 expires_at__gte=timezone.now(),
             ).exists():
-                raise GraphQLError(
-                    "An active invitation already exists for this user."
-                )
+                raise GraphQLError("An active invitation already exists for this user.")
 
             invited_by = OrganisationMember.objects.get(
                 user=info.context.user, organisation_id=org_id, deleted_at=None
@@ -145,6 +144,7 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
 
             invite = OrganisationMemberInvite.objects.create(
                 organisation=org,
+                role_id=role_id,
                 invited_by=invited_by,
                 invitee_email=email,
                 expires_at=expiry,
@@ -219,12 +219,16 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
 
             org = Organisation.objects.get(id=org_id)
 
-            dev_role = Role.objects.get(organisation=org, name__iexact="developer")
+            role = (
+                invite.role
+                if invite.role is not None
+                else Role.objects.get(organisation=org, name__iexact="developer")
+            )
 
             org_member = OrganisationMember.objects.create(
                 user_id=info.context.user.userId,
                 organisation=org,
-                role=dev_role,
+                role=role,
                 identity_key=identity_key,
                 wrapped_keyring=wrapped_keyring,
                 wrapped_recovery=wrapped_recovery,
