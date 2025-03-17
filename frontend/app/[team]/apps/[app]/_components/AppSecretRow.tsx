@@ -62,7 +62,7 @@ const EnvSecret = ({
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
 
-  const [showValue, setShowValue] = useState<boolean>(valueIsNew || false)
+  const [showValue, setShowValue] = useState<boolean>(valueIsNew || !serverEnvSecret || false)
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
@@ -93,6 +93,14 @@ const EnvSecret = ({
     if (isBoolean) setShowValue(true)
   }, [isBoolean])
 
+  // Ensure newly added values or changed values are revealed
+  useEffect(() => {
+    // If there's no server secret (new value) or the client value is different from server value, show it
+    if (!serverEnvSecret || (clientEnvSecret.secret && serverEnvSecret?.secret?.value !== clientEnvSecret.secret.value)) {
+      setShowValue(true);
+    }
+  }, [serverEnvSecret, clientEnvSecret.secret]);
+
   const handleHideSecret = () => setShowValue(false)
 
   const toggleShowValue = () => {
@@ -102,7 +110,11 @@ const EnvSecret = ({
   const handleDeleteValue = () =>
     deleteEnvValue(appSecretId, clientEnvSecret!.env as EnvironmentType)
 
-  const handleAddValue = () => addEnvValue(appSecretId, clientEnvSecret.env as EnvironmentType)
+  const handleAddValue = () => {
+    addEnvValue(appSecretId, clientEnvSecret.env as EnvironmentType);
+    // Ensure the value is visible after adding it
+    setShowValue(true);
+  }
 
   const valueIsModified = () => {
     if (serverEnvSecret) {
