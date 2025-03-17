@@ -5,56 +5,42 @@ import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import GetApps from '@/graphql/queries/getApps.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
-import InviteMember from '@/graphql/mutations/organisation/inviteNewMember.gql'
+
 import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
 import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
-import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
+
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, useContext, useState } from 'react'
 import {
   OrganisationMemberInviteType,
   OrganisationMemberType,
   AppType,
   EnvironmentType,
-  ApiOrganisationPlanChoices,
   RoleType,
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, Transition } from '@headlessui/react'
-import {
-  FaBan,
-  FaChevronDown,
-  FaCopy,
-  FaPlus,
-  FaTimes,
-  FaTrashAlt,
-  FaUserAlt,
-} from 'react-icons/fa'
+import { FaBan, FaChevronDown, FaCopy, FaTimes, FaTrashAlt, FaUserAlt } from 'react-icons/fa'
 import clsx from 'clsx'
 
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
-import { PermissionPolicy, userHasGlobalAccess, userIsAdmin } from '@/utils/access/permissions'
+import { PermissionPolicy, userHasGlobalAccess } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 
-import { Alert } from '@/components/common/Alert'
-import { Input } from '@/components/common/Input'
-import CopyButton from '@/components/common/CopyButton'
 import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
-import { isCloudHosted } from '@/utils/appConfig'
-import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
-import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
+import { InviteDialog } from './_components/InviteDialog'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -298,232 +284,6 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
         )}
       </Listbox>
     </div>
-  )
-}
-
-const InviteDialog = (props: { organisationId: string }) => {
-  const { organisationId } = props
-
-  const { activeOrganisation } = useContext(organisationContext)
-
-  const searchParams = useSearchParams()
-
-  const { data } = useQuery(GetOrganisationPlan, {
-    variables: { organisationId },
-    fetchPolicy: 'cache-and-network',
-  })
-
-  const upsell =
-    isCloudHosted() &&
-    activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
-    data?.organisationPlan.seatsUsed.total === data?.organisationPlan.maxUsers
-
-  const [createInvite, { error, loading: mutationLoading }] = useMutation(InviteMember)
-
-  const [isOpen, setIsOpen] = useState<boolean>(false)
-  const [email, setEmail] = useState<string>('')
-
-  const emailInputRef = useRef(null)
-
-  const [inviteLink, setInviteLink] = useState<string>('')
-  const [errorMessage, setErrorMessage] = useState<string>('')
-
-  const reset = () => {
-    setEmail('')
-    setInviteLink('')
-    setErrorMessage('')
-  }
-
-  const closeModal = () => {
-    reset()
-    setIsOpen(false)
-  }
-
-  const openModal = () => {
-    setIsOpen(true)
-  }
-
-  const handleClose = () => {
-    closeModal()
-  }
-
-  useEffect(() => {
-    if (searchParams?.get('invite')) {
-      openModal()
-    }
-  }, [searchParams])
-
-  useEffect(() => {
-    if (error) setErrorMessage(error.message)
-  }, [error])
-
-  const handleInvite = async (event: { preventDefault: () => void }) => {
-    event.preventDefault()
-    const { data } = await createInvite({
-      variables: {
-        email,
-        orgId: organisationId,
-        apps: [],
-        role: 'dev',
-      },
-      refetchQueries: [
-        {
-          query: GetInvites,
-          variables: {
-            orgId: organisationId,
-          },
-        },
-      ],
-      fetchPolicy: 'network-only',
-    })
-
-    setInviteLink(getInviteLink(data?.inviteOrganisationMember.invite.id))
-  }
-
-  if (upsell)
-    return (
-      <UpsellDialog
-        buttonLabel={
-          <>
-            <FaPlus /> Add a member
-          </>
-        }
-      />
-    )
-
-  return (
-    <>
-      <div className="flex items-center justify-center">
-        <Button variant="primary" onClick={openModal} title="Add a member">
-          <FaPlus /> Add a member
-        </Button>
-      </div>
-
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog
-          as="div"
-          className="relative z-10"
-          onClose={closeModal}
-          initialFocus={emailInputRef}
-        >
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="w-full max-w-screen-sm transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                      Invite a new member
-                    </h3>
-
-                    <Button variant="text" onClick={handleClose}>
-                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                    </Button>
-                  </Dialog.Title>
-
-                  <div className="space-y-4 divide-y divide-neutral-500/40">
-                    <p className="text-neutral-500">Invite a user to your Organisation.</p>
-                    <div>
-                      {!inviteLink && (
-                        <form className="space-y-8 py-4" onSubmit={handleInvite}>
-                          {errorMessage && (
-                            <Alert variant="danger" icon={true}>
-                              {errorMessage}
-                            </Alert>
-                          )}
-
-                          <p className="text-neutral-500">
-                            Enter the email address of the user you want to invite below. An
-                            invitation link will be sent to this email address.
-                          </p>
-
-                          <Alert variant="info" icon={true}>
-                            <p>
-                              You will need to manually provision access to{' '}
-                              <strong> applications </strong> and <strong> environments </strong>{' '}
-                              after the member has joined the organization.
-                            </p>
-                          </Alert>
-                          <div className="w-full">
-                            <Input
-                              value={email}
-                              setValue={(value) => setEmail(value)}
-                              label="User email"
-                              type="email"
-                              required
-                              autoFocus
-                              ref={emailInputRef}
-                            />
-                          </div>
-
-                          <div className="col-span-2 flex items-center gap-4 justify-end">
-                            <Button variant="secondary" type="button" onClick={closeModal}>
-                              Cancel
-                            </Button>
-                            <Button variant="primary" type="submit" isLoading={mutationLoading}>
-                              Invite
-                            </Button>
-                          </div>
-                        </form>
-                      )}
-                      {inviteLink && (
-                        <div className="py-8 space-y-6">
-                          <div className="text-center max-w-lg mx-auto">
-                            <h3 className="font-semibold text-xl text-black dark:text-white">
-                              Invite sent!
-                            </h3>
-                            <p className="text-neutral-500">
-                              An invite link has been sent by email to{' '}
-                              <span className="font-medium text-black dark:text-white">
-                                {email}
-                              </span>
-                              . You can also share the link below to invite this user to your
-                              organisation. This invite will expire in 72 hours.
-                            </p>
-                          </div>
-
-                          <div className="group relative overflow-x-hidden rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-emerald-800 dark:text-emerald-300">
-                            <pre className="ph-no-capture text-sm">{inviteLink}</pre>
-                            <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent to-zinc-300 dark:to-zinc-800"></div>
-                            <div className="absolute right-1 top-2.5 ">
-                              <CopyButton value={inviteLink} defaultHidden={false} />
-                            </div>
-                          </div>
-
-                          <Alert variant="info" icon={true} size="sm">
-                            You can add users to specific Apps and Environments once they accept
-                            this invite and join your Organisation.
-                          </Alert>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
-    </>
   )
 }
 
@@ -866,7 +626,9 @@ export default function Members({ params }: { params: { team: string } }) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap"></td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {invite.role && <RoleLabel role={invite.role} />}
+                    </td>
                     <td
                       className={clsx(
                         'px-6 py-4 whitespace-nowrap',

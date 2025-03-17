@@ -273,13 +273,18 @@ class OrganisationMemberInvite(models.Model):
         Organisation, related_name="invites", on_delete=models.CASCADE
     )
     apps = models.ManyToManyField(App)
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     invited_by = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE)
     invitee_email = models.EmailField()
     valid = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     expires_at = models.DateTimeField()
-
     objects = OrganisationMemberInviteManager()
 
 
