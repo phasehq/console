@@ -438,7 +438,7 @@ export default function SecretLogs(props: { app: string }) {
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
-          <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
+          <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
             <span className="text-neutral-500 font-light text-lg">
               {totalCount && <Count from={0} to={totalCount} />} Events
             </span>
@@ -451,7 +451,7 @@ export default function SecretLogs(props: { app: string }) {
             </Button>
           </div>
           <table className="table-auto w-full text-left text-sm font-light">
-            <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-10  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+            <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-5  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-neutral-500">
                 <th></th>
                 <th className="px-6 py-4">Account</th>
