@@ -80,7 +80,6 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
       </div>
     )
 
-
     return link ? (
       <Link className="hidden lg:block" href={link}>
         {content()}
@@ -115,7 +114,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
                 index === 4 && 'z-[4]'
               )}
             >
-              <Avatar imagePath={member!.avatarUrl} size="md" />
+              <Avatar member={member!} size="md" />
             </div>
           ))}
           {surplusMemberCount > 0 && (

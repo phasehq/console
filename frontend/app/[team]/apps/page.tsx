@@ -135,7 +135,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                   />
                   <FaTimesCircle
                     className={clsx(
-                      'cursor-pointer text-neutral-500 transition-opacity ease',
+                      'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
                       searchQuery ? 'opacity-100' : 'opacity-0'
                     )}
                     role="button"
