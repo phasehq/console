@@ -80,6 +80,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
       </div>
     )
 
+
     return link ? (
       <Link className="hidden lg:block" href={link}>
         {content()}
