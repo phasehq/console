@@ -1,5 +1,3 @@
-// frontend/components/syncing/ProviderIcon.tsx
-
 import { FaCube } from 'react-icons/fa'
 import {
   SiAmazonaws,
@@ -14,40 +12,31 @@ import {
   SiCloudflare,
 } from 'react-icons/si'
 
-interface IconMapping {
-  icon: React.ElementType
-  color: string
-}
-
-const providerIconMap: Record<string, IconMapping> = {
-  cloudflare_workers: { icon: SiCloudflareworkers, color: '#F38020' },
-  cloudflare_pages: { icon: SiCloudflarepages, color: '#F38020' },
-  cloudflare: { icon: SiCloudflare, color: '#F38020' },
-  aws: { icon: SiAmazonaws, color: '#FF9900' },
-  github: { icon: SiGithub, color: 'black dark:text-white' },
-  gitlab: { icon: SiGitlab, color: '#FC6D26' },
-  hashicorp_vault: { icon: SiVault, color: '#FFEC6E' },
-  hashicorp_nomad: { icon: SiNomad, color: '#00CA8E' },
-  railway: { icon: SiRailway, color: '#0B0D0E dark:text-white' },
-  vercel: { icon: SiVercel, color: '#000000 dark:text-white' },
-}
-
-export const ProviderIcon = (props: { providerId: string; size?: 'sm' | 'md' | 'lg' | 'xl' }) => {
+export const ProviderIcon = (props: { providerId: string }) => {
   const { providerId } = props
   const id = providerId.toLowerCase()
 
-  const sizes = {
-    sm: 'h-4 w-4',
-    md: 'h-8 w-8',
-    lg: 'h-12 w-12',
-    xl: 'h-20 w-20',
-  }
+  if (id.includes('cloudflare_workers'))
+    return <SiCloudflareworkers className="shrink-0 text-[#F38020]" />
 
-  const sizeStyle = sizes[props.size || 'sm']
+  if (id.includes('cloudflare_pages'))
+    return <SiCloudflarepages className="shrink-0 text-[#F38020]" />
 
-  const iconData = Object.keys(providerIconMap).find((key) => id.includes(key))
-    ? providerIconMap[id]
-    : { icon: FaCube, color: '' }
+  if (id === 'cloudflare') return <SiCloudflare className="shrink-0 text-[#F38020]" />
 
-  return <iconData.icon className={`shrink-0 ${sizeStyle} ${iconData.color}`} />
+  if (id.includes('aws')) return <SiAmazonaws className="shrink-0 text-[#FF9900]" />
+
+  if (id.includes('github')) return <SiGithub className="shrink-0 text-black dark:text-white" />
+
+  if (id.includes('gitlab')) return <SiGitlab className="shrink-0 text-[#FC6D26]" />
+
+  if (id.includes('hashicorp_vault')) return <SiVault className="shrink-0 text-[#FFEC6E]" />
+
+  if (id.includes('hashicorp_nomad')) return <SiNomad className="shrink-0 text-[#00CA8E]" />
+
+  if (id.includes('railway'))
+    return <SiRailway className="shrink-0 text-[#0B0D0E] dark:text-white" />
+
+  if (id.includes('vercel')) return <SiVercel className="shrink-0 text-[#000000] dark:text-white" />
+  else return <FaCube />
 }
