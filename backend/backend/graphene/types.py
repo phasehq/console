@@ -217,6 +217,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
             "valid",
             "organisation",
             "apps",
+            "role",
             "created_at",
             "updated_at",
             "expires_at",

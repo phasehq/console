@@ -1,4 +1,11 @@
-import { useState, useImperativeHandle, forwardRef, ReactNode, Fragment } from 'react'
+import {
+  useState,
+  useImperativeHandle,
+  forwardRef,
+  ReactNode,
+  Fragment,
+  MutableRefObject,
+} from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { FaTimes } from 'react-icons/fa'
 import { Button, ButtonVariant } from './Button'
@@ -12,6 +19,7 @@ interface GenericDialogProps {
   buttonVariant?: ButtonVariant
   buttonContent?: ReactNode
   size?: 'lg' | 'md' | 'sm'
+  initialFocus?: MutableRefObject<null>
 }
 
 const GenericDialog = forwardRef(
@@ -24,6 +32,7 @@ const GenericDialog = forwardRef(
       buttonVariant = 'primary',
       buttonContent,
       size,
+      initialFocus,
     }: GenericDialogProps,
     ref
   ) => {
@@ -63,7 +72,12 @@ const GenericDialog = forwardRef(
         )}
 
         <Transition appear show={isOpen} as={Fragment}>
-          <Dialog as="div" className="relative z-10" onClose={closeModal}>
+          <Dialog
+            as="div"
+            className="relative z-10"
+            onClose={closeModal}
+            initialFocus={initialFocus}
+          >
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
