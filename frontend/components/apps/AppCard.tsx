@@ -189,13 +189,13 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             count={totalSyncCount}
             icon={<FaProjectDiagram />}
             link={
-              variant === 'normal'
-                ? undefined
-                : `/${organisation?.name}/apps/${app.id}/access/syncing`
+              variant === 'normal' ? undefined : `/${organisation?.name}/apps/${app.id}/syncing`
             }
           >
             {providers.slice(0, 5).map((providerId) => (
-              <ProviderIcon key={providerId} providerId={providerId} size="md" />
+              <div key={providerId} className="text-2xl">
+                <ProviderIcon providerId={providerId} />
+              </div>
             ))}
             {surplusSynCount > 0 && (
               <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
@@ -235,9 +235,12 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             ) : (
               <Link
                 href={`/${organisation?.name}/apps/${app.id}`}
-                className="hover:text-emerald-500 transition ease"
+                className="hover:text-emerald-500 transition ease flex items-center gap-4 justify-between w-full"
               >
                 {name}
+                <div className="xl:hidden">
+                  <EncryptionModeIndicator app={app} />
+                </div>
               </Link>
             )}{' '}
           </div>
@@ -251,7 +254,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             </CopyButton>
           )}
         </div>
-        <div className="hidden sm:block">
+        <div className="hidden xl:block">
           <EncryptionModeIndicator app={app} />
         </div>
       </div>
