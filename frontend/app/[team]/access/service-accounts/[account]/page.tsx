@@ -353,7 +353,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-neutral-500">by:</span>
-                        <Avatar imagePath={token!.createdBy?.avatarUrl} size="sm" />
+                        <Avatar member={token!.createdBy!} size="sm" />
                         <span className="font-medium text-zinc-900 dark:text-zinc-100">
                           {token?.createdBy?.fullName}
                         </span>
