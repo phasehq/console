@@ -81,21 +81,23 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
       </div>
     )
 
-    return link ? (
-      count > 0 ? (
-        <Link
-          title={`View ${app.name} ${itemType}s`}
-          className="hidden lg:flex w-min group"
-          href={link}
-        >
-          {content()}
-        </Link>
-      ) : (
-        <div></div>
-      )
-    ) : (
-      content()
-    )
+    if (variant === 'normal') return count > 0 ? content() : <></>
+
+    if (variant === 'compact') {
+      if (count > 0) {
+        return link ? (
+          <Link
+            title={`View ${app.name} ${itemType}s`}
+            className="hidden lg:flex w-min group"
+            href={link}
+          >
+            {content()}
+          </Link>
+        ) : (
+          content()
+        )
+      } else return <div></div>
+    }
   }
 
   const CondensedAppMetaCounts = () => {
@@ -130,7 +132,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
         className={clsx(
           variant === 'compact'
             ? 'col-span-5 hidden lg:grid grid-cols-5 justify-stretch'
-            : 'grid grid-cols-4 gap-2 w-full'
+            : 'flex items-center justify-between gap-2 w-full'
         )}
       >
         <AppMetaCategory
