@@ -136,7 +136,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={account!.id}
               className={clsx(
-                'rounded-full flex items-center shrink-0 bg-zinc-100 dark:bg-zinc-700 ring-1 ring-inset ring-zinc-500/20 justify-center size-8 p-1 text-2xs font-semibold text-zinc-900 dark:text-zinc-100',
+                'rounded-full flex items-center shrink-0 bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-zinc-500/20 justify-center size-8 p-1 text-2xs font-semibold text-zinc-900 dark:text-zinc-100',
 
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
@@ -165,7 +165,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={env!.id}
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-700 ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
+                'bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
                 index === 2 && 'z-[2]',
