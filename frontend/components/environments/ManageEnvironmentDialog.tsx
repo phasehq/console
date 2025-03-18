@@ -250,7 +250,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
         {props.environment.members?.map((member) =>
           member ? (
             <div key={member.email} title={member.fullName || member.email || ''}>
-              <Avatar imagePath={member.avatarUrl!} size="lg" />
+              <Avatar member={member} size="lg" />
             </div>
           ) : (
             <></>

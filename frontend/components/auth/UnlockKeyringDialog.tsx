@@ -187,7 +187,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                           <div className="flex flex-col gap-4">
                             <div className="whitespace-nowrap flex items-start gap-2">
                               <div className="pt-2">
-                                <Avatar imagePath={session?.user?.image!} size="md" />
+                                <Avatar user={session?.user} size="md" />
                               </div>
                               <div className="flex flex-col gap-2">
                                 <div className="flex flex-col">

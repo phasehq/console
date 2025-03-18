@@ -305,7 +305,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                                               active && 'font-semibold'
                                             )}
                                           >
-                                            <Avatar imagePath={person.avatarUrl!} size="sm" />
+                                            <Avatar member={person} size="sm" />
                                             <span className="text-black dark:text-white">
                                               {person.fullName || person.email}
                                             </span>
@@ -865,7 +865,7 @@ export default function Members({ params }: { params: { team: string; app: strin
               {data?.appUsers.map((member: OrganisationMemberType) => (
                 <tr className="group" key={member.id}>
                   <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                    <Avatar imagePath={member.avatarUrl!} size="lg" />
+                    <Avatar member={member} size="lg" />
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
                         <span className="text-lg font-medium">

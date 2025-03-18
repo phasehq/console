@@ -61,15 +61,16 @@ const EnvSecret = ({
   const [readSecret] = useMutation(LogSecretReads)
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
+  const isEmptyValue = clientEnvSecret.secret?.value === ''
 
-  const [showValue, setShowValue] = useState<boolean>(valueIsNew || false)
+  const [showValue, setShowValue] = useState<boolean>(valueIsNew || !serverEnvSecret || isEmptyValue || false)
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
     : false
   const booleanValue = clientEnvSecret.secret?.value.toLowerCase() === 'true'
 
-  // Permisssions
+  // Permissions
   const userCanUpdateSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
     !serverEnvSecret
@@ -102,7 +103,11 @@ const EnvSecret = ({
   const handleDeleteValue = () =>
     deleteEnvValue(appSecretId, clientEnvSecret!.env as EnvironmentType)
 
-  const handleAddValue = () => addEnvValue(appSecretId, clientEnvSecret.env as EnvironmentType)
+  const handleAddValue = () => {
+    addEnvValue(appSecretId, clientEnvSecret.env as EnvironmentType);
+    // Ensure the value is visible after adding it
+    setShowValue(true);
+  }
 
   const valueIsModified = () => {
     if (serverEnvSecret) {
