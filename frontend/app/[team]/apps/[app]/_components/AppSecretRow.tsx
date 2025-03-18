@@ -70,7 +70,7 @@ const EnvSecret = ({
     : false
   const booleanValue = clientEnvSecret.secret?.value.toLowerCase() === 'true'
 
-  // Permisssions
+  // Permissions
   const userCanUpdateSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
     !serverEnvSecret
