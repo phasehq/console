@@ -61,8 +61,9 @@ const EnvSecret = ({
   const [readSecret] = useMutation(LogSecretReads)
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
+  const isEmptyValue = clientEnvSecret.secret?.value === ''
 
-  const [showValue, setShowValue] = useState<boolean>(valueIsNew || !serverEnvSecret || false)
+  const [showValue, setShowValue] = useState<boolean>(valueIsNew || !serverEnvSecret || isEmptyValue || false)
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
