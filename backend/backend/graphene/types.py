@@ -545,6 +545,7 @@ class AppType(DjangoObjectType):
             "identity_key",
             "wrapped_key_share",
             "created_at",
+            "updated_at",
             "app_token",
             "app_seed",
             "app_version",
@@ -572,6 +573,23 @@ class AppType(DjangoObjectType):
                 user=org_member, environment_id=app_env.id
             ).exists()
         ]
+
+    def resolve_updated_at(self, info):
+        app_updated_at = self.updated_at
+
+        # Get the latest updated_at from environments
+        latest_environment_updated_at = (
+            max(env.updated_at for env in self.environments.all())
+            if self.environments
+            else None
+        )
+
+        # Return the most recent updated_at between app and its environments
+        return (
+            max(app_updated_at, latest_environment_updated_at)
+            if latest_environment_updated_at
+            else app_updated_at
+        )
 
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)

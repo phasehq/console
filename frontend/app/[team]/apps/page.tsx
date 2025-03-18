@@ -20,6 +20,8 @@ import clsx from 'clsx'
 import { motion } from 'framer-motion'
 import { BsFillGrid3X3GapFill } from 'react-icons/bs'
 import { MdSearchOff } from 'react-icons/md'
+import { AppSortOption, sortApps } from '@/utils/app'
+import AppSortMenu from './_components/AppSortMenu'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
   type ViewMode = 'grid' | 'list'
@@ -32,6 +34,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [searchQuery, setSearchQuery] = useState('')
+  const [sort, setSort] = useState<AppSortOption>('-updated')
 
   const dialogRef = useRef<{ openModal: () => void }>(null)
 
@@ -70,10 +73,12 @@ export default function AppsHome({ params }: { params: { team: string } }) {
     fetchPolicy: 'cache-and-network',
   })
 
-  const apps = data?.apps as AppType[]
+  const apps = (data?.apps as AppType[]) ?? []
 
   const filteredApps =
     searchQuery === '' ? apps : apps.filter((app) => app?.name?.toLowerCase().includes(searchQuery))
+
+  const filteredAndSortedApps = sortApps(filteredApps, sort)
 
   // Load saved view preference
   useEffect(() => {
@@ -92,7 +97,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   return (
     <div
-      className="w-full p-8 text-black dark:text-white flex flex-col gap-10 overflow-y-auto"
+      className="w-full p-8 text-black dark:text-white flex flex-col gap-6 overflow-y-auto"
       style={{ height: 'calc(100vh - 64px)' }}
     >
       <div className="space-y-1">
@@ -123,24 +128,28 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                 )}
               </div>
               <div className="flex justify-between gap-2">
-                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
-                  <div className="">
-                    <FaSearch className="text-neutral-500" />
+                <div className="flex items-center gap-4">
+                  <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
+                    <div className="">
+                      <FaSearch className="text-neutral-500" />
+                    </div>
+                    <input
+                      placeholder="Search"
+                      className="custom bg-zinc-100 dark:bg-zinc-800"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <FaTimesCircle
+                      className={clsx(
+                        'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                        searchQuery ? 'opacity-100' : 'opacity-0'
+                      )}
+                      role="button"
+                      onClick={() => setSearchQuery('')}
+                    />
                   </div>
-                  <input
-                    placeholder="Search"
-                    className="custom bg-zinc-100 dark:bg-zinc-800"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <FaTimesCircle
-                    className={clsx(
-                      'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
-                      searchQuery ? 'opacity-100' : 'opacity-0'
-                    )}
-                    role="button"
-                    onClick={() => setSearchQuery('')}
-                  />
+
+                  <AppSortMenu sort={sort} setSort={setSort} />
                 </div>
 
                 <div className="lg:flex items-center justify-end gap-2 hidden">
@@ -181,7 +190,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                 )}
               </div>
             )}
-            {filteredApps?.map((app) => (
+            {filteredAndSortedApps?.map((app) => (
               <AppCard
                 key={app.id}
                 app={app}
@@ -189,7 +198,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
               />
             ))}
 
-            {filteredApps?.length === 0 && searchQuery && (
+            {filteredAndSortedApps?.length === 0 && searchQuery && (
               <div className="xl:col-span-2 1080p:col-span-3 justify-center p-20">
                 <EmptyState
                   title={`No results for "${searchQuery}"`}

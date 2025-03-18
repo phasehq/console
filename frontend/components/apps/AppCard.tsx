@@ -81,9 +81,13 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
     )
 
     return link ? (
-      <Link className="hidden lg:block" href={link}>
-        {content()}
-      </Link>
+      count > 0 ? (
+        <Link title={`View app ${itemType}s`} className="hidden lg:flex w-min group" href={link}>
+          {content()}
+        </Link>
+      ) : (
+        <div></div>
+      )
     ) : (
       content()
     )
@@ -106,7 +110,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={member!.id}
               className={clsx(
-                'rounded-full',
+                'rounded-full group-hover:saturate-50 transition ease',
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
                 index === 2 && 'z-[2]',
@@ -136,7 +140,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={account!.id}
               className={clsx(
-                'rounded-full flex items-center shrink-0 bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-zinc-500/20 justify-center size-8 p-1 text-2xs font-semibold text-zinc-900 dark:text-zinc-100',
+                'bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-50 transition ease group-hover:dark:bg-zinc-700 ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
 
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
@@ -165,7 +169,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={env!.id}
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
+                'bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-50 transition ease group-hover:dark:bg-zinc-700 ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
                 index === 2 && 'z-[2]',
@@ -193,7 +197,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             }
           >
             {providers.slice(0, 5).map((providerId) => (
-              <div key={providerId} className="text-2xl">
+              <div key={providerId} className="text-2xl group-hover:saturate-50 transition ease">
                 <ProviderIcon providerId={providerId} />
               </div>
             ))}
@@ -220,7 +224,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
       <div
         className={clsx(
           'flex justify-between',
-          variant === 'normal' ? 'items-start' : 'items-center col-span-2 w-full max-w-[28rem]'
+          variant === 'normal' ? 'items-start' : 'items-center col-span-2 w-full max-w-[24rem]'
         )}
       >
         <div className="space-y-0.5">
@@ -250,7 +254,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             </div>
           ) : (
             <CopyButton value={id} buttonVariant="ghost">
-              <span className="text-2xs font-mono md:whitespace-nowrap">{id}</span>
+              <span className="text-2xs font-mono md:whitespace-nowrap text-neutral-500">{id}</span>
             </CopyButton>
           )}
         </div>

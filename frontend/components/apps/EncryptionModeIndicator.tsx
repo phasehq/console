@@ -14,7 +14,7 @@ export const SseLabel = ({ sseEnabled }: { sseEnabled: boolean }) => (
   <div
     title={sseEnabled ? 'Server-side encryption enabled' : 'End-to-end encryption enabled'}
     className={clsx(
-      'rounded-md px-2 text-2xs font-semibold flex items-center gap-1',
+      'rounded-md px-2 text-2xs font-semibold flex items-center justify-center gap-1 w-16',
       sseEnabled ? 'text-sky-500 bg-sky-400/10' : 'text-emerald-500 bg-emerald-400/10'
     )}
   >
