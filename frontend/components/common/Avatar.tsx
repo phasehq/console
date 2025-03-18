@@ -10,11 +10,14 @@ type GenericUser = {
   image?: string | null
 }
 
-export const Avatar = (props: {
+interface AvatarProps {
   member?: OrganisationMemberType
   user?: GenericUser
   size?: 'sm' | 'md' | 'lg' | 'xl' // Define the size prop with the correct type
-}) => {
+  showTitle?: boolean
+}
+
+export const Avatar = ({ member, user, size, showTitle = true }: AvatarProps) => {
   const [useFallBack, setUseFallBack] = useState(false)
 
   const sizes = {
@@ -25,7 +28,7 @@ export const Avatar = (props: {
   }
 
   // Ensure at least one of member or user is provided
-  if (!props.member && !props.user) {
+  if (!member && !user) {
     return (
       <div className="mr-1 rounded-full bg-center bg-no-repeat ring-1 ring-inset ring-neutral-500/40 flex items-center justify-center p-1">
         <FaUserLarge className="text-neutral-500" />
@@ -33,18 +36,18 @@ export const Avatar = (props: {
     )
   }
 
-  const sizeStyle = sizes[props.size || 'md'] // Default to 'md' size if not provided
+  const sizeStyle = sizes[size || 'md'] // Default to 'md' size if not provided
 
   let avatarUrl: Maybe<string> | undefined = undefined
   let fullName: Maybe<string> | undefined = undefined
   let email: Maybe<string> | undefined = undefined
 
-  if (props.member) {
-    ;({ avatarUrl, fullName, email } = props.member)
-  } else if (props.user) {
-    avatarUrl = props.user.image ?? null // Ensure image is assigned as string | null
-    fullName = props.user.name ?? null // Ensure name is assigned as string | null
-    email = props.user.email
+  if (member) {
+    ;({ avatarUrl, fullName, email } = member)
+  } else if (user) {
+    avatarUrl = user.image ?? null // Ensure image is assigned as string | null
+    fullName = user.name ?? null // Ensure name is assigned as string | null
+    email = user.email
   }
 
   // Function to extract initials from full name
@@ -74,7 +77,7 @@ export const Avatar = (props: {
 
   return (
     <div
-      title={fullName || email || ''}
+      title={showTitle ? fullName! || email! : undefined}
       className={clsx(
         'mr-1 rounded-full flex items-center justify-center select-none',
         sizeStyle,
