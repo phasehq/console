@@ -39,6 +39,7 @@ const EnvSecret = ({
   updateEnvValue,
   addEnvValue,
   deleteEnvValue,
+  tabIndex,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
@@ -55,6 +56,7 @@ const EnvSecret = ({
   updateEnvValue: (id: string, envId: string, value: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
+  tabIndex?: number
 }) => {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -169,7 +171,7 @@ const EnvSecret = ({
       {clientEnvSecret.secret === null ? (
         <div className="flex items-center gap-2">
           <span className="text-red-500 font-mono uppercase">missing</span>
-          <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
+          <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue} tabIndex={tabIndex}>
             <FaPlus />
             Add value
           </Button>{' '}
@@ -212,6 +214,7 @@ const EnvSecret = ({
                 disabled={stagedForDelete}
                 value={clientEnvSecret.secret.value}
                 placeholder="VALUE"
+                tabIndex={tabIndex}
                 onChange={(e) =>
                   updateEnvValue(appSecretId, clientEnvSecret.env.id!, e.target.value)
                 }
@@ -219,13 +222,14 @@ const EnvSecret = ({
             </div>
             {clientEnvSecret.secret !== null && (
               <div className="flex items-center gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
-                <Button variant="outline" onClick={toggleShowValue}>
+                {/* Set tab index to -1 to prevent focus on the button */}
+                <Button variant="outline" onClick={toggleShowValue} tabIndex={-1}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
                 </Button>
-                <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
+                <CopyButton value={clientEnvSecret.secret!.value} tabIndex={-1}></CopyButton>
                 {userCanDeleteSecrets && (
-                  <Button variant="danger" onClick={handleDeleteValue}>
+                  <Button variant="danger" onClick={handleDeleteValue} tabIndex={-1}>
                     {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
                   </Button>
                 )}
@@ -398,6 +402,7 @@ export const AppSecretRow = ({
               <button
                 onClick={toggleAccordion}
                 className="relative flex items-center justify-center"
+                tabIndex={-1}
               >
                 <FaChevronRight
                   className={clsx(
@@ -431,6 +436,7 @@ export const AppSecretRow = ({
                         : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500'
                   )}
                   value={clientAppSecret.key}
+                  tabIndex={secretIsNew ? 1 : undefined}
                   onChange={(e) => handleUpdateKey(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
@@ -440,6 +446,7 @@ export const AppSecretRow = ({
                     <Button
                       title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
                       variant="danger"
+                      tabIndex={-1}
                       onClick={(e) => {
                         e.stopPropagation()
                         deleteKey(clientAppSecret.id)
@@ -499,7 +506,7 @@ export const AppSecretRow = ({
               >
                 <Disclosure.Panel static={true}>
                   <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
-                    {envs.map((envSecret) => (
+                    {envs.map((envSecret, envIndex) => (
                       <EnvSecret
                         key={envSecret.env.id}
                         keyIsStagedForDelete={stagedForDelete}
@@ -515,6 +522,7 @@ export const AppSecretRow = ({
                         }
                         addEnvValue={addEnvValue}
                         deleteEnvValue={deleteEnvValue}
+                        tabIndex={secretIsNew ? envIndex + 2 : undefined}
                       />
                     ))}
                   </div>
