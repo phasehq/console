@@ -93,14 +93,6 @@ const EnvSecret = ({
     if (isBoolean) setShowValue(true)
   }, [isBoolean])
 
-  // Ensure newly added values or changed values are revealed
-  useEffect(() => {
-    // If there's no server secret (new value) or the client value is different from server value, show it
-    if (!serverEnvSecret || (clientEnvSecret.secret && serverEnvSecret?.secret?.value !== clientEnvSecret.secret.value)) {
-      setShowValue(true);
-    }
-  }, [serverEnvSecret, clientEnvSecret.secret]);
-
   const handleHideSecret = () => setShowValue(false)
 
   const toggleShowValue = () => {
