@@ -83,7 +83,11 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
 
     return link ? (
       count > 0 ? (
-        <Link title={`View app ${itemType}s`} className="hidden lg:flex w-min group" href={link}>
+        <Link
+          title={`View ${app.name} ${itemType}s`}
+          className="hidden lg:flex w-min group"
+          href={link}
+        >
           {content()}
         </Link>
       ) : (
@@ -122,7 +126,13 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
 
   const AppMetaRow = () => {
     return (
-      <div className="col-span-5 hidden lg:grid grid-cols-5 justify-stretch">
+      <div
+        className={clsx(
+          variant === 'compact'
+            ? 'col-span-5 hidden lg:grid grid-cols-5 justify-stretch'
+            : 'grid grid-cols-4 gap-2 w-full'
+        )}
+      >
         <AppMetaCategory
           itemType="Member"
           count={members.length}
@@ -137,7 +147,8 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={member!.id}
               className={clsx(
-                'rounded-full group-hover:saturate-50 transition ease',
+                'rounded-full  transition ease',
+                variant === 'compact' && 'group-hover:saturate-50',
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
                 index === 2 && 'z-[2]',
@@ -145,7 +156,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
                 index === 4 && 'z-[4]'
               )}
             >
-              <Avatar member={member!} size="md" />
+              <Avatar showTitle={false} member={member!} size="md" />
             </div>
           ))}
           {surplusMemberCount > 0 && (
@@ -167,8 +178,8 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={account!.id}
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-50 transition ease group-hover:dark:bg-zinc-700 ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
-
+                'bg-zinc-100 dark:bg-zinc-800  transition ease  ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
+                variant === 'compact' && 'group-hover:bg-zinc-50 group-hover:dark:bg-zinc-700',
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
                 index === 2 && 'z-[2]',
@@ -196,7 +207,8 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={env!.id}
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-50 transition ease group-hover:dark:bg-zinc-700 ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
+                'bg-zinc-100 dark:bg-zinc-800  transition ease  ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
+                variant === 'compact' && 'group-hover:bg-zinc-50 group-hover:dark:bg-zinc-700',
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
                 index === 2 && 'z-[2]',
@@ -221,7 +233,13 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
           link={variant === 'normal' ? undefined : `/${organisation?.name}/apps/${app.id}/syncing`}
         >
           {providers.slice(0, 5).map((providerId) => (
-            <div key={providerId} className="text-2xl group-hover:saturate-50 transition ease">
+            <div
+              key={providerId}
+              className={clsx(
+                'text-2xl transition ease',
+                variant === 'compact' && 'group-hover:saturate-50'
+              )}
+            >
               <ProviderIcon providerId={providerId} />
             </div>
           ))}
@@ -233,7 +251,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
         </AppMetaCategory>
 
         {variant === 'compact' && (
-          <div className="text-sm text-neutral-500 hidden lg:block">
+          <div className="text-xs text-neutral-500 hidden lg:block">
             {relativeTimeFromDates(new Date(app.updatedAt))}
           </div>
         )}
