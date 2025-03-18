@@ -174,20 +174,25 @@ export default function AppsHome({ params }: { params: { team: string } }) {
             )}
           >
             {viewMode === 'list' && (
-              <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 pl-3 border-b border-neutral-500/40 pb-2">
-                {['App', 'Members', 'Service Accounts', 'Environments', 'Integrations'].map(
-                  (heading, index) => (
-                    <div
-                      key={heading}
-                      className={clsx(
-                        index === 0 ? 'col-span-2' : 'hidden lg:block',
-                        'text-neutral-500 text-2xs uppercase tracking-widest font-semibold'
-                      )}
-                    >
-                      {heading}
-                    </div>
-                  )
-                )}
+              <div className="grid grid-cols-1 lg:grid-cols-7 gap-4 pl-3 border-b border-neutral-500/40 pb-2">
+                {[
+                  'App',
+                  'Members',
+                  'Service Accounts',
+                  'Environments',
+                  'Integrations',
+                  'Updated',
+                ].map((heading, index) => (
+                  <div
+                    key={heading}
+                    className={clsx(
+                      index === 0 ? 'col-span-2' : 'hidden lg:block',
+                      'text-neutral-500 text-2xs uppercase tracking-widest font-semibold'
+                    )}
+                  >
+                    {heading}
+                  </div>
+                ))}
               </div>
             )}
             {filteredAndSortedApps?.map((app) => (

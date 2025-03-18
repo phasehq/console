@@ -11,6 +11,7 @@ import { ReactNode, useContext } from 'react'
 import CopyButton from '../common/CopyButton'
 import { organisationContext } from '@/contexts/organisationContext'
 import Link from 'next/link'
+import { relativeTimeFromDates } from '@/utils/time'
 
 interface AppCardProps {
   app: AppType
@@ -93,9 +94,35 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
     )
   }
 
+  const CondensedAppMetaCounts = () => {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 text-xs text-neutral-500">
+          <FaUsers />
+          {members.length}
+        </div>
+
+        <div className="flex items-center gap-1 text-xs text-neutral-500">
+          <FaRobot />
+          {serviceAccounts.length}
+        </div>
+
+        <div className="flex items-center gap-1 text-xs text-neutral-500">
+          <BsListColumnsReverse />
+          {environments.length}
+        </div>
+
+        <div className="flex items-center gap-1 text-xs text-neutral-500">
+          <FaProjectDiagram />
+          {totalSyncCount}
+        </div>
+      </div>
+    )
+  }
+
   const AppMetaRow = () => {
     return (
-      <>
+      <div className="col-span-5 hidden lg:grid grid-cols-5 justify-stretch">
         <AppMetaCategory
           itemType="Member"
           count={members.length}
@@ -187,28 +214,30 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
           )}
         </AppMetaCategory>
 
-        {totalSyncCount > 0 && (
-          <AppMetaCategory
-            itemType="Integration"
-            count={totalSyncCount}
-            icon={<FaProjectDiagram />}
-            link={
-              variant === 'normal' ? undefined : `/${organisation?.name}/apps/${app.id}/syncing`
-            }
-          >
-            {providers.slice(0, 5).map((providerId) => (
-              <div key={providerId} className="text-2xl group-hover:saturate-50 transition ease">
-                <ProviderIcon providerId={providerId} />
-              </div>
-            ))}
-            {surplusSynCount > 0 && (
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
-                +{surplusSynCount}
-              </span>
-            )}
-          </AppMetaCategory>
+        <AppMetaCategory
+          itemType="Integration"
+          count={totalSyncCount}
+          icon={<FaProjectDiagram />}
+          link={variant === 'normal' ? undefined : `/${organisation?.name}/apps/${app.id}/syncing`}
+        >
+          {providers.slice(0, 5).map((providerId) => (
+            <div key={providerId} className="text-2xl group-hover:saturate-50 transition ease">
+              <ProviderIcon providerId={providerId} />
+            </div>
+          ))}
+          {surplusSynCount > 0 && (
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
+              +{surplusSynCount}
+            </span>
+          )}
+        </AppMetaCategory>
+
+        {variant === 'compact' && (
+          <div className="text-sm text-neutral-500 hidden lg:block">
+            {relativeTimeFromDates(new Date(app.updatedAt))}
+          </div>
         )}
-      </>
+      </div>
     )
   }
 
@@ -218,16 +247,16 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
         'flex w-full',
         variant === 'normal'
           ? 'flex-col gap-8 justify-between rounded-xl'
-          : 'gap-6 lg:gap-10 grid grid-cols-2 lg:grid-cols-6 justify-stretch items-center py-1'
+          : 'gap-6 lg:gap-10 grid grid-cols-2 lg:grid-cols-7 justify-stretch items-center py-1'
       )}
     >
       <div
         className={clsx(
           'flex justify-between',
-          variant === 'normal' ? 'items-start' : 'items-center col-span-2 w-full max-w-[24rem]'
+          variant === 'normal' ? 'items-start' : 'items-center col-span-2 w-full lg:max-w-[24rem]'
         )}
       >
-        <div className="space-y-0.5">
+        <div className="space-y-0.5 w-full">
           <div
             className={clsx(
               'font-semibold flex items-center justify-between gap-2 text-zinc-700 dark:text-zinc-100 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease',
@@ -253,9 +282,16 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
               {id}
             </div>
           ) : (
-            <CopyButton value={id} buttonVariant="ghost">
-              <span className="text-2xs font-mono md:whitespace-nowrap text-neutral-500">{id}</span>
-            </CopyButton>
+            <div className="flex items-center justify-between">
+              <CopyButton value={id} buttonVariant="ghost">
+                <span className="text-2xs font-mono md:whitespace-nowrap text-neutral-500">
+                  {id}
+                </span>
+              </CopyButton>
+              <div className="lg:hidden">
+                <CondensedAppMetaCounts />
+              </div>
+            </div>
           )}
         </div>
         <div className="hidden xl:block">
