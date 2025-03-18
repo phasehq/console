@@ -36,6 +36,7 @@ def send_email(subject, recipient_list, template_name, context):
         f"Phase <{default_from_email}>",
         recipient_list,
         html_message=email_html_message,
+        fail_silently=True,
     )
 
 
