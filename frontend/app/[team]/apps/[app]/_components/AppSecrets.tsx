@@ -884,6 +884,23 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                     deleteKey={handleStageClientSecretForDelete}
                     stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
                     secretsStagedForDelete={secretsToDelete}
+                    rowTabIndexBase={index * 100}
+                    onExpandNextSecret={() => {
+                      // Check if there's a next secret to expand
+                      if (index < filteredSecrets.length - 1) {
+                        const nextSecret = filteredSecrets[index + 1];
+                        handleExpandRow(nextSecret.id);
+                        
+                        // If we're expanding a new row, scroll it into view
+                        setTimeout(() => {
+                          const element = document.getElementById(`secret-key-${nextSecret.id}`);
+                          if (element) {
+                            element.focus();
+                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }
+                        }, 10);
+                      }
+                    }}
                   />
                 ))}
               </tbody>
