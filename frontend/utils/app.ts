@@ -400,6 +400,13 @@ export type AppSortOption =
   | 'integrations'
   | '-integrations'
 
+export type AppTabs =
+  | '/access/members'
+  | '/access/service-accounts'
+  | 'syncing'
+  | 'logs'
+  | 'settings'
+
 export const sortApps = (apps: AppType[], sort: AppSortOption): AppType[] => {
   return apps.slice().sort((a, b) => {
     switch (sort) {

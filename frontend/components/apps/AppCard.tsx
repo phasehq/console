@@ -1,6 +1,5 @@
 import { FaProjectDiagram, FaRobot, FaUsers } from 'react-icons/fa'
 import { Card } from '../common/Card'
-
 import { AppType } from '@/apollo/graphql'
 import { ProviderIcon } from '../syncing/ProviderIcon'
 import { Avatar } from '../common/Avatar'
@@ -12,10 +11,13 @@ import CopyButton from '../common/CopyButton'
 import { organisationContext } from '@/contexts/organisationContext'
 import Link from 'next/link'
 import { relativeTimeFromDates } from '@/utils/time'
+import { useRouter } from 'next/navigation'
+import { AppTabs } from '@/utils/app'
 
 interface AppCardProps {
   app: AppType
   variant: 'normal' | 'compact'
+  tabToLink?: AppTabs
 }
 
 interface AppCardMetaProps {
@@ -90,6 +92,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             title={`View ${app.name} ${itemType}s`}
             className="hidden lg:flex w-min group"
             href={link}
+            onClick={(e) => e.stopPropagation()}
           >
             {content()}
           </Link>
@@ -254,7 +257,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
 
         {variant === 'compact' && (
           <div className="text-xs text-neutral-500 hidden lg:block">
-            {relativeTimeFromDates(new Date(app.updatedAt))}
+            {app.updatedAt && relativeTimeFromDates(new Date(app.updatedAt))}
           </div>
         )}
       </div>
@@ -288,7 +291,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             ) : (
               <Link
                 href={`/${organisation?.name}/apps/${app.id}`}
-                className="hover:text-emerald-500 transition ease flex items-center gap-4 justify-between w-full"
+                className="flex items-center gap-4 justify-between w-full"
               >
                 {name}
                 <div className="xl:hidden">
@@ -330,12 +333,26 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
   )
 }
 
-export const AppCard = ({ app, variant }: AppCardProps) => {
+export const AppCard = ({ app, variant, tabToLink }: AppCardProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const router = useRouter()
+
+  const link = `/${organisation?.name}/apps/${app.id}/${tabToLink || ''}`
+
+  const handleRowClick = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+
+    // If ctrl/cmd key was pressed, open in new tab
+    if (e && (e.ctrlKey || e.metaKey)) {
+      window.open(link, '_blank')
+    } else {
+      router.push(link)
+    }
+  }
 
   if (variant === 'normal')
     return (
-      <Link href={`/${organisation?.name}/apps/${app.id}`}>
+      <Link href={link}>
         <Card>
           <AppCardContent app={app} variant={variant} />
         </Card>
@@ -343,7 +360,10 @@ export const AppCard = ({ app, variant }: AppCardProps) => {
     )
   else
     return (
-      <div className="hover:bg-neutral-500/10 transition ease">
+      <div
+        className="hover:bg-neutral-500/10 transition ease cursor-pointer"
+        onClick={handleRowClick}
+      >
         <AppCardContent app={app} variant={variant} />
       </div>
     )
