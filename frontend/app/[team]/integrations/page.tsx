@@ -98,7 +98,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
         {({ open }) => (
           <>
             <Menu.Button as={Fragment}>
-              <Button type="button" variant="primary" title="Create a new snc">
+              <Button type="button" variant="primary" title="Create a new sync">
                 <FaPlus /> Create a sync
               </Button>
             </Menu.Button>
