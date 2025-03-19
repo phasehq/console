@@ -108,7 +108,7 @@ export const AppsView = ({ apps, tabToLink }: { apps: AppType[]; tabToLink?: App
                 key={heading}
                 className={clsx(
                   index === 0 ? 'col-span-2' : 'hidden lg:block',
-                  'text-neutral-500 text-2xs uppercase tracking-widest font-semibold'
+                  'text-neutral-500 text-2xs uppercase tracking-widest font-semibold text-left'
                 )}
               >
                 {heading}
