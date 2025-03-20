@@ -356,7 +356,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                           Created {relativeTimeFromDates(new Date(token?.createdAt))}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-neutral-500">by:</span>
+                          <span className="text-neutral-500">by</span>
                           <Avatar member={token!.createdBy!} size="sm" />
                           <span className="font-medium text-zinc-900 dark:text-zinc-100">
                             {token?.createdBy?.fullName}
@@ -373,7 +373,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                           )}
                         >
                           <span className="whitespace-nowrap">
-                            {isExpired ? 'Expired' : 'Expires'}:
+                            {isExpired ? 'Expired' : 'Expires'}
                           </span>
                           <span className="whitespace-nowrap">
                             {token!.expiresAt
@@ -383,7 +383,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                         </div>
 
                         <div className="flex items-center gap-1 text-sm text-neutral-500">
-                          <span className="whitespace-nowrap">Last used:</span>
+                          <span className="whitespace-nowrap">Last used</span>
                           <span className="whitespace-nowrap">
                             {token!.lastUsed
                               ? relativeTimeFromDates(new Date(token?.lastUsed))
