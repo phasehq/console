@@ -43,7 +43,7 @@ def send_email(subject, recipient_list, template_name, context):
             html_message=email_html_message,
             fail_silently=False,  # Changed to False to catch exceptions
         )
-        logger.info(f"Email sent successfully: {subject} to {recipient_list}")
+        logger.debug(f"Email sent successfully: {subject} to {recipient_list}")
         return True
     except SMTPException as e:
         logger.error(f"SMTP Error sending email to {recipient_list}: {str(e)}")
