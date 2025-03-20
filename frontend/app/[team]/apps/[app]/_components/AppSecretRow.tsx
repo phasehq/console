@@ -39,6 +39,9 @@ const EnvSecret = ({
   updateEnvValue,
   addEnvValue,
   deleteEnvValue,
+  tabIndex,
+  isLastEnv,
+  onTabToNextSecret,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
@@ -55,6 +58,9 @@ const EnvSecret = ({
   updateEnvValue: (id: string, envId: string, value: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
+  tabIndex?: number
+  isLastEnv?: boolean
+  onTabToNextSecret?: () => void
 }) => {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -169,7 +175,26 @@ const EnvSecret = ({
       {clientEnvSecret.secret === null ? (
         <div className="flex items-center gap-2">
           <span className="text-red-500 font-mono uppercase">missing</span>
-          <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
+          {/* 
+            When tabbing through secrets, if a value is missing,
+            this button gets focus. User can press Space to add the value.
+           */}
+          <Button 
+            variant="secondary" 
+            disabled={keyIsStagedForDelete} 
+            onClick={handleAddValue} 
+            tabIndex={tabIndex}
+            onKeyDown={(e) => {
+              // If this is the last environment and the user presses Tab,
+              // expand the next secret in the list
+              if (e.key === 'Tab' && !e.shiftKey && isLastEnv && onTabToNextSecret) {
+                // Let the default tab behavior happen first (focus moves out)
+                setTimeout(() => {
+                  onTabToNextSecret();
+                }, 0);
+              }
+            }}
+          >
             <FaPlus />
             Add value
           </Button>{' '}
@@ -212,20 +237,38 @@ const EnvSecret = ({
                 disabled={stagedForDelete}
                 value={clientEnvSecret.secret.value}
                 placeholder="VALUE"
+                tabIndex={tabIndex}
                 onChange={(e) =>
                   updateEnvValue(appSecretId, clientEnvSecret.env.id!, e.target.value)
                 }
+                onKeyDown={(e) => {
+                  // If this is the last environment and the user presses Tab,
+                  // expand the next secret in the list
+                  if (e.key === 'Tab' && !e.shiftKey && isLastEnv && onTabToNextSecret) {
+                    // Let the default tab behavior happen first (focus moves out)
+                    setTimeout(() => {
+                      onTabToNextSecret();
+                    }, 0);
+                  }
+                }}
+                onFocus={() => {
+                  // Automatically reveal secret value when focused via tab navigation
+                  if (!showValue) {
+                    setShowValue(true);
+                  }
+                }}
               />
             </div>
             {clientEnvSecret.secret !== null && (
               <div className="flex items-center gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
-                <Button variant="outline" onClick={toggleShowValue}>
+                {/* Set tab index to -1 to prevent focus on the button */}
+                <Button variant="outline" onClick={toggleShowValue} tabIndex={-1}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
                 </Button>
-                <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
+                <CopyButton value={clientEnvSecret.secret!.value} tabIndex={-1}></CopyButton>
                 {userCanDeleteSecrets && (
-                  <Button variant="danger" onClick={handleDeleteValue}>
+                  <Button variant="danger" onClick={handleDeleteValue} tabIndex={-1}>
                     {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
                   </Button>
                 )}
@@ -252,6 +295,8 @@ interface AppSecretRowProps {
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteKey: (id: string) => void
+  rowTabIndexBase?: number
+  onExpandNextSecret?: () => void
 }
 
 export const AppSecretRow = ({
@@ -268,6 +313,8 @@ export const AppSecretRow = ({
   addEnvValue,
   deleteEnvValue,
   deleteKey,
+  rowTabIndexBase = 0,
+  onExpandNextSecret,
 }: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -287,7 +334,7 @@ export const AppSecretRow = ({
     updateKey(clientAppSecret.id, sanitizedK)
   }
 
-  // Permisssions
+  // Permissions
   const userCanUpdateSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) || secretIsNew
   const userCanDeleteSecrets =
@@ -375,6 +422,7 @@ export const AppSecretRow = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretIsNew])
 
+  // Sort environments by index for proper tab order
   const envs = clientAppSecret.envs.sort((a, b) => a.env.index! - b.env.index!)
 
   return (
@@ -398,6 +446,7 @@ export const AppSecretRow = ({
               <button
                 onClick={toggleAccordion}
                 className="relative flex items-center justify-center"
+                tabIndex={-1}
               >
                 <FaChevronRight
                   className={clsx(
@@ -430,7 +479,9 @@ export const AppSecretRow = ({
                         ? 'ring-1 ring-inset ring-amber-500'
                         : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500'
                   )}
+                  id={`secret-key-${clientAppSecret.id}`}
                   value={clientAppSecret.key}
+                  tabIndex={isExpanded ? rowTabIndexBase + 1 : undefined}
                   onChange={(e) => handleUpdateKey(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
@@ -440,6 +491,7 @@ export const AppSecretRow = ({
                     <Button
                       title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
                       variant="danger"
+                      tabIndex={-1}
                       onClick={(e) => {
                         e.stopPropagation()
                         deleteKey(clientAppSecret.id)
@@ -499,7 +551,7 @@ export const AppSecretRow = ({
               >
                 <Disclosure.Panel static={true}>
                   <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
-                    {envs.map((envSecret) => (
+                    {envs.map((envSecret, envIndex) => (
                       <EnvSecret
                         key={envSecret.env.id}
                         keyIsStagedForDelete={stagedForDelete}
@@ -515,6 +567,9 @@ export const AppSecretRow = ({
                         }
                         addEnvValue={addEnvValue}
                         deleteEnvValue={deleteEnvValue}
+                        tabIndex={isExpanded ? rowTabIndexBase + envIndex + 2 : undefined}
+                        isLastEnv={envIndex === envs.length - 1}
+                        onTabToNextSecret={envIndex === envs.length - 1 ? onExpandNextSecret : undefined}
                       />
                     ))}
                   </div>

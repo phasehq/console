@@ -9,9 +9,10 @@ type CopyButtonProps = {
   children?: ReactNode
   buttonVariant?: ButtonVariant
   title?: string
+  tabIndex?: number
 }
 
-const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant, title }) => {
+const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant, title, tabIndex }) => {
   const [copyCount, setCopyCount] = useState(0)
   const copied = copyCount > 0
 
@@ -30,6 +31,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant,
     <Button
       variant={variant}
       title={title || 'Copy to clipboard'}
+      tabIndex={tabIndex}
       onClick={() => {
         window.navigator.clipboard.writeText(value).then(() => {
           setCopyCount((count) => count + 1)
