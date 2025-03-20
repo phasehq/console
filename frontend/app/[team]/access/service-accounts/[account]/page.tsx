@@ -366,13 +366,16 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
                       {/* Token Status*/}
                       <div className="md:col-span-3 space-y-2">
-                        <div className="flex items-center gap-1 text-sm text-neutral-500">
+                        <div
+                          className={clsx(
+                            'flex items-center gap-1 text-sm ',
+                            isExpired ? 'text-red-500' : 'text-neutral-500'
+                          )}
+                        >
                           <span className="whitespace-nowrap">
                             {isExpired ? 'Expired' : 'Expires'}:
                           </span>
-                          <span
-                            className={clsx('whitespace-nowrap', isExpired ? 'text-red-500' : '')}
-                          >
+                          <span className="whitespace-nowrap">
                             {token!.expiresAt
                               ? relativeTimeFromDates(new Date(token?.expiresAt))
                               : 'never'}
