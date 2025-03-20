@@ -20,7 +20,7 @@ export const DeleteServiceAccountTokenDialog = ({ token }: { token: ServiceAccou
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
-  const [deleteToken] = useMutation(DeleteServiceAccountTokenOp)
+  const [deleteToken, { loading }] = useMutation(DeleteServiceAccountTokenOp)
 
   const handleDelete = async () => {
     const deleted = await deleteToken({
@@ -49,7 +49,7 @@ export const DeleteServiceAccountTokenDialog = ({ token }: { token: ServiceAccou
       <div className="space-y-4">
         <div className="text-neutral-500 py-4">Are you sure you want to delete this token?</div>
         <div className="flex justify-end">
-          <Button variant="danger" onClick={handleDelete}>
+          <Button variant="danger" onClick={handleDelete} isLoading={loading}>
             <FaTrash /> Delete
           </Button>
         </div>

@@ -179,10 +179,12 @@ OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI")
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = os.getenv("SMTP_SERVER")
 EMAIL_PORT = int(os.getenv("SMTP_PORT", 587))
-EMAIL_USE_TLS = True
+EMAIL_USE_TLS = os.getenv("SMTP_USE_TLS", "True").lower() in ("true", "1")
+EMAIL_USE_SSL = os.getenv("SMTP_USE_SSL", "False").lower() in ("true", "1")
 EMAIL_HOST_USER = os.getenv("SMTP_USERNAME")
 EMAIL_HOST_PASSWORD = get_secret("SMTP_PASSWORD")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+EMAIL_TIMEOUT = int(os.getenv("SMTP_TIMEOUT", 5))
 
 
 SITE_ID = 1
