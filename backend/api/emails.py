@@ -3,9 +3,13 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from datetime import datetime
 import os
+import logging
 from api.utils.rest import encode_string_to_base64, get_client_ip
 from api.models import OrganisationMember
 from django.utils import timezone
+from smtplib import SMTPException
+
+logger = logging.getLogger(__name__)
 
 
 def get_org_member_name(org_member):
@@ -29,15 +33,24 @@ def send_email(subject, recipient_list, template_name, context):
     # Get the DEFAULT_FROM_EMAIL from settings
     default_from_email = getattr(settings, "DEFAULT_FROM_EMAIL")
 
-    # Send the email
-    send_mail(
-        subject,
-        "",  # plain text content can be empty as we're sending HTML
-        f"Phase <{default_from_email}>",
-        recipient_list,
-        html_message=email_html_message,
-        fail_silently=True,
-    )
+    try:
+        # Send the email
+        send_mail(
+            subject,
+            "",  # plain text content can be empty as we're sending HTML
+            f"Phase <{default_from_email}>",
+            recipient_list,
+            html_message=email_html_message,
+            fail_silently=False,  # Changed to False to catch exceptions
+        )
+        logger.info(f"Email sent successfully: {subject} to {recipient_list}")
+        return True
+    except SMTPException as e:
+        logger.error(f"SMTP Error sending email to {recipient_list}: {str(e)}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error sending email to {recipient_list}: {str(e)}")
+        return False
 
 
 def send_login_email(request, email, full_name, provider):
