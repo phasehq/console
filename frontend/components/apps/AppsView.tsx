@@ -149,7 +149,7 @@ export const AppsView = ({
             : 'divide-y divide-neutral-500/20'
         )}
       >
-        {loading ? (
+        {loading && noApps ? (
           <Skeletons />
         ) : (
           filteredAndSortedApps?.map((app) => (
