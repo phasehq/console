@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { AppCard } from './AppCard'
 import AppSortMenu from '@/app/[team]/apps/_components/AppSortMenu'
 import { AppSortOption, AppTabs, sortApps } from '@/utils/app'
-import { useState, useEffect, useContext } from 'react'
+import { useState, useEffect, useContext, useMemo } from 'react'
 import { BsFillGrid3X3GapFill } from 'react-icons/bs'
 import { FaSearch, FaTimesCircle, FaList, FaBoxOpen } from 'react-icons/fa'
 import { Button } from '../common/Button'
@@ -65,10 +65,13 @@ export const AppsView = ({
     localStorage.setItem('apps-view-mode', newMode)
   }
 
-  const filteredApps =
-    searchQuery === '' ? apps : apps.filter((app) => app?.name?.toLowerCase().includes(searchQuery))
+  const filteredApps = useMemo(() => {
+    return searchQuery === ''
+      ? apps
+      : apps.filter((app) => app?.name?.toLowerCase().includes(searchQuery.toLowerCase()))
+  }, [searchQuery, apps])
 
-  const filteredAndSortedApps = sortApps(filteredApps, sort)
+  const filteredAndSortedApps = useMemo(() => sortApps(filteredApps, sort), [filteredApps, sort])
 
   const noApps = apps.length === 0
 
