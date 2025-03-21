@@ -16,8 +16,6 @@ import { Button } from '@/components/common/Button'
 import { AppsView } from '@/components/apps/AppsView'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
-  type ViewMode = 'grid' | 'list'
-
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // Permissions
@@ -45,6 +43,8 @@ export default function AppsHome({ params }: { params: { team: string } }) {
   })
 
   const apps = (data?.apps as AppType[]) ?? []
+
+  if (!organisation) return <></>
 
   return (
     <div
@@ -81,9 +81,9 @@ export default function AppsHome({ params }: { params: { team: string } }) {
             </div>
           )}
 
-          <AppsView apps={apps} />
+          <AppsView loading={loading} apps={apps} />
 
-          {apps?.length === 0 && userCanCreateApps && (
+          {!loading && apps?.length === 0 && userCanCreateApps && (
             <div className="xl:col-span-2 1080p:col-span-3 justify-center p-20">
               <EmptyState
                 title="No apps"
@@ -116,11 +116,6 @@ export default function AppsHome({ params }: { params: { team: string } }) {
         >
           <></>
         </EmptyState>
-      )}
-      {loading && (
-        <div className="mx-auto my-auto">
-          <Spinner size="xl" />
-        </div>
       )}
     </div>
   )

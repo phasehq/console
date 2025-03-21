@@ -187,7 +187,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
   if (loading)
     return (
-      <div className="w-full flex items-center justify-center">
+      <div className="w-full flex items-center justify-center py-40">
         <Spinner size="md" />
       </div>
     )
