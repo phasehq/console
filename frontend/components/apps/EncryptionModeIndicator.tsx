@@ -12,8 +12,9 @@ import { userHasPermission } from '@/utils/access/permissions'
 
 export const SseLabel = ({ sseEnabled }: { sseEnabled: boolean }) => (
   <div
+    title={sseEnabled ? 'Server-side encryption enabled' : 'End-to-end encryption enabled'}
     className={clsx(
-      'rounded-md px-2 text-2xs font-semibold flex items-center gap-1',
+      'rounded-md px-2 text-2xs font-semibold flex items-center justify-center gap-1 w-16',
       sseEnabled ? 'text-sky-500 bg-sky-400/10' : 'text-emerald-500 bg-emerald-400/10'
     )}
   >
@@ -34,17 +35,13 @@ export const EncryptionModeIndicator = (props: { app: AppType; asMenu?: boolean 
     true
   )
 
-  if (asMenu === false) return <SseLabel sseEnabled={app.sseEnabled!} />
+  if (!asMenu) return <SseLabel sseEnabled={app.sseEnabled!} />
 
   if (!userCanReadEncMode) return <></>
 
   return (
     <Menu as="div" className="relative inline-block text-left">
-      <Menu.Button
-        as="div"
-        className="cursor-pointer"
-        title={app.sseEnabled ? 'Server-side encryption enabled' : 'End-to-end encryption enabled'}
-      >
+      <Menu.Button as="div" className="cursor-pointer">
         <SseLabel sseEnabled={app.sseEnabled!} />
       </Menu.Button>
       <Transition

@@ -16,10 +16,14 @@ import { createApplication } from '@/utils/app'
 import { userHasPermission } from '@/utils/access/permissions'
 import { Input } from '../common/Input'
 
-const NewAppDialog = forwardRef(
-  (props: { appCount: number; organisation: OrganisationType }, ref) => {
-    const { organisation, appCount } = props
+interface NewAppDialogProps {
+  appCount: number
+  organisation: OrganisationType
+  showButton: boolean
+}
 
+const NewAppDialog = forwardRef(
+  ({ organisation, appCount, showButton }: NewAppDialogProps, ref) => {
     const userCanCreateEnvs = userHasPermission(
       organisation.role?.permissions,
       'Environments',
@@ -141,16 +145,12 @@ const NewAppDialog = forwardRef(
 
     return (
       <>
-        <div
-          className="flex items-center justify-center cursor-pointer w-full h-full group"
-          role="button"
-          onClick={openModal}
-        >
-          <div className="flex items-center text-lg gap-1 rounded-full bg-zinc-900 py-1 px-3 text-white group-hover:bg-zinc-700 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-1 dark:ring-inset dark:ring-emerald-400/20 dark:group-hover:bg-emerald-400/10 dark:group-hover:text-emerald-300 dark:group-hover:ring-emerald-300">
+        {showButton && (
+          <Button variant="primary" onClick={openModal}>
             <FaPlus />
             Create an App
-          </div>
-        </div>
+          </Button>
+        )}
 
         <Transition appear show={isOpen} as={Fragment}>
           <Dialog as="div" className="relative z-10" onClose={() => {}} initialFocus={nameInputRef}>

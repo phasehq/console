@@ -1,6 +1,7 @@
 import { ApolloClient, ApolloQueryResult } from '@apollo/client'
 import {
   ApiEnvironmentEnvTypeChoices,
+  AppType,
   EnvironmentType,
   MutationCreateAppArgs,
   OrganisationType,
@@ -383,4 +384,64 @@ export async function createApplication({
   })
 
   return newAppId
+}
+
+export type AppSortOption =
+  | 'created'
+  | '-created'
+  | 'updated'
+  | '-updated'
+  | 'name'
+  | '-name'
+  | 'members'
+  | '-members'
+  | 'serviceAccounts'
+  | '-serviceAccounts'
+  | 'integrations'
+  | '-integrations'
+
+export type AppTabs =
+  | '/access/members'
+  | '/access/service-accounts'
+  | 'syncing'
+  | 'logs'
+  | 'settings'
+
+export const sortApps = (apps: AppType[], sort: AppSortOption): AppType[] => {
+  return apps.slice().sort((a, b) => {
+    switch (sort) {
+      case 'created':
+        return new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
+      case '-created':
+        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+      case 'updated':
+        return new Date(a.updatedAt!).getTime() - new Date(b.updatedAt!).getTime()
+      case '-updated':
+        return new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime()
+      case 'name':
+        return a.name.localeCompare(b.name)
+      case '-name':
+        return b.name.localeCompare(a.name)
+      case 'members':
+        return a.members.length - b.members.length
+      case '-members':
+        return b.members.length - a.members.length
+      case 'serviceAccounts':
+        return a.serviceAccounts.length - b.serviceAccounts.length
+      case '-serviceAccounts':
+        return b.serviceAccounts.length - a.serviceAccounts.length
+      case 'integrations':
+        return (
+          a.environments.reduce((acc, env) => acc + (env!.syncs?.length || 0), 0) -
+          b.environments.reduce((acc, env) => acc + (env!.syncs?.length || 0), 0)
+        )
+      case '-integrations':
+        return (
+          b.environments.reduce((acc, env) => acc + (env!.syncs?.length || 0), 0) -
+          a.environments.reduce((acc, env) => acc + (env!.syncs?.length || 0), 0)
+        )
+      default:
+        return 0
+    }
+  })
 }

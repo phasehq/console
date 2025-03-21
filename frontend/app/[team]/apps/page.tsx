@@ -5,19 +5,20 @@ import { GetApps } from '@/graphql/queries/getApps.gql'
 import { AppType } from '@/apollo/graphql'
 import NewAppDialog from '@/components/apps/NewAppDialog'
 import { useContext, useEffect, useRef } from 'react'
-import Link from 'next/link'
 import Spinner from '@/components/common/Spinner'
-import { AppCard } from '@/components/apps/AppCard'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FaBan } from 'react-icons/fa'
+import { FaBan, FaPlus } from 'react-icons/fa'
 import { FaBoxOpen } from 'react-icons/fa6'
+import { Button } from '@/components/common/Button'
+import { AppsView } from '@/components/apps/AppsView'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  // Permissions
   const userCanViewApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
   const userCanCreateApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'create')
 
@@ -25,11 +26,11 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   const searchParams = useSearchParams()
 
+  const openNewAppDialog = () => dialogRef.current?.openModal()
+
   useEffect(() => {
     if (searchParams?.get('new')) {
-      if (dialogRef.current) {
-        dialogRef.current.openModal()
-      }
+      openNewAppDialog()
     }
   }, [searchParams])
 
@@ -41,42 +42,68 @@ export default function AppsHome({ params }: { params: { team: string } }) {
     fetchPolicy: 'cache-and-network',
   })
 
-  const apps = data?.apps as AppType[]
+  const apps = (data?.apps as AppType[]) ?? []
+
+  if (!organisation) return <></>
 
   return (
     <div
-      className="w-full p-8 text-black dark:text-white flex flex-col gap-16 overflow-y-auto"
+      className="w-full p-8 text-black dark:text-white flex flex-col gap-6 overflow-y-auto"
       style={{ height: 'calc(100vh - 64px)' }}
     >
-      <h1 className="text-3xl font-bold capitalize col-span-4">Apps</h1>
+      <div className="space-y-1">
+        <h1 className="text-3xl font-bold capitalize col-span-4">Apps</h1>
+        <p className="text-neutral-500">
+          All Apps that you have access to in the {organisation?.name} organisation
+        </p>
+      </div>
+
+      {userCanCreateApps && organisation && (
+        <NewAppDialog
+          organisation={organisation}
+          appCount={apps?.length}
+          ref={dialogRef}
+          showButton={false}
+        />
+      )}
       {userCanViewApps ? (
-        <div className="grid grid-cols-1 xl:grid-cols-2 1080p:grid-cols-3 gap-8">
-          {apps?.map((app) => (
-            <Link href={`/${params.team}/apps/${app.id}`} key={app.id}>
-              <AppCard app={app} />
-            </Link>
-          ))}
-          {organisation && apps && userCanCreateApps && (
-            <div className="bg-zinc-100 dark:bg-neutral-800 opacity-80 hover:opacity-100 transition-opacity ease-in-out shadow-lg rounded-xl flex flex-col gap-y-20 min-h-60">
-              <NewAppDialog organisation={organisation} appCount={apps.length} ref={dialogRef} />
+        <>
+          {apps?.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                {organisation && apps && userCanCreateApps && (
+                  <Button variant="primary" onClick={openNewAppDialog}>
+                    <FaPlus />
+                    Create an App{' '}
+                  </Button>
+                )}
+              </div>
             </div>
           )}
-          {apps?.length === 0 && !userCanCreateApps && (
+
+          <AppsView loading={loading} apps={apps} />
+
+          {!loading && apps?.length === 0 && userCanCreateApps && (
             <div className="xl:col-span-2 1080p:col-span-3 justify-center p-20">
               <EmptyState
                 title="No apps"
-                subtitle="You don't have access to any apps yet. Contact an Admin to get access."
+                subtitle="You don't have access to any apps yet. Create an App to get started."
                 graphic={
                   <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                     <FaBoxOpen />
                   </div>
                 }
               >
-                <></>
+                <>
+                  <Button variant="primary" onClick={openNewAppDialog}>
+                    <FaPlus />
+                    Create an App{' '}
+                  </Button>
+                </>
               </EmptyState>
             </div>
           )}
-        </div>
+        </>
       ) : (
         <EmptyState
           title="Access restricted"
@@ -89,11 +116,6 @@ export default function AppsHome({ params }: { params: { team: string } }) {
         >
           <></>
         </EmptyState>
-      )}
-      {loading && (
-        <div className="mx-auto my-auto">
-          <Spinner size="xl" />
-        </div>
       )}
     </div>
   )
