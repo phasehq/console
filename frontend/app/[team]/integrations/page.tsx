@@ -275,7 +275,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
 
                     {apps && (
                       <div>
-                        <AppsView apps={apps} tabToLink={'syncing'} />
+                        <AppsView apps={apps} loading={loading} tabToLink={'syncing'} />
                       </div>
                     )}
                   </div>

@@ -38,7 +38,7 @@ const AppCardSkeleton = ({ variant }: AppCardSkeletonProps) => {
       className={clsx(
         'flex w-full',
         variant === 'normal'
-          ? 'flex-col gap-20 justify-between rounded-xl ring-1 ring-neutral-500/40 p-3'
+          ? 'flex-col gap-24 justify-between rounded-xl ring-1 ring-neutral-500/40 p-3'
           : 'gap-6 lg:gap-10 grid grid-cols-2 lg:grid-cols-7 justify-stretch items-center py-4'
       )}
     >
