@@ -578,11 +578,10 @@ class AppType(DjangoObjectType):
         app_updated_at = self.updated_at
 
         # Get the latest updated_at from environments
-        latest_environment_updated_at = (
-            max(env.updated_at for env in self.environments.all())
-            if self.environments
-            else None
-        )
+        environments = self.environments.all()
+        latest_environment_updated_at = None
+        if environments.exists():
+            latest_environment_updated_at = max(env.updated_at for env in environments)
 
         # Return the most recent updated_at between app and its environments
         return (
