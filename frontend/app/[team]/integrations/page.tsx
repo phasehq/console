@@ -225,7 +225,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
                     : ' border-transparent cursor-pointer'
                 )}
               >
-                Credentials
+                Third-party credentials
               </div>
             )}
           </Tab>
@@ -309,7 +309,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
               <div className="space-y-4">
                 <div className="border-b border-neutral-500/20 pb-4">
                   <h2 className="text-black dark:text-white text-xl font-medium">
-                    Integration credentials
+                    Third-party integration credentials
                   </h2>
                   <p className="text-neutral-500">
                     Manage stored credentials for third party services
