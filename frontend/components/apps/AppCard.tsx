@@ -134,7 +134,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
       <div
         className={clsx(
           variant === 'compact'
-            ? 'col-span-5 hidden lg:grid grid-cols-5 justify-stretch'
+            ? 'col-span-5 hidden lg:grid grid-cols-5 justify-stretch gap-4'
             : 'flex items-center justify-between gap-2 w-full'
         )}
       >
