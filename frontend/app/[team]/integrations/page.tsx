@@ -199,7 +199,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
         <p className="text-neutral-500">Manage integrations with third party services</p>
       </div>
 
-      <Tab.Group>
+      <Tab.Group defaultIndex={providerFromUrl ? 1 : 0}>
         <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
           <Tab as={Fragment}>
             {({ selected }) => (
