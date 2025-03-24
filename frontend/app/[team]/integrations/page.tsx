@@ -1,7 +1,7 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { Fragment, useContext, useState, useEffect } from 'react'
+import { Fragment, useContext, useState, useEffect, useMemo } from 'react'
 import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import { useQuery } from '@apollo/client'
@@ -54,14 +54,14 @@ export default function Integrations({ params }: { params: { team: string } }) {
   const searchParams = useSearchParams()
   const providerFromUrl = searchParams?.get('provider')
   const { data: providersData } = useQuery(GetProviderList)
-  const providers: ProviderType[] = providersData?.providers ?? []
+  const providers = useMemo(() => providersData?.providers ?? [], [providersData?.providers])
   const [provider, setProvider] = useState<ProviderType | null>(null)
 
   // Simplified useEffect that only handles provider param
   useEffect(() => {
     if (providerFromUrl && providers.length > 0) {
       const matchingProvider = providers.find(
-        (p) => p.id.toLowerCase() === providerFromUrl.toLowerCase()
+        (p: ProviderType) => p.id.toLowerCase() === providerFromUrl.toLowerCase()
       )
       if (matchingProvider) {
         setProvider(matchingProvider)
@@ -348,7 +348,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
                       {noCredentials ? (
                         <div className="">
                           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
-                            {providers.map((provider) => (
+                            {providers.map((provider: ProviderType) => (
                               <button
                                 key={provider.id}
                                 type="button"
