@@ -418,7 +418,7 @@ export const AppSecretRow = ({
                   {index + 1}
                 </span>
               </button>
-              <div className="relative group flex-1 min-w-40 md:min-w-60">
+              <div className="relative group flex-1 min-w-60 md:min-w-80">
                 <input
                   ref={keyInputRef}
                   disabled={stagedForDelete || !userCanUpdateSecrets}
