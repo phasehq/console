@@ -205,6 +205,7 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
+  updatedAt: DateTime!
   sseEnabled: Boolean!
   serviceAccounts: [ServiceAccountType!]!
   environments: [EnvironmentType]!

@@ -27,7 +27,7 @@ import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
 
 const INPUT_BASE_STYLE =
-  'w-full font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture'
+  'w-full flex-1  font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
 
 const EnvSecret = ({
   appSecretId,
@@ -63,7 +63,9 @@ const EnvSecret = ({
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
   const isEmptyValue = clientEnvSecret.secret?.value === ''
 
-  const [showValue, setShowValue] = useState<boolean>(valueIsNew || !serverEnvSecret || isEmptyValue || false)
+  const [showValue, setShowValue] = useState<boolean>(
+    valueIsNew || !serverEnvSecret || isEmptyValue || false
+  )
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
@@ -104,9 +106,9 @@ const EnvSecret = ({
     deleteEnvValue(appSecretId, clientEnvSecret!.env as EnvironmentType)
 
   const handleAddValue = () => {
-    addEnvValue(appSecretId, clientEnvSecret.env as EnvironmentType);
+    addEnvValue(appSecretId, clientEnvSecret.env as EnvironmentType)
     // Ensure the value is visible after adding it
-    setShowValue(true);
+    setShowValue(true)
   }
 
   const valueIsModified = () => {
@@ -416,14 +418,14 @@ export const AppSecretRow = ({
                   {index + 1}
                 </span>
               </button>
-              <div className="relative w-full group">
+              <div className="relative group flex-1 min-w-60 md:min-w-80">
                 <input
                   ref={keyInputRef}
                   disabled={stagedForDelete || !userCanUpdateSecrets}
                   className={clsx(
                     INPUT_BASE_STYLE,
                     rowInputColor(),
-                    'rounded-sm',
+                    'rounded-sm ',
                     keyIsBlank
                       ? 'ring-1 ring-inset ring-red-500'
                       : keyIsDuplicate
@@ -435,6 +437,7 @@ export const AppSecretRow = ({
                   onClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
                 />
+
                 <div className="absolute inset-y-0 right-2 flex gap-1 items-center opacity-0 group-hover:opacity-100 transition ease">
                   {userCanDeleteSecrets && (
                     <Button
@@ -454,10 +457,13 @@ export const AppSecretRow = ({
             {envs.map((env) => (
               <td
                 key={env.env.id}
-                className={'px-6 whitespace-nowrap group cursor-pointer'}
+                className="px-6 whitespace-nowrap group cursor-pointer"
                 onClick={toggleAccordion}
               >
-                <div className="flex items-center justify-center" title={tooltipText(env)}>
+                <div
+                  className="flex items-center justify-center text-sm xl:text-base"
+                  title={tooltipText(env)}
+                >
                   {env.secret !== null ? (
                     env.secret.value.length === 0 ? (
                       <FaCircle className="text-neutral-500 shrink-0" />

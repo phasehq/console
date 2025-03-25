@@ -62,7 +62,7 @@ export function Button(buttonProps: ButtonProps) {
   const Component = 'button'
 
   const computedClassName = clsx(
-    'inline-flex gap-1 justify-center items-center overflow-hidden text-sm font-medium transition-all ease-in-out',
+    'inline-flex gap-1 justify-center items-center overflow-hidden text-sm font-medium transition-all ease-in-out whitespace-nowrap',
     variantStyles[variant],
     classString,
     (buttonProps.disabled || isLoading) && 'opacity-60 pointer-events-none'
