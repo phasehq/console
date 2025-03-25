@@ -1,8 +1,8 @@
-import { useContext } from 'react'
+import { useContext, useState } from 'react'
 import { useQuery } from '@apollo/client'
 import { Menu, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
-import { FaPlus, FaArrowRight } from 'react-icons/fa'
+import { FaPlus, FaArrowRight, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import Link from 'next/link'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -10,6 +10,8 @@ import { GetApps } from '@/graphql/queries/getApps.gql'
 import Spinner from '@/components/common/Spinner'
 import { AppType, Query } from '@/apollo/graphql'
 import clsx from 'clsx'
+import { EmptyState } from '@/components/common/EmptyState'
+import { MdSearchOff } from 'react-icons/md'
 
 interface AddAppButtonProps {
   teamSlug: string
@@ -19,6 +21,8 @@ interface AddAppButtonProps {
 
 export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButtonProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const [searchQuery, setSearchQuery] = useState('')
 
   const { data, loading } = useQuery<Query>(GetApps, {
     variables: { organisationId: organisation?.id },
@@ -32,17 +36,20 @@ export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButton
 
   const apps = data?.apps?.filter((app): app is AppType => app !== null) || []
 
+  const filteredApps =
+    searchQuery === ''
+      ? apps
+      : apps.filter((app: AppType) => app?.name?.toLowerCase().includes(searchQuery))
+
   return (
     <Menu as="div" className="relative group">
-      {() => (
+      {({ open }) => (
         <>
           <Menu.Button as={Fragment}>
-            <Button variant="primary">
-              <FaPlus />
-              Add App
+            <Button variant="primary" title="Create a new sync">
+              <FaPlus /> Add App
             </Button>
           </Menu.Button>
-
           <Transition
             enter="transition duration-100 ease-out"
             enterFrom="transform scale-95 opacity-0"
@@ -51,32 +58,67 @@ export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButton
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className={clsx(
-              'absolute z-10  mt-2',
-              alignMenuRight ? 'left-0 origin-top-left' : 'right-0 origin-top-right'
-            )}
+            className="absolute z-10 right-0 origin-bottom-right mt-2"
           >
             <Menu.Items as={Fragment}>
-              <div className="flex flex-col w-64 divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                {apps.length > 0 ? (
-                  apps.map((app) => (
+              <div className="flex flex-col w-min divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                <div>
+                  <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
+                    <div className="">
+                      <FaSearch className="text-neutral-500" />
+                    </div>
+                    <input
+                      placeholder="Search"
+                      className="custom bg-zinc-100 dark:bg-zinc-800"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <FaTimesCircle
+                      className={clsx(
+                        'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                        searchQuery ? 'opacity-100' : 'opacity-0'
+                      )}
+                      role="button"
+                      onClick={() => setSearchQuery('')}
+                    />
+                  </div>
+                </div>
+
+                <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20">
+                  {filteredApps.map((app: AppType) => (
                     <Menu.Item key={app.id} as={Fragment}>
                       {({ active }) => (
                         <Link
                           href={`/${teamSlug}/apps/${app.id}/access/service-accounts?new=${serviceAccountId}`}
-                          className={`text-zinc-900 dark:text-zinc-100 px-4 py-2 flex items-center justify-between gap-4 rounded-md ${
-                            active ? 'bg-zinc-300 dark:bg-zinc-700' : ''
-                          }`}
+                          className={clsx(
+                            ' px-4 py-2 flex items-center justify-between gap-4 transition ease',
+                            active
+                              ? 'bg-zinc-200 dark:bg-zinc-700 text-emerald-500'
+                              : 'text-zinc-900 dark:text-zinc-100'
+                          )}
                         >
-                          <div className="text-lg whitespace-nowrap truncate">{app.name}</div>
-                          <FaArrowRight className="text-neutral-500 flex-shrink-0" />
+                          <div className="text-sm whitespace-nowrap">{app.name}</div>
+                          <FaArrowRight
+                            className={clsx(active ? 'text-emerald-500' : 'text-neutral-500')}
+                          />
                         </Link>
                       )}
                     </Menu.Item>
-                  ))
-                ) : (
-                  <div className="px-4 py-2 text-sm text-neutral-500">No apps available</div>
-                )}
+                  ))}
+                  {filteredApps.length === 0 && searchQuery && (
+                    <EmptyState
+                      title={`No results for "${searchQuery}"`}
+                      subtitle="Try adjusting your search term"
+                      graphic={
+                        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                          <MdSearchOff />
+                        </div>
+                      }
+                    >
+                      <></>
+                    </EmptyState>
+                  )}
+                </div>
               </div>
             </Menu.Items>
           </Transition>
