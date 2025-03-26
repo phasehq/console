@@ -43,12 +43,16 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
-    await renameEnvironment({
+    const { data } = await renameEnvironment({
       variables: { environmentId: props.environment?.id, name },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
       ],
     })
+
+    if (!data) {
+      return
+    }
     toast.success('Environment renamed!')
   }
 
