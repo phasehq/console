@@ -46,6 +46,7 @@ const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) 
 export const graphQlClient = new ApolloClient({
   link: from([errorLink, httpLink]),
   cache: new InMemoryCache(),
+  connectToDevTools: false,
   defaultOptions: {
     watchQuery: {
       skipPollAttempt: () => document.hidden
