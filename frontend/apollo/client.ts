@@ -38,7 +38,7 @@ const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) 
   // Log network error
   if (networkError) {
     console.log(`[Network error]: ${networkError}`)
-    // Client-side logout when recieving a 403 from the backend
+    // Client-side logout when receiving a 403 from the backend
     if (networkError.message.includes('403')) handleSignout()
   }
 })
