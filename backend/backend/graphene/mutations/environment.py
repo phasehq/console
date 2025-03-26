@@ -1,3 +1,4 @@
+import re
 from django.utils import timezone
 from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
@@ -10,7 +11,6 @@ from api.utils.access.permissions import (
 )
 from api.utils.audit_logging import log_secret_event
 from api.utils.secrets import create_environment_folder_structure, normalize_path_string
-
 from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
 from graphql import GraphQLError
@@ -115,6 +115,11 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 "You don't have permission to create environments in this organisation"
             )
 
+        if not re.match(r"^[a-zA-Z0-9\-_]+$", environment_data.name):
+            raise GraphQLError(
+                "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores."
+            )
+
         if Environment.objects.filter(
             app=app, name__iexact=environment_data.name
         ).exists():
@@ -207,6 +212,11 @@ class RenameEnvironmentMutation(graphene.Mutation):
         if not can_use_custom_envs(org):
             raise GraphQLError(
                 "Your Organisation doesn't have access to Custom Environments"
+            )
+
+        if not re.match(r"^[a-zA-Z0-9\-_]+$", name):
+            raise GraphQLError(
+                "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores."
             )
 
         if (

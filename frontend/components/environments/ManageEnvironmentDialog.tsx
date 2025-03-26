@@ -22,6 +22,7 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { userHasPermission } from '@/utils/access/permissions'
+import { sanitizeInput } from '@/utils/environment'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -65,7 +66,7 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
             : "You don't have the permissions required to rename this Environment"}
       </Alert>
       <Input
-        value={name}
+        value={sanitizeInput(name)}
         setValue={setName}
         label="Environment name"
         required

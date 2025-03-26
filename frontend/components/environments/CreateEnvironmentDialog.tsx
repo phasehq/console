@@ -14,6 +14,7 @@ import { toast } from 'react-toastify'
 import Spinner from '../common/Spinner'
 import { Alert } from '../common/Alert'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
+import { sanitizeInput } from '@/utils/environment'
 
 export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -66,7 +67,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       appData.sseEnabled ? appData.serverPublicKey : null
     )
 
-    await createEnvironment({
+    const { data } = await createEnvironment({
       variables: {
         envInput: newEnvData.createEnvPayload,
         adminKeys: newEnvData.adminKeysPayload,
@@ -76,14 +77,16 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       refetchQueries: [{ query: GetAppEnvironments, variables: { appId: props.appId } }],
     })
 
+    if (!data) {
+      return
+    }
+
     setName('')
 
     toast.success('Environment created!')
 
     closeModal()
   }
-
-  const sanitizeInput = (value: string) => value.replace(/[^a-zA-Z0-9]/g, '')
 
   const closeModal = () => {
     if (dialogRef.current) {
