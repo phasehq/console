@@ -55,7 +55,9 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const [createEnvironment, { loading }] = useMutation(CreateEnv)
 
   const [name, setName] = useState('')
+
   const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const inputRef = useRef(null)
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
@@ -125,6 +127,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
           <FaPlus /> New Environment
         </div>
       }
+      initialFocus={inputRef}
     >
       <form className="space-y-4 py-4" onSubmit={handleSubmit}>
         <div>
@@ -142,7 +145,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
             label="Environment name"
             required
             maxLength={32}
-            data-autofocus
+            ref={inputRef}
           />
           <p className="text-xs text-neutral-500">
             Use up to 32 characters. Only letters, numbers, hyphens and underscores allowed.

@@ -69,7 +69,7 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
             ? 'Upgrade to Pro to rename Environments'
             : "You don't have the permissions required to rename this Environment"}
       </Alert>
-      
+
       <div className="space-y-2">
         <Input
           value={sanitizeInput(name)}
@@ -77,7 +77,6 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
           label="Environment name"
           required
           maxLength={32}
-          data-autofocus
           disabled={!allowRename}
         />
         {allowRename && (
@@ -86,7 +85,7 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
           </p>
         )}
       </div>
-      
+
       {allowRename && (
         <div className="flex justify-end">
           <Button type="submit" variant="primary" disabled={name === props.environment.name}>
