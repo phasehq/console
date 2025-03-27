@@ -135,14 +135,19 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
           All Organisation Admins will have accesss to this Environment.
         </Alert>
 
-        <Input
-          value={sanitizeInput(name)}
-          setValue={setName}
-          label="Environment name"
-          required
-          maxLength={32}
-          data-autofocus
-        />
+        <div className="space-y-2">
+          <Input
+            value={sanitizeInput(name)}
+            setValue={setName}
+            label="Environment name"
+            required
+            maxLength={32}
+            data-autofocus
+          />
+          <p className="text-xs text-neutral-500">
+            Use up to 32 characters. Only letters, numbers, hyphens and underscores allowed.
+          </p>
+        </div>
 
         <div className="flex justify-end">
           <Button type="submit" variant="primary" isLoading={loading}>
