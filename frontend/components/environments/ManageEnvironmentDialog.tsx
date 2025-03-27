@@ -74,6 +74,8 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
         setValue={setName}
         label="Environment name"
         required
+        maxLength={32}
+        data-autofocus
         disabled={!allowRename}
       />
       {allowRename && (
