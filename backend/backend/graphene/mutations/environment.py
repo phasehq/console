@@ -115,9 +115,9 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 "You don't have permission to create environments in this organisation"
             )
 
-        if not re.match(r"^[a-zA-Z0-9\-_]+$", environment_data.name):
+        if not re.match(r"^[a-zA-Z0-9\-_]{1,32}$", environment_data.name):
             raise GraphQLError(
-                "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores."
+                "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
             )
 
         if Environment.objects.filter(
@@ -214,9 +214,9 @@ class RenameEnvironmentMutation(graphene.Mutation):
                 "Your Organisation doesn't have access to Custom Environments"
             )
 
-        if not re.match(r"^[a-zA-Z0-9\-_]+$", name):
+        if not re.match(r"^[a-zA-Z0-9\-_]{1,32}$", name):
             raise GraphQLError(
-                "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores."
+                "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
             )
 
         if (
