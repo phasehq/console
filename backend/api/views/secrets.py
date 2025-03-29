@@ -89,6 +89,7 @@ class E2EESecretsView(APIView):
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
+        # Filter by key
         try:
             key_digest = request.headers["keydigest"]
             if key_digest:
@@ -96,11 +97,26 @@ class E2EESecretsView(APIView):
         except:
             pass
 
+        # Filter by path
         try:
             path = request.headers["path"]
             if path:
                 path = normalize_path_string(path)
                 secrets_filter["path"] = path
+        except:
+            pass
+
+        # Filter by tags
+        try:
+            tag_names = request.headers["tags"]
+            if tag_names:
+                tag_list = tag_names.split(",")
+                # Fetch all matching tags for the given organization
+                tags = SecretTag.objects.filter(
+                    organisation=env.app.organisation, name__in=tag_list
+                )
+                # Filter secrets based on these tags
+                secrets_filter["tags__in"] = tags
         except:
             pass
 
@@ -393,6 +409,17 @@ class PublicSecretsView(APIView):
         if path:
             path = normalize_path_string(path)
             secrets_filter["path"] = path
+
+        # Filter by tags
+        tag_names = request.GET.get("tags")
+        if tag_names:
+            tag_list = tag_names.split(",")
+            # Fetch all matching tags for the given organization
+            tags = SecretTag.objects.filter(
+                organisation=env.app.organisation, name__in=tag_list
+            )
+            # Filter secrets based on these tags
+            secrets_filter["tags__in"] = tags
 
         secrets = Secret.objects.filter(**secrets_filter)
 
