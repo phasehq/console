@@ -135,7 +135,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
         </div>
 
         <Alert variant="info" icon={true} size="sm">
-          All Organisation Admins will have accesss to this Environment.
+          All Organisation Admins will have access to this Environment.
         </Alert>
 
         <div className="space-y-2">
