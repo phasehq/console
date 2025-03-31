@@ -95,22 +95,40 @@ def create_environment_folder_structure(complete_path, environment_id):
                 )
 
             try:
-                # Try to get or create the folder
-                folder, _ = SecretFolder.objects.get_or_create(
-                    name=segment,
-                    environment=environment,
-                    folder=current_folder,
-                    path=current_path,
-                )
+                # Try to get or create the folder first using get to handle duplicates
+                try:
+                    folder = SecretFolder.objects.get(
+                        name=segment,
+                        environment=environment,
+                        folder=current_folder,
+                        path=current_path,
+                    )
+                except SecretFolder.DoesNotExist:
+                    # If it doesn't exist, try to create it
+                    try:
+                        folder = SecretFolder.objects.create(
+                            name=segment,
+                            environment=environment,
+                            folder=current_folder,
+                            path=current_path,
+                        )
+                    except:
+                        # If creation failed due to race condition, get the first matching folder
+                        folder = SecretFolder.objects.filter(
+                            name=segment,
+                            environment=environment,
+                            folder=current_folder,
+                            path=current_path,
+                        ).first()
             except MultipleObjectsReturned:
-                # If MultipleObjectsReturned, it means the folder was just created concurrently.
-                # Simply get the existing folder.
-                folder = SecretFolder.objects.get(
+                # If MultipleObjectsReturned, it means the folder was created concurrently.
+                # Simply get the first matching folder and continue
+                folder = SecretFolder.objects.filter(
                     name=segment,
                     environment=environment,
                     folder=current_folder,
                     path=current_path,
-                )
+                ).first()
 
             # Update the current_folder to the folder that was just created or found
             current_folder = folder
