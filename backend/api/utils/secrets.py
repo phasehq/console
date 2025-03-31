@@ -76,63 +76,52 @@ def create_environment_folder_structure(complete_path, environment_id):
     # Ensure the path_segments list does not include empty segments caused by leading or trailing slashes
     path_segments = [segment for segment in complete_path.split("/") if segment]
 
-    current_folder = None
+    if not path_segments:
+        # If there are no segments, return None as there's no folder to create
+        return None
+
     # The initial current_path should correctly represent the root
     current_path = "/"
-
-    environment = Environment.objects.get(id=environment_id)
-
+    current_folder = None
+    
+    # Lock the environment to prevent concurrent operations on the same environment
     with transaction.atomic():
+        # Get environment with lock to prevent concurrent operations
+        environment = Environment.objects.select_for_update().get(id=environment_id)
+        
+        # Process each path segment
         for i, segment in enumerate(path_segments):
-            # For each folder except the first, the path includes its parent's name
-            # For the first segment, current_path should remain "/" as its location
-
+            # For each folder except the first, update the path
             if i > 0:
                 current_path += (
                     f"/{path_segments[i-1]}"
                     if current_path != "/"
                     else path_segments[i - 1]
                 )
-
-            try:
-                # Try to get or create the folder first using get to handle duplicates
-                try:
-                    folder = SecretFolder.objects.get(
-                        name=segment,
-                        environment=environment,
-                        folder=current_folder,
-                        path=current_path,
-                    )
-                except SecretFolder.DoesNotExist:
-                    # If it doesn't exist, try to create it
-                    try:
-                        folder = SecretFolder.objects.create(
-                            name=segment,
-                            environment=environment,
-                            folder=current_folder,
-                            path=current_path,
-                        )
-                    except:
-                        # If creation failed due to race condition, get the first matching folder
-                        folder = SecretFolder.objects.filter(
-                            name=segment,
-                            environment=environment,
-                            folder=current_folder,
-                            path=current_path,
-                        ).first()
-            except MultipleObjectsReturned:
-                # If MultipleObjectsReturned, it means the folder was created concurrently.
-                # Simply get the first matching folder and continue
-                folder = SecretFolder.objects.filter(
+            
+            # Use select_for_update() to lock rows - this prevents concurrent operations
+            existing_folders = SecretFolder.objects.select_for_update().filter(
+                name=segment,
+                environment=environment,
+                folder=current_folder,
+                path=current_path
+            )
+            
+            if existing_folders.exists():
+                # If folder exists, get it
+                folder = existing_folders.first()
+            else:
+                # If folder doesn't exist, create it under the protection of the lock
+                folder = SecretFolder.objects.create(
                     name=segment,
                     environment=environment,
                     folder=current_folder,
-                    path=current_path,
-                ).first()
-
-            # Update the current_folder to the folder that was just created or found
+                    path=current_path
+                )
+            
+            # Update current_folder to the retrieved or created folder
             current_folder = folder
-
+    
     return current_folder
 
 
