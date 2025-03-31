@@ -210,6 +210,120 @@ def decrypt_secret_value(secret):
         secret (Secret): The secret instance to decrypt.
 
     Returns:
+        value (str): Decrypted secret value, with all local and cross env/app references replaced inline.
+    """
+    Secret = apps.get_model("api", "Secret")
+    Environment = apps.get_model("api", "Environment")
+    ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+
+    # Regex patterns to detect references
+    cross_app_env_pattern = re.compile(r"\$\{(.+?)::(.+?)\.(.+?)\}")
+    local_ref_pattern = re.compile(r"\$\{([^.]+?)\}")
+
+    pk, sk = get_server_keypair()
+
+    server_env_key = ServerEnvironmentKey.objects.get(
+        environment_id=secret.environment.id
+    )
+
+    app = server_env_key.environment.app
+
+    # Decrypt environment seed and salt
+    env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
+    env_salt = decrypt_asymmetric(server_env_key.wrapped_salt, sk.hex(), pk.hex())
+
+    # Compute environment keypair
+    env_pubkey, env_privkey = env_keypair(env_seed)
+
+    # Decrypt secret value
+    value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
+
+    # Resolve cross-app and cross-env references
+    cross_app_env_matches = re.findall(cross_app_env_pattern, value)
+
+    for ref_app, ref_env, ref_key in cross_app_env_matches:
+        try:
+            path, key_name = decompose_path_and_key(ref_key)
+
+            referenced_environment = Environment.objects.get(
+                name__iexact=ref_env, app__name__iexact=ref_app
+            )
+            referenced_environment_key = ServerEnvironmentKey.objects.get(
+                environment_id=referenced_environment.id
+            )
+            seed = decrypt_asymmetric(
+                referenced_environment_key.wrapped_seed, sk.hex(), pk.hex()
+            )
+            salt = decrypt_asymmetric(
+                referenced_environment_key.wrapped_salt, sk.hex(), pk.hex()
+            )
+
+            key_digest = blake2b_digest(key_name, salt)
+
+            referenced_env_pubkey, referenced_env_privkey = env_keypair(seed)
+
+            referenced_secret = Secret.objects.get(
+                environment=referenced_environment,
+                path=path,
+                key_digest=key_digest,
+                deleted_at=None,
+            )
+
+            referenced_secret_value = decrypt_asymmetric(
+                referenced_secret.value,
+                referenced_env_privkey,
+                referenced_env_pubkey,
+            )
+
+            value = value.replace(
+                f"${{{ref_app}::{ref_env}.{ref_key}}}", referenced_secret_value
+            )
+        except:
+            print(
+                f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
+            )
+            pass
+
+    # Resolve local references
+    local_ref_matches = re.findall(local_ref_pattern, value)
+
+    for ref_key in local_ref_matches:
+        try:
+            path, key_name = decompose_path_and_key(ref_key)
+
+            key_digest = blake2b_digest(key_name, env_salt)
+
+            referenced_secret = Secret.objects.get(
+                environment=secret.environment,
+                path=path,
+                key_digest=key_digest,
+                deleted_at=None,
+            )
+
+            referenced_secret_value = decrypt_asymmetric(
+                referenced_secret.value,
+                env_privkey,
+                env_pubkey,
+            )
+
+            value = value.replace(
+                f"${{{ref_key}}}",
+                referenced_secret_value,
+            )
+        except:
+            print(
+                f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
+            )
+            pass
+
+    return value
+    """
+    Decrypts the given secret's value and resolves all references.
+
+    Args:
+        secret (Secret): The secret instance to decrypt.
+
+    Returns:
         value (str): Decrypted secret value, with all local and cross env references replace inline.
     """
     Secret = apps.get_model("api", "Secret")
