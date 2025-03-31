@@ -1,6 +1,7 @@
 import re
 from django.db import transaction
 from django.apps import apps
+from django.core.exceptions import MultipleObjectsReturned
 
 # from api.models import SecretFolder, Secret, ServerEnvironmentKey
 
@@ -93,13 +94,23 @@ def create_environment_folder_structure(complete_path, environment_id):
                     else path_segments[i - 1]
                 )
 
-            # Check if the folder already exists at the current path and with the given name
-            folder, _ = SecretFolder.objects.get_or_create(
-                name=segment,
-                environment=environment,
-                folder=current_folder,
-                path=current_path,
-            )
+            try:
+                # Try to get or create the folder
+                folder, _ = SecretFolder.objects.get_or_create(
+                    name=segment,
+                    environment=environment,
+                    folder=current_folder,
+                    path=current_path,
+                )
+            except MultipleObjectsReturned:
+                # If MultipleObjectsReturned, it means the folder was just created concurrently.
+                # Simply get the existing folder.
+                folder = SecretFolder.objects.get(
+                    name=segment,
+                    environment=environment,
+                    folder=current_folder,
+                    path=current_path,
+                )
 
             # Update the current_folder to the folder that was just created or found
             current_folder = folder
