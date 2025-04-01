@@ -49,7 +49,7 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
           >
             <td
               className={clsx(
-                'px-6 py-4 border-l-4',
+                'px-6 py-4 border-l',
                 open ? 'border-l-emerald-500 ' : 'border-l-transparent'
               )}
             >
@@ -87,13 +87,14 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
           >
-            <td colSpan={6}>
-              <Disclosure.Panel
-                className={clsx(
-                  'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20 text-black dark:text-white',
-                  open ? 'border-b border-l-2 border-l-emerald-500 border-r shadow-xl' : ''
-                )}
-              >
+            <td
+              colSpan={6}
+              className={clsx(
+                'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20 text-black dark:text-white border-l',
+                open ? 'border-b  border-l-emerald-500 border-r shadow-xl' : 'border-l-transparent'
+              )}
+            >
+              <Disclosure.Panel>
                 <div className="text-sm font-mono border-b border-dashed border-neutral-500/20">
                   <span className="text-neutral-500">Event ID: </span>
                   <span className="font-semibold">{event.id}</span>
