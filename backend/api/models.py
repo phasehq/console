@@ -528,7 +528,13 @@ class SecretFolder(models.Model):
             models.UniqueConstraint(
                 fields=["environment", "folder", "name", "path"],
                 name="unique_secret_folder",
-            )
+                condition=models.Q(folder__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=["environment", "name", "path"],
+                name="unique_root_folder",
+                condition=models.Q(folder__isnull=True),
+            ),
         ]
 
 
