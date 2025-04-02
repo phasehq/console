@@ -8,47 +8,49 @@ def deduplicate_folders(apps, schema_editor):
     SecretFolder = apps.get_model("api", "SecretFolder")
     Secret = apps.get_model("api", "Secret")
 
-    # Step 1: Find duplicate root folders (folder IS NULL) grouped by (environment_id, name, path)
-    # Step 1: Find duplicate folders at all levels (root and subfolders)
-    duplicates = (
-        SecretFolder.objects.values(
-            "environment_id", "folder_id", "name", "path"
-        )  # Include subfolder grouping
-        .annotate(count=Count("id"))
-        .filter(count__gt=1)  # More than one exists
-    )
-
-    for duplicate in duplicates:
-        env_id = duplicate["environment_id"]
-        folder_id = duplicate["folder_id"]  # This could be NULL for root folders
-        name = duplicate["name"]
-        path = duplicate["path"]
-
-        # Step 2: Get all duplicate folder instances (sorted deterministically)
-        folders = list(
-            SecretFolder.objects.filter(
-                environment_id=env_id, folder_id=folder_id, name=name, path=path
-            ).order_by(
-                "id"
-            )  # Ensure consistent selection
+    while True:  # Keep processing until no duplicates remain
+        duplicates = (
+            SecretFolder.objects.values("environment_id", "folder_id", "name", "path")
+            .annotate(count=Count("id"))
+            .filter(count__gt=1)  # More than one folder exists with the same attributes
         )
 
-        # Step 3: Pick one canonical folder
-        canonical_folder = folders[0]
-        duplicate_ids = [f.id for f in folders[1:]]  # All other duplicates
+        if not duplicates:  # If no duplicates left, we're done
+            break
 
-        # Step 4: Update `Secret` objects pointing to duplicate folders
-        Secret.objects.filter(folder_id__in=duplicate_ids).update(
-            folder=canonical_folder
-        )
+        for duplicate in duplicates:
+            env_id = duplicate["environment_id"]
+            folder_id = duplicate["folder_id"]  # Could be NULL for root folders
+            name = duplicate["name"]
+            path = duplicate["path"]
 
-        # Step 5: Update **subfolders** that reference duplicate folders
-        SecretFolder.objects.filter(folder_id__in=duplicate_ids).update(
-            folder=canonical_folder
-        )
+            # Get all duplicate folder instances, ensuring consistent ordering
+            folders = list(
+                SecretFolder.objects.filter(
+                    environment_id=env_id, folder_id=folder_id, name=name, path=path
+                ).order_by(
+                    "created_at", "id"
+                )  # Prefer older folders
+            )
 
-        # Step 6: Delete all but the canonical folder
-        SecretFolder.objects.filter(id__in=duplicate_ids).delete()
+            if len(folders) < 2:
+                continue  # Skip if no real duplicates
+
+            canonical_folder = folders[0]  # Pick the oldest as canonical
+            duplicate_ids = [f.id for f in folders[1:]]  # The rest are duplicates
+
+            # Update all Secrets pointing to duplicate folders
+            Secret.objects.filter(folder_id__in=duplicate_ids).update(
+                folder=canonical_folder
+            )
+
+            # Update subfolders that reference duplicate folders
+            SecretFolder.objects.filter(folder_id__in=duplicate_ids).update(
+                folder=canonical_folder
+            )
+
+            # Delete all but the canonical folder
+            SecretFolder.objects.filter(id__in=duplicate_ids).delete()
 
 
 class Migration(migrations.Migration):
