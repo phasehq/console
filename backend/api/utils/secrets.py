@@ -258,7 +258,7 @@ def decrypt_secret_value(secret, require_resolved_references=False):
             referenced_app = App.objects.get(name__iexact=ref_app, organisation=org)
 
             referenced_environment = Environment.objects.get(
-                name__iexact=ref_env, app_=referenced_app
+                name__iexact=ref_env, app=referenced_app
             )
             referenced_environment_key = ServerEnvironmentKey.objects.get(
                 environment_id=referenced_environment.id
