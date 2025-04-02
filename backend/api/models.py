@@ -524,7 +524,12 @@ class SecretFolder(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
-        unique_together = (("environment", "folder", "name", "path"),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["environment", "folder", "name", "path"],
+                name="unique_secret_folder",
+            )
+        ]
 
 
 class SecretTag(models.Model):
