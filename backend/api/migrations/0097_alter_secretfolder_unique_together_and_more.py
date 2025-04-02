@@ -6,16 +6,12 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0096_organisationmemberinvite_role'),
+        ("api", "0096_organisationmemberinvite_role"),
     ]
 
     operations = [
         migrations.AlterUniqueTogether(
-            name='secretfolder',
+            name="secretfolder",
             unique_together=set(),
-        ),
-        migrations.AddConstraint(
-            model_name='secretfolder',
-            constraint=models.UniqueConstraint(fields=('environment', 'folder', 'name', 'path'), name='unique_secret_folder'),
         ),
     ]
