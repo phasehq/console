@@ -9,37 +9,40 @@ def deduplicate_folders(apps, schema_editor):
     Secret = apps.get_model("api", "Secret")
 
     # Step 1: Find duplicate root folders (folder IS NULL) grouped by (environment_id, name, path)
+    # Step 1: Find duplicate folders at all levels (root and subfolders)
     duplicates = (
-        SecretFolder.objects.filter(folder__isnull=True)  # Only root folders
-        .values("environment_id", "name", "path")
+        SecretFolder.objects.values(
+            "environment_id", "folder_id", "name", "path"
+        )  # Include subfolder grouping
         .annotate(count=Count("id"))
         .filter(count__gt=1)  # More than one exists
     )
 
     for duplicate in duplicates:
         env_id = duplicate["environment_id"]
+        folder_id = duplicate["folder_id"]  # This could be NULL for root folders
         name = duplicate["name"]
         path = duplicate["path"]
 
-        # Step 2: Get all duplicate folder instances
+        # Step 2: Get all duplicate folder instances (sorted deterministically)
         folders = list(
             SecretFolder.objects.filter(
-                environment_id=env_id, name=name, path=path, folder__isnull=True
+                environment_id=env_id, folder_id=folder_id, name=name, path=path
             ).order_by(
                 "id"
-            )  # Ensure deterministic selection
+            )  # Ensure consistent selection
         )
 
-        # Step 3: Choose the first folder as the canonical one
+        # Step 3: Pick one canonical folder
         canonical_folder = folders[0]
         duplicate_ids = [f.id for f in folders[1:]]  # All other duplicates
 
-        # Step 4: Update Secrets pointing to duplicate folders
+        # Step 4: Update `Secret` objects pointing to duplicate folders
         Secret.objects.filter(folder_id__in=duplicate_ids).update(
             folder=canonical_folder
         )
 
-        # Step 5: Update Subfolders pointing to duplicate folders
+        # Step 5: Update **subfolders** that reference duplicate folders
         SecretFolder.objects.filter(folder_id__in=duplicate_ids).update(
             folder=canonical_folder
         )
