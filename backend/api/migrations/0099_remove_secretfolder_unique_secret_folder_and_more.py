@@ -10,10 +10,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveConstraint(
-            model_name="secretfolder",
-            name="unique_secret_folder",
-        ),
         migrations.AddConstraint(
             model_name="secretfolder",
             constraint=models.UniqueConstraint(
