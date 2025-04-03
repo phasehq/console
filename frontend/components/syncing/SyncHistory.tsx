@@ -20,7 +20,9 @@ const FormattedJSON = (props: { jsonData: string }) => {
   const jsonData = parseJSON(props.jsonData)
 
   // Format the JSON (or keep the original string if it's not valid JSON)
-  const formattedJSON = jsonData.message || jsonData.error || JSON.stringify(jsonData, null, 2)
+  const formattedJSON = jsonData
+    ? jsonData.message || jsonData.error || JSON.stringify(jsonData, null, 2)
+    : 'No detail available'
 
   return (
     <div className="overflow-auto py-4">
