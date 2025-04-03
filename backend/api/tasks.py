@@ -212,14 +212,10 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
         environment_sync.status = EnvironmentSync.FAILED
 
     finally:
-        sync_event.completed_at = timezone.now()
-        sync_event.save()
-
         environment_sync.last_sync = timezone.now()
         environment_sync.save()
-
-        if sync_event.status == EnvironmentSync.TIMED_OUT:
-            raise  # Re-raise the JobTimeoutException
+        sync_event.completed_at = timezone.now()
+        sync_event.save()
 
 
 @job("default", timeout=DEFAULT_TIMEOUT)
