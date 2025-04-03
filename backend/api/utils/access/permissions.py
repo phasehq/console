@@ -1,21 +1,12 @@
-from api.models import (
-    App,
-    Environment,
-    EnvironmentKey,
-    OrganisationMember,
-    ServiceAccount,
-)
 from api.utils.access.roles import default_roles
-
-# middlewares.py
-from django.http import JsonResponse
-from django.utils.deprecation import MiddlewareMixin
+from django.apps import apps
 
 
 admin_roles = ["Owner", "Admin"]
 
 
 def user_is_admin(user_id, org_id):
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
     member = OrganisationMember.objects.get(
         user_id=user_id, organisation_id=org_id, deleted_at=None
     )
@@ -23,12 +14,16 @@ def user_is_admin(user_id, org_id):
 
 
 def user_is_org_member(user_id, org_id):
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
     return OrganisationMember.objects.filter(
         user_id=user_id, organisation_id=org_id, deleted_at=None
     ).exists()
 
 
 def user_can_access_app(user_id, app_id):
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    App = apps.get_model("api", "App")
+
     app = App.objects.get(id=app_id)
     org_member = OrganisationMember.objects.get(
         user_id=user_id, organisation=app.organisation, deleted_at=None
@@ -37,6 +32,10 @@ def user_can_access_app(user_id, app_id):
 
 
 def user_can_access_environment(user_id, env_id):
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    Environment = apps.get_model("api", "Environment")
+    EnvironmentKey = apps.get_model("api", "EnvironmentKey")
+
     env = Environment.objects.get(id=env_id)
     org_member = OrganisationMember.objects.get(
         organisation=env.app.organisation, user_id=user_id, deleted_at=None
@@ -47,6 +46,10 @@ def user_can_access_environment(user_id, env_id):
 
 
 def service_account_can_access_environment(account_id, env_id):
+    Environment = apps.get_model("api", "Environment")
+    EnvironmentKey = apps.get_model("api", "EnvironmentKey")
+    ServiceAccount = apps.get_model("api", "ServiceAccount")
+
     env = Environment.objects.get(id=env_id)
     service_account = ServiceAccount.objects.get(
         organisation=env.app.organisation, id=account_id, deleted_at=None
@@ -57,6 +60,7 @@ def service_account_can_access_environment(account_id, env_id):
 
 
 def member_can_access_org(member_id, org_id):
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
     return OrganisationMember.objects.filter(
         id=member_id, organisation_id=org_id, deleted_at=None
     ).exists()
@@ -70,6 +74,8 @@ def user_has_permission(
     is_app_resource=False,
     is_service_account=False,
 ):
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+
     """Check if the user has the specified permission for a resource in an organization."""
     try:
         # Get the user's membership in the organization

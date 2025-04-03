@@ -2,12 +2,15 @@ import re
 from django.db import transaction
 from django.apps import apps
 import logging
-from django.core.exceptions import ObjectDoesNotExist
 from api.utils.crypto import (
     blake2b_digest,
     decrypt_asymmetric,
     env_keypair,
     get_server_keypair,
+)
+from api.utils.access.permissions import (
+    service_account_can_access_environment,
+    user_can_access_environment,
 )
 
 logger = logging.getLogger(__name__)
@@ -207,7 +210,7 @@ def decompose_path_and_key(composed_key):
     return normalize_path_string(path), key_name
 
 
-def decrypt_secret_value(secret, require_resolved_references=False):
+def decrypt_secret_value(secret, require_resolved_references=False, account=None):
     """
     Decrypts the given secret's value and resolves all references.
 
@@ -222,6 +225,7 @@ def decrypt_secret_value(secret, require_resolved_references=False):
     Environment = apps.get_model("api", "Environment")
     App = apps.get_model("api", "App")
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+    ServiceAccount = apps.get_model("api", "ServiceAccount")
 
     # Regex patterns to detect references
     cross_app_env_pattern = re.compile(r"\$\{(.+?)::(.+?)\.(.+?)\}")
@@ -260,6 +264,34 @@ def decrypt_secret_value(secret, require_resolved_references=False):
             referenced_environment = Environment.objects.get(
                 name__iexact=ref_env, app=referenced_app
             )
+
+            if account:
+                is_service_account = isinstance(account, ServiceAccount)
+
+                if is_service_account:
+                    if not service_account_can_access_environment(
+                        account.id, referenced_environment.id
+                    ):
+                        if require_resolved_references:
+                            raise SecretReferenceException(
+                                "This service account doesn't have permission to read secrets in one or more referenced environments."
+                            )
+                        else:
+
+                            return value
+
+                else:
+                    if not user_can_access_environment(
+                        account.userId, referenced_environment.id
+                    ):
+                        if require_resolved_references:
+                            raise SecretReferenceException(
+                                "You don't have permission to read secrets in one or more referenced environments."
+                            )
+                        else:
+
+                            return value
+
             referenced_environment_key = ServerEnvironmentKey.objects.get(
                 environment_id=referenced_environment.id
             )
