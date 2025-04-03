@@ -20,16 +20,11 @@ const FormattedJSON = (props: { jsonData: string }) => {
   const jsonData = parseJSON(props.jsonData)
 
   // Format the JSON (or keep the original string if it's not valid JSON)
-  const formattedJSON =
-    typeof jsonData === 'object'
-      ? jsonData.message
-        ? jsonData.message
-        : JSON.stringify(jsonData, null, 2)
-      : jsonData
+  const formattedJSON = jsonData.message || jsonData.error || JSON.stringify(jsonData, null, 2)
 
   return (
-    <div className="overflow-auto p-2">
-      <code className="block whitespace-pre-wrap break-words text-xs">
+    <div className="overflow-auto py-4">
+      <code className="block whitespace-pre-wrap break-words text-xs font-medium">
         <pre>{formattedJSON}</pre>
       </code>
     </div>
