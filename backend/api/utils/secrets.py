@@ -217,6 +217,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
     Args:
         secret (Secret): The secret instance to decrypt.
         require_resolved_references (bool): If True, raise an exception if any reference cannot be resolved.
+        account: (OrganisationMember | ServiceAccount): The account attempting to decrypt the secret value.
 
     Returns:
         value (str): Decrypted secret value, with all local and cross env/app references replaced inline.
