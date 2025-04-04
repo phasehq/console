@@ -336,7 +336,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             )
         except Secret.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced secret {ref_key} does not exist in {ref_app}::{ref_env} at the requested path"
+                f"Warning: The referenced secret does not exist in {ref_app}::{ref_env} at the requested path"
             )
         except Exception as ex:
             unresolved_references.append(str(ex))
