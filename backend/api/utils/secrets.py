@@ -329,7 +329,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             )
         except ServerEnvironmentKey.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced app does not have SSE enabled"
+                f"Warning: The referenced app {ref_app} does not have SSE (Server-Side Encryption) enabled."
             )
         except Environment.DoesNotExist:
             unresolved_references.append(
