@@ -325,19 +325,19 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             )
         except App.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced app {ref_app} does not exist"
+                f"Warning: The referenced app '{ref_app}' does not exist"
             )
         except ServerEnvironmentKey.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced app {ref_app} does not have SSE (Server-Side Encryption) enabled."
+                f"Warning: The referenced app '{ref_app}' does not have SSE (Server-Side Encryption) enabled."
             )
         except Environment.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced environment {ref_env} does not exist"
+                f"Warning: The referenced environment '{ref_env}' does not exist"
             )
         except Secret.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced secret does not exist in {ref_app}::{ref_env} at the requested path"
+                f"Warning: The referenced secret does not exist in '{ref_app}::{ref_env}' at the requested path"
             )
         except Exception as ex:
             unresolved_references.append(str(ex))
