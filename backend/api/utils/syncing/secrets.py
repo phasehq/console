@@ -47,7 +47,7 @@ def get_environment_secrets(environment, path):
     # Decrypt key and value for each secret
     for secret in secrets:
         key = decrypt_asymmetric(secret.key, env_privkey, env_pubkey)
-        value = decrypt_secret_value(secret)
+        value = decrypt_secret_value(secret, True)
         comment = (
             decrypt_asymmetric(secret.comment, env_privkey, env_pubkey)
             if secret.comment

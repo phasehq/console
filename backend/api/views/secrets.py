@@ -398,6 +398,12 @@ class PublicSecretsView(APIView):
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
+        account = None
+        if request.auth["auth_type"] == "User":
+            account = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            account = request.auth["service_account"]
+
         # Filter by key
         key = request.GET.get("key")
         if key:
@@ -437,7 +443,11 @@ class PublicSecretsView(APIView):
         serializer = SecretSerializer(
             secrets,
             many=True,
-            context={"org_member": request.auth["org_member"], "sse": True},
+            context={
+                "org_member": request.auth["org_member"],
+                "account": account,
+                "sse": True,
+            },
         )
 
         return Response(serializer.data, status=status.HTTP_200_OK)

@@ -1,7 +1,12 @@
 from api.utils.crypto import decrypt_asymmetric
 
-from api.utils.secrets import decrypt_secret_value, get_environment_keys
+from api.utils.secrets import (
+    SecretReferenceException,
+    decrypt_secret_value,
+    get_environment_keys,
+)
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 from .models import (
     CustomUser,
     Environment,
@@ -9,7 +14,6 @@ from .models import (
     Lockbox,
     Organisation,
     Secret,
-    ServerEnvironmentKey,
     ServiceToken,
     UserToken,
     PersonalSecret,
@@ -88,8 +92,13 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_value(self, obj):
         if self.context.get("sse"):
-            value = decrypt_secret_value(obj)
-            return value
+            account = self.context.get("account")
+
+            try:
+                value = decrypt_secret_value(obj, False, account)
+                return value
+            except SecretReferenceException as e:
+                raise PermissionDenied(str(e))
         return obj.value
 
     def get_comment(self, obj):
