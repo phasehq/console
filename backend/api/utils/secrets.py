@@ -89,7 +89,6 @@ def create_environment_folder_structure(complete_path, environment_id):
 
     environment = Environment.objects.get(id=environment_id)
 
-    #with transaction.atomic():
     for i, segment in enumerate(path_segments):
         # For each folder except the first, the path includes its parent's name
         # For the first segment, current_path should remain "/" as its location
