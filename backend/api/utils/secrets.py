@@ -325,24 +325,23 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             )
         except App.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced app '{ref_app}' does not exist"
+                f"The referenced app '{ref_app}' does not exist"
             )
-
         except App.MultipleObjectsReturned:
             unresolved_references.append(
-                f"Warning: Two or more apps named '{ref_app}' exist!"
+                f"Could not resolve a cross-app reference because two or more apps named '{ref_app}' exist!"
             )
         except ServerEnvironmentKey.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced app '{ref_app}' does not have SSE (Server-Side Encryption) enabled."
+                f"The referenced app '{ref_app}' does not have SSE (Server-Side Encryption) enabled."
             )
         except Environment.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced environment '{ref_env}' does not exist"
+                f"The referenced environment '{ref_env}' does not exist"
             )
         except Secret.DoesNotExist:
             unresolved_references.append(
-                f"Warning: The referenced secret does not exist in '{ref_app}::{ref_env}' at the requested path"
+                f"The referenced secret does not exist in '{ref_app}::{ref_env}' at the requested path"
             )
         except Exception as ex:
             unresolved_references.append(str(ex))
@@ -379,7 +378,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             )
         except:
             unresolved_local_references.append(
-                f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
+                f"The referenced environment or key either does not exist or the server does not have access to it."
             )
 
     if require_resolved_references and unresolved_local_references:
