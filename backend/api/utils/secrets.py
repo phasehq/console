@@ -89,28 +89,27 @@ def create_environment_folder_structure(complete_path, environment_id):
 
     environment = Environment.objects.get(id=environment_id)
 
-    with transaction.atomic():
-        for i, segment in enumerate(path_segments):
-            # For each folder except the first, the path includes its parent's name
-            # For the first segment, current_path should remain "/" as its location
+    for i, segment in enumerate(path_segments):
+        # For each folder except the first, the path includes its parent's name
+        # For the first segment, current_path should remain "/" as its location
 
-            if i > 0:
-                current_path += (
-                    f"/{path_segments[i-1]}"
-                    if current_path != "/"
-                    else path_segments[i - 1]
-                )
-
-            # Check if the folder already exists at the current path and with the given name
-            folder, _ = SecretFolder.objects.get_or_create(
-                name=segment,
-                environment=environment,
-                folder=current_folder,
-                path=current_path,
+        if i > 0:
+            current_path += (
+                f"/{path_segments[i-1]}"
+                if current_path != "/"
+                else path_segments[i - 1]
             )
 
-            # Update the current_folder to the folder that was just created or found
-            current_folder = folder
+        # Check if the folder already exists at the current path and with the given name
+        folder, _ = SecretFolder.objects.get_or_create(
+            name=segment,
+            environment=environment,
+            folder=current_folder,
+            path=current_path,
+        )
+
+        # Update the current_folder to the folder that was just created or found
+        current_folder = folder
 
     return current_folder
 
