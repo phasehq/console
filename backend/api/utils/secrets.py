@@ -327,6 +327,11 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             unresolved_references.append(
                 f"Warning: The referenced app '{ref_app}' does not exist"
             )
+
+        except App.MultipleObjectsReturned:
+            unresolved_references.append(
+                f"Warning: Two or more apps named '{ref_app}' exist!"
+            )
         except ServerEnvironmentKey.DoesNotExist:
             unresolved_references.append(
                 f"Warning: The referenced app '{ref_app}' does not have SSE (Server-Side Encryption) enabled."
