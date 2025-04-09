@@ -29,6 +29,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
   const { data, loading } = useQuery(GetServiceAccounts, {
     variables: { orgId: organisation?.id },
     skip: !organisation || !userCanReadSA,
+    fetchPolicy: 'cache-and-network',
   })
 
   return (
