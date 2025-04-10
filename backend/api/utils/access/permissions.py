@@ -107,3 +107,25 @@ def user_has_permission(
 
     except OrganisationMember.DoesNotExist:
         return False  # User is not a member of the organization
+
+
+def role_has_global_access(role):
+    Role = apps.get_model("api", "Role")
+
+    """Check if a given role has global access."""
+    try:
+        # Check if the role is a default role
+        if role.is_default:
+            # Get permissions from the default_roles dictionary
+            role_name = role.name.capitalize()
+            permissions = default_roles.get(role_name, {})
+        else:
+            # Use the permissions stored in the role object
+            permissions = role.permissions
+
+        permission_key = "global_access"
+
+        return permissions.get(permission_key, False)
+
+    except Role.DoesNotExist:
+        return False  # Role is not valid
