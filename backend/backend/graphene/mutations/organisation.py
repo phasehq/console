@@ -1,5 +1,6 @@
 from api.emails import send_invite_email, send_user_joined_email, send_welcome_email
 from api.utils.access.permissions import (
+    role_has_global_access,
     user_has_permission,
     user_is_admin,
     user_is_org_member,
@@ -302,12 +303,26 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         ):
             raise GraphQLError("You dont have permission to change member roles")
 
-        role = Role.objects.get(organisation=org_member.organisation, id=role_id)
+        active_user_role = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation=org_member.organisation,
+            deleted_at=None,
+        ).role
 
-        if role.name.lower() == "owner":
+        active_user_has_global_access = role_has_global_access(active_user_role)
+        current_role_has_global_access = role_has_global_access(org_member.role)
+
+        if current_role_has_global_access and not active_user_has_global_access:
+            raise GraphQLError(
+                "You cannot change this user's role as you don't have global access"
+            )
+
+        new_role = Role.objects.get(organisation=org_member.organisation, id=role_id)
+
+        if new_role.name.lower() == "owner":
             raise GraphQLError("You cannot set this user as the organisation owner")
 
-        org_member.role = role
+        org_member.role = new_role
         org_member.save()
 
         return UpdateOrganisationMemberRole(org_member=org_member)

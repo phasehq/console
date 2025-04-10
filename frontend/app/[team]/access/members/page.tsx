@@ -183,6 +183,7 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
   }
 
   const handleUpdateRole = async (newRole: RoleType) => {
+    const currentRoleHasGlobalAccess = userHasGlobalAccess(member.role?.permissions)
     const newRoleHasGlobalAccess = userHasGlobalAccess(newRole.permissions)
     const currentUserHasGlobalAccess = userHasGlobalAccess(organisation?.role?.permissions)
 
@@ -191,6 +192,13 @@ const RoleSelector = (props: { member: OrganisationMemberType }) => {
 
     if (newRoleHasGlobalAccess && !currentUserHasGlobalAccess) {
       toast.error('You cannot assign users to this role as it requires global access!', {
+        autoClose: 5000,
+      })
+      return false
+    }
+
+    if (currentRoleHasGlobalAccess && !currentUserHasGlobalAccess) {
+      toast.error("You cannot change this user's role as you don't have global access!", {
         autoClose: 5000,
       })
       return false
