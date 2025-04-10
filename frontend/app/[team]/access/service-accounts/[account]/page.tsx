@@ -2,7 +2,7 @@
 
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
-import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
+import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
 import { UpdateServiceAccountOp } from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { relativeTimeFromDates } from '@/utils/time'
@@ -61,7 +61,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete')
     : false
 
-  const { data, loading } = useQuery(GetServiceAccounts, {
+  const { data, loading } = useQuery(GetServiceAccountDetail, {
     variables: { orgId: organisation?.id, id: params.account },
     skip: !organisation || !userCanReadSA,
     fetchPolicy: 'cache-and-network',
@@ -84,7 +84,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         name,
       },
       refetchQueries: [
-        { query: GetServiceAccounts, variables: { orgId: organisation?.id, id: params.account } },
+        {
+          query: GetServiceAccountDetail,
+          variables: { orgId: organisation?.id, id: params.account },
+        },
       ],
     })
 
@@ -394,7 +397,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
                       {/* Delete Button*/}
                       <div className="md:col-span-1 flex justify-end opacity-0 group-hover:opacity-100 transition ease">
-                        <DeleteServiceAccountTokenDialog token={token!} />
+                        <DeleteServiceAccountTokenDialog
+                          token={token!}
+                          serviceAccountId={account.id}
+                        />
                       </div>
                     </div>
                   )

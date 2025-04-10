@@ -241,8 +241,9 @@ class ServiceAccountTokenType(DjangoObjectType):
     def resolve_last_used(self, info):
         event = (
             SecretEvent.objects.filter(service_account_token=self)
-            .order_by("timestamp")
-            .last()
+            .order_by("-timestamp")
+            .only("timestamp")
+            .first()
         )
         if event:
             return event.timestamp

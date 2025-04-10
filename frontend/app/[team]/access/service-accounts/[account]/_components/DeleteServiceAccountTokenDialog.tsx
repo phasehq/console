@@ -1,6 +1,6 @@
 import { FaTrash } from 'react-icons/fa'
 import { DeleteServiceAccountTokenOp } from '@/graphql/mutations/service-accounts/deleteServiceAccountToken.gql'
-import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
+import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { useContext, useRef } from 'react'
@@ -11,7 +11,13 @@ import GenericDialog from '@/components/common/GenericDialog'
 import { useRouter } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
 
-export const DeleteServiceAccountTokenDialog = ({ token }: { token: ServiceAccountTokenType }) => {
+export const DeleteServiceAccountTokenDialog = ({
+  token,
+  serviceAccountId,
+}: {
+  token: ServiceAccountTokenType
+  serviceAccountId: string
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanDeleteTokens = organisation
@@ -25,7 +31,12 @@ export const DeleteServiceAccountTokenDialog = ({ token }: { token: ServiceAccou
   const handleDelete = async () => {
     const deleted = await deleteToken({
       variables: { id: token.id },
-      refetchQueries: [{ query: GetServiceAccounts, variables: { orgId: organisation!.id } }],
+      refetchQueries: [
+        {
+          query: GetServiceAccountDetail,
+          variables: { orgId: organisation!.id, id: serviceAccountId },
+        },
+      ],
     })
     if (deleted.data.deleteServiceAccountToken.ok) {
       toast.success('Deleted token!')
