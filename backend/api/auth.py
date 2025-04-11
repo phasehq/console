@@ -11,6 +11,7 @@ from api.utils.access.permissions import (
     user_can_access_environment,
 )
 from rest_framework import authentication, exceptions
+from django.apps import apps
 
 
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
@@ -54,9 +55,20 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             try:
                 app_id = request.GET.get("app_id")
                 env_name = request.GET.get("env")
+                if not app_id:
+                    raise exceptions.AuthenticationFailed("Missing app_id parameter")
+                if not env_name:
+                    raise exceptions.AuthenticationFailed("Missing env parameter")
                 env = Environment.objects.get(app_id=app_id, name__iexact=env_name)
             except Environment.DoesNotExist:
-                raise exceptions.AuthenticationFailed("Environment not found")
+                # Check if the app exists to give a more specific error
+                App = apps.get_model("api", "App")
+                if not App.objects.filter(id=app_id).exists():
+                    raise exceptions.NotFound(f"App with ID {app_id} not found")
+                else:
+                    raise exceptions.NotFound(
+                        f"Environment '{env_name}' not found in App {app_id}"
+                    )
 
         auth["environment"] = env
 
@@ -94,6 +106,18 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                         "Service account cannot access this environment"
                     )
             except Exception as ex:
-                raise exceptions.NotFound("Service account not found")
+                # Distinguish between ServiceAccount not found and other potential errors
+                ServiceAccount = apps.get_model("api", "ServiceAccount")
+                try:
+                    # Attempt to get the service account again to confirm if it exists
+                    get_service_account_from_token(auth_token)
+                    # If it exists, the error was likely the environment access check
+                    raise exceptions.AuthenticationFailed(
+                        "Service account cannot access this environment"
+                    )
+                except ServiceAccount.DoesNotExist:
+                    raise exceptions.NotFound("Service account not found")
+                except Exception: # Catch any other unexpected error during the re-check
+                    raise exceptions.AuthenticationFailed("Authentication error")
 
         return (user, auth)
