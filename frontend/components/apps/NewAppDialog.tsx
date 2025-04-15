@@ -30,20 +30,15 @@ const NewAppDialog = forwardRef(
       'create',
       true
     )
-    // This is unused as we are not longer creating example secrets when creating an application
-    const userCanCreateSecrets = userHasPermission(
-      organisation.role?.permissions,
-      'Secrets',
-      'create',
-      true
-    )
 
     const [isOpen, setIsOpen] = useState<boolean>(false)
     const [name, setName] = useState<string>('')
     const [appCreating, setAppCreating] = useState<boolean>(false)
     const [error, setError] = useState<Error | null>(null)
-    const nameInputRef = useRef(null)
     const [createSuccess, setCreateSuccess] = useState(false)
+
+    const nameInputRef = useRef(null)
+    const upsellDialogRef = useRef<{ openModal: () => void }>(null)
 
     const { keyring } = useContext(KeyringContext)
 
@@ -53,6 +48,13 @@ const NewAppDialog = forwardRef(
       },
       skip: !organisation,
     })
+
+    const allowNewApp = () => {
+      if (!organisation.planDetail?.maxApps) return true
+      return appCount < organisation.planDetail?.maxApps
+    }
+
+    const showUpSell = !allowNewApp() && !createSuccess
 
     const reset = () => {
       setName('')
@@ -71,6 +73,7 @@ const NewAppDialog = forwardRef(
 
     const openModal = () => {
       setIsOpen(true)
+      upsellDialogRef.current?.openModal()
     }
 
     useImperativeHandle(ref, () => ({
@@ -109,11 +112,6 @@ const NewAppDialog = forwardRef(
       })
     }
 
-    const allowNewApp = () => {
-      if (!organisation.planDetail?.maxApps) return true
-      return appCount < organisation.planDetail?.maxApps
-    }
-
     const planDisplay = () => {
       if (organisation.plan === ApiOrganisationPlanChoices.Fr)
         return {
@@ -129,10 +127,12 @@ const NewAppDialog = forwardRef(
         }
     }
 
-    if (!allowNewApp() && !createSuccess)
+    if (showUpSell)
       return (
         <div className="flex items-center justify-center cursor-pointer w-full h-full group">
           <UpsellDialog
+            ref={upsellDialogRef}
+            showButton={showButton}
             buttonLabel={
               <>
                 <FaPlus />
