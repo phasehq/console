@@ -1,3 +1,4 @@
+import logging
 from api.utils.rest import (
     get_org_member_from_user_token,
     get_service_account_from_token,
@@ -12,6 +13,8 @@ from api.utils.access.permissions import (
 )
 from rest_framework import authentication, exceptions
 from django.apps import apps
+
+logger = logging.getLogger(__name__)
 
 
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
@@ -117,7 +120,12 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                     )
                 except ServiceAccount.DoesNotExist:
                     raise exceptions.NotFound("Service account not found")
-                except Exception: # Catch any other unexpected error during the re-check
-                    raise exceptions.AuthenticationFailed("Authentication error")
+                except (
+                    Exception
+                ) as ex:  # Catch any other unexpected error during the re-check
+                    logger.debug(f"Authentication error: {ex}")
+                    raise exceptions.AuthenticationFailed(
+                        f"Authentication error. Please check your authentication token or App / Environment access."
+                    )
 
         return (user, auth)
