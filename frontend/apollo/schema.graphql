@@ -153,6 +153,7 @@ type OrganisationMemberType {
   fullName: String
   avatarUrl: String
   self: Boolean
+  lastLogin: DateTime
 }
 
 type ActivatedPhaseLicenseType {
