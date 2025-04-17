@@ -167,6 +167,7 @@ class OrganisationMemberType(DjangoObjectType):
     avatar_url = graphene.String()
     role = graphene.Field(RoleType)
     self = graphene.Boolean()
+    last_login = graphene.DateTime()
 
     class Meta:
         model = OrganisationMember
@@ -205,6 +206,9 @@ class OrganisationMemberType(DjangoObjectType):
 
     def resolve_self(self, info):
         return self.user == info.context.user
+
+    def resolve_last_login(self, info):
+        return self.user.last_login
 
 
 class OrganisationMemberInviteType(DjangoObjectType):
