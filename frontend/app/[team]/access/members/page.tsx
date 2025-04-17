@@ -25,8 +25,9 @@ import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, Transition } from '@headlessui/react'
-import { FaBan, FaChevronDown, FaCopy, FaTimes, FaTrashAlt, FaUserAlt } from 'react-icons/fa'
+import { FaBan, FaChevronDown, FaCopy, FaTimes, FaTrashAlt, FaUserAlt, FaChevronRight } from 'react-icons/fa'
 import clsx from 'clsx'
+import Link from 'next/link'
 
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
@@ -574,57 +575,56 @@ export default function Members({ params }: { params: { team: string } }) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     User
                   </th>
-
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Joined
                   </th>
-                  {activeUserCanDeleteUsers && <th className="px-6 py-3"></th>}
+                  <th className="px-6 py-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-500/40">
+              <tbody className="divide-y divide-zinc-500/20">
                 {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
-                  <tr key={member.id}>
+                  <tr key={member.id} className="group">
                     <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                      <Avatar member={member} size="lg" />
-                      <div className="flex flex-col">
-                        <span className="text-lg font-medium">
+                      <Avatar member={member} size="md" />
+                      <div>
+                        <div className="font-medium">
                           {member.fullName || member.email}
-                        </span>
+                        </div>
                         {member.fullName && (
-                          <span className="text-neutral-500 text-sm">{member.email}</span>
+                          <div className="text-sm text-gray-500">{member.email}</div>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <RoleSelector member={member} />
-                      </div>
+                      <RoleLabel role={member.role!} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap capitalize">
                       {relativeTimeFromDates(new Date(member.createdAt))}
                     </td>
-                    <td className="px-6 py-4 flex items-center justify-end gap-2">
-                      {!member.self! &&
-                        activeUserCanDeleteUsers &&
-                        member.role!.name!.toLowerCase() !== 'owner' && (
-                          <DeleteMemberConfirmDialog member={member} />
-                        )}
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {!member.self && (
+                        <Link href={`/${params.team}/access/members/${member.id}`}>
+                          <Button variant="secondary">
+                            Manage <FaChevronRight />
+                          </Button>
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}
                 {sortedInvites.map((invite: OrganisationMemberInviteType) => (
                   <tr key={invite.id} className="opacity-60">
                     <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                      <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
+                      <div className="flex rounded-full items-center justify-center h-10 w-10 bg-neutral-500">
                         <FaUserAlt />
                       </div>
-                      <div className="flex flex-col">
-                        <div className="text-base font-medium">
+                      <div>
+                        <div className="font-medium">
                           {invite.inviteeEmail}{' '}
-                          <span className="text-neutral-500 text-sm">
+                          <span className="text-sm text-gray-500">
                             (invited by{' '}
                             {invite.invitedBy.self
                               ? 'You'
