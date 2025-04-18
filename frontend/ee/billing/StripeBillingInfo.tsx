@@ -329,7 +329,7 @@ const ManagePaymentMethodsDialog = () => {
           ))}
         </div>
 
-        {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr && (
+        {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
           <div className="flex justify-end">
             <AddPaymentMethodDialog onSuccess={refetchSubscription} />
           </div>
