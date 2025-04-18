@@ -359,6 +359,8 @@ try:
         "free": os.getenv("STRIPE_FREE"),
         "pro_monthly": os.getenv("STRIPE_PRO_MONTHLY"),
         "pro_yearly": os.getenv("STRIPE_PRO_YEARLY"),
+        "enterprise_monthly": os.getenv("STRIPE_ENTERPRISE_MONTHLY"),
+        "enterprise_yearly": os.getenv("STRIPE_ENTERPRISE_YEARLY"),
     }
 except:
     pass

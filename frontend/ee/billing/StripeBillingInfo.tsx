@@ -33,6 +33,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import { AddPaymentMethodDialog, AddPaymentMethodForm } from './AddPaymentMethodForm'
+import { ModifySubscriptionDialog } from './ModifySubscriptionDialog'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
@@ -414,19 +415,25 @@ export const StripeBillingInfo = () => {
     const classMap: Record<string, string> = {
       free: 'border-t-neutral-500', // For free plan
       pro_active: 'border-t-emerald-500', // For active pro plan
-      pro_cancelled: 'border-t-amber-500', // For cancelled pro plan
+      enterprise_active: 'border-t-emerald-500', // For active pro plan
+      cancelled: 'border-t-amber-500', // For cancelled pro plan
     }
 
     if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr) {
       return classMap.free
     } else if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr) {
       if (subscriptionData?.cancelAtPeriodEnd) {
-        return classMap.pro_cancelled
+        return classMap.cancelled
       } else {
         return classMap.pro_active
       }
+    } else if (activeOrganisation?.plan === ApiOrganisationPlanChoices.En) {
+      if (subscriptionData?.cancelAtPeriodEnd) {
+        return classMap.cancelled
+      } else {
+        return classMap.enterprise_active
+      }
     }
-
     return '' // Default case if no condition matches
   }
 
@@ -492,8 +499,7 @@ export const StripeBillingInfo = () => {
           )}
 
           {userCanUpdateBilling && (
-            <div className="flex items-center gap-2">
-              <ManagePaymentMethodsDialog />
+            <div className="flex flex-col items-end gap-4">
               {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
                 <div>
                   {!subscriptionData.cancelAtPeriodEnd ? (
@@ -503,6 +509,12 @@ export const StripeBillingInfo = () => {
                   )}
                 </div>
               )}
+              <div className="flex items-center gap-2">
+                {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
+                  <ModifySubscriptionDialog />
+                )}
+                <ManagePaymentMethodsDialog />
+              </div>
             </div>
           )}
         </div>

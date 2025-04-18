@@ -1,38 +1,47 @@
 import { useCallback, useContext, useState } from 'react'
-import { InitStripeProUpgradeCheckout } from '@/graphql/mutations/billing/initProUpgradeCheckout.gql'
+import { InitStripeUpgradeCheckout } from '@/graphql/mutations/billing/initUpgradeCheckout.gql'
 import { useMutation } from '@apollo/client'
 import { loadStripe } from '@stripe/stripe-js'
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js'
 import { organisationContext } from '@/contexts/organisationContext'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
-import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { ApiOrganisationPlanChoices, BillingPeriodEnum, PlanTypeEnum } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { FaCartShopping } from 'react-icons/fa6'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import clsx from 'clsx'
+import { Tab } from '@headlessui/react'
 
-type BillingPeriods = 'monthly' | 'yearly'
+//type BillingPeriods = BillingPeriodEnum.Monthly | BillingPeriodEnum.Yearly
 
-type PriceOption = { name: BillingPeriods; unitPrice: number; monthlyPrice: number }
+type PriceOption = { name: BillingPeriodEnum; unitPrice: number; monthlyPrice: number }
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
-const UpgradeForm = (props: { onSuccess: Function; billingPeriod: BillingPeriods }) => {
-  const { billingPeriod } = props
+const UpgradeForm = (props: {
+  onSuccess: Function
+  planType: PlanTypeEnum
+  billingPeriod: BillingPeriodEnum
+}) => {
+  const { planType, billingPeriod } = props
 
-  const [createCheckoutSession] = useMutation(InitStripeProUpgradeCheckout)
+  const [createCheckoutSession] = useMutation(InitStripeUpgradeCheckout)
   const { activeOrganisation } = useContext(organisationContext)
 
   const fetchClientSecret = useCallback(async () => {
     // Create a Checkout Session
     const { data } = await createCheckoutSession({
-      variables: { organisationId: activeOrganisation!.id, billingPeriod },
+      variables: {
+        organisationId: activeOrganisation!.id,
+        planType,
+        billingPeriod,
+      },
     })
-    const clientSecret = data.createProUpgradeCheckoutSession.clientSecret
+    const clientSecret = data.createSubscriptionCheckoutSession.clientSecret
 
     return clientSecret
-  }, [])
+  }, [activeOrganisation, billingPeriod, createCheckoutSession])
 
   const options = { fetchClientSecret }
 
@@ -47,28 +56,32 @@ const UpgradeForm = (props: { onSuccess: Function; billingPeriod: BillingPeriods
 
 const prices: PriceOption[] = [
   {
-    name: 'monthly',
+    name: BillingPeriodEnum.Monthly,
     unitPrice: 2,
     monthlyPrice: 2,
   },
   {
-    name: 'yearly',
+    name: BillingPeriodEnum.Yearly,
     unitPrice: 24,
     monthlyPrice: 2,
   },
 ]
 
-const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
-  const [checkoutPreview, setCheckoutPreview] = useState<BillingPeriods>('yearly')
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriods | null>(null)
+const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
+  const [billingPeriodPreview, setBillingPeriodPreview] = useState<BillingPeriodEnum>(
+    BillingPeriodEnum.Yearly
+  )
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriodEnum | null>(null)
+  const [planType, setPlanType] = useState<PlanTypeEnum>(PlanTypeEnum.Pro)
 
   const toggleCheckoutPreview = () => {
-    if (checkoutPreview === 'yearly') setCheckoutPreview('monthly')
-    else setCheckoutPreview('yearly')
+    billingPeriodPreview === BillingPeriodEnum.Yearly
+      ? setBillingPeriodPreview(BillingPeriodEnum.Monthly)
+      : setBillingPeriodPreview(BillingPeriodEnum.Yearly)
   }
 
   const calculateGraduatedPrice = (seats: number) => {
-    const basePrice = 2
+    const basePrice = planType === PlanTypeEnum.Pro ? 2 : 5
 
     // Define graduated tiers with unit prices
     const tiers = [
@@ -124,7 +137,7 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
     }
   }
 
-  const priceToPreview = prices.find((price) => price.name === checkoutPreview)
+  const priceToPreview = prices.find((price) => price.name === billingPeriodPreview)
 
   const CheckoutPreview = ({ price }: { price: PriceOption }) => {
     const graduatedPrice = calculateGraduatedPrice(props.userCount)
@@ -138,17 +151,20 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
           <div className="text-zinc-900 dark:text-zinc-100">
             <span className="font-extralight text-7xl">
               $
-              {checkoutPreview === 'monthly'
+              {billingPeriodPreview === BillingPeriodEnum.Monthly
                 ? graduatedPrice.effectiveRate.monthly.toFixed(2)
                 : graduatedPrice.effectiveRate.annually.toFixed(2)}
             </span>
-            <span className="text-neutral-500">/mo per account</span>
+            <div className="text-neutral-500">/mo per account</div>
           </div>
           <div>
             <div className="text-neutral-500 text-xs uppercase font-medium">Billed</div>
             <div className="flex items-center justify-center gap-2 text-zinc-900 dark:text-zinc-100 text-xs">
               <div>Monthly</div>
-              <ToggleSwitch value={checkoutPreview === 'yearly'} onToggle={toggleCheckoutPreview} />
+              <ToggleSwitch
+                value={billingPeriodPreview === BillingPeriodEnum.Yearly}
+                onToggle={toggleCheckoutPreview}
+              />
               <div>Yearly</div>
             </div>
           </div>
@@ -159,7 +175,7 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
             <span>Avg Unit Price:</span>
             <span>
               $
-              {checkoutPreview === 'monthly'
+              {billingPeriodPreview === BillingPeriodEnum.Monthly
                 ? graduatedPrice.effectiveRate.monthly.toFixed(2)
                 : graduatedPrice.effectiveRate.annually.toFixed(2)}
             </span>
@@ -181,7 +197,7 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
             <span>Total:</span>
             <span>
               $
-              {checkoutPreview === 'monthly'
+              {billingPeriodPreview === BillingPeriodEnum.Monthly
                 ? graduatedPrice.monthly.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -206,17 +222,56 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
   if (billingPeriod === null)
     return (
       <div className="space-y-8">
-        <div className="col-span-2 flex items-center justify-center gap-2">
-          <LogoWordMark className="fill-black dark:fill-white h-10" />{' '}
-          <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />
-        </div>
-
-        <div>{priceToPreview && <CheckoutPreview price={priceToPreview} />}</div>
+        <Tab.Group
+          selectedIndex={planType === PlanTypeEnum.Pro ? 0 : 1}
+          onChange={(index) =>
+            setPlanType(index === 0 ? PlanTypeEnum.Pro : PlanTypeEnum.Enterprise)
+          }
+        >
+          <Tab.List className="flex justify-center gap-8 border-b border-neutral-500/40">
+            <Tab>
+              {({ selected }) => (
+                <div
+                  className={clsx(
+                    'col-span-2 flex items-center justify-center gap-2 transition ease border-b -mb-px',
+                    selected
+                      ? 'opacity-100 grayscale-0 border-emerald-500'
+                      : 'opacity-50 grayscale border-transparent'
+                  )}
+                >
+                  <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />
+                </div>
+              )}
+            </Tab>
+            <Tab>
+              {({ selected }) => (
+                <div
+                  className={clsx(
+                    'col-span-2 flex items-center justify-center gap-2 transition ease border-b -mb-px',
+                    selected
+                      ? 'opacity-100 grayscale-0 border-amber-500'
+                      : 'opacity-50 grayscale border-transparent'
+                  )}
+                >
+                  <PlanLabel plan={ApiOrganisationPlanChoices.En} />
+                </div>
+              )}
+            </Tab>
+          </Tab.List>
+          <Tab.Panels>
+            <Tab.Panel>
+              <div>{priceToPreview && <CheckoutPreview price={priceToPreview} />}</div>
+            </Tab.Panel>
+            <Tab.Panel>
+              <div>{priceToPreview && <CheckoutPreview price={priceToPreview} />}</div>
+            </Tab.Panel>
+          </Tab.Panels>
+        </Tab.Group>
       </div>
     )
   return (
     <div className="space-y-2">
-      <UpgradeForm billingPeriod={billingPeriod} onSuccess={props.onSuccess} />
+      <UpgradeForm planType={planType} billingPeriod={billingPeriod} onSuccess={props.onSuccess} />
       <div>
         <Button variant="secondary" onClick={() => setBillingPeriod(null)}>
           Back
@@ -226,4 +281,4 @@ const ProUpgradeDialog = (props: { userCount: number; onSuccess: () => void }) =
   )
 }
 
-export default ProUpgradeDialog
+export default UpgradeDialog

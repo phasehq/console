@@ -23,10 +23,8 @@ export const UpsellDialog = ({
 
   const closeModal = () => dialogRef?.current?.closeModal()
 
-  // Dynamically import ProUpgradeDialog only if the app is cloud-hosted
-  const ProUpgradeDialog = isCloudHosted()
-    ? dynamic(() => import('@/ee/billing/ProUpgradeDialog'))
-    : null
+  // Dynamically import UpgradeDialog only if the app is cloud-hosted
+  const UpgradeDialog = isCloudHosted() ? dynamic(() => import('@/ee/billing/UpgradeDialog')) : null
 
   const { data, loading } = useQuery(GetOrganisationPlan, {
     variables: { organisationId: activeOrganisation?.id },
@@ -57,8 +55,8 @@ export const UpsellDialog = ({
           activeOrganisation.plan === ApiOrganisationPlanChoices.Pr ? (
             <UpgradeRequestForm onSuccess={() => {}} />
           ) : (
-            ProUpgradeDialog && (
-              <ProUpgradeDialog
+            UpgradeDialog && (
+              <UpgradeDialog
                 userCount={data.organisationPlan?.seatsUsed?.total}
                 onSuccess={closeModal}
               />
