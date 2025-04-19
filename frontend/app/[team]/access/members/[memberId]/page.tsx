@@ -7,14 +7,19 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext } from 'react'
-import { FaBan, FaChevronLeft, FaClock } from 'react-icons/fa'
+import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey, FaPlus } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
-import { OrganisationMemberType } from '@/apollo/graphql'
+import { OrganisationMemberType, UserTokenType, AppType } from '@/apollo/graphql'
 import { DeleteMemberConfirmDialog } from '../_components/DeleteMemberConfirmDialog'
 import { RoleSelector } from '../_components/RoleSelector'
-import { RoleLabel } from '@/components/users/RoleLabel'
 import { relativeTimeFromDates } from '@/utils/time'
+import { Button } from '@/components/common/Button'
+import { SseLabel } from '@/components/apps/EncryptionModeIndicator'
+import clsx from 'clsx'
+import { DeleteUserTokenDialog } from '../_components/DeleteUserTokenDialog'
+import CopyButton from '@/components/common/CopyButton'
+import { AddAppToMemberButton } from '../_components/AddAppToMemberButton'
 
 export default function MemberDetail({ params }: { params: { team: string; memberId: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -30,6 +35,22 @@ export default function MemberDetail({ params }: { params: { team: string; membe
   const userCanUpdateMemberRoles = organisation
     ? userHasPermission(organisation.role!.permissions, 'Members', 'update') &&
       userHasPermission(organisation.role!.permissions, 'Roles', 'read')
+    : false
+
+  const userCanReadAppMemberships = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Apps', 'read')
+    : false
+
+  const userCanWriteAppMemberships = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Apps', 'update')
+    : false
+
+  const userCanReadMemberTokens = organisation
+    ? userHasPermission(organisation.role!.permissions, 'MemberTokens', 'read')
+    : false
+
+  const userCanDeleteMemberTokens = organisation
+    ? userHasPermission(organisation.role!.permissions, 'MemberTokens', 'delete')
     : false
 
   const { data, loading, error } = useQuery(GetOrganisationMembers, {
@@ -48,27 +69,23 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
   if (loading || !organisation) {
     return (
-      <div className="flex justify-center items-center h-full">
+      <div className="flex justify-center items-center h-full w-full">
         <Spinner size="md" />
       </div>
     )
   }
 
   if (error) {
-    return <div className="text-red-500">Error loading member data: {error.message}</div>
+    return <div className="text-red-500 p-4">Error loading member data: {error.message}</div>
   }
 
   if (!userCanReadMembers && organisation) {
     return (
-      <section>
+      <section className="p-4">
         <EmptyState
           title="Access restricted"
-          subtitle="You don't have the permissions required to view members in this organisation."
-          graphic={
-            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-              <FaBan />
-            </div>
-          }
+          subtitle="You don't have the permissions required to view this member."
+          graphic={<div className="text-neutral-300 dark:text-neutral-700 text-7xl"><FaBan /></div>}
         >
           <Link
             href={`/${params.team}/access/members`}
@@ -83,15 +100,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
   if (!member) {
     return (
-      <section>
+      <section className="p-4">
         <EmptyState
           title="Member not found"
           subtitle="This member doesn't exist or you don't have access to them."
-          graphic={
-            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-              <FaBan />
-            </div>
-          }
+          graphic={<div className="text-neutral-300 dark:text-neutral-700 text-7xl"><FaBan /></div>}
         >
           <Link
             href={`/${params.team}/access/members`}
@@ -106,11 +119,16 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
   const isOwner = member.role?.name?.toLowerCase() === 'owner'
   const displayRoleOnly = !!(isOwner || !userCanUpdateMemberRoles || member.self)
-  const canDelete = userCanDeleteMembers && !member.self && !isOwner
+  const canDeleteMember = userCanDeleteMembers && !member.self && !isOwner
+
+  // Determine if the current user can view this member's tokens section (self or has MemberTokens:read permission)
+  const canViewTokensSection = member.self || userCanReadMemberTokens
+  // Determine if the delete button should be shown for a specific token (self or has MemberTokens:delete permission)
+  const canDeleteThisMembersTokens = member.self || userCanDeleteMemberTokens
 
   return (
-    <section className="overflow-y-auto h-full">
-      <div className="pb-4">
+    <section className="flex flex-col">
+      <div className="pb-4 px-4 md:px-6 pt-4">
         <Link
           href={`/${params.team}/access/members`}
           className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
@@ -118,30 +136,32 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <FaChevronLeft /> Back to members
         </Link>
       </div>
-      <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
-        <div className="flex items-center gap-4">
-          <Avatar member={member} size='xl' />
-          <div className="flex flex-col gap-1">
-            <h3 className="text-2xl font-semibold">
-              {member.fullName || 'User'}
-            </h3>
-            <span className="text-neutral-500 text-sm">{member.email}</span>
-            {member.lastLogin ? (
-              <span 
-                className="text-neutral-500 text-xs flex items-center gap-1 cursor-help"
-                title={new Date(member.lastLogin).toLocaleString()}
-              > 
-                 <FaClock /> Last active: {relativeTimeFromDates(new Date(member.lastLogin))}
-              </span>
-            ) : (
-              <span className="text-neutral-500 text-xs flex items-center gap-1">
-                 <FaClock /> Last active: Never
-              </span>
-            )}
+      <div className="flex-grow overflow-y-auto px-4 md:px-6 space-y-8 pb-8">
+        <div className="pt-4">
+          <div className="flex items-center gap-4">
+            <Avatar member={member} size='xl' />
+            <div className="flex flex-col gap-1">
+              <h3 className="text-2xl font-semibold">
+                {member.fullName || 'User'}
+              </h3>
+              <span className="text-neutral-500 text-sm">{member.email}</span>
+              {member.lastLogin ? (
+                <span 
+                  className="text-neutral-500 text-xs flex items-center gap-1 cursor-help"
+                  title={new Date(member.lastLogin).toLocaleString()}
+                > 
+                  <FaClock /> Last login: {relativeTimeFromDates(new Date(member.lastLogin))}
+                </span>
+              ) : (
+                <span className="text-neutral-500 text-xs flex items-center gap-1">
+                  <FaClock /> Last login: Never
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="py-4 space-y-4">
+        <div className="pt-4 space-y-4 border-t border-neutral-500/40">
           <div>
             <div className="text-xl font-semibold">Role</div>
             <div className="text-neutral-500">Manage the role for this member</div>
@@ -158,8 +178,186 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           </div>
         </div>
 
-        {canDelete && (
-          <div className="space-y-2 py-4">
+        {userCanReadAppMemberships && (
+          <div className="pt-4 space-y-4 border-t border-neutral-500/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xl font-semibold">App Access</div>
+                <div className="text-neutral-500">
+                  Apps and Environments this member has access to
+                </div>
+              </div>
+              {userCanWriteAppMemberships && (
+                <AddAppToMemberButton 
+                   member={member} 
+                   organisationId={organisation.id} 
+                   teamSlug={params.team} 
+                 />
+              )}
+            </div>
+
+            <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+              {member.appMemberships && member.appMemberships.length > 0 ? (
+                member.appMemberships.map((app: AppType) => (
+                  <div
+                    key={app?.id}
+                    className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-2 group"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100">
+                          {app?.name}
+                        </div>
+                        <SseLabel sseEnabled={Boolean(app?.sseEnabled)} />
+                      </div>
+                      <div className="flex items-center gap-1 text-sm text-neutral-500 group/id">
+                        <span className="text-neutral-500 text-2xs flex items-center">App ID:</span>
+                        <CopyButton value={app.id} buttonVariant="ghost">
+                          <span className="text-neutral-500 text-2xs font-mono hover:text-zinc-900 dark:hover:text-zinc-100 transition ease">{app.id}</span>
+                        </CopyButton>
+                      </div>
+                    </div>
+
+                    <div className="col-span-2">
+                      <div className="text-2xs uppercase tracking-widest text-neutral-500 mb-1">
+                        Environments
+                      </div>
+                      <div className="text-sm text-zinc-700 dark:text-zinc-300">
+                        {app?.environments?.map((env) => env?.name).join(' + ') || '-'}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Link
+                        className="opacity-0 group-hover:opacity-100 transition ease"
+                        href={`/${params.team}/apps/${app?.id}/access/members`}
+                        title={`Manage ${member.fullName || member.email}'s access to ${app?.name}`}
+                      >
+                        <Button variant="secondary" className="flex items-center gap-2">
+                          <FaCog className="h-4 w-4" />
+                          <span>Manage</span>
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-neutral-500">
+                  This member does not have explicit access to any Apps.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {canViewTokensSection && (
+          <div className="pt-4 space-y-4 border-t border-neutral-500/40">
+            <div>
+              <div className="text-xl font-semibold">Personal Access Tokens</div>
+              <div className="text-neutral-500">Manage personal access tokens for this member</div>
+            </div>
+
+            {member.self && (
+              <div className="flex justify-end">
+                <Button variant="primary" disabled title="Create token (coming soon)"><FaPlus /> Create token</Button>
+              </div>
+            )}
+
+            <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+              {member.tokens && member.tokens.length > 0 ? (
+                member.tokens.map((token: UserTokenType) => {
+                  const isExpired =
+                    token!.expiresAt === null ? false : new Date(token!.expiresAt) < new Date()
+                  return (
+                    <div
+                      key={token!.id}
+                      className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-2 group"
+                    >
+                      <div className="md:col-span-4 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <FaKey className="text-neutral-500 flex-shrink-0" />
+                          <span className="font-medium text-lg text-zinc-900 dark:text-zinc-100 truncate">
+                            {token!.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-sm text-neutral-500">
+                          <span className="text-neutral-500 text-xs flex items-center">Token ID:</span>
+                          <CopyButton
+                            value={token!.id}
+                            buttonVariant="ghost"
+                            title="Copy Token ID to clipboard"
+                          >
+                            <span className="text-neutral-500 text-2xs font-mono hover:text-zinc-900 dark:hover:text-zinc-100 transition ease">{token!.id}</span>
+                          </CopyButton>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-4 text-neutral-500 text-sm flex flex-col gap-1">
+                        <div className="whitespace-nowrap" title={new Date(token?.createdAt).toLocaleString()}>
+                          Created {relativeTimeFromDates(new Date(token?.createdAt))}
+                        </div>
+                        {token.createdBy && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-neutral-500">by</span>
+                            <Avatar member={token.createdBy} size="sm" />
+                            <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                               {token.createdBy.fullName || token.createdBy.email} 
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="md:col-span-3 space-y-2">
+                        <div
+                          className={clsx(
+                            'flex items-center gap-1 text-sm ',
+                            isExpired ? 'text-red-500' : 'text-neutral-500'
+                          )}
+                          title={token.expiresAt ? new Date(token.expiresAt).toLocaleString() : 'Never expires'}
+                        >
+                          <span className="whitespace-nowrap">
+                            {isExpired ? 'Expired' : 'Expires'}
+                          </span>
+                          <span className="whitespace-nowrap">
+                            {token!.expiresAt
+                              ? relativeTimeFromDates(new Date(token?.expiresAt))
+                              : 'never'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {canDeleteThisMembersTokens && (
+                        <div className="md:col-span-1 flex justify-end opacity-0 group-hover:opacity-100 transition ease">
+                          <DeleteUserTokenDialog
+                            token={token!}
+                            organisationId={organisation.id}
+                            memberId={member.id}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              ) : (
+                <div className="py-8">
+                  <EmptyState
+                    title="No tokens created"
+                    subtitle="This member has not created any personal access tokens."
+                    graphic={<div className="text-neutral-300 dark:text-neutral-700 text-7xl"><FaKey /></div>}
+                  >
+                    {member.self && (
+                      <Button variant="primary" disabled title="Create token (coming soon)"><FaPlus /> Create token</Button>
+                    )}
+                    {!member.self && <></>}
+                  </EmptyState>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {canDeleteMember && (
+          <div className="pt-4 space-y-4 border-t border-neutral-500/40">
             <div>
               <div className="text-xl font-semibold">Danger Zone</div>
               <div className="text-neutral-500">
