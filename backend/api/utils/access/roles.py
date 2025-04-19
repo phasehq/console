@@ -1,7 +1,7 @@
 default_roles = {
     "Owner": {
         "meta": {
-            "version": 1,
+            "version": 2,
             "description": "The organisation owner, limited to a single user, with full access to all resources and actions.",
         },
         "permissions": {
@@ -9,6 +9,7 @@ default_roles = {
             "Billing": ["create", "read", "update", "delete"],
             "Apps": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
+            "MemberPersonalAccessTokens": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "ServiceAccountTokens": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
@@ -29,7 +30,7 @@ default_roles = {
     },
     "Admin": {
         "meta": {
-            "version": 1,
+            "version": 2,
             "description": "Administrative users with broad access to resources and global access to all Apps and Environments.",
         },
         "permissions": {
@@ -37,6 +38,7 @@ default_roles = {
             "Billing": ["create", "read", "update", "delete"],
             "Apps": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
+            "MemberPersonalAccessTokens": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "ServiceAccountTokens": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],

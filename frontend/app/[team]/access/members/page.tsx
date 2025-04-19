@@ -25,8 +25,9 @@ import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Listbox, Transition } from '@headlessui/react'
-import { FaBan, FaChevronDown, FaCopy, FaTimes, FaTrashAlt, FaUserAlt } from 'react-icons/fa'
+import { FaBan, FaChevronDown, FaCopy, FaTimes, FaTrashAlt, FaUserAlt, FaChevronRight } from 'react-icons/fa'
 import clsx from 'clsx'
+import Link from 'next/link'
 
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
@@ -437,115 +438,6 @@ export default function Members({ params }: { params: { team: string } }) {
     )
   }
 
-  const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberType }) => {
-    const { member } = props
-
-    const { activeOrganisation: organisation } = useContext(organisationContext)
-
-    const [removeMember] = useMutation(RemoveMember)
-
-    const [isOpen, setIsOpen] = useState<boolean>(false)
-
-    const closeModal = () => {
-      setIsOpen(false)
-    }
-
-    const openModal = () => {
-      setIsOpen(true)
-    }
-
-    const handleRemoveMember = async () => {
-      await removeMember({
-        variables: { memberId: member.id },
-        refetchQueries: [
-          {
-            query: GetOrganisationMembers,
-            variables: { organisationId: organisation?.id, role: null },
-          },
-        ],
-      })
-    }
-
-    const allowDelete =
-      !member.self! && activeUserCanDeleteUsers && member.role!.name!.toLowerCase() !== 'owner'
-
-    return (
-      <>
-        {allowDelete && (
-          <div className="flex items-center justify-center">
-            <Button
-              variant="danger"
-              onClick={openModal}
-              title="Remove member"
-              disabled={member.role!.name!.toLowerCase() === 'owner'}
-            >
-              <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-                <FaTrashAlt />
-              </div>
-            </Button>
-          </div>
-        )}
-
-        <Transition appear show={isOpen} as={Fragment}>
-          <Dialog as="div" className="relative z-10" onClose={closeModal}>
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0"
-              enterTo="opacity-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100"
-              leaveTo="opacity-0"
-            >
-              <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-            </Transition.Child>
-
-            <div className="fixed inset-0 overflow-y-auto">
-              <div className="flex min-h-full items-center justify-center p-4 text-center">
-                <Transition.Child
-                  as={Fragment}
-                  enter="ease-out duration-300"
-                  enterFrom="opacity-0 scale-95"
-                  enterTo="opacity-100 scale-100"
-                  leave="ease-in duration-200"
-                  leaveFrom="opacity-100 scale-100"
-                  leaveTo="opacity-0 scale-95"
-                >
-                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                    <Dialog.Title as="div" className="flex w-full justify-between">
-                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                        Remove member
-                      </h3>
-
-                      <Button variant="text" onClick={closeModal}>
-                        <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                      </Button>
-                    </Dialog.Title>
-
-                    <div className="space-y-6 p-4">
-                      <p className="text-neutral-500">
-                        Are you sure you want to remove {member.fullName || member.email} from this
-                        organisation?
-                      </p>
-                      <div className="flex items-center gap-4">
-                        <Button variant="secondary" type="button" onClick={closeModal}>
-                          Cancel
-                        </Button>
-                        <Button variant="danger" onClick={handleRemoveMember}>
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  </Dialog.Panel>
-                </Transition.Child>
-              </div>
-            </div>
-          </Dialog>
-        </Transition>
-      </>
-    )
-  }
-
   if (!organisation)
     return (
       <div className="flex items-center justify-center p-10">
@@ -574,57 +466,54 @@ export default function Members({ params }: { params: { team: string } }) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     User
                   </th>
-
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Joined
                   </th>
-                  {activeUserCanDeleteUsers && <th className="px-6 py-3"></th>}
+                  <th className="px-6 py-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-500/40">
+              <tbody className="divide-y divide-zinc-500/20">
                 {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
-                  <tr key={member.id}>
+                  <tr key={member.id} className="group">
                     <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                      <Avatar member={member} size="lg" />
-                      <div className="flex flex-col">
-                        <span className="text-lg font-medium">
+                      <Avatar member={member} size="md" />
+                      <div>
+                        <div className="font-medium">
                           {member.fullName || member.email}
-                        </span>
+                        </div>
                         {member.fullName && (
-                          <span className="text-neutral-500 text-sm">{member.email}</span>
+                          <div className="text-sm text-gray-500">{member.email}</div>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <RoleSelector member={member} />
-                      </div>
+                      <RoleLabel role={member.role!} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap capitalize">
                       {relativeTimeFromDates(new Date(member.createdAt))}
                     </td>
-                    <td className="px-6 py-4 flex items-center justify-end gap-2">
-                      {!member.self! &&
-                        activeUserCanDeleteUsers &&
-                        member.role!.name!.toLowerCase() !== 'owner' && (
-                          <DeleteMemberConfirmDialog member={member} />
-                        )}
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                       <Link href={`/${params.team}/access/members/${member.id}`}>
+                          <Button variant="secondary">
+                             Manage <FaChevronRight />
+                          </Button>
+                       </Link>
                     </td>
                   </tr>
                 ))}
                 {sortedInvites.map((invite: OrganisationMemberInviteType) => (
                   <tr key={invite.id} className="opacity-60">
                     <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
-                      <div className="flex rounded-full items-center justify-center h-12 w-12 bg-neutral-500">
+                      <div className="flex rounded-full items-center justify-center h-10 w-10 bg-neutral-500">
                         <FaUserAlt />
                       </div>
-                      <div className="flex flex-col">
-                        <div className="text-base font-medium">
+                      <div>
+                        <div className="font-medium">
                           {invite.inviteeEmail}{' '}
-                          <span className="text-neutral-500 text-sm">
+                          <span className="text-sm text-gray-500">
                             (invited by{' '}
                             {invite.invitedBy.self
                               ? 'You'
