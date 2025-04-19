@@ -34,6 +34,7 @@ import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import { AddPaymentMethodDialog, AddPaymentMethodForm } from './AddPaymentMethodForm'
 import { ModifySubscriptionDialog } from './ModifySubscriptionDialog'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
@@ -500,15 +501,20 @@ export const StripeBillingInfo = () => {
 
           {userCanUpdateBilling && (
             <div className="flex flex-col items-end gap-4">
-              {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
-                <div>
-                  {!subscriptionData.cancelAtPeriodEnd ? (
-                    <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
-                  ) : (
-                    <ResumeSubscription subscriptionData={subscriptionData} />
-                  )}
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {/* {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr && <UpsellDialog />} */}
+                {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
+                  <div>
+                    {!subscriptionData.cancelAtPeriodEnd ? (
+                      <CancelSubscriptionDialog
+                        subscriptionId={subscriptionData?.subscriptionId!}
+                      />
+                    ) : (
+                      <ResumeSubscription subscriptionData={subscriptionData} />
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
                   <ModifySubscriptionDialog />

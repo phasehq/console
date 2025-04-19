@@ -11,6 +11,7 @@ import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptionDetails.gql'
 import { ModifyStripeSubscription } from '@/graphql/mutations/billing/modifySubscription.gql'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useRef, useState } from 'react'
@@ -67,6 +68,7 @@ export const ModifySubscriptionDialog = () => {
       },
       refetchQueries: [
         { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation?.id } },
+        { query: GetOrganisations },
       ],
     })
 

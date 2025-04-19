@@ -52,15 +52,11 @@ export const UpsellDialog = ({
           {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr ? 'Pro' : 'Enterprise'}
         </div>
         {isCloudHosted() ? (
-          activeOrganisation.plan === ApiOrganisationPlanChoices.Pr ? (
-            <UpgradeRequestForm onSuccess={() => {}} />
-          ) : (
-            UpgradeDialog && (
-              <UpgradeDialog
-                userCount={data.organisationPlan?.seatsUsed?.total}
-                onSuccess={closeModal}
-              />
-            )
+          UpgradeDialog && (
+            <UpgradeDialog
+              userCount={data.organisationPlan?.seatsUsed?.total}
+              onSuccess={closeModal}
+            />
           )
         ) : (
           <div className="text-zinc-900 dark:text-zinc-100">

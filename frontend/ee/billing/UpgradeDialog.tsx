@@ -1,17 +1,27 @@
-import { useCallback, useContext, useState } from 'react'
+import { useCallback, useContext, useEffect, useState } from 'react'
 import { InitStripeUpgradeCheckout } from '@/graphql/mutations/billing/initUpgradeCheckout.gql'
-import { useMutation } from '@apollo/client'
+import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptionDetails.gql'
+import { ModifyStripeSubscription } from '@/graphql/mutations/billing/modifySubscription.gql'
+import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
+import { useMutation, useQuery } from '@apollo/client'
 import { loadStripe } from '@stripe/stripe-js'
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js'
 import { organisationContext } from '@/contexts/organisationContext'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
-import { ApiOrganisationPlanChoices, BillingPeriodEnum, PlanTypeEnum } from '@/apollo/graphql'
+import {
+  ApiOrganisationPlanChoices,
+  BillingPeriodEnum,
+  PlanTypeEnum,
+  StripeSubscriptionDetails,
+} from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { FaCartShopping } from 'react-icons/fa6'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import clsx from 'clsx'
 import { Tab } from '@headlessui/react'
+import { toast } from 'react-toastify'
+import { userHasPermission } from '@/utils/access/permissions'
 
 //type BillingPeriods = BillingPeriodEnum.Monthly | BillingPeriodEnum.Yearly
 
@@ -68,6 +78,8 @@ const prices: PriceOption[] = [
 ]
 
 const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
+  const { activeOrganisation } = useContext(organisationContext)
+
   const [billingPeriodPreview, setBillingPeriodPreview] = useState<BillingPeriodEnum>(
     BillingPeriodEnum.Yearly
   )
@@ -79,6 +91,11 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
       ? setBillingPeriodPreview(BillingPeriodEnum.Monthly)
       : setBillingPeriodPreview(BillingPeriodEnum.Yearly)
   }
+
+  useEffect(() => {
+    if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr)
+      setPlanType(PlanTypeEnum.Enterprise)
+  }, [activeOrganisation])
 
   const calculateGraduatedPrice = (seats: number) => {
     const basePrice = planType === PlanTypeEnum.Pro ? 2 : 5
@@ -140,7 +157,45 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
   const priceToPreview = prices.find((price) => price.name === billingPeriodPreview)
 
   const CheckoutPreview = ({ price }: { price: PriceOption }) => {
+    // Permission checks
+    const userCanReadBilling = activeOrganisation
+      ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'read')
+      : false
+
+    const [modifySubscription] = useMutation(ModifyStripeSubscription)
+    const { data, loading } = useQuery(GetSubscriptionDetails, {
+      variables: { organisationId: activeOrganisation?.id },
+      skip: !activeOrganisation || !userCanReadBilling,
+    })
+
+    const subscriptionData: StripeSubscriptionDetails | undefined =
+      data?.stripeSubscriptionDetails ?? undefined
+
     const graduatedPrice = calculateGraduatedPrice(props.userCount)
+
+    const handleModifySubscription = async () => {
+      await modifySubscription({
+        variables: {
+          organisationId: activeOrganisation?.id,
+          subscriptionId: subscriptionData!.subscriptionId,
+          billingPeriod: billingPeriodPreview,
+          planType,
+        },
+        refetchQueries: [
+          { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation?.id } },
+          { query: GetOrganisations },
+        ],
+      })
+
+      toast.success('Your subscription has been updated!')
+      props.onSuccess()
+      //dialogRef.current?.closeModal()
+    }
+
+    const handleCheckout = () => {
+      if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr) setBillingPeriod(price.name)
+      else handleModifySubscription()
+    }
 
     return (
       <div
@@ -211,8 +266,9 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
         </div>
 
         <div className="flex items-center gap-1 text-emerald-500 font-medium pt-4 justify-end">
-          <Button variant="primary" onClick={() => setBillingPeriod(price.name)}>
-            <FaCartShopping /> Checkout
+          <Button variant="primary" onClick={handleCheckout}>
+            <FaCartShopping />{' '}
+            {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr ? 'Upgrade' : 'Checkout'}
           </Button>
         </div>
       </div>
