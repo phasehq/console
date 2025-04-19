@@ -496,13 +496,11 @@ export default function Members({ params }: { params: { team: string } }) {
                       {relativeTimeFromDates(new Date(member.createdAt))}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {!member.self && (
-                        <Link href={`/${params.team}/access/members/${member.id}`}>
+                       <Link href={`/${params.team}/access/members/${member.id}`}>
                           <Button variant="secondary">
-                            Manage <FaChevronRight />
+                             Manage <FaChevronRight />
                           </Button>
-                        </Link>
-                      )}
+                       </Link>
                     </td>
                   </tr>
                 ))}
