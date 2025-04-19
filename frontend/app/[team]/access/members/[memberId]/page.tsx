@@ -46,11 +46,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
     : false
 
   const userCanReadMemberTokens = organisation
-    ? userHasPermission(organisation.role!.permissions, 'MemberTokens', 'read')
+    ? userHasPermission(organisation.role!.permissions, 'MemberPersonalAccessTokens', 'read')
     : false
 
   const userCanDeleteMemberTokens = organisation
-    ? userHasPermission(organisation.role!.permissions, 'MemberTokens', 'delete')
+    ? userHasPermission(organisation.role!.permissions, 'MemberPersonalAccessTokens', 'delete')
     : false
 
   const { data, loading, error } = useQuery(GetOrganisationMembers, {

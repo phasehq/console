@@ -237,15 +237,12 @@ class OrganisationMemberType(DjangoObjectType):
         return filtered_apps
 
     def resolve_tokens(self, info):
-        # Check if the requesting user has permission to read MemberTokens for this member's organisation
-        can_view_tokens = user_has_permission(info.context.user, "read", "MemberTokens", self.organisation)
+        # Check using the new permission name
+        can_view_tokens = user_has_permission(info.context.user, "read", "MemberPersonalAccessTokens", self.organisation)
 
         if not can_view_tokens and self.user != info.context.user:
-             # Allow viewing self even without specific permission, but block others.
-             # Or, strictly enforce permission: if not can_view_tokens: raise GraphQLError(...)
-             return [] # Return empty list if no permission and not viewing self
+             return [] 
         
-        # If user has permission OR is viewing self, return tokens
         return UserToken.objects.filter(user=self, deleted_at=None).order_by('-created_at')
 
 
@@ -782,16 +779,13 @@ class UserTokenType(DjangoObjectType):
         )
 
     def resolve_created_by(self, info):
-        # Check if the requesting user has permission to read MemberTokens in the token owner's organisation
-        can_view_creator = user_has_permission(info.context.user, "read", "MemberTokens", self.user.organisation)
+        # Check using the new permission name
+        can_view_creator = user_has_permission(info.context.user, "read", "MemberPersonalAccessTokens", self.user.organisation)
 
         if not can_view_creator and self.user.user != info.context.user:
-            # Allow viewing self's creator even without permission, but block others.
-            # Or, strictly enforce permission: if not can_view_tokens: return None
             return None 
         
-        # If user has permission OR is viewing self, return creator
-        return self.user # 'user' field links to the OrganisationMember
+        return self.user
 
 
 class ServiceTokenType(DjangoObjectType):
