@@ -1,0 +1,17 @@
+mutation ModifyStripeSubscription(
+  $organisationId: ID!
+  $subscriptionId: String!
+  $planType: PlanTypeEnum!
+  $billingPeriod: BillingPeriodEnum!
+) {
+  modifySubscription(
+    organisationId: $organisationId
+    subscriptionId: $subscriptionId
+    planType: $planType
+    billingPeriod: $billingPeriod
+  ) {
+    success
+    message
+    status
+  }
+}

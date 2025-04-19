@@ -31,9 +31,10 @@ from ee.billing.graphene.queries.stripe import (
 )
 from ee.billing.graphene.mutations.stripe import (
     CancelSubscriptionMutation,
-    CreateProUpgradeCheckoutSession,
+    CreateSubscriptionCheckoutSession,
     CreateSetupIntentMutation,
     DeletePaymentMethodMutation,
+    ModifySubscriptionMutation,
     ResumeSubscriptionMutation,
     SetDefaultPaymentMethodMutation,
 )
@@ -312,7 +313,6 @@ class Query(graphene.ObjectType):
         CloudFlarePagesType,
         credential_id=graphene.ID(),
     )
-
 
     cloudflare_workers = graphene.List(
         CloudflareWorkerType,
@@ -915,10 +915,11 @@ class Mutation(graphene.ObjectType):
     create_lockbox = CreateLockboxMutation.Field()
 
     # Billing
-    create_pro_upgrade_checkout_session = CreateProUpgradeCheckoutSession.Field()
+    create_subscription_checkout_session = CreateSubscriptionCheckoutSession.Field()
     delete_payment_method = DeletePaymentMethodMutation.Field()
     cancel_subscription = CancelSubscriptionMutation.Field()
     resume_subscription = ResumeSubscriptionMutation.Field()
+    modify_subscription = ModifySubscriptionMutation.Field()
     create_setup_intent = CreateSetupIntentMutation.Field()
     set_default_payment_method = SetDefaultPaymentMethodMutation.Field()
 

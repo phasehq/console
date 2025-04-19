@@ -86,7 +86,7 @@ export const PostCheckoutScreen = ({ stripeSessionId }: { stripeSessionId: strin
                   </div>
 
                   <p className="text-lg font-semibold">
-                    Your subscription of Phase Pro is now active!
+                    Your subscription of {planName} is now active!
                   </p>
                   <div></div>
 

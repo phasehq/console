@@ -1,0 +1,13 @@
+mutation InitStripeUpgradeCheckout(
+  $organisationId: ID!
+  $planType: PlanTypeEnum!
+  $billingPeriod: BillingPeriodEnum!
+) {
+  createSubscriptionCheckoutSession(
+    organisationId: $organisationId
+    planType: $planType
+    billingPeriod: $billingPeriod
+  ) {
+    clientSecret
+  }
+}
