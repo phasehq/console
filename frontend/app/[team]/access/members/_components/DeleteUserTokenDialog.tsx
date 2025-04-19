@@ -46,8 +46,9 @@ export const DeleteUserTokenDialog = (props: { token: UserTokenType, organisatio
         onClick={openModal}
         title="Delete token"
         disabled={loading}
+        className="flex items-center gap-1"
       >
-        <FaTrashAlt />
+        <FaTrashAlt /> Delete
       </Button>
 
       <Transition appear show={isOpen} as={Fragment}>
