@@ -257,12 +257,6 @@ export default function MemberDetail({ params }: { params: { team: string; membe
               <div className="text-neutral-500">Manage personal access tokens for this member</div>
             </div>
 
-            {member.self && (
-              <div className="flex justify-end">
-                <Button variant="primary" disabled title="Create token (coming soon)"><FaPlus /> Create token</Button>
-              </div>
-            )}
-
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {member.tokens && member.tokens.length > 0 ? (
                 member.tokens.map((token: UserTokenType) => {
@@ -345,10 +339,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                     subtitle="This member has not created any personal access tokens."
                     graphic={<div className="text-neutral-300 dark:text-neutral-700 text-7xl"><FaKey /></div>}
                   >
-                    {member.self && (
-                      <Button variant="primary" disabled title="Create token (coming soon)"><FaPlus /> Create token</Button>
-                    )}
-                    {!member.self && <></>}
+                    <></>
                   </EmptyState>
                 </div>
               )}
