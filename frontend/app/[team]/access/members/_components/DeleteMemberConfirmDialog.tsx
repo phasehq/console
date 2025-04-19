@@ -67,10 +67,9 @@ export const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberTyp
           onClick={openModal}
           title="Remove member"
           disabled={member.role!.name!.toLowerCase() === 'owner'}
+          className="flex items-center gap-1"
         >
-          <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-            <FaTrashAlt className="mr-1" /> Delete Member
-          </div>
+          <FaTrashAlt /> Delete
         </Button>
       )}
 

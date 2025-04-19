@@ -356,7 +356,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         )}
 
         {canDeleteMember && (
-          <div className="pt-4 space-y-4 border-t border-neutral-500/40">
+          <div className="pt-4 space-y-2 border-t border-neutral-500/40">
             <div>
               <div className="text-xl font-semibold">Danger Zone</div>
               <div className="text-neutral-500">
@@ -364,7 +364,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
               </div>
             </div>
 
-            <div className="flex justify-between items-center ring-1 ring-inset ring-red-500/40 bg-red-400/10 rounded-lg space-y-2 p-4">
+            <div className="flex justify-between items-center ring-1 ring-inset ring-red-500/40 bg-red-400/10 rounded-lg p-4">
               <div>
                 <div className="font-medium text-red-400">Remove member</div>
                 <div className="text-neutral-500">
