@@ -148,7 +148,15 @@ export default function MemberDetail({ params }: { params: { team: string; membe
               {member.lastLogin ? (
                 <span 
                   className="text-neutral-500 text-xs flex items-center gap-1 cursor-help"
-                  title={new Date(member.lastLogin).toLocaleString()}
+                  title={new Date(member.lastLogin).toLocaleString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    timeZoneName: 'short'
+                  })}
                 > 
                   <FaClock /> Last login: {relativeTimeFromDates(new Date(member.lastLogin))}
                 </span>
