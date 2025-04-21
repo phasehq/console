@@ -1,5 +1,0 @@
-mutation InitStripeProUpgradeCheckout($organisationId: ID!, $billingPeriod: String!) {
-  createProUpgradeCheckoutSession(organisationId: $organisationId, billingPeriod: $billingPeriod) {
-    clientSecret
-  }
-}
