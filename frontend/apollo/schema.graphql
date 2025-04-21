@@ -684,6 +684,8 @@ type StripeSubscriptionDetails {
   cancelAt: Int
   cancelAtPeriodEnd: Boolean
   paymentMethods: [PaymentMethodDetails]
+  billingPeriod: BillingPeriodEnum
+  planType: PlanTypeEnum
 }
 
 type PaymentMethodDetails {
@@ -693,6 +695,16 @@ type PaymentMethodDetails {
   expMonth: Int
   expYear: Int
   isDefault: Boolean
+}
+
+enum BillingPeriodEnum {
+  MONTHLY
+  YEARLY
+}
+
+enum PlanTypeEnum {
+  PRO
+  ENTERPRISE
 }
 
 type Mutation {
@@ -760,10 +772,11 @@ type Mutation {
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation
-  createProUpgradeCheckoutSession(billingPeriod: String, organisationId: ID!): CreateProUpgradeCheckoutSession
+  createSubscriptionCheckoutSession(billingPeriod: BillingPeriodEnum, organisationId: ID!, planType: PlanTypeEnum): CreateSubscriptionCheckoutSession
   deletePaymentMethod(organisationId: ID, paymentMethodId: String): DeletePaymentMethodMutation
   cancelSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
   resumeSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
+  modifySubscription(billingPeriod: BillingPeriodEnum, organisationId: ID!, planType: PlanTypeEnum, subscriptionId: String!): UpdateSubscriptionResponse
   createSetupIntent(organisationId: ID): CreateSetupIntentMutation
   setDefaultPaymentMethod(
     organisationId: ID
@@ -1091,7 +1104,7 @@ input LockboxInput {
   expiry: BigInt
 }
 
-type CreateProUpgradeCheckoutSession {
+type CreateSubscriptionCheckoutSession {
   clientSecret: String
 }
 
@@ -1102,7 +1115,7 @@ type DeletePaymentMethodMutation {
 type UpdateSubscriptionResponse {
   success: Boolean
   message: String
-  canceledAt: String
+  cancelledAt: String
   status: String
 }
 

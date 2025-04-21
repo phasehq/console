@@ -5,6 +5,7 @@ from graphene import ObjectType, String, Boolean, List, Int, Float
 import stripe
 from django.conf import settings
 from graphql import GraphQLError
+from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
 
 
 class StripeCheckoutDetails(graphene.ObjectType):
@@ -36,6 +37,8 @@ class StripeSubscriptionDetails(ObjectType):
     cancel_at = Int()
     cancel_at_period_end = Boolean()
     payment_methods = List(PaymentMethodDetails)
+    billing_period = BillingPeriodEnum()
+    plan_type = PlanTypeEnum()
 
 
 def resolve_stripe_checkout_details(self, info, stripe_session_id):
@@ -84,6 +87,18 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
         renewal_date = subscription["current_period_end"]
         status = subscription["status"]
 
+        price = subscription["items"]["data"][0]["price"]
+        billing_period = (
+            BillingPeriodEnum.MONTHLY
+            if "monthly" in price["lookup_key"]
+            else BillingPeriodEnum.YEARLY
+        )
+        plan_type = (
+            PlanTypeEnum.PRO
+            if "pro" in price["lookup_key"]
+            else PlanTypeEnum.ENTERPRISE
+        )
+
         # Retrieve cancellation details
         cancel_at = subscription.get("cancel_at")  # Timestamp of cancellation, if set
         cancel_at_period_end = subscription.get("cancel_at_period_end")  # Boolean
@@ -111,13 +126,16 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
             for pm in payment_methods["data"]
         ]
 
-        # Retrieve upcoming invoice to get the amount of the next payment
-        upcoming_invoice = stripe.Invoice.upcoming(
-            customer=org.stripe_customer_id, subscription=org.stripe_subscription_id
-        )
-        next_payment_amount = upcoming_invoice[
-            "total"
-        ]  # Amount in the smallest currency unit
+        try:
+            # Retrieve upcoming invoice to get the amount of the next payment
+            upcoming_invoice = stripe.Invoice.upcoming(
+                customer=org.stripe_customer_id, subscription=org.stripe_subscription_id
+            )
+            next_payment_amount = upcoming_invoice[
+                "total"
+            ]  # Amount in the smallest currency unit
+        except:
+            next_payment_amount = 0
 
         return StripeSubscriptionDetails(
             subscription_id=org.stripe_subscription_id,
@@ -129,7 +147,9 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
             cancel_at=str(cancel_at) if cancel_at else None,
             cancel_at_period_end=cancel_at_period_end,
             payment_methods=payment_methods_list,
-            next_payment_amount=next_payment_amount,  # Add this field
+            next_payment_amount=next_payment_amount,
+            billing_period=billing_period,
+            plan_type=plan_type,
         )
     except stripe.error.StripeError as e:
-        return None
+        raise GraphQLError(f"Stripe error: {e}")

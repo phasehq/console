@@ -1,27 +1,29 @@
 from api.models import Organisation
 from api.utils.organisations import get_organisation_seats
 from api.utils.access.permissions import user_has_permission
+from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
 import stripe
 from django.conf import settings
-from graphene import Mutation, ID, String, Boolean, ObjectType, Mutation
+from graphene import Mutation, ID, String, Boolean, ObjectType, Mutation, Enum
 from graphql import GraphQLError
 
 
 class UpdateSubscriptionResponse(ObjectType):
     success = Boolean()
     message = String()
-    canceled_at = String()
+    cancelled_at = String()
     status = String()
 
 
-class CreateProUpgradeCheckoutSession(Mutation):
+class CreateSubscriptionCheckoutSession(Mutation):
     class Arguments:
         organisation_id = ID(required=True)
-        billing_period = String()
+        plan_type = PlanTypeEnum()
+        billing_period = BillingPeriodEnum()
 
     client_secret = String()
 
-    def mutate(self, info, organisation_id, billing_period):
+    def mutate(self, info, organisation_id, plan_type, billing_period):
 
         try:
             stripe.api_key = settings.STRIPE["secret_key"]
@@ -39,15 +41,24 @@ class CreateProUpgradeCheckoutSession(Mutation):
             if not organisation.stripe_customer_id:
                 raise GraphQLError("Organisation must have a Stripe customer ID.")
 
-            price = (
-                settings.STRIPE["prices"]["pro_monthly"]
-                if billing_period == "monthly"
-                else settings.STRIPE["prices"]["pro_yearly"]
-            )
+            if plan_type == PlanTypeEnum.ENTERPRISE:
+                price = (
+                    settings.STRIPE["prices"]["enterprise_monthly"]
+                    if billing_period == BillingPeriodEnum.MONTHLY
+                    else settings.STRIPE["prices"]["enterprise_yearly"]
+                )
+
+            else:
+                price = (
+                    settings.STRIPE["prices"]["pro_monthly"]
+                    if billing_period == BillingPeriodEnum.MONTHLY
+                    else settings.STRIPE["prices"]["pro_yearly"]
+                )
 
             # Create the checkout session
             session = stripe.checkout.Session.create(
                 mode="subscription",
+                billing_address_collection="required",
                 ui_mode="embedded",
                 line_items=[
                     {
@@ -65,7 +76,9 @@ class CreateProUpgradeCheckoutSession(Mutation):
                     "allow_redisplay_filters": ["always", "limited", "unspecified"],
                 },
             )
-            return CreateProUpgradeCheckoutSession(client_secret=session.client_secret)
+            return CreateSubscriptionCheckoutSession(
+                client_secret=session.client_secret
+            )
 
         except Organisation.DoesNotExist:
             raise GraphQLError("Organisation not found.")
@@ -131,21 +144,21 @@ class CancelSubscriptionMutation(Mutation):
             return UpdateSubscriptionResponse(
                 success=True,
                 message="Subscription set to cancel at the end of the current billing cycle.",
-                canceled_at=None,  # The subscription is not yet canceled
+                cancelled_at=None,  # The subscription is not yet canceled
                 status=updated_subscription["status"],
             )
         except stripe.error.InvalidRequestError as e:
             return UpdateSubscriptionResponse(
                 success=False,
                 message=f"Error: {str(e)}",
-                canceled_at=None,
+                cancelled_at=None,
                 status=None,
             )
         except Exception as e:
             return UpdateSubscriptionResponse(
                 success=False,
                 message=f"An unexpected error occurred: {str(e)}",
-                canceled_at=None,
+                cancelled_at=None,
                 status=None,
             )
 
@@ -185,21 +198,104 @@ class ResumeSubscriptionMutation(Mutation):
             return UpdateSubscriptionResponse(
                 success=True,
                 message="Subscription resumed successfully.",
-                canceled_at=None,  # Reset canceled_at since the subscription is active
+                cancelled_at=None,  # Reset cancelled_at since the subscription is active
                 status=updated_subscription["status"],
             )
         except stripe.error.InvalidRequestError as e:
             return UpdateSubscriptionResponse(
                 success=False,
                 message=f"Error: {str(e)}",
-                canceled_at=None,
+                cancelled_at=None,
                 status=None,
             )
         except Exception as e:
             return UpdateSubscriptionResponse(
                 success=False,
                 message=f"An unexpected error occurred: {str(e)}",
-                canceled_at=None,
+                cancelled_at=None,
+                status=None,
+            )
+
+
+class ModifySubscriptionMutation(Mutation):
+    class Arguments:
+        organisation_id = ID(required=True)
+        plan_type = PlanTypeEnum()
+        billing_period = BillingPeriodEnum()
+        subscription_id = String(required=True)
+
+    Output = UpdateSubscriptionResponse
+
+    def mutate(self, info, organisation_id, plan_type, billing_period, subscription_id):
+        try:
+            stripe.api_key = settings.STRIPE["secret_key"]
+
+            organisation = Organisation.objects.get(id=organisation_id)
+
+            if not user_has_permission(
+                info.context.user, "update", "Billing", organisation
+            ):
+                raise GraphQLError("You don't have permission to update Billing")
+
+            # Ensure the organisation has a Stripe customer ID
+            if not organisation.stripe_customer_id:
+                raise GraphQLError("Organisation must have a Stripe customer ID.")
+
+            if organisation.stripe_subscription_id != subscription_id:
+                raise GraphQLError("Invalid subscription ID")
+
+            subscription = stripe.Subscription.retrieve(
+                organisation.stripe_subscription_id
+            )
+
+            subscription_item_id = subscription["items"]["data"][0]["id"]
+
+            if plan_type == PlanTypeEnum.ENTERPRISE:
+                price = (
+                    settings.STRIPE["prices"]["enterprise_monthly"]
+                    if billing_period == BillingPeriodEnum.MONTHLY
+                    else settings.STRIPE["prices"]["enterprise_yearly"]
+                )
+
+            else:
+                price = (
+                    settings.STRIPE["prices"]["pro_monthly"]
+                    if billing_period == BillingPeriodEnum.MONTHLY
+                    else settings.STRIPE["prices"]["pro_yearly"]
+                )
+
+            # Retrieve the subscription and update it with a new price
+            updated_subscription = stripe.Subscription.modify(
+                organisation.stripe_subscription_id,
+                items=[
+                    {
+                        "id": subscription_item_id,  # Assuming there's only one item in the subscription
+                        "price": price,
+                        "quantity": get_organisation_seats(organisation),
+                    },
+                ],
+            )
+
+            return UpdateSubscriptionResponse(
+                success=True,
+                cancelled_at=None,
+                message="Subscription modified successfully.",
+                status=updated_subscription["status"],
+            )
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+        except stripe.error.InvalidRequestError as e:
+            return UpdateSubscriptionResponse(
+                success=False,
+                cancelled_at=None,
+                message=f"Stripe error: {str(e)}",
+                status=None,
+            )
+        except Exception as e:
+            return UpdateSubscriptionResponse(
+                success=False,
+                cancelled_at=None,
+                message=f"An unexpected error occurred: {str(e)}",
                 status=None,
             )
 
