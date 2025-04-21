@@ -516,9 +516,8 @@ export const StripeBillingInfo = () => {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
-                  <ModifySubscriptionDialog />
-                )}
+                {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr &&
+                  !subscriptionData.cancelAtPeriodEnd && <ModifySubscriptionDialog />}
                 <ManagePaymentMethodsDialog />
               </div>
             </div>
