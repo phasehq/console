@@ -221,7 +221,9 @@ export default function Members({ params }: { params: { team: string } }) {
                     <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
                       <Avatar member={member} size="md" />
                       <div>
-                        <div className="font-medium">{member.fullName || member.email}</div>
+                        <div className="font-medium">
+                          {member.fullName || member.email} {member.self && ' (You)'}
+                        </div>
                         {member.fullName && (
                           <div className="text-sm text-gray-500">{member.email}</div>
                         )}
