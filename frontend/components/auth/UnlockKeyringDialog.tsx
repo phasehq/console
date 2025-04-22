@@ -2,7 +2,7 @@
 
 import { Dialog, Transition } from '@headlessui/react'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
-import { FaEye, FaEyeSlash, FaLock, FaShieldAlt, FaSignOutAlt, FaUnlock } from 'react-icons/fa'
+import { FaEye, FaEyeSlash, FaLock, FaSignOutAlt, FaUnlock } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { useSession } from 'next-auth/react'
@@ -14,11 +14,10 @@ import { Avatar } from '../common/Avatar'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { handleSignout } from '@/apollo/client'
-import { SplitButton } from '../common/SplitButton'
-import { getDevicePassword, setDevicePassword } from '@/utils/localStorage'
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { getKeyring } from '@/utils/crypto'
 import Spinner from '../common/Spinner'
+import { setDevicePassword, getDevicePassword } from '@/utils/localStorage';
 
 export default function UnlockKeyringDialog(props: { organisation: OrganisationType }) {
   const { organisation } = props
