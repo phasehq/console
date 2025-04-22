@@ -11,9 +11,12 @@ import { Dialog, Transition } from '@headlessui/react'
 import { Fragment, useContext, useState } from 'react'
 import { FaTimes, FaTrashAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
+import { useRouter } from 'next/navigation'
 
-
-export const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberType, organisationId: string }) => {
+export const DeleteMemberConfirmDialog = (props: {
+  member: OrganisationMemberType
+  organisationId: string
+}) => {
   const { member, organisationId } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -30,6 +33,8 @@ export const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberTyp
     setIsOpen(true)
   }
 
+  const router = useRouter()
+
   const handleRemoveMember = async () => {
     await removeMember({
       variables: { memberId: member.id },
@@ -40,15 +45,14 @@ export const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberTyp
         },
       ],
       onCompleted: () => {
-         toast.success('Member removed successfully')
-         closeModal()
-         // Ideally, redirect back to members list page after successful deletion
-         // window.location.href = `/${organisation?.slug}/access/members` // Or use Next.js router
+        toast.success('Member removed successfully')
+        closeModal()
+        router.push(`/${organisation?.name}/access/members`)
       },
       onError: (error) => {
-         toast.error(`Failed to remove member: ${error.message}`)
-         closeModal()
-      }
+        toast.error(`Failed to remove member: ${error.message}`)
+        closeModal()
+      },
     })
   }
 
@@ -131,4 +135,4 @@ export const DeleteMemberConfirmDialog = (props: { member: OrganisationMemberTyp
       </Transition>
     </>
   )
-} 
+}

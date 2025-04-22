@@ -346,11 +346,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
                       {canDeleteThisMembersTokens && (
                         <div className="md:col-span-1 flex justify-end opacity-0 group-hover:opacity-100 transition ease">
-                          <DeleteUserTokenDialog
-                            token={token!}
-                            organisationId={organisation.id}
-                            memberId={member.id}
-                          />
+                          <DeleteUserTokenDialog token={token!} organisationId={organisation.id} />
                         </div>
                       )}
                     </div>

@@ -3,16 +3,15 @@
 import { UserTokenType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import DeleteUserToken from '@/graphql/mutations/users/deleteUserToken.gql'
-import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql' // To refetch member details
+import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import { useMutation } from '@apollo/client'
 import { Dialog, Transition } from '@headlessui/react'
 import { Fragment, useState } from 'react'
 import { FaTimes, FaTrashAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 
-
-export const DeleteUserTokenDialog = (props: { token: UserTokenType, organisationId: string, memberId: string }) => {
-  const { token, organisationId, memberId } = props
+export const DeleteUserTokenDialog = (props: { token: UserTokenType; organisationId: string }) => {
+  const { token, organisationId } = props
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [deleteToken, { loading }] = useMutation(DeleteUserToken)
@@ -53,18 +52,17 @@ export const DeleteUserTokenDialog = (props: { token: UserTokenType, organisatio
 
       <Transition appear show={isOpen} as={Fragment}>
         <Dialog as="div" className="relative z-10" onClose={closeModal}>
-          {/* ... Dialog backdrop ... */}
-           <Transition.Child
-             as={Fragment}
-             enter="ease-out duration-300"
-             enterFrom="opacity-0"
-             enterTo="opacity-100"
-             leave="ease-in duration-200"
-             leaveFrom="opacity-100"
-             leaveTo="opacity-0"
-           >
-             <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-           </Transition.Child>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
+          </Transition.Child>
 
           <div className="fixed inset-0 overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4 text-center">
@@ -99,7 +97,7 @@ export const DeleteUserTokenDialog = (props: { token: UserTokenType, organisatio
                     <Button variant="secondary" onClick={closeModal} disabled={loading}>
                       Cancel
                     </Button>
-                    <Button variant="danger" onClick={handleDelete} disabled={loading}>
+                    <Button variant="danger" onClick={handleDelete} isLoading={loading}>
                       {loading ? 'Deleting...' : 'Delete Token'}
                     </Button>
                   </div>
@@ -111,4 +109,4 @@ export const DeleteUserTokenDialog = (props: { token: UserTokenType, organisatio
       </Transition>
     </>
   )
-} 
+}
