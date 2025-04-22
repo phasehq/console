@@ -29,12 +29,6 @@ query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
       name
       createdAt
       expiresAt
-      createdBy {
-        id
-        fullName
-        avatarUrl
-        email
-      }
     }
   }
 }

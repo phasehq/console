@@ -7,7 +7,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext } from 'react'
-import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey, FaPlus } from 'react-icons/fa'
+import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { OrganisationMemberType, UserTokenType, AppType } from '@/apollo/graphql'
@@ -85,7 +85,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         <EmptyState
           title="Access restricted"
           subtitle="You don't have the permissions required to view this member."
-          graphic={<div className="text-neutral-300 dark:text-neutral-700 text-7xl"><FaBan /></div>}
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl">
+              <FaBan />
+            </div>
+          }
         >
           <Link
             href={`/${params.team}/access/members`}
@@ -104,7 +108,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         <EmptyState
           title="Member not found"
           subtitle="This member doesn't exist or you don't have access to them."
-          graphic={<div className="text-neutral-300 dark:text-neutral-700 text-7xl"><FaBan /></div>}
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl">
+              <FaBan />
+            </div>
+          }
         >
           <Link
             href={`/${params.team}/access/members`}
@@ -139,14 +147,14 @@ export default function MemberDetail({ params }: { params: { team: string; membe
       <div className="flex-grow overflow-y-auto px-4 md:px-6 space-y-8 pb-8">
         <div className="pt-4">
           <div className="flex items-center gap-4">
-            <Avatar member={member} size='xl' />
+            <Avatar member={member} size="xl" />
             <div className="flex flex-col gap-1">
               <h3 className="text-2xl font-semibold">
-                {member.fullName || 'User'}
+                {member.fullName || 'User'} {member.self && ' (You)'}{' '}
               </h3>
               <span className="text-neutral-500 text-sm">{member.email}</span>
               {member.lastLogin ? (
-                <span 
+                <span
                   className="text-neutral-500 text-xs flex items-center gap-1 cursor-help"
                   title={new Date(member.lastLogin).toLocaleString('en-GB', {
                     day: '2-digit',
@@ -155,9 +163,9 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                     hour: '2-digit',
                     minute: '2-digit',
                     second: '2-digit',
-                    timeZoneName: 'short'
+                    timeZoneName: 'short',
                   })}
-                > 
+                >
                   <FaClock /> Last login: {relativeTimeFromDates(new Date(member.lastLogin))}
                 </span>
               ) : (
@@ -176,7 +184,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           </div>
           <div className="space-y-2">
             <div className="text-lg w-max">
-              <RoleSelector member={member} organisationId={organisation.id} displayOnly={displayRoleOnly} />
+              <RoleSelector
+                member={member}
+                organisationId={organisation.id}
+                displayOnly={displayRoleOnly}
+              />
             </div>
             <div className="flex flex-col gap-1">
               <div className="text-sm text-neutral-500">
@@ -195,12 +207,12 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                   Apps and Environments this member has access to
                 </div>
               </div>
-              {userCanWriteAppMemberships && (
-                <AddAppToMemberButton 
-                   member={member} 
-                   organisationId={organisation.id} 
-                   teamSlug={params.team} 
-                 />
+              {userCanWriteAppMemberships && !member.self && (
+                <AddAppToMemberButton
+                  member={member}
+                  organisationId={organisation.id}
+                  teamSlug={params.team}
+                />
               )}
             </div>
 
@@ -221,7 +233,9 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                       <div className="flex items-center gap-1 text-sm text-neutral-500 group/id">
                         <span className="text-neutral-500 text-2xs flex items-center">App ID:</span>
                         <CopyButton value={app.id} buttonVariant="ghost">
-                          <span className="text-neutral-500 text-2xs font-mono hover:text-zinc-900 dark:hover:text-zinc-100 transition ease">{app.id}</span>
+                          <span className="text-neutral-500 text-2xs font-mono hover:text-zinc-900 dark:hover:text-zinc-100 transition ease">
+                            {app.id}
+                          </span>
                         </CopyButton>
                       </div>
                     </div>
@@ -283,30 +297,28 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                           </span>
                         </div>
                         <div className="flex items-center gap-1 text-sm text-neutral-500">
-                          <span className="text-neutral-500 text-xs flex items-center">Token ID:</span>
+                          <span className="text-neutral-500 text-xs flex items-center">
+                            Token ID:
+                          </span>
                           <CopyButton
                             value={token!.id}
                             buttonVariant="ghost"
                             title="Copy Token ID to clipboard"
                           >
-                            <span className="text-neutral-500 text-2xs font-mono hover:text-zinc-900 dark:hover:text-zinc-100 transition ease">{token!.id}</span>
+                            <span className="text-neutral-500 text-2xs font-mono hover:text-zinc-900 dark:hover:text-zinc-100 transition ease">
+                              {token!.id}
+                            </span>
                           </CopyButton>
                         </div>
                       </div>
 
-                      <div className="md:col-span-4 text-neutral-500 text-sm flex flex-col gap-1">
-                        <div className="whitespace-nowrap" title={new Date(token?.createdAt).toLocaleString()}>
+                      <div className="md:col-span-4 text-neutral-500 text-sm flex  justify-center">
+                        <div
+                          className="whitespace-nowrap"
+                          title={new Date(token?.createdAt).toLocaleString()}
+                        >
                           Created {relativeTimeFromDates(new Date(token?.createdAt))}
                         </div>
-                        {token.createdBy && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-neutral-500">by</span>
-                            <Avatar member={token.createdBy} size="sm" />
-                            <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                               {token.createdBy.fullName || token.createdBy.email} 
-                            </span>
-                          </div>
-                        )}
                       </div>
 
                       <div className="md:col-span-3 space-y-2">
@@ -315,7 +327,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                             'flex items-center gap-1 text-sm ',
                             isExpired ? 'text-red-500' : 'text-neutral-500'
                           )}
-                          title={token.expiresAt ? new Date(token.expiresAt).toLocaleString() : 'Never expires'}
+                          title={
+                            token.expiresAt
+                              ? new Date(token.expiresAt).toLocaleString()
+                              : 'Never expires'
+                          }
                         >
                           <span className="whitespace-nowrap">
                             {isExpired ? 'Expired' : 'Expires'}
@@ -345,7 +361,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                   <EmptyState
                     title="No tokens created"
                     subtitle="This member has not created any personal access tokens."
-                    graphic={<div className="text-neutral-300 dark:text-neutral-700 text-7xl"><FaKey /></div>}
+                    graphic={
+                      <div className="text-neutral-300 dark:text-neutral-700 text-7xl">
+                        <FaKey />
+                      </div>
+                    }
                   >
                     <></>
                   </EmptyState>
@@ -378,4 +398,4 @@ export default function MemberDetail({ params }: { params: { team: string; membe
       </div>
     </section>
   )
-} 
+}
