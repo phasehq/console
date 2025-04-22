@@ -153,47 +153,9 @@ type OrganisationMemberType {
   fullName: String
   avatarUrl: String
   self: Boolean
-}
-
-type ActivatedPhaseLicenseType {
-  id: String!
-  customerName: String!
-  organisation: OrganisationType!
-  plan: ApiActivatedPhaseLicensePlanChoices!
-  seats: Int
-  tokens: Int
-  metadata: JSONString!
-  environment: String!
-  licenseType: String!
-  signatureDate: Date!
-  issuingAuthority: String!
-  issuedAt: DateTime!
-  expiresAt: DateTime!
-  activatedAt: DateTime!
-}
-
-enum ApiActivatedPhaseLicensePlanChoices {
-  """Free"""
-  FR
-
-  """Pro"""
-  PR
-
-  """Enterprise"""
-  EN
-}
-
-type OrganisationMemberInviteType {
-  id: String!
-  organisation: OrganisationType!
-  apps: [AppType!]!
-  role: RoleType
-  invitedBy: OrganisationMemberType!
-  inviteeEmail: String!
-  valid: Boolean!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime!
+  lastLogin: DateTime
+  appMemberships: [AppType!]
+  tokens: [UserTokenType!]
 }
 
 type AppType {
@@ -466,6 +428,60 @@ enum ApiSecretEventEventTypeChoices {
   D
 }
 
+type UserTokenType {
+  id: String!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime
+  createdBy: OrganisationMemberType
+  lastUsed: DateTime
+}
+
+type ActivatedPhaseLicenseType {
+  id: String!
+  customerName: String!
+  organisation: OrganisationType!
+  plan: ApiActivatedPhaseLicensePlanChoices!
+  seats: Int
+  tokens: Int
+  metadata: JSONString!
+  environment: String!
+  licenseType: String!
+  signatureDate: Date!
+  issuingAuthority: String!
+  issuedAt: DateTime!
+  expiresAt: DateTime!
+  activatedAt: DateTime!
+}
+
+enum ApiActivatedPhaseLicensePlanChoices {
+  """Free"""
+  FR
+
+  """Pro"""
+  PR
+
+  """Enterprise"""
+  EN
+}
+
+type OrganisationMemberInviteType {
+  id: String!
+  organisation: OrganisationType!
+  apps: [AppType!]!
+  role: RoleType
+  invitedBy: OrganisationMemberType!
+  inviteeEmail: String!
+  valid: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime!
+}
+
 type LogsResponseType {
   kms: [KMSLogType]
   secrets: [SecretEventType]
@@ -539,17 +555,6 @@ type EnvironmentTokenType {
   wrappedKeyShare: String!
   createdAt: DateTime
   updatedAt: DateTime!
-}
-
-type UserTokenType {
-  id: String!
-  name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
 }
 
 type CloudFlarePagesType {

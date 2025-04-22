@@ -13,6 +13,22 @@ query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
     fullName
     avatarUrl
     createdAt
+    lastLogin
     self
+    appMemberships {
+      id
+      name
+      sseEnabled
+      environments {
+        id
+        name
+      }
+    }
+    tokens {
+      id
+      name
+      createdAt
+      expiresAt
+    }
   }
 }

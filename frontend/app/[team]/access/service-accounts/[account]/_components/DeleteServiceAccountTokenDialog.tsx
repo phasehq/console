@@ -1,4 +1,4 @@
-import { FaTrash } from 'react-icons/fa'
+import { FaTrashAlt } from 'react-icons/fa'
 import { DeleteServiceAccountTokenOp } from '@/graphql/mutations/service-accounts/deleteServiceAccountToken.gql'
 import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
 import { useMutation } from '@apollo/client'
@@ -50,9 +50,9 @@ export const DeleteServiceAccountTokenDialog = ({
     <GenericDialog
       title={`Delete ${token.name}`}
       buttonContent={
-        <>
-          <FaTrash /> Delete
-        </>
+        <span className="flex items-center gap-1">
+          <FaTrashAlt /> Delete
+        </span>
       }
       buttonVariant="danger"
       ref={dialogRef}
@@ -60,8 +60,8 @@ export const DeleteServiceAccountTokenDialog = ({
       <div className="space-y-4">
         <div className="text-neutral-500 py-4">Are you sure you want to delete this token?</div>
         <div className="flex justify-end">
-          <Button variant="danger" onClick={handleDelete} isLoading={loading}>
-            <FaTrash /> Delete
+          <Button variant="danger" onClick={handleDelete} isLoading={loading} className="flex items-center gap-1">
+            <FaTrashAlt /> Delete
           </Button>
         </div>
       </div>
