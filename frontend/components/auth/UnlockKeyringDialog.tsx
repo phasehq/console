@@ -214,7 +214,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                         </div>
 
                         <div className="flex justify-between items-end gap-4">
-                          <div className="space-y-1 w-full">
+                          <div className="space-y-2 w-full">
                             <label
                               className="block text-gray-700 text-sm font-bold mb-2"
                               htmlFor="password"
