@@ -118,7 +118,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
       },
       error: {
         render() {
-          return 'Something went wrong! Please check your sudo password and try again.'
+          return 'Unlock failed! Please check your sudo password and try again.'
         },
         autoClose: 2000,
       },
