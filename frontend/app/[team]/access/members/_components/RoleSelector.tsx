@@ -2,22 +2,15 @@
 
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
-import {
-  OrganisationMemberType,
-  AppType,
-  EnvironmentType,
-  RoleType,
-} from '@/apollo/graphql'
+import { OrganisationMemberType, AppType, EnvironmentType, RoleType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Listbox, Transition } from '@headlessui/react'
 import { FaChevronDown } from 'react-icons/fa'
 import clsx from 'clsx'
-
 import { toast } from 'react-toastify'
 import { PermissionPolicy, userHasGlobalAccess } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
-
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { userHasPermission } from '@/utils/access/permissions'
 import { updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
@@ -25,14 +18,15 @@ import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisati
 import GetApps from '@/graphql/queries/getApps.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
-import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
-import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
 import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
 import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 
-
-export const RoleSelector = (props: { member: OrganisationMemberType; organisationId: string; displayOnly?: boolean }) => {
+export const RoleSelector = (props: {
+  member: OrganisationMemberType
+  organisationId: string
+  displayOnly?: boolean
+}) => {
   const { member, organisationId, displayOnly = false } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -159,18 +153,20 @@ export const RoleSelector = (props: { member: OrganisationMemberType; organisati
       if (!adminRole) {
         throw new Error('Admin role not found')
       }
-      
-       // After all apps have been processed, assign the admin role
+
+      // After all apps have been processed, assign the admin role
       await updateRole({
         variables: {
           memberId: member.id,
           roleId: adminRole.id,
         },
-         refetchQueries: [
-           { query: GetOrganisationMembers, variables: { organisationId: organisationId, role: null } },
-         ]
+        refetchQueries: [
+          {
+            query: GetOrganisationMembers,
+            variables: { organisationId: organisationId, role: null },
+          },
+        ],
       })
-
     } catch (error) {
       console.error('Error assigning global access:', error)
       throw error // Ensure the promise rejects if any error occurs
@@ -178,7 +174,7 @@ export const RoleSelector = (props: { member: OrganisationMemberType; organisati
   }
 
   const handleUpdateRole = async (newRole: RoleType) => {
-    if (!role) return; // Should not happen if rendered
+    if (!role) return // Should not happen if rendered
 
     const currentRoleHasGlobalAccess = userHasGlobalAccess(role?.permissions)
     const newRoleHasGlobalAccess = userHasGlobalAccess(newRole.permissions)
@@ -212,47 +208,52 @@ export const RoleSelector = (props: { member: OrganisationMemberType; organisati
     setRole(newRole) // Optimistic UI update
 
     const processUpdate = async () => {
-       return new Promise(async (resolve, reject) => {
-         try {
-           if (newRoleHasGlobalAccess) {
-             await assignGlobalAccess() // This function now also calls updateRole internally
-           } else {
-             await updateRole({
-               variables: {
-                 memberId: member.id,
-                 roleId: newRole.id,
-               },
-               refetchQueries: [
-                  { query: GetOrganisationMembers, variables: { organisationId: organisationId, role: null } },
-                ]
-             })
-           }
-           // Update Service Account handlers if the new role grants access
-           // Consider if this should only run if access *changes*
-           if (newRoleHasServiceAccountAccess) {
-             await updateServiceAccountHandlers(organisationId, keyring!)
-           }
-           resolve(true)
-         } catch (error) {
-           setRole(member.role ?? undefined) // Revert optimistic update on error, handle null
-           reject(error)
-         }
-       })
-     }
+      return new Promise(async (resolve, reject) => {
+        try {
+          if (newRoleHasGlobalAccess) {
+            await assignGlobalAccess() // This function now also calls updateRole internally
+          } else {
+            await updateRole({
+              variables: {
+                memberId: member.id,
+                roleId: newRole.id,
+              },
+              refetchQueries: [
+                {
+                  query: GetOrganisationMembers,
+                  variables: { organisationId: organisationId, role: null },
+                },
+              ],
+            })
+          }
+          // Update Service Account handlers if the new role grants access
+          // Consider if this should only run if access *changes*
+          if (newRoleHasServiceAccountAccess) {
+            await updateServiceAccountHandlers(organisationId, keyring!)
+          }
+          resolve(true)
+        } catch (error) {
+          setRole(member.role ?? undefined) // Revert optimistic update on error, handle null
+          reject(error)
+        }
+      })
+    }
 
-     await toast.promise(processUpdate(), {
-       pending: 'Updating role...',
-       success: 'Updated role!',
-       error: 'Failed to update role!', // Provide a more specific error message if possible from the catch block
-     })
+    await toast.promise(processUpdate(), {
+      pending: 'Updating role...',
+      success: 'Updated role!',
+      error: 'Failed to update role!', // Provide a more specific error message if possible from the catch block
+    })
   }
 
-  const roleOptions = roleData?.roles.filter((option: RoleType) => option.name?.toLowerCase() !== 'owner') || []
+  const roleOptions =
+    roleData?.roles.filter((option: RoleType) => option.name?.toLowerCase() !== 'owner') || []
 
   // Determine if the selector should be disabled
   const disabled = !!(displayOnly || isOwner || !userCanUpdateMemberRoles || member.self)
 
-  if (roleDataPending) return <div className="h-10 w-24 bg-neutral-500/20 animate-pulse rounded-full" /> // Skeleton loader
+  if (roleDataPending)
+    return <div className="h-10 w-24 bg-neutral-500/20 animate-pulse rounded-full" /> // Skeleton loader
 
   if (!role) return <div className="text-neutral-500">No role assigned</div> // Handle case where role is null/undefined
 
@@ -287,11 +288,11 @@ export const RoleSelector = (props: { member: OrganisationMemberType; organisati
               </div>
             </Listbox.Button>
             <Transition
-               as={Fragment}
-               leave="transition ease-in duration-100"
-               leaveFrom="opacity-100"
-               leaveTo="opacity-0"
-             >
+              as={Fragment}
+              leave="transition ease-in duration-100"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
               <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none mt-1">
                 {roleOptions.map((optionRole: RoleType) => (
                   <Listbox.Option key={optionRole.id} value={optionRole} as={Fragment}>
@@ -309,10 +310,10 @@ export const RoleSelector = (props: { member: OrganisationMemberType; organisati
                   </Listbox.Option>
                 ))}
               </Listbox.Options>
-             </Transition>
+            </Transition>
           </>
         )}
       </Listbox>
     </div>
   )
-} 
+}
