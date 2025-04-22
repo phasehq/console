@@ -2,45 +2,29 @@
 
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
-import GetApps from '@/graphql/queries/getApps.gql'
-import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 
 import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
-import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
-import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
-import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 
-import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
+import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useState } from 'react'
-import {
-  OrganisationMemberInviteType,
-  OrganisationMemberType,
-  AppType,
-  EnvironmentType,
-  RoleType,
-} from '@/apollo/graphql'
+import { OrganisationMemberInviteType, OrganisationMemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
-import { Dialog, Listbox, Transition } from '@headlessui/react'
-import { FaBan, FaChevronDown, FaCopy, FaTimes, FaTrashAlt, FaUserAlt, FaChevronRight } from 'react-icons/fa'
+import { Dialog, Transition } from '@headlessui/react'
+import { FaBan, FaCopy, FaTimes, FaTrashAlt, FaUserAlt, FaChevronRight } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
 
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
-import { PermissionPolicy, userHasGlobalAccess } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
-import { KeyringContext } from '@/contexts/keyringContext'
 
-import { getInviteLink, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
+import { getInviteLink } from '@/utils/crypto'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
-import { updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
 import { InviteDialog } from './_components/InviteDialog'
 
 const handleCopy = (val: string) => {
@@ -50,250 +34,6 @@ const handleCopy = (val: string) => {
 
 const inviteIsExpired = (invite: OrganisationMemberInviteType) => {
   return new Date(invite.expiresAt) < new Date()
-}
-
-const RoleSelector = (props: { member: OrganisationMemberType }) => {
-  const { member } = props
-
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-  const { keyring } = useContext(KeyringContext)
-
-  const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
-
-  const userCanUpdateMemberRoles = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Members', 'update') &&
-      userHasPermission(organisation.role!.permissions, 'Roles', 'read')
-    : false
-
-  const { data: appsData } = useQuery(GetApps, {
-    variables: { organisationId: organisation!.id },
-    skip: !userCanReadApps,
-  })
-
-  const { data: roleData, loading: roleDataPending } = useQuery(GetRoles, {
-    variables: { orgId: organisation!.id },
-    skip: !userCanUpdateMemberRoles,
-  })
-  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
-  const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
-  const [updateRole] = useMutation(UpdateMemberRole)
-  const [addMemberToApp] = useMutation(AddMemberToApp)
-
-  const [role, setRole] = useState<RoleType>(member.role!)
-
-  const isOwner = role.name!.toLowerCase() === 'owner'
-
-  /**
-   * Handles the assignment of a user to a global access role.
-   * Env keys for all apps are fetched and decrypted by the active user,
-   * then each key is re-encrypted for the new user and saved on the backend via the addMemberToApp mutation.
-   *
-   * @returns {Promise<void>}
-   */
-  const assignGlobalAccess = async (): Promise<void> => {
-    if (!appsData) {
-      return Promise.reject(new Error('No apps data available'))
-    }
-
-    const apps = appsData.apps
-
-    // Function to process an individual app
-    const processApp = async (app: AppType) => {
-      try {
-        // Fetch envs for the app
-        const { data: appEnvsData } = await getAppEnvs({ variables: { appId: app.id } })
-        const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
-
-        // Construct promises to encrypt each env key for the target user
-        const envKeyPromises = appEnvironments.map(async (env: EnvironmentType) => {
-          // Fetch the current wrapped key for the environment
-          const { data } = await getEnvKey({
-            variables: {
-              envId: env.id,
-              appId: app.id,
-            },
-          })
-
-          const {
-            wrappedSeed: userWrappedSeed,
-            wrappedSalt: userWrappedSalt,
-            identityKey,
-          } = data.environmentKeys[0]
-
-          // Unwrap env keys for current logged in user
-          const { seed, salt } = await unwrapEnvSecretsForUser(
-            userWrappedSeed,
-            userWrappedSalt,
-            keyring!
-          )
-
-          // Re-encrypt the env key for the target user
-          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(
-            { seed, salt },
-            member
-          )
-
-          // Return the mutation payload
-          return {
-            envId: env.id,
-            userId: member.id,
-            identityKey,
-            wrappedSeed,
-            wrappedSalt,
-          }
-        })
-
-        // Get mutation payloads with wrapped keys for each environment
-        const envKeyInputs = await Promise.all(envKeyPromises)
-
-        // Add the user to this app, with wrapped keys for each environment
-        await addMemberToApp({
-          variables: { memberId: member.id, appId: app.id, envKeys: envKeyInputs },
-        })
-      } catch (error) {
-        console.error(`Error processing app ${app.id}:`, error)
-        throw error // Propagate the error to be caught later
-      }
-    }
-
-    try {
-      // Process each app sequentially using for...of to ensure async operations complete in order
-      for (const app of apps) {
-        await processApp(app)
-      }
-
-      // After all apps have been processed, assign the global admin role
-      const adminRole = roleOptions.find(
-        (option: RoleType) => option.name?.toLowerCase() === 'admin'
-      )
-
-      if (adminRole) {
-        await updateRole({
-          variables: {
-            memberId: member.id,
-            roleId: adminRole.id,
-          },
-        })
-      } else {
-        throw new Error('Admin role not found')
-      }
-    } catch (error) {
-      console.error('Error assigning global access:', error)
-      throw error // Ensure the promise rejects if any error occurs
-    }
-  }
-
-  const handleUpdateRole = async (newRole: RoleType) => {
-    const currentRoleHasGlobalAccess = userHasGlobalAccess(member.role?.permissions)
-    const newRoleHasGlobalAccess = userHasGlobalAccess(newRole.permissions)
-    const currentUserHasGlobalAccess = userHasGlobalAccess(organisation?.role?.permissions)
-
-    const newRolePolicy: PermissionPolicy = JSON.parse(newRole.permissions)
-    const newRoleHasServiceAccountAccess = newRolePolicy.permissions['ServiceAccounts'].length > 0
-
-    if (newRoleHasGlobalAccess && !currentUserHasGlobalAccess) {
-      toast.error('You cannot assign users to this role as it requires global access!', {
-        autoClose: 5000,
-      })
-      return false
-    }
-
-    if (currentRoleHasGlobalAccess && !currentUserHasGlobalAccess) {
-      toast.error("You cannot change this user's role as you don't have global access!", {
-        autoClose: 5000,
-      })
-      return false
-    }
-
-    if (newRoleHasGlobalAccess && !userCanReadApps) {
-      toast.error(
-        'You are missing the required "Apps:read" permissions and cannot assign this user to a role with global access!',
-        { autoClose: 5000 }
-      )
-      return false
-    }
-
-    setRole(newRole)
-
-    const processUpdate = async () => {
-      return new Promise(async (resolve, reject) => {
-        try {
-          if (newRoleHasGlobalAccess) await assignGlobalAccess()
-          else {
-            await updateRole({
-              variables: {
-                memberId: member.id,
-                roleId: newRole.id,
-              },
-            })
-          }
-          //if (newRoleHasServiceAccountAccess)
-          await updateServiceAccountHandlers(organisation!.id, keyring!)
-          resolve(true)
-        } catch (error) {
-          reject(error)
-        }
-      })
-    }
-    await toast.promise(processUpdate, {
-      pending: 'Updating role...',
-      success: 'Updated role!',
-      error: 'Something went wrong!',
-    })
-  }
-
-  const roleOptions = roleData?.roles.filter((option: RoleType) => option.name !== 'Owner') || []
-
-  const disabled = isOwner || !userCanUpdateMemberRoles || member.self!
-
-  if (roleDataPending) return <></>
-
-  return disabled ? (
-    <RoleLabel role={role} />
-  ) : (
-    <div className="space-y-1 w-full">
-      <Listbox disabled={disabled} value={role} onChange={handleUpdateRole}>
-        {({ open }) => (
-          <>
-            <Listbox.Button as={Fragment} aria-required>
-              <div
-                className={clsx(
-                  'py-2 flex items-center justify-between  rounded-md h-10',
-                  disabled ? 'cursor-not-allowed' : 'cursor-pointer'
-                )}
-              >
-                <RoleLabel role={role} />
-                {!disabled && (
-                  <FaChevronDown
-                    className={clsx(
-                      'transition-transform ease duration-300 text-neutral-500',
-                      open ? 'rotate-180' : 'rotate-0'
-                    )}
-                  />
-                )}
-              </div>
-            </Listbox.Button>
-            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none">
-              {roleOptions.map((role: RoleType) => (
-                <Listbox.Option key={role.name} value={role} as={Fragment}>
-                  {({ active, selected }) => (
-                    <div
-                      className={clsx(
-                        'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                        active && 'bg-zinc-300 dark:bg-zinc-700'
-                      )}
-                    >
-                      <RoleLabel role={role} />
-                    </div>
-                  )}
-                </Listbox.Option>
-              ))}
-            </Listbox.Options>
-          </>
-        )}
-      </Listbox>
-    </div>
-  )
 }
 
 export default function Members({ params }: { params: { team: string } }) {
@@ -481,9 +221,7 @@ export default function Members({ params }: { params: { team: string } }) {
                     <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
                       <Avatar member={member} size="md" />
                       <div>
-                        <div className="font-medium">
-                          {member.fullName || member.email}
-                        </div>
+                        <div className="font-medium">{member.fullName || member.email}</div>
                         {member.fullName && (
                           <div className="text-sm text-gray-500">{member.email}</div>
                         )}
@@ -496,11 +234,11 @@ export default function Members({ params }: { params: { team: string } }) {
                       {relativeTimeFromDates(new Date(member.createdAt))}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                       <Link href={`/${params.team}/access/members/${member.id}`}>
-                          <Button variant="secondary">
-                             Manage <FaChevronRight />
-                          </Button>
-                       </Link>
+                      <Link href={`/${params.team}/access/members/${member.id}`}>
+                        <Button variant="secondary">
+                          Manage <FaChevronRight />
+                        </Button>
+                      </Link>
                     </td>
                   </tr>
                 ))}
