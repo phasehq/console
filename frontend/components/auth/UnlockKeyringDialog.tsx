@@ -112,7 +112,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
       pending: 'Unlocking...',
       success: {
         render() {
-          return 'Unlocked user keyring!'
+          return 'Keyring unlocked.'
         },
         autoClose: 2000,
       },
