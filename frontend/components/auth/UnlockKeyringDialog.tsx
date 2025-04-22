@@ -218,7 +218,6 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                               className="block text-gray-700 text-sm font-bold mb-2"
                               htmlFor="password"
                             >
-                              Sudo password
                             </label>
                             <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 roudned-md focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
                               <input
@@ -244,49 +243,34 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                             </div>
                           </div>
                           <div className="pb-1">
-                            <SplitButton
+                            <Button
                               type="submit"
                               variant="primary"
                               isLoading={unlocking}
-                              menuContent={
-                                <div className="space-y-4 w-96 p-2">
-                                  <div>
-                                    <div className="text-black dark:text-white font-semibold">
-                                      Remember password
-                                    </div>
-                                    <div className="text-neutral-500 text-sm">
-                                      Store your sudo password on this device to automatically
-                                      unlock your keyring when you log in.
-                                    </div>
-                                  </div>
-
-                                  <div
-                                    className={clsx(
-                                      'flex items-center gap-2 text-sm pt-2',
-                                      trustDevice ? 'text-emerald-500' : 'text-neutral-500'
-                                    )}
-                                  >
-                                    <ToggleSwitch
-                                      value={trustDevice}
-                                      onToggle={() => setTrustDevice(!trustDevice)}
-                                    />
-                                    Remember password on this device
-                                  </div>
-                                </div>
-                              }
+                              disabled={unlocking}
                             >
-                              {!unlocking &&
-                                (trustDevice ? (
-                                  <FaShieldAlt className="shrink-0" />
-                                ) : (
-                                  <FaUnlock className="shrink-0" />
-                                ))}{' '}
-                              {trustDevice ? 'Remember' : 'Unlock'}
-                            </SplitButton>
+                              <FaUnlock className="shrink-0" />
+                              Unlock
+                            </Button>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-neutral-500/20 pt-2">
+                        <div className="space-y-2">
+                          <div
+                            className={clsx(
+                              'flex items-center gap-2 text-sm',
+                              trustDevice ? 'text-emerald-500' : 'text-neutral-500'
+                            )}
+                          >
+                            <ToggleSwitch
+                              value={trustDevice}
+                              onToggle={() => setTrustDevice(!trustDevice)}
+                            />
+                            Remember password
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-neutral-500/20 pt-4 mt-4">
                           <Link
                             className="text-xs text-neutral-500 hover:text-black dark:hover:text-white transition ease"
                             href={`/${organisation.name}/recovery`}
