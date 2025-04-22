@@ -157,7 +157,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                     <Dialog.Title as="div" className="flex w-full gap-2 items-center">
                       <FaLock className='text-neutral-500'/>
                       <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                        Unlock User Keyring
+                        Enter your <code className="text-neutral-500">sudo</code> password
                       </h3>
                     </Dialog.Title>
                   )}
@@ -170,9 +170,8 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                     </div>
                   ) : (
                     <form onSubmit={handleFormSubmit}>
-                      <div className="py-4">
+                      <div className="pt-2 pb-4">
                         <p className="text-neutral-500">
-                          Please enter your <code>sudo</code> password to unlock the user keyring.
                           This is required for data to be decrypted on this screen.
                         </p>
                       </div>
