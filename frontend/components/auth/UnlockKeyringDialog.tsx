@@ -155,12 +155,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                 <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   {!devicePasswordExists && (
                     <Dialog.Title as="div" className="flex w-full gap-2 items-center">
-                      <FaLock
-                        className={clsx(
-                          keyring === null ? 'text-red-500' : 'text-emerald-500',
-                          'transition-colors ease'
-                        )}
-                      />
+                      <FaLock className='text-neutral-500'/>
                       <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                         Unlock User Keyring
                       </h3>
