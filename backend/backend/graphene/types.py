@@ -18,6 +18,7 @@ from api.models import (
     EnvironmentSyncEvent,
     EnvironmentToken,
     Lockbox,
+    NetworkAccessPolicy,
     Organisation,
     App,
     OrganisationMember,
@@ -170,6 +171,7 @@ class OrganisationMemberType(DjangoObjectType):
     last_login = graphene.DateTime()
     app_memberships = graphene.List(graphene.NonNull(lambda: AppType))
     tokens = graphene.List(graphene.NonNull(lambda: UserTokenType))
+    network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
 
     class Meta:
         model = OrganisationMember
@@ -214,8 +216,10 @@ class OrganisationMemberType(DjangoObjectType):
 
     def resolve_app_memberships(self, info):
         # Find all EnvironmentKeys for this user
-        user_env_keys = EnvironmentKey.objects.filter(user=self, deleted_at=None).select_related('environment__app')
-        
+        user_env_keys = EnvironmentKey.objects.filter(
+            user=self, deleted_at=None
+        ).select_related("environment__app")
+
         # Get unique app IDs the user has access to
         app_ids = set(key.environment.app.id for key in user_env_keys)
         apps = App.objects.filter(id__in=app_ids)
@@ -228,22 +232,30 @@ class OrganisationMemberType(DjangoObjectType):
         filtered_apps = []
         for app in apps:
             # Fetch all environments for the current app
-            all_app_environments = Environment.objects.filter(app=app).order_by('index')
+            all_app_environments = Environment.objects.filter(app=app).order_by("index")
             # Filter environments to only those the user has access to
             accessible_environment_ids = app_envs_map.get(app.id, set())
-            app.filtered_environments = [env for env in all_app_environments if env.id in accessible_environment_ids]
+            app.filtered_environments = [
+                env
+                for env in all_app_environments
+                if env.id in accessible_environment_ids
+            ]
             filtered_apps.append(app)
 
         return filtered_apps
 
     def resolve_tokens(self, info):
         # Check using the new permission name
-        can_view_tokens = user_has_permission(info.context.user, "read", "MemberPersonalAccessTokens", self.organisation)
+        can_view_tokens = user_has_permission(
+            info.context.user, "read", "MemberPersonalAccessTokens", self.organisation
+        )
 
         if not can_view_tokens and self.user != info.context.user:
-             return [] 
-        
-        return UserToken.objects.filter(user=self, deleted_at=None).order_by('-created_at')
+            return []
+
+        return UserToken.objects.filter(user=self, deleted_at=None).order_by(
+            "-created_at"
+        )
 
 
 class OrganisationMemberInviteType(DjangoObjectType):
@@ -640,6 +652,7 @@ class ServiceAccountType(DjangoObjectType):
     handlers = graphene.List(ServiceAccountHandlerType)
     tokens = graphene.List(ServiceAccountTokenType)
     app_memberships = graphene.List(graphene.NonNull(AppType))
+    network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
 
     class Meta:
         model = ServiceAccount
@@ -780,11 +793,16 @@ class UserTokenType(DjangoObjectType):
 
     def resolve_created_by(self, info):
         # Check using the new permission name
-        can_view_creator = user_has_permission(info.context.user, "read", "MemberPersonalAccessTokens", self.user.organisation)
+        can_view_creator = user_has_permission(
+            info.context.user,
+            "read",
+            "MemberPersonalAccessTokens",
+            self.user.organisation,
+        )
 
         if not can_view_creator and self.user.user != info.context.user:
-            return None 
-        
+            return None
+
         return self.user
 
 
@@ -914,4 +932,13 @@ class PhaseLicenseType(graphene.ObjectType):
 class ActivatedPhaseLicenseType(DjangoObjectType):
     class Meta:
         model = ActivatedPhaseLicense
+        fields = "__all__"
+
+
+class NetworkAccessPolicyType(DjangoObjectType):
+    organisation_members = graphene.List(graphene.NonNull(lambda: OrganisationMemberType))
+    service_accounts = graphene.List(graphene.NonNull(lambda: ServiceAccountType))
+    
+    class Meta:
+        model = NetworkAccessPolicy
         fields = "__all__"

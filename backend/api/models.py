@@ -185,6 +185,23 @@ class Role(models.Model):
         return f"{self.name} ({self.organisation.name})"
 
 
+class NetworkAccessPolicy(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.CharField(max_length=100)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
+    allowed_ips = models.TextField(
+        help_text="Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)"
+    )
+    is_global = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def get_ip_list(self):
+        return [ip.strip() for ip in self.allowed_ips.split(",") if ip.strip()]
+
+    def __str__(self):
+        return self.name
+
+
 class OrganisationMember(models.Model):
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
@@ -205,6 +222,9 @@ class OrganisationMember(models.Model):
     identity_key = models.CharField(max_length=256, null=True, blank=True)
     wrapped_keyring = models.TextField(blank=True)
     wrapped_recovery = models.TextField(blank=True)
+    network_policies = models.ManyToManyField(
+        NetworkAccessPolicy, blank=True, related_name="members"
+    )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -241,6 +261,9 @@ class ServiceAccount(models.Model):
     identity_key = models.CharField(max_length=256, null=True, blank=True)
     server_wrapped_keyring = models.TextField(null=True)
     server_wrapped_recovery = models.TextField(null=True)
+    network_policies = models.ManyToManyField(
+        NetworkAccessPolicy, blank=True, related_name="service_accounts"
+    )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)

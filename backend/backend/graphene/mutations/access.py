@@ -1,6 +1,6 @@
-from api.models import Organisation, OrganisationMember, Role
+from api.models import NetworkAccessPolicy, Organisation, OrganisationMember, Role
 from api.utils.access.permissions import user_has_permission
-from backend.graphene.types import RoleType
+from backend.graphene.types import NetworkAccessPolicyType, RoleType
 import graphene
 from graphql import GraphQLError
 
@@ -111,3 +111,82 @@ class DeleteCustomRoleMutation(graphene.Mutation):
         role.delete()
 
         return DeleteCustomRoleMutation(ok=True)
+
+
+class CreateNetworkAccessPolicyMutation(graphene.Mutation):
+    class Arguments:
+        name = graphene.String()
+        allowed_ips = graphene.String(required=True)
+        organisation_id = graphene.ID(required=True)
+
+    network_access_policy = graphene.Field(NetworkAccessPolicyType)
+
+    @classmethod
+    def mutate(cls, root, info, name, allowed_ips, organisation_id):
+        user = info.context.user
+        org = Organisation.objects.get(id=organisation_id)
+
+        if not user_has_permission(user, "create", "Network Access Policies", org):
+            raise GraphQLError(
+                "You don't have the permissions required to create Network Access Policies in this organisation"
+            )
+
+        policy = NetworkAccessPolicy.objects.create(
+            organisation=org, name=name, allowed_ips=allowed_ips
+        )
+
+        return CreateNetworkAccessPolicyMutation(network_access_policy=policy)
+
+
+class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+        name = graphene.String()
+        allowed_ips = graphene.String()
+
+    network_access_policy = graphene.Field(NetworkAccessPolicyType)
+
+    @classmethod
+    def mutate(cls, root, info, id, name=None, allowed_ips=None):
+        user = info.context.user
+        policy = NetworkAccessPolicy.objects.get(id=id)
+
+        if not user_has_permission(
+            user, "update", "Network Access Policies", policy.organisation
+        ):
+            raise GraphQLError(
+                "You don't have the permissions required to update Network Access Policies in this organisation"
+            )
+
+        if name is not None:
+            policy.name = name
+
+        if allowed_ips is not None:
+            policy.allowed_ips = allowed_ips
+
+        policy.save()
+
+        return UpdateNetworkAccessPolicyMutation(network_access_policy=policy)
+
+
+class DeleteNetworkAccessPolicyMutation(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        user = info.context.user
+        policy = NetworkAccessPolicy.objects.get(id=id)
+
+        if not user_has_permission(
+            user, "delete", "Network Access Policies", policy.organisation
+        ):
+            raise GraphQLError(
+                "You don't have the permissions required to delete Network Access Policies in this organisation"
+            )
+
+        policy.delete()
+
+        return DeleteNetworkAccessPolicyMutation(ok=True)
