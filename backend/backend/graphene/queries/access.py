@@ -86,3 +86,14 @@ def resolve_network_access_policies(root, info, organisation_id):
         raise GraphQLError(
             "You don't have permission to read Network Access Policies in this Organisation"
         )
+
+
+def resolve_client_ip(root, info):
+    request = info.context
+    # Use common headers to support reverse proxies
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(",")[0].strip()
+    else:
+        ip = request.META.get("REMOTE_ADDR")
+    return ip

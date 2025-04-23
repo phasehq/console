@@ -20,8 +20,11 @@ from .graphene.queries.syncing import (
 from .graphene.mutations.syncing import CreateVercelSync
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
+    CreateNetworkAccessPolicyMutation,
     DeleteCustomRoleMutation,
+    DeleteNetworkAccessPolicyMutation,
     UpdateCustomRoleMutation,
+    UpdateNetworkAccessPolicyMutation,
 )
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
@@ -60,6 +63,8 @@ from .graphene.queries.syncing import (
 from .graphene.queries.access import (
     resolve_roles,
     resolve_organisation_global_access_users,
+    resolve_network_access_policies,
+    resolve_client_ip,
 )
 from .graphene.queries.service_accounts import (
     resolve_service_accounts,
@@ -144,6 +149,7 @@ from .graphene.types import (
     EnvironmentTokenType,
     EnvironmentType,
     LogsResponseType,
+    NetworkAccessPolicyType,
     OrganisationMemberInviteType,
     OrganisationMemberType,
     OrganisationPlanType,
@@ -194,9 +200,14 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 class Query(graphene.ObjectType):
+    client_ip = graphene.String()
+
     organisations = graphene.List(OrganisationType)
 
     roles = graphene.List(RoleType, org_id=graphene.ID())
+    network_access_policies = graphene.List(
+        NetworkAccessPolicyType, organisation_id=graphene.ID()
+    )
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
@@ -354,6 +365,8 @@ class Query(graphene.ObjectType):
 
     resolve_server_public_key = resolve_server_public_key
 
+    resolve_client_ip = resolve_client_ip
+
     resolve_sse_enabled = resolve_sse_enabled
 
     resolve_providers = resolve_providers
@@ -392,6 +405,7 @@ class Query(graphene.ObjectType):
         return [membership.organisation for membership in memberships]
 
     resolve_roles = resolve_roles
+    resolve_network_access_policies = resolve_network_access_policies
 
     resolve_organisation_plan = resolve_organisation_plan
 
@@ -839,6 +853,11 @@ class Mutation(graphene.ObjectType):
     create_custom_role = CreateCustomRoleMutation.Field()
     update_custom_role = UpdateCustomRoleMutation.Field()
     delete_custom_role = DeleteCustomRoleMutation.Field()
+
+    # IP allowlist
+    create_network_access_policy = CreateNetworkAccessPolicyMutation.Field()
+    update_network_access_policy = UpdateNetworkAccessPolicyMutation.Field()
+    delete_network_access_policy = DeleteNetworkAccessPolicyMutation.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
