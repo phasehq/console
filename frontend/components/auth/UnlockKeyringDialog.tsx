@@ -42,7 +42,6 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   const reset = () => {
     setPassword('')
     setShowPw(false)
-    setTrustDevice(false)
   }
 
   const decryptKeyring = (sudoPassword: string) => {
