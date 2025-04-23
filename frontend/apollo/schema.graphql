@@ -1,6 +1,8 @@
 type Query {
+  clientIp: String
   organisations: [OrganisationType]
   roles(orgId: ID): [RoleType]
+  networkAccessPolicies(organisationId: ID): [NetworkAccessPolicyType]
   organisationNameAvailable(name: String): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -112,34 +114,21 @@ type SeatsUsed {
   total: Int
 }
 
-type PhaseLicenseType {
-  id: String
-  customerName: String
-  organisationName: String
-  plan: PlanTier
-  seats: Int
-  tokens: Int
-  issuedAt: Date
-  expiresAt: Date
-  environment: String
-  licenseType: String
-  signatureDate: String
-  issuingAuthority: String
-  isActivated: Boolean
-  organisationOwner: OrganisationMemberType
-}
+type NetworkAccessPolicyType {
+  id: String!
+  name: String!
+  organisation: OrganisationType!
 
-enum PlanTier {
-  PRO_PLAN
-  ENTERPRISE_PLAN
+  """
+  Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
+  """
+  allowedIps: String!
+  isGlobal: Boolean!
+  createdAt: DateTime!
+  members: [OrganisationMemberType!]!
+  serviceAccounts: [ServiceAccountType!]
+  organisationMembers: [OrganisationMemberType!]
 }
-
-"""
-The `Date` scalar type represents a Date
-value as specified by
-[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
-"""
-scalar Date
 
 type OrganisationMemberType {
   id: String!
@@ -156,6 +145,7 @@ type OrganisationMemberType {
   lastLogin: DateTime
   appMemberships: [AppType!]
   tokens: [UserTokenType!]
+  networkPolicies: [NetworkAccessPolicyType!]
 }
 
 type AppType {
@@ -185,6 +175,7 @@ type ServiceAccountType {
   handlers: [ServiceAccountHandlerType]
   tokens: [ServiceAccountTokenType]
   appMemberships: [AppType!]
+  networkPolicies: [NetworkAccessPolicyType!]
 }
 
 type ServiceAccountHandlerType {
@@ -438,8 +429,36 @@ type UserTokenType {
   updatedAt: DateTime!
   expiresAt: DateTime
   createdBy: OrganisationMemberType
-  lastUsed: DateTime
 }
+
+type PhaseLicenseType {
+  id: String
+  customerName: String
+  organisationName: String
+  plan: PlanTier
+  seats: Int
+  tokens: Int
+  issuedAt: Date
+  expiresAt: Date
+  environment: String
+  licenseType: String
+  signatureDate: String
+  issuingAuthority: String
+  isActivated: Boolean
+  organisationOwner: OrganisationMemberType
+}
+
+enum PlanTier {
+  PRO_PLAN
+  ENTERPRISE_PLAN
+}
+
+"""
+The `Date` scalar type represents a Date
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar Date
 
 type ActivatedPhaseLicenseType {
   id: String!
@@ -731,6 +750,9 @@ type Mutation {
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
   updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
   deleteCustomRole(id: ID!): DeleteCustomRoleMutation
+  createNetworkAccessPolicy(allowedIps: String!, isGlobal: Boolean!, name: String, organisationId: ID!): CreateNetworkAccessPolicyMutation
+  updateNetworkAccessPolicy(allowedIps: String, id: ID!, isGlobal: Boolean, name: String): UpdateNetworkAccessPolicyMutation
+  deleteNetworkAccessPolicy(id: ID!): DeleteNetworkAccessPolicyMutation
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
   enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
@@ -892,6 +914,18 @@ type UpdateCustomRoleMutation {
 }
 
 type DeleteCustomRoleMutation {
+  ok: Boolean
+}
+
+type CreateNetworkAccessPolicyMutation {
+  networkAccessPolicy: NetworkAccessPolicyType
+}
+
+type UpdateNetworkAccessPolicyMutation {
+  networkAccessPolicy: NetworkAccessPolicyType
+}
+
+type DeleteNetworkAccessPolicyMutation {
   ok: Boolean
 }
 
