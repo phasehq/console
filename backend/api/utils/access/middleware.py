@@ -1,6 +1,8 @@
 # permissions.py
 from api.utils.access.network import is_ip_allowed
+from api.models import NetworkAccessPolicy
 from rest_framework.permissions import BasePermission
+from itertools import chain
 
 
 class IsIPAllowed(BasePermission):
@@ -17,16 +19,28 @@ class IsIPAllowed(BasePermission):
     def has_permission(self, request, view):
         ip = self.get_client_ip(request)
 
-        org_member = getattr(request.auth, "org_member", None)
-        service_account = getattr(request.auth, "service_account", None)
+        org_member = request.auth.get("org_member", None)
+        service_account = request.auth.get("service_account", None)
 
-        policies = []
+        org = None
+        account_policies = NetworkAccessPolicy.objects.none()
+
         if org_member:
-            policies = org_member.network_policies.all()
+            account_policies = org_member.network_policies.all()
+            org = org_member.organisation
         elif service_account:
-            policies = service_account.network_policies.all()
+            account_policies = service_account.network_policies.all()
+            org = service_account.organisation
 
-        if not policies:
-            return False  # Deny if no policies
+        global_policies = (
+            NetworkAccessPolicy.objects.filter(organisation=org, is_global=True)
+            if org
+            else NetworkAccessPolicy.objects.none()
+        )
 
-        return is_ip_allowed(ip, policies)
+        all_policies = list(chain(account_policies, global_policies))
+
+        if not all_policies:
+            return True  # Allow if no policies defined
+
+        return is_ip_allowed(ip, all_policies)
