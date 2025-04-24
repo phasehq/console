@@ -1,6 +1,7 @@
 import requests
 import json
 import base64
+from api.utils.access.middleware import IsIPAllowed
 import jwt
 import os
 from api.serializers import (
@@ -174,12 +175,12 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
             if emails:
                 # First try to get primary email
                 for email_obj in emails:
-                    if email_obj.get('primary'):
-                        extra_data["email"] = email_obj['email']
+                    if email_obj.get("primary"):
+                        extra_data["email"] = email_obj["email"]
                         break
                 # If no primary email found, use the first one
                 if not extra_data.get("email") and len(emails) > 0:
-                    extra_data["email"] = emails[0]['email']
+                    extra_data["email"] = emails[0]["email"]
 
         email = extra_data["email"]
 
@@ -332,7 +333,7 @@ def service_token_kms(request):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([AllowAny, IsIPAllowed])
 def secrets_tokens(request):
     auth_token = request.headers["authorization"]
 
