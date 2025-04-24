@@ -34,6 +34,7 @@ query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
       id
       name
       allowedIps
+      isGlobal
     }
   }
 }

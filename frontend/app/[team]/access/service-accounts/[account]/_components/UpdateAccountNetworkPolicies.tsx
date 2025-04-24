@@ -30,7 +30,7 @@ export const UpdateAccountNetworkPolicies = ({
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
   const [selectedPolicies, setSelectedPolicies] = useState<NetworkAccessPolicyType[]>(
-    account.networkPolicies || []
+    account.networkPolicies?.filter((p) => !p.isGlobal) || []
   )
 
   // Permissions
@@ -40,6 +40,10 @@ export const UpdateAccountNetworkPolicies = ({
 
   const userCanUpdateServiceAccounts = organisation
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update')
+    : false
+
+  const userCanUpdateMembers = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'Members', 'update')
     : false
 
   const { data, loading } = useQuery(GetNetworkPolicies, {
@@ -67,7 +71,7 @@ export const UpdateAccountNetworkPolicies = ({
                 ? AccountTypeEnum.Service
                 : AccountTypeEnum.User,
             accountId: account.id,
-            policyIds: selectedPolicies.map((p) => p.id),
+            policyIds: selectedPolicies.filter((p) => !p.isGlobal).map((p) => p.id),
           },
         ],
         organisationId: organisation?.id!,
@@ -88,6 +92,13 @@ export const UpdateAccountNetworkPolicies = ({
     toast.success('Update network access policy for this account')
     closeModal()
   }
+
+  const accountPolicies =
+    data?.networkAccessPolicies.filter((policy: NetworkAccessPolicyType) => !policy.isGlobal) ?? []
+  const globalPolicies =
+    data?.networkAccessPolicies.filter((policy: NetworkAccessPolicyType) => policy.isGlobal) ?? []
+
+  if (account.__typename === 'OrganisationMemberType' && account.self) return <></>
 
   return (
     <GenericDialog
@@ -120,7 +131,7 @@ export const UpdateAccountNetworkPolicies = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-500/20">
-              {data?.networkAccessPolicies.map((policy: NetworkAccessPolicyType) => (
+              {globalPolicies.map((policy: NetworkAccessPolicyType) => (
                 <tr key={policy.id} className="group">
                   <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
                     {policy.name}{' '}
@@ -137,9 +148,40 @@ export const UpdateAccountNetworkPolicies = ({
                     </div>
                   </td>
 
-                  <td className="px-6 py-4 flex items-center justify-end gap-2">
+                  <td
+                    className="px-6 py-4 flex items-center justify-end gap-2"
+                    title="This policy is enabled globally and cannot be disabled from this screen"
+                  >
+                    <ToggleSwitch value={true} disabled={true} onToggle={() => {}} />
+                  </td>
+                </tr>
+              ))}
+              {accountPolicies.map((policy: NetworkAccessPolicyType) => (
+                <tr key={policy.id} className="group">
+                  <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
+                    {policy.name}{' '}
+                    {policy.isGlobal && (
+                      <FaGlobe title="Global policy" className="text-neutral-500" />
+                    )}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    <div className="flex gap-2 flex-wrap">
+                      {policy.allowedIps.split(',').map((ip) => (
+                        <IPChip key={ip} ip={ip}></IPChip>
+                      ))}
+                    </div>
+                  </td>
+
+                  <td
+                    className="px-6 py-4 flex items-center justify-end gap-2"
+                    title={`${selectedPolicies.map((p) => p.id).includes(policy.id) ? 'Disable' : 'Enable'} this policy`}
+                  >
                     <ToggleSwitch
                       value={selectedPolicies.map((p) => p.id).includes(policy.id)}
+                      disabled={
+                        selectedPolicies.map((p) => p.id).includes(policy.id) && policy.isGlobal
+                      }
                       onToggle={() => handleTogglePolicy(policy)}
                     />
                   </td>
