@@ -42,6 +42,7 @@ from django.utils import timezone
 from datetime import datetime
 from api.utils.access.roles import default_roles
 from graphql import GraphQLError
+from itertools import chain
 
 
 class SeatsUsed(ObjectType):
@@ -258,7 +259,12 @@ class OrganisationMemberType(DjangoObjectType):
         )
 
     def resolve_network_policies(self, info):
-        return self.network_policies.all()
+        global_policies = NetworkAccessPolicy.objects.filter(
+            organisation=self.organisation, is_global=True
+        )
+        account_policies = self.network_policies.all()
+
+        return list(chain(account_policies, global_policies))
 
 
 class OrganisationMemberInviteType(DjangoObjectType):
@@ -707,7 +713,12 @@ class ServiceAccountType(DjangoObjectType):
         return filtered_apps
 
     def resolve_network_policies(self, info):
-        return self.network_policies.all()
+        global_policies = NetworkAccessPolicy.objects.filter(
+            organisation=self.organisation, is_global=True
+        )
+        account_policies = self.network_policies.all()
+
+        return list(chain(account_policies, global_policies))
 
 
 class EnvironmentKeyType(DjangoObjectType):
