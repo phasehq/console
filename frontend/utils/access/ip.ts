@@ -1,14 +1,31 @@
-export const isValidCidr = (ip: string) => {
+import * as ipaddr from 'ipaddr.js'
+
+export const isValidIp = (ip: string): boolean => {
   try {
-    if (!ip) return false
-    const [addr, prefix] = ip.split('/')
-    if (prefix && (isNaN(+prefix) || +prefix < 0 || +prefix > 32)) return false
-    const octets = addr.split('.')
-    if (octets.length !== 4) return false
-    return octets.every((o) => {
-      const n = +o
-      return !isNaN(n) && n >= 0 && n <= 255
-    })
+    if (!ip || ip.includes('/')) return false
+    ipaddr.parse(ip)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const isValidCidr = (cidr: string): boolean => {
+  try {
+    if (!cidr) return false
+    const [addr, prefixStr] = cidr.split('/')
+    if (!addr || !prefixStr) return false
+
+    const parsed = ipaddr.parse(addr)
+    const prefix = parseInt(prefixStr, 10)
+
+    if (parsed.kind() === 'ipv4') {
+      return prefix >= 0 && prefix <= 32
+    } else if (parsed.kind() === 'ipv6') {
+      return prefix >= 0 && prefix <= 128
+    } else {
+      return false
+    }
   } catch {
     return false
   }

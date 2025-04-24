@@ -12,8 +12,9 @@ import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { IPChip } from './IPChip'
 import { NetworkAccessPolicyType } from '@/apollo/graphql'
-import { isValidCidr } from '@/utils/access/ip'
+import { isValidCidr, isValidIp } from '@/utils/access/ip'
 import { userHasPermission } from '@/utils/access/permissions'
+import * as ipaddr from 'ipaddr.js'
 
 export const UpdateNetworkAccessPolicyDialog = ({
   policy,
@@ -49,17 +50,36 @@ export const UpdateNetworkAccessPolicyDialog = ({
     const trimmed = value.trim().toLowerCase()
     if (!trimmed) return
 
-    if (ips.includes(trimmed)) {
+    let normalized = trimmed
+
+    try {
+      if (trimmed.includes('/')) {
+        if (!isValidCidr(trimmed)) {
+          setError('Invalid CIDR range.')
+          return
+        }
+        const [addr, prefix] = trimmed.split('/')
+        const parsed = ipaddr.parse(addr)
+        normalized = `${parsed.toNormalizedString()}/${prefix}`
+      } else {
+        if (!isValidIp(trimmed)) {
+          setError('Invalid IP address.')
+          return
+        }
+        const parsed = ipaddr.parse(trimmed)
+        normalized = parsed.toNormalizedString()
+      }
+    } catch {
+      setError('Invalid IP or CIDR.')
+      return
+    }
+
+    if (ips.includes(normalized)) {
       setError('IP already added.')
       return
     }
 
-    if (!isValidCidr(trimmed)) {
-      setError('Invalid IP or CIDR range.')
-      return
-    }
-
-    setIps([...ips, trimmed])
+    setIps([...ips, normalized])
     setIpInputValue('')
     setError(null)
   }
