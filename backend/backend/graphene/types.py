@@ -257,6 +257,9 @@ class OrganisationMemberType(DjangoObjectType):
             "-created_at"
         )
 
+    def resolve_network_policies(self, info):
+        return self.network_policies.all()
+
 
 class OrganisationMemberInviteType(DjangoObjectType):
     class Meta:
@@ -703,6 +706,9 @@ class ServiceAccountType(DjangoObjectType):
 
         return filtered_apps
 
+    def resolve_network_policies(self, info):
+        return self.network_policies.all()
+
 
 class EnvironmentKeyType(DjangoObjectType):
     class Meta:
@@ -936,9 +942,11 @@ class ActivatedPhaseLicenseType(DjangoObjectType):
 
 
 class NetworkAccessPolicyType(DjangoObjectType):
-    organisation_members = graphene.List(graphene.NonNull(lambda: OrganisationMemberType))
+    organisation_members = graphene.List(
+        graphene.NonNull(lambda: OrganisationMemberType)
+    )
     service_accounts = graphene.List(graphene.NonNull(lambda: ServiceAccountType))
-    
+
     class Meta:
         model = NetworkAccessPolicy
         fields = "__all__"

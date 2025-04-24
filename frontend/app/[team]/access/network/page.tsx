@@ -58,7 +58,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                     Global
                   </th>
                   <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    IPs
+                    Allowlist
                   </th>
 
                   <th></th>

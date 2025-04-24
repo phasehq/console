@@ -1,4 +1,10 @@
-from api.models import NetworkAccessPolicy, Organisation, OrganisationMember, Role
+from api.models import (
+    NetworkAccessPolicy,
+    Organisation,
+    OrganisationMember,
+    Role,
+    ServiceAccount,
+)
 from api.utils.access.permissions import user_has_permission
 from backend.graphene.types import NetworkAccessPolicyType, RoleType
 import graphene
@@ -195,3 +201,53 @@ class DeleteNetworkAccessPolicyMutation(graphene.Mutation):
         policy.delete()
 
         return DeleteNetworkAccessPolicyMutation(ok=True)
+
+
+class AccountTypeEnum(graphene.Enum):
+    USER = "user"
+    SERVICE = "service"
+
+
+class AccountPolicyInput(graphene.InputObjectType):
+    account_type = AccountTypeEnum(required=True)
+    account_id = graphene.ID(required=True)
+    policy_ids = graphene.List(graphene.ID)
+
+
+class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
+    class Arguments:
+        account_inputs = graphene.List(AccountPolicyInput)
+        organisation_id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, account_inputs, organisation_id):
+
+        if not user_has_permission(
+            info.context.user,
+            "update",
+            "Members",
+            Organisation.objects.get(id=organisation_id),
+        ):
+            raise GraphQLError(
+                "You don't have the permissions required to delete Network Access Policies in this organisation"
+            )
+
+        for account_input in account_inputs:
+            account_filter = {
+                "organisation_id": organisation_id,
+                "id": account_input.account_id,
+            }
+
+            account = (
+                OrganisationMember.objects.get(**account_filter)
+                if account_input.account_type == AccountTypeEnum.USER
+                else ServiceAccount.objects.get(**account_filter)
+            )
+
+            account.network_policies.set(
+                NetworkAccessPolicy.objects.filter(id__in=account_input.policy_ids)
+            )
+
+        return UpdateAccountNetworkAccessPolicies(ok=True)

@@ -47,6 +47,17 @@ export type AwsSecretType = {
   name?: Maybe<Scalars['String']['output']>;
 };
 
+export type AccountPolicyInput = {
+  accountId: Scalars['ID']['input'];
+  accountType: AccountTypeEnum;
+  policyIds?: InputMaybe<Array<InputMaybe<Scalars['ID']['input']>>>;
+};
+
+export enum AccountTypeEnum {
+  Service = 'SERVICE',
+  User = 'USER'
+}
+
 export type ActivatedPhaseLicenseType = {
   __typename?: 'ActivatedPhaseLicenseType';
   activatedAt: Scalars['DateTime']['output'];
@@ -691,6 +702,7 @@ export type Mutation = {
   swapEnvironmentOrder?: Maybe<SwapEnvironmentOrderMutation>;
   toggleSyncActive?: Maybe<ToggleSyncActive>;
   triggerSync?: Maybe<TriggerSync>;
+  updateAccountNetworkAccessPolicies?: Maybe<UpdateAccountNetworkAccessPolicies>;
   updateAppName?: Maybe<UpdateAppNameMutation>;
   updateCustomRole?: Maybe<UpdateCustomRoleMutation>;
   updateMemberEnvironmentScope?: Maybe<UpdateMemberEnvScopeMutation>;
@@ -1152,6 +1164,12 @@ export type MutationToggleSyncActiveArgs = {
 
 export type MutationTriggerSyncArgs = {
   syncId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationUpdateAccountNetworkAccessPoliciesArgs = {
+  accountInputs?: InputMaybe<Array<InputMaybe<AccountPolicyInput>>>;
+  organisationId: Scalars['ID']['input'];
 };
 
 
@@ -1943,6 +1961,11 @@ export type ToggleSyncActive = {
 export type TriggerSync = {
   __typename?: 'TriggerSync';
   sync?: Maybe<EnvironmentSyncType>;
+};
+
+export type UpdateAccountNetworkAccessPolicies = {
+  __typename?: 'UpdateAccountNetworkAccessPolicies';
+  ok?: Maybe<Scalars['Boolean']['output']>;
 };
 
 export type UpdateAppNameMutation = {

@@ -23,6 +23,7 @@ from .graphene.mutations.access import (
     CreateNetworkAccessPolicyMutation,
     DeleteCustomRoleMutation,
     DeleteNetworkAccessPolicyMutation,
+    UpdateAccountNetworkAccessPolicies,
     UpdateCustomRoleMutation,
     UpdateNetworkAccessPolicyMutation,
 )
@@ -858,6 +859,7 @@ class Mutation(graphene.ObjectType):
     create_network_access_policy = CreateNetworkAccessPolicyMutation.Field()
     update_network_access_policy = UpdateNetworkAccessPolicyMutation.Field()
     delete_network_access_policy = DeleteNetworkAccessPolicyMutation.Field()
+    update_account_network_access_policies = UpdateAccountNetworkAccessPolicies.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()

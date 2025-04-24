@@ -753,6 +753,7 @@ type Mutation {
   createNetworkAccessPolicy(allowedIps: String!, isGlobal: Boolean!, name: String, organisationId: ID!): CreateNetworkAccessPolicyMutation
   updateNetworkAccessPolicy(allowedIps: String, id: ID!, isGlobal: Boolean, name: String): UpdateNetworkAccessPolicyMutation
   deleteNetworkAccessPolicy(id: ID!): DeleteNetworkAccessPolicyMutation
+  updateAccountNetworkAccessPolicies(accountInputs: [AccountPolicyInput], organisationId: ID!): UpdateAccountNetworkAccessPolicies
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
   enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
@@ -927,6 +928,21 @@ type UpdateNetworkAccessPolicyMutation {
 
 type DeleteNetworkAccessPolicyMutation {
   ok: Boolean
+}
+
+type UpdateAccountNetworkAccessPolicies {
+  ok: Boolean
+}
+
+input AccountPolicyInput {
+  accountType: AccountTypeEnum!
+  accountId: ID!
+  policyIds: [ID]
+}
+
+enum AccountTypeEnum {
+  USER
+  SERVICE
 }
 
 type CreateServiceAccountMutation {
