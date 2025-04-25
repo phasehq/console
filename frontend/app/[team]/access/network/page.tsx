@@ -12,6 +12,7 @@ import { CreateNetworkAccessPolicyDialog } from './_components/CreateNetworkPoli
 import { IPChip } from './_components/IPChip'
 import { UpdateNetworkAccessPolicyDialog } from './_components/UpdateNetworkPolicyDialog'
 import { DeleteNetworkAccessPolicyDialog } from './_components/DeleteNetworkPolicyDialog'
+import { ManageOrgGlobalPolicies } from './_components/ManageOrgGlobalPolicies'
 
 export default function NetworkPolicies({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -33,9 +34,12 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
     skip: !organisation || !userCanReadNetworkPolicies,
   })
 
+  const globalPolicies =
+    data?.networkAccessPolicies.filter((policy: NetworkAccessPolicyType) => policy.isGlobal) ?? []
+
   return (
-    <section className="overflow-y-auto">
-      <div className="w-full space-y-4 text-black dark:text-white">
+    <section className="overflow-y-auto space-y-8">
+      <div className="w-full space-y-2 text-zinc-900 dark:text-zinc-100">
         <div className="space-y-1">
           <h2 className="text-xl font-semibold">{params.team} Network Access Policies</h2>
           <p className="text-neutral-500">Manage organisation Network Access Policies.</p>
@@ -43,7 +47,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
         <div className="space-y-4">
           {userCanCreateNetworkPolicies && (
             <div className="flex justify-end">
-              <CreateNetworkAccessPolicyDialog />
+              <CreateNetworkAccessPolicyDialog clientIp={data?.clientIp} />
             </div>
           )}
 
@@ -54,9 +58,9 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                   <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Name
                   </th>
-                  <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {/* <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Global
-                  </th>
+                  </th> */}
                   <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Allowlist
                   </th>
@@ -69,9 +73,9 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                   <tr key={policy.id} className="group">
                     <td className="text-zinc-900 dark:text-zinc-100 font-medium">{policy.name}</td>
 
-                    <td className="px-6 py-4">
+                    {/* <td className="px-6 py-4">
                       {policy.isGlobal && <FaCheckCircle className="text-emerald-500" />}
-                    </td>
+                    </td> */}
 
                     <td className="px-6 py-4">
                       <div className="flex gap-2 flex-wrap">
@@ -82,10 +86,70 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                     </td>
 
                     <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
-                      <UpdateNetworkAccessPolicyDialog policy={policy} />
+                      <UpdateNetworkAccessPolicyDialog policy={policy} clientIp={data?.clientIp} />
                       {userCanDeleteNetworkPolicies && (
                         <DeleteNetworkAccessPolicyDialog policy={policy} />
                       )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState
+              title="Access restricted"
+              subtitle="You don't have the permissions required to view Network Access Policies in this organisation."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaBan />
+                </div>
+              }
+            >
+              <></>
+            </EmptyState>
+          )}
+        </div>
+      </div>
+
+      <div className="w-full space-y-2 text-zinc-900 dark:text-zinc-100">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Global Policies</h2>
+          <p className="text-neutral-500">
+            Manage Network Access Policies that are applied globally to all user and service
+            accounts.
+          </p>
+        </div>
+        <div className="space-y-4">
+          {userCanCreateNetworkPolicies && (
+            <div className="flex justify-end">
+              <ManageOrgGlobalPolicies />
+            </div>
+          )}
+
+          {userCanReadNetworkPolicies ? (
+            <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+              <thead>
+                <tr>
+                  <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
+
+                  <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Allowlist
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-500/20">
+                {globalPolicies.map((policy: NetworkAccessPolicyType) => (
+                  <tr key={policy.id} className="group">
+                    <td className="text-zinc-900 dark:text-zinc-100 font-medium">{policy.name}</td>
+
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2 flex-wrap">
+                        {policy.allowedIps.split(',').map((ip) => (
+                          <IPChip key={ip} ip={ip}></IPChip>
+                        ))}
+                      </div>
                     </td>
                   </tr>
                 ))}

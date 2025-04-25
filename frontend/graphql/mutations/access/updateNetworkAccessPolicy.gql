@@ -1,5 +1,5 @@
-mutation UpdateAccessPolicy($id: ID!, $name: String!, $allowedIps: String!, $isGlobal: Boolean!) {
-  updateNetworkAccessPolicy(id: $id, name: $name, allowedIps: $allowedIps, isGlobal: $isGlobal) {
+mutation UpdateAccessPolicies($inputs: [UpdatePolicyInput]) {
+  updateNetworkAccessPolicy(policyInputs: $inputs) {
     networkAccessPolicy {
       id
     }

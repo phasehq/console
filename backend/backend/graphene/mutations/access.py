@@ -145,37 +145,42 @@ class CreateNetworkAccessPolicyMutation(graphene.Mutation):
         return CreateNetworkAccessPolicyMutation(network_access_policy=policy)
 
 
+class UpdatePolicyInput(graphene.InputObjectType):
+    id = graphene.ID(required=True)
+    name = graphene.String()
+    allowed_ips = graphene.String()
+    is_global = graphene.Boolean()
+
+
 class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
     class Arguments:
-        id = graphene.ID(required=True)
-        name = graphene.String()
-        allowed_ips = graphene.String()
-        is_global = graphene.Boolean()
+        policy_inputs = graphene.List(UpdatePolicyInput)
 
     network_access_policy = graphene.Field(NetworkAccessPolicyType)
 
     @classmethod
-    def mutate(cls, root, info, id, name=None, allowed_ips=None, is_global=None):
+    def mutate(cls, root, info, policy_inputs):
         user = info.context.user
-        policy = NetworkAccessPolicy.objects.get(id=id)
 
-        if not user_has_permission(
-            user, "update", "NetworkAccessPolicies", policy.organisation
-        ):
-            raise GraphQLError(
-                "You don't have the permissions required to update Network Access Policies in this organisation"
-            )
+        for policy_input in policy_inputs:
+            policy = NetworkAccessPolicy.objects.get(id=policy_input.id)
+            if not user_has_permission(
+                user, "update", "NetworkAccessPolicies", policy.organisation
+            ):
+                raise GraphQLError(
+                    "You don't have the permissions required to update Network Access Policies in this organisation"
+                )
 
-        if name is not None:
-            policy.name = name
+            if policy_input.name is not None:
+                policy.name = policy_input.name
 
-        if allowed_ips is not None:
-            policy.allowed_ips = allowed_ips
+            if policy_input.allowed_ips is not None:
+                policy.allowed_ips = policy_input.allowed_ips
 
-        if is_global is not None:
-            policy.is_global = is_global
+            if policy_input.is_global is not None:
+                policy.is_global = policy_input.is_global
 
-        policy.save()
+            policy.save()
 
         return UpdateNetworkAccessPolicyMutation(network_access_policy=policy)
 

@@ -751,7 +751,7 @@ type Mutation {
   updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
   deleteCustomRole(id: ID!): DeleteCustomRoleMutation
   createNetworkAccessPolicy(allowedIps: String!, isGlobal: Boolean!, name: String, organisationId: ID!): CreateNetworkAccessPolicyMutation
-  updateNetworkAccessPolicy(allowedIps: String, id: ID!, isGlobal: Boolean, name: String): UpdateNetworkAccessPolicyMutation
+  updateNetworkAccessPolicy(policyInputs: [UpdatePolicyInput]): UpdateNetworkAccessPolicyMutation
   deleteNetworkAccessPolicy(id: ID!): DeleteNetworkAccessPolicyMutation
   updateAccountNetworkAccessPolicies(accountInputs: [AccountPolicyInput], organisationId: ID!): UpdateAccountNetworkAccessPolicies
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
@@ -924,6 +924,13 @@ type CreateNetworkAccessPolicyMutation {
 
 type UpdateNetworkAccessPolicyMutation {
   networkAccessPolicy: NetworkAccessPolicyType
+}
+
+input UpdatePolicyInput {
+  id: ID!
+  name: String
+  allowedIps: String
+  isGlobal: Boolean
 }
 
 type DeleteNetworkAccessPolicyMutation {

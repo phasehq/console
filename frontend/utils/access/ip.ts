@@ -30,3 +30,26 @@ export const isValidCidr = (cidr: string): boolean => {
     return false
   }
 }
+
+export const isClientIpAllowed = (ipList: string[], clientIp: string) => {
+  try {
+    const addr = ipaddr.parse(clientIp)
+
+    return ipList.some((entry) => {
+      try {
+        if (entry.includes('/')) {
+          const [rangeIp, prefixLength] = entry.split('/')
+          const cidr = ipaddr.parse(rangeIp)
+          const range = cidr.match(addr, parseInt(prefixLength, 10))
+          return range
+        } else {
+          return addr.toNormalizedString() === ipaddr.parse(entry).toNormalizedString()
+        }
+      } catch {
+        return false
+      }
+    })
+  } catch {
+    return false
+  }
+}
