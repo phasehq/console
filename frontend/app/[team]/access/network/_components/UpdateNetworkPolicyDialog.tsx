@@ -4,7 +4,7 @@ import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useContext, useState, useRef, useEffect } from 'react'
 import { FaEdit, FaTimesCircle } from 'react-icons/fa'
-import { UpdateAccessPolicy } from '@/graphql/mutations/access/updateNetworkAccessPolicy.gql'
+import { UpdateAccessPolicies } from '@/graphql/mutations/access/updateNetworkAccessPolicy.gql'
 import { GetNetworkPolicies } from '@/graphql/queries/access/getNetworkPolicies.gql'
 import clsx from 'clsx'
 import { Button } from '@/components/common/Button'
@@ -18,8 +18,10 @@ import * as ipaddr from 'ipaddr.js'
 
 export const UpdateNetworkAccessPolicyDialog = ({
   policy,
+  clientIp,
 }: {
   policy: NetworkAccessPolicyType
+  clientIp: string
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -27,7 +29,7 @@ export const UpdateNetworkAccessPolicyDialog = ({
     ? userHasPermission(organisation?.role?.permissions, 'NetworkAccessPolicies', 'update')
     : false
 
-  const [updatePolicy, { loading }] = useMutation(UpdateAccessPolicy)
+  const [updatePolicy, { loading }] = useMutation(UpdateAccessPolicies)
 
   const [name, setName] = useState(policy.name)
   const [isGlobal, setIsGlobal] = useState(policy.isGlobal)
@@ -111,10 +113,14 @@ export const UpdateNetworkAccessPolicyDialog = ({
 
     await updatePolicy({
       variables: {
-        id: policy.id,
-        name,
-        allowedIps: ips.join(','),
-        isGlobal,
+        inputs: [
+          {
+            id: policy.id,
+            name,
+            allowedIps: ips.join(','),
+            isGlobal,
+          },
+        ],
       },
       refetchQueries: [
         { query: GetNetworkPolicies, variables: { organisationId: organisation?.id } },
@@ -153,7 +159,7 @@ export const UpdateNetworkAccessPolicyDialog = ({
             </label>
             <div
               className={clsx(
-                'flex flex-wrap items-center gap-2 p-1 rounded-md ring-1 bg-zinc-100 dark:bg-zinc-800',
+                'flex flex-wrap items-center gap-2 p-1 rounded-md ring-1 bg-zinc-100 dark:bg-zinc-800 group relative',
                 error
                   ? 'ring-red-500 focus-within:ring-red-500'
                   : 'ring-neutral-500/40 focus-within:ring-emerald-500'
@@ -185,6 +191,18 @@ export const UpdateNetworkAccessPolicyDialog = ({
                 )}
                 placeholder="e.g. 192.168.1.0/24"
               />
+              {clientIp && !ips.includes(clientIp) && (
+                <div className="absolute left-0 -bottom-9 w-full hidden group-focus-within:block bg-zinc-100 dark:bg-zinc-800 shadow-lg rounded-b-lg border border-neutral-300 dark:border-neutral-700 z-10">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full rounded-b-lg"
+                    onClick={() => addIp(clientIp)}
+                  >
+                    Add current IP
+                  </Button>
+                </div>
+              )}
             </div>
             {error && <p className="text-sm text-red-500 mt-1 ml-1">{error}</p>}
           </div>

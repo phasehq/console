@@ -11,10 +11,10 @@ import { Button } from '@/components/common/Button'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { IPChip } from './IPChip'
-import { isValidCidr, isValidIp } from '@/utils/access/ip'
+import { isClientIpAllowed, isValidCidr, isValidIp } from '@/utils/access/ip'
 import * as ipaddr from 'ipaddr.js'
 
-export const CreateNetworkAccessPolicyDialog = () => {
+export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [createPolicy, { loading }] = useMutation(CreateAccessPolicy)
@@ -91,6 +91,13 @@ export const CreateNetworkAccessPolicyDialog = () => {
       return
     }
 
+    // if (clientIp && !isClientIpAllowed(ips, clientIp)) {
+    //   const confirm = window.confirm(
+    //     `Warning: Your current IP (${clientIp}) is not in the allowed list or any CIDR range. You may be locked out. Continue?`
+    //   )
+    //   if (!confirm) return
+    // }
+
     await createPolicy({
       variables: {
         name,
@@ -128,10 +135,8 @@ export const CreateNetworkAccessPolicyDialog = () => {
             </label>
             <div
               className={clsx(
-                'flex flex-wrap items-center gap-2 p-1 rounded-md ring-1 bg-zinc-100 dark:bg-zinc-800',
-                error
-                  ? 'ring-red-500 focus-within:ring-red-500'
-                  : 'ring-neutral-500/40 focus-within:ring-emerald-500'
+                'flex flex-wrap items-center gap-2 p-1 rounded-md ring-1 bg-zinc-100 dark:bg-zinc-800 relative group focus-within:ring-emerald-500',
+                error ? 'ring-red-500' : 'ring-neutral-500/40'
               )}
             >
               {ips.map((ip) => (
@@ -159,7 +164,20 @@ export const CreateNetworkAccessPolicyDialog = () => {
                 )}
                 placeholder="e.g. 192.168.1.0/24"
               />
+              {clientIp && !ips.includes(clientIp) && (
+                <div className="absolute left-0 -bottom-9 w-full hidden group-focus-within:block bg-zinc-100 dark:bg-zinc-800 shadow-lg rounded-b-lg border border-neutral-300 dark:border-neutral-700 z-10">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full rounded-b-lg"
+                    onClick={() => addIp(clientIp)}
+                  >
+                    Add current IP
+                  </Button>
+                </div>
+              )}
             </div>
+
             {error && <p className="text-sm text-red-500 mt-1 ml-1">{error}</p>}
           </div>
           <div className="flex items-center justify-between gap-6">
