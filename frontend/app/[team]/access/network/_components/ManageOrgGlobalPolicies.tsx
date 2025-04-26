@@ -13,6 +13,7 @@ import { UpdateAccessPolicies } from '@/graphql/mutations/access/updateNetworkAc
 import { useMutation, useQuery } from '@apollo/client'
 import { isClientIpAllowed } from '@/utils/access/ip'
 import { toast } from 'react-toastify'
+import { arraysEqual } from '@/utils/crypto'
 
 export const ManageOrgGlobalPolicies = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -54,6 +55,17 @@ export const ManageOrgGlobalPolicies = () => {
 
   const closeModal = () => dialogRef.current?.closeModal()
 
+  const saveRequired = data
+    ? !arraysEqual(
+        data?.networkAccessPolicies
+          .filter((policy: NetworkAccessPolicyType) => policy.isGlobal)
+          .map((policy: NetworkAccessPolicyType) => policy.id),
+        policies
+          .filter((policy: NetworkAccessPolicyType) => policy.isGlobal)
+          .map((policy: NetworkAccessPolicyType) => policy.id)
+      )
+    : false
+
   const handleSave = async () => {
     const globalIps = policies
       .filter((policy) => policy.isGlobal)
@@ -79,7 +91,7 @@ export const ManageOrgGlobalPolicies = () => {
         { query: GetNetworkPolicies, variables: { organisationId: organisation?.id } },
       ],
     })
-    toast.success('Update organisation global policies')
+    toast.success('Updated organisation global policies')
     closeModal()
   }
 
@@ -163,7 +175,7 @@ export const ManageOrgGlobalPolicies = () => {
           Cancel
         </Button>
         <Button
-          disabled={!userCanUpdateNetworkPolicies}
+          disabled={!userCanUpdateNetworkPolicies || !saveRequired}
           variant="primary"
           onClick={handleSave}
           isLoading={updateIsPending}
