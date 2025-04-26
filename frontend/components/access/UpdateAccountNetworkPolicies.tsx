@@ -14,11 +14,11 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef, useState } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { IPChip } from '../../../network/_components/IPChip'
 import { UpdateAccountNetworkPolicy } from '@/graphql/mutations/access/updateAccountNetworkPolicies.gql'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
+import { IPChip } from '@/app/[team]/access/network/_components/IPChip'
 
 export const UpdateAccountNetworkPolicies = ({
   account,
@@ -38,13 +38,10 @@ export const UpdateAccountNetworkPolicies = ({
     ? userHasPermission(organisation?.role?.permissions, 'NetworkAccessPolicies', 'read')
     : false
 
-  const userCanUpdateServiceAccounts = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update')
-    : false
-
-  const userCanUpdateMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'update')
-    : false
+  const userCanUpdateAccount =
+    account.__typename === 'ServiceAccountType'
+      ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update')
+      : userHasPermission(organisation?.role?.permissions, 'Members', 'update')
 
   const { data, loading } = useQuery(GetNetworkPolicies, {
     variables: { organisationId: organisation?.id },
@@ -179,9 +176,7 @@ export const UpdateAccountNetworkPolicies = ({
                   >
                     <ToggleSwitch
                       value={selectedPolicies.map((p) => p.id).includes(policy.id)}
-                      disabled={
-                        selectedPolicies.map((p) => p.id).includes(policy.id) && policy.isGlobal
-                      }
+                      disabled={!userCanUpdateAccount}
                       onToggle={() => handleTogglePolicy(policy)}
                     />
                   </td>
@@ -208,7 +203,12 @@ export const UpdateAccountNetworkPolicies = ({
         <Button variant="secondary" onClick={closeModal}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleUpdatePolicy} isLoading={updateIsPending}>
+        <Button
+          variant="primary"
+          onClick={handleUpdatePolicy}
+          isLoading={updateIsPending}
+          disabled={!userCanUpdateAccount}
+        >
           Save
         </Button>
       </div>

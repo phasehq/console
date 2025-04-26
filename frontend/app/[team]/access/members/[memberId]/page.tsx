@@ -21,7 +21,7 @@ import { DeleteUserTokenDialog } from '../_components/DeleteUserTokenDialog'
 import CopyButton from '@/components/common/CopyButton'
 import { AddAppToMemberButton } from '../_components/AddAppToMemberButton'
 import { IPChip } from '../../network/_components/IPChip'
-import { UpdateAccountNetworkPolicies } from '../../service-accounts/[account]/_components/UpdateAccountNetworkPolicies'
+import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 
 export default function MemberDetail({ params }: { params: { team: string; memberId: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -295,7 +295,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
             {member.networkPolicies?.length! > 0 ? (
               <div className="divide-y divide-neutral-500/20 py-6">
                 {member.networkPolicies?.map((policy) => (
-                  <div key={policy.id} className="flex items-center justify-between gap-2 py-2">
+                  <div key={policy.id} className="flex items-center justify-between gap-8 py-4">
                     <div className="flex items-center gap-2">
                       <FaNetworkWired className="text-neutral-500" />
                       <div className="font-medium text-zinc-900 dark:text-zinc-100">
@@ -313,7 +313,14 @@ export default function MemberDetail({ params }: { params: { team: string; membe
             ) : (
               <EmptyState
                 title="No Policy"
-                subtitle="This Member does not have any network access policies associated with it"
+                subtitle={
+                  <>
+                    This service account does not have any Network Access Policies associated with
+                    it
+                    <br /> Access is allowed from any IP address{' '}
+                    <span className="font-semibold font-mono">(0.0.0.0/0, ::/0)</span>
+                  </>
+                }
                 graphic={
                   <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                     <FaNetworkWired />
