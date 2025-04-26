@@ -34,7 +34,7 @@ import CopyButton from '@/components/common/CopyButton'
 import { SseLabel } from '@/components/apps/EncryptionModeIndicator'
 import clsx from 'clsx'
 import { IPChip } from '../../network/_components/IPChip'
-import { UpdateAccountNetworkPolicies } from './_components/UpdateAccountNetworkPolicies'
+import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -346,9 +346,16 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             ) : (
               <EmptyState
                 title="No Policy"
-                subtitle="This Service Account does not have any network access policies associated with it"
+                subtitle={
+                  <>
+                    This service account does not have any Network Access Policies associated with
+                    it
+                    <br /> Access is allowed from any IP address{' '}
+                    <span className="font-semibold font-mono">(0.0.0.0/0, ::/0)</span>
+                  </>
+                }
                 graphic={
-                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <div className="text-neutral-300 dark:text-neutral-700 text-5xl text-center">
                     <FaNetworkWired />
                   </div>
                 }
