@@ -3,7 +3,7 @@ import { Input } from '@/components/common/Input'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useContext, useState, useRef } from 'react'
-import { FaPlus, FaTimesCircle } from 'react-icons/fa'
+import { FaInfo, FaPlus, FaTimesCircle } from 'react-icons/fa'
 import { CreateAccessPolicy } from '@/graphql/mutations/access/createNetworkAccessPolicy.gql'
 import { GetNetworkPolicies } from '@/graphql/queries/access/getNetworkPolicies.gql'
 import clsx from 'clsx'
@@ -20,13 +20,19 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
   const [createPolicy, { loading }] = useMutation(CreateAccessPolicy)
 
   const [name, setName] = useState('')
-  const [isGlobal, setIsGlobal] = useState(false)
   const [ips, setIps] = useState<string[]>([])
   const [ipInputValue, setIpInputValue] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<{ closeModal: () => void }>(null)
+
+  const reset = () => {
+    setName('')
+    setIps([])
+    setIpInputValue('')
+    setError(null)
+  }
 
   const addIp = (value: string) => {
     const trimmed = value.trim().toLowerCase()
@@ -83,6 +89,11 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
 
   const closeModal = () => dialogRef.current?.closeModal()
 
+  const handleCancel = () => {
+    closeModal()
+    reset()
+  }
+
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
@@ -91,18 +102,11 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
       return
     }
 
-    // if (clientIp && !isClientIpAllowed(ips, clientIp)) {
-    //   const confirm = window.confirm(
-    //     `Warning: Your current IP (${clientIp}) is not in the allowed list or any CIDR range. You may be locked out. Continue?`
-    //   )
-    //   if (!confirm) return
-    // }
-
     await createPolicy({
       variables: {
         name,
         allowedIps: ips.join(','),
-        isGlobal,
+        isGlobal: false,
         organisationId: organisation?.id,
       },
       refetchQueries: [
@@ -113,6 +117,9 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
     toast.success('Created new  network access policy')
     closeModal()
   }
+
+  const kbdStyle =
+    'bg-neutral-200 dark:bg-neutral-800 text-zinc-800 dark:text-zinc-200 font-mono font-semibold text-2xs ring-1 ring-inset ring-neutral-400/20 rounded-md py-0.5 px-1'
 
   return (
     <GenericDialog
@@ -130,9 +137,12 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
         <div className="space-y-8 py-4" onSubmit={handleSubmit}>
           <Input value={name} setValue={setName} label="Name" required />
           <div>
-            <label className="block text-sm font-medium text-neutral-500 mb-1">
-              Allowed IPs or CIDR Ranges
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-neutral-500 mb-1">
+                Allowed IPs or CIDR Ranges
+              </label>
+              {error && <p className="text-sm text-red-500 mt-1 ml-1">{error}</p>}
+            </div>
             <div
               className={clsx(
                 'flex flex-wrap items-center gap-2 p-1 rounded-md ring-1 bg-zinc-100 dark:bg-zinc-800 relative group focus-within:ring-emerald-500',
@@ -172,28 +182,21 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
                     className="w-full rounded-b-lg"
                     onClick={() => addIp(clientIp)}
                   >
-                    Add current IP
+                    Add current IP:{' '}
+                    <span className="font-mono text-sky-800 dark:text-sky-300">{clientIp}</span>
                   </Button>
                 </div>
               )}
             </div>
-
-            {error && <p className="text-sm text-red-500 mt-1 ml-1">{error}</p>}
-          </div>
-          <div className="flex items-center justify-between gap-6">
-            <div>
-              <div className="text-zinc-900 dark:text-zinc-100 font-medium text-sm">
-                Set as Global Policy
-              </div>
-              <div className="text-neutral-500 text-xs">
-                Global Policies are applied to all User and Service accounts across the Organisation
-              </div>
+            <div className="flex items-center gap-2 text-xs text-neutral-500 py-2 text-right justify-end">
+              <FaInfo /> Enter an IP adress or CIDR range and hit{' '}
+              <kbd className={kbdStyle}>Enter</kbd>, <kbd className={kbdStyle}>Space</kbd> or{' '}
+              <kbd className={kbdStyle}>,</kbd>
             </div>
-            <ToggleSwitch value={isGlobal} onToggle={() => setIsGlobal(!isGlobal)} />
           </div>
         </div>
         <div className="flex items-center justify-between mt-4">
-          <Button type="button" variant="secondary" onClick={closeModal}>
+          <Button type="button" variant="secondary" onClick={handleCancel}>
             Cancel
           </Button>
           <Button type="submit" variant="primary" isLoading={loading}>
