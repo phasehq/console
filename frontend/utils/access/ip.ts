@@ -31,8 +31,19 @@ export const isValidCidr = (cidr: string): boolean => {
   }
 }
 
-export const isClientIpAllowed = (ipList: string[], clientIp: string) => {
+/**
+ * Checks if a client IP address is allowed based on a list of IPs and CIDR ranges.
+ *
+ * @param ipList - An array of IP addresses or CIDR ranges (e.g., "192.168.1.1", "10.0.0.0/24").
+ * @param clientIp - The IP address of the client to check.
+ * @returns `true` if the client IP matches any IP or CIDR range in the list, or if the list is empty; otherwise, `false`.
+ */
+export const isClientIpAllowed = (ipList: string[], clientIp: string): boolean => {
   try {
+    if (ipList.length === 0) {
+      return true
+    }
+
     const addr = ipaddr.parse(clientIp)
 
     return ipList.some((entry) => {
