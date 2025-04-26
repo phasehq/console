@@ -73,7 +73,12 @@ export const ManageOrgGlobalPolicies = () => {
       isGlobal: p.isGlobal,
     }))
 
-    await updatePolicies({ variables: { inputs } })
+    await updatePolicies({
+      variables: { inputs },
+      refetchQueries: [
+        { query: GetNetworkPolicies, variables: { organisationId: organisation?.id } },
+      ],
+    })
     toast.success('Update organisation global policies')
     closeModal()
   }
