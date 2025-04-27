@@ -194,6 +194,7 @@ class NetworkAccessPolicy(models.Model):
     )
     is_global = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def get_ip_list(self):
         return [ip.strip() for ip in self.allowed_ips.split(",") if ip.strip()]
