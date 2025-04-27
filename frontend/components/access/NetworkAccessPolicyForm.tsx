@@ -107,7 +107,7 @@ export function NetworkAccessPolicyForm({
   return (
     <form onSubmit={handleFormSubmit}>
       <div className="space-y-8 py-4">
-        <Input value={name} setValue={setName} label="Name" required />
+        <Input value={name} setValue={setName} label="Name" required disabled={disabled} />
         <div>
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium text-neutral-500 mb-1">
