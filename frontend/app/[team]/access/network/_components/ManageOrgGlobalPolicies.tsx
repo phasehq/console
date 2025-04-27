@@ -78,12 +78,30 @@ export const ManageOrgGlobalPolicies = () => {
       if (!confirm) return
     }
 
-    const inputs = policies.map((p) => ({
-      id: p.id,
-      name: p.name,
-      allowedIps: p.allowedIps,
-      isGlobal: p.isGlobal,
-    }))
+    // Get list of policy IDs whose isGlobal has changed
+    const changedPolicyIds =
+      data?.networkAccessPolicies
+        .filter((policy: NetworkAccessPolicyType) => {
+          const updated = policies.find((p) => p.id === policy.id)
+          return updated && updated.isGlobal !== policy.isGlobal
+        })
+        .map((policy: NetworkAccessPolicyType) => policy.id) || []
+
+    // Only include changed policies
+    const inputs = policies
+      .filter((p) => changedPolicyIds.includes(p.id))
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        allowedIps: p.allowedIps,
+        isGlobal: p.isGlobal,
+      }))
+
+    if (inputs.length === 0) {
+      // No changes to save
+      toast.info('No changes to save')
+      return
+    }
 
     await updatePolicies({
       variables: { inputs },
