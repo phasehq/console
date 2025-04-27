@@ -105,8 +105,8 @@ export const UpdateAccountNetworkPolicies = ({
       ],
     })
 
-    toast.success('Update network access policy for this account')
     closeModal()
+    toast.success('Update network access policy for this account')
   }
 
   const availablePolicies =
