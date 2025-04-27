@@ -23,6 +23,7 @@ import { IPChip } from '@/app/[team]/access/network/_components/IPChip'
 import { CreateNetworkAccessPolicyDialog } from '@/app/[team]/access/network/_components/CreateNetworkPolicyDialog'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
+import { isClientIpAllowed } from '@/utils/access/ip'
 
 export const UpdateAccountNetworkPolicies = ({
   account,
@@ -62,7 +63,21 @@ export const UpdateAccountNetworkPolicies = ({
 
   const closeModal = () => dialogRef.current?.closeModal()
 
+  const isSelf = account.__typename === 'OrganisationMemberType' && account.self
+  const clientIp = data?.clientIp
+
   const handleUpdatePolicy = async () => {
+    const newIps = selectedPolicies.flatMap((policy) =>
+      policy.allowedIps.split(',').map((ip) => ip.trim())
+    )
+
+    if (isSelf && clientIp && !isClientIpAllowed(newIps, clientIp)) {
+      const confirm = window.confirm(
+        `Warning: Your current IP (${clientIp}) is not in the allowed list or any CIDR range. You may be locked out. Continue?`
+      )
+      if (!confirm) return
+    }
+
     await updatePolicy({
       variables: {
         accounts: [
@@ -100,8 +115,6 @@ export const UpdateAccountNetworkPolicies = ({
     data?.networkAccessPolicies.filter((policy: NetworkAccessPolicyType) => policy.isGlobal) ?? []
 
   const noPolicies = availablePolicies.length === 0 && globalPolicies.length === 0
-
-  if (account.__typename === 'OrganisationMemberType' && account.self) return <></>
 
   if (!organisation) return <></>
 
