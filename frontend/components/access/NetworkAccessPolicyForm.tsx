@@ -118,13 +118,13 @@ export function NetworkAccessPolicyForm({
         <div>
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium text-neutral-500 mb-1">
-              Allowed IPs or CIDR Ranges
+              Allowed IPs or CIDR Ranges <span className="text-red-500">*</span>
             </label>
             {error && <p className="text-sm text-red-500 mt-1 ml-1">{error}</p>}
           </div>
           <div
             className={clsx(
-              'flex flex-wrap items-center gap-2 p-1 rounded-md ring-1 bg-zinc-100 dark:bg-zinc-800 relative group focus-within:ring-emerald-500',
+              'flex flex-wrap items-center gap-2 p-2 rounded-md ring-1 bg-zinc-100 dark:bg-zinc-800 relative group focus-within:ring-emerald-500',
               error ? 'ring-red-500' : 'ring-neutral-500/40'
             )}
           >
