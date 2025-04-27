@@ -35,7 +35,7 @@ class IsIPAllowed(BasePermission):
         if org.plan == Organisation.FREE_PLAN:
             return True
         else:
-            from backend.ee.access.utils.network import is_ip_allowed
+            from ee.access.utils.network import is_ip_allowed
 
             global_policies = (
                 (

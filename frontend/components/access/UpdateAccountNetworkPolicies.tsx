@@ -3,6 +3,7 @@ import {
   OrganisationMemberType,
   NetworkAccessPolicyType,
   AccountTypeEnum,
+  ApiOrganisationPlanChoices,
 } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
@@ -20,6 +21,8 @@ import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { IPChip } from '@/app/[team]/access/network/_components/IPChip'
 import { CreateNetworkAccessPolicyDialog } from '@/app/[team]/access/network/_components/CreateNetworkPolicyDialog'
+import { PlanLabel } from '../settings/organisation/PlanLabel'
+import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 
 export const UpdateAccountNetworkPolicies = ({
   account,
@@ -99,6 +102,19 @@ export const UpdateAccountNetworkPolicies = ({
   const noPolicies = availablePolicies.length === 0 && globalPolicies.length === 0
 
   if (account.__typename === 'OrganisationMemberType' && account.self) return <></>
+
+  if (!organisation) return <></>
+
+  if (organisation.plan === ApiOrganisationPlanChoices.Fr)
+    return (
+      <UpsellDialog
+        buttonLabel={
+          <>
+            <FaNetworkWired /> Manage policy <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />{' '}
+          </>
+        }
+      />
+    )
 
   return (
     <GenericDialog

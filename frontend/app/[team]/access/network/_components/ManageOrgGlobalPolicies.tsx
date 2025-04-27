@@ -1,4 +1,4 @@
-import { NetworkAccessPolicyType } from '@/apollo/graphql'
+import { ApiOrganisationPlanChoices, NetworkAccessPolicyType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -6,7 +6,7 @@ import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useContext, useEffect, useRef, useState } from 'react'
-import { FaNetworkWired, FaGlobe, FaBan } from 'react-icons/fa'
+import { FaNetworkWired, FaGlobe, FaBan, FaPlus } from 'react-icons/fa'
 import { IPChip } from './IPChip'
 import { GetNetworkPolicies } from '@/graphql/queries/access/getNetworkPolicies.gql'
 import { UpdateAccessPolicies } from '@/graphql/mutations/access/updateNetworkAccessPolicy.gql'
@@ -14,6 +14,8 @@ import { useMutation, useQuery } from '@apollo/client'
 import { isClientIpAllowed } from '@/utils/access/ip'
 import { toast } from 'react-toastify'
 import { arraysEqual } from '@/utils/crypto'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 
 export const ManageOrgGlobalPolicies = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -112,6 +114,20 @@ export const ManageOrgGlobalPolicies = () => {
     toast.success('Updated organisation global policies')
     closeModal()
   }
+
+  if (!organisation) return <></>
+
+  if (organisation.plan === ApiOrganisationPlanChoices.Pr)
+    return (
+      <UpsellDialog
+        buttonLabel={
+          <>
+            <FaNetworkWired /> Manage global policies{' '}
+            <PlanLabel plan={ApiOrganisationPlanChoices.En} />{' '}
+          </>
+        }
+      />
+    )
 
   return (
     <GenericDialog

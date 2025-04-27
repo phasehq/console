@@ -7,6 +7,9 @@ import { GetNetworkPolicies } from '@/graphql/queries/access/getNetworkPolicies.
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { NetworkAccessPolicyForm } from '@/components/access/NetworkAccessPolicyForm'
+import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 
 export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -40,6 +43,19 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
     toast.success('Created new  network access policy')
     closeModal()
   }
+
+  if (!organisation) return <></>
+
+  if (organisation.plan === ApiOrganisationPlanChoices.Fr)
+    return (
+      <UpsellDialog
+        buttonLabel={
+          <>
+            <FaPlus /> Create policy <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />{' '}
+          </>
+        }
+      />
+    )
 
   return (
     <GenericDialog

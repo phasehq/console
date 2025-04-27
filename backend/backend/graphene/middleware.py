@@ -40,7 +40,7 @@ class IPWhitelistMiddleware:
             return next(root, info, **kwargs)
 
         else:
-            from backend.ee.access.utils.network import is_ip_allowed
+            from ee.access.utils.network import is_ip_allowed
 
             try:
                 org_member = OrganisationMember.objects.get(
