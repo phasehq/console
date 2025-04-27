@@ -1,6 +1,6 @@
 # permissions.py
-from api.utils.access.network import is_ip_allowed
-from api.models import NetworkAccessPolicy
+
+from api.models import NetworkAccessPolicy, Organisation
 from rest_framework.permissions import BasePermission
 from itertools import chain
 
@@ -32,15 +32,24 @@ class IsIPAllowed(BasePermission):
             account_policies = service_account.network_policies.all()
             org = service_account.organisation
 
-        global_policies = (
-            NetworkAccessPolicy.objects.filter(organisation=org, is_global=True)
-            if org
-            else NetworkAccessPolicy.objects.none()
-        )
+        if org.plan == Organisation.FREE_PLAN:
+            return True
+        else:
+            from backend.ee.access.utils.network import is_ip_allowed
 
-        all_policies = list(chain(account_policies, global_policies))
+            global_policies = (
+                (
+                    NetworkAccessPolicy.objects.filter(organisation=org, is_global=True)
+                    if org
+                    else NetworkAccessPolicy.objects.none()
+                )
+                if org.plan == Organisation.ENTERPRISE_PLAN
+                else []
+            )
 
-        if not all_policies:
-            return True  # Allow if no policies defined
+            all_policies = list(chain(account_policies, global_policies))
 
-        return is_ip_allowed(ip, all_policies)
+            if not all_policies:
+                return True  # Allow if no policies defined
+
+            return is_ip_allowed(ip, all_policies)

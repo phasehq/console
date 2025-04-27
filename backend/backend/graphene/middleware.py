@@ -1,7 +1,7 @@
 from graphql import GraphQLResolveInfo
 from graphql import GraphQLError
-from api.models import NetworkAccessPolicy, OrganisationMember
-from api.utils.access.network import is_ip_allowed
+from api.models import NetworkAccessPolicy, Organisation, OrganisationMember
+
 from itertools import chain
 
 
@@ -34,28 +34,40 @@ class IPWhitelistMiddleware:
             # If the operation doesn't involve an org, skip check
             return next(root, info, **kwargs)
 
-        try:
-            org_member = OrganisationMember.objects.get(
-                organisation_id=organisation_id,
-                user_id=user.userId,
-                deleted_at__isnull=True,
-            )
-        except OrganisationMember.DoesNotExist:
-            raise GraphQLError("You are not a member of this organisation")
+        org = Organisation.objects.get(id=organisation_id)
 
-        ip = self.get_client_ip(request)
-
-        account_policies = org_member.network_policies.all()
-        global_policies = NetworkAccessPolicy.objects.filter(
-            organisation_id=organisation_id, is_global=True
-        )
-
-        all_policies = list(chain(account_policies, global_policies))
-
-        if not all_policies or is_ip_allowed(ip, all_policies):
+        if org.plan == Organisation.FREE_PLAN:
             return next(root, info, **kwargs)
 
-        raise IPRestrictedError(org_member.organisation.name)
+        else:
+            from backend.ee.access.utils.network import is_ip_allowed
+
+            try:
+                org_member = OrganisationMember.objects.get(
+                    organisation_id=organisation_id,
+                    user_id=user.userId,
+                    deleted_at__isnull=True,
+                )
+            except OrganisationMember.DoesNotExist:
+                raise GraphQLError("You are not a member of this organisation")
+
+            ip = self.get_client_ip(request)
+
+            account_policies = org_member.network_policies.all()
+            global_policies = (
+                NetworkAccessPolicy.objects.filter(
+                    organisation_id=organisation_id, is_global=True
+                )
+                if org.plan == Organisation.ENTERPRISE_PLAN
+                else []
+            )
+
+            all_policies = list(chain(account_policies, global_policies))
+
+            if not all_policies or is_ip_allowed(ip, all_policies):
+                return next(root, info, **kwargs)
+
+            raise IPRestrictedError(org_member.organisation.name)
 
     def get_client_ip(self, request):
         x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
