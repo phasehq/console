@@ -83,7 +83,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                       </div>
                     </td>
 
-                    <td className="px-6 py-2 text-neutral-500 text-xs">
+                    <td className="px-6 py-2 text-neutral-500 text-xs whitespace-nowrap">
                       <div className="space-y-2">
                         <div>Updated {relativeTimeFromDates(new Date(policy.updatedAt))}</div>
                         <div>Created {relativeTimeFromDates(new Date(policy.createdAt))}</div>
@@ -150,7 +150,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                 <tbody className="divide-y divide-zinc-500/20">
                   {globalPolicies.map((policy: NetworkAccessPolicyType) => (
                     <tr key={policy.id} className="group">
-                      <td className="text-zinc-900 dark:text-zinc-100 font-medium">
+                      <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap">
                         {policy.name}
                       </td>
 
