@@ -330,7 +330,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                 {account.networkPolicies?.map((policy) => (
                   <div key={policy.id} className="flex items-center justify-between gap-2 py-2">
                     <div className="flex items-center gap-2">
-                      <FaNetworkWired className="text-neutral-500" />
+                      <FaNetworkWired className="text-neutral-500 shrink-0" />
                       <div className="font-medium text-zinc-900 dark:text-zinc-100">
                         {policy.name}
                       </div>
