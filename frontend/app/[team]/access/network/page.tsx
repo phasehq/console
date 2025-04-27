@@ -83,10 +83,10 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 text-neutral-500 text-sm">
+                    <td className="px-6 py-2 text-neutral-500 text-xs">
                       <div className="space-y-2">
-                        <div>Created {relativeTimeFromDates(new Date(policy.createdAt))}</div>
                         <div>Updated {relativeTimeFromDates(new Date(policy.updatedAt))}</div>
+                        <div>Created {relativeTimeFromDates(new Date(policy.createdAt))}</div>
                       </div>
                     </td>
 
