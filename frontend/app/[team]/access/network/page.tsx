@@ -14,6 +14,7 @@ import { UpdateNetworkAccessPolicyDialog } from './_components/UpdateNetworkPoli
 import { DeleteNetworkAccessPolicyDialog } from './_components/DeleteNetworkPolicyDialog'
 import { ManageOrgGlobalPolicies } from './_components/ManageOrgGlobalPolicies'
 import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
+import { relativeTimeFromDates } from '@/utils/time'
 
 export default function NetworkPolicies({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -59,12 +60,12 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                   <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Name
                   </th>
-                  {/* <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Global
-                  </th> */}
+
                   <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Allowlist
                   </th>
+
+                  <th></th>
 
                   <th></th>
                 </tr>
@@ -74,15 +75,18 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                   <tr key={policy.id} className="group">
                     <td className="text-zinc-900 dark:text-zinc-100 font-medium">{policy.name}</td>
 
-                    {/* <td className="px-6 py-4">
-                      {policy.isGlobal && <FaCheckCircle className="text-emerald-500" />}
-                    </td> */}
-
                     <td className="px-6 py-4">
                       <div className="flex gap-2 flex-wrap">
                         {policy.allowedIps.split(',').map((ip) => (
                           <IPChip key={ip} ip={ip}></IPChip>
                         ))}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 text-neutral-500 text-sm">
+                      <div className="space-y-2">
+                        <div>Created {relativeTimeFromDates(new Date(policy.createdAt))}</div>
+                        <div>Updated {relativeTimeFromDates(new Date(policy.updatedAt))}</div>
                       </div>
                     </td>
 

@@ -5,6 +5,7 @@ query GetNetworkPolicies($organisationId: ID!) {
     allowedIps
     isGlobal
     createdAt
+    updatedAt
   }
   clientIp
 }
