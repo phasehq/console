@@ -157,7 +157,9 @@ export const ManageOrgGlobalPolicies = () => {
                   Allowlist
                 </th>
 
-                <th></th>
+                <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Enabled
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-500/20">
