@@ -19,6 +19,7 @@ import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { IPChip } from '@/app/[team]/access/network/_components/IPChip'
+import { CreateNetworkAccessPolicyDialog } from '@/app/[team]/access/network/_components/CreateNetworkPolicyDialog'
 
 export const UpdateAccountNetworkPolicies = ({
   account,
@@ -90,10 +91,12 @@ export const UpdateAccountNetworkPolicies = ({
     closeModal()
   }
 
-  const accountPolicies =
+  const availablePolicies =
     data?.networkAccessPolicies.filter((policy: NetworkAccessPolicyType) => !policy.isGlobal) ?? []
   const globalPolicies =
     data?.networkAccessPolicies.filter((policy: NetworkAccessPolicyType) => policy.isGlobal) ?? []
+
+  const noPolicies = availablePolicies.length === 0 && globalPolicies.length === 0
 
   if (account.__typename === 'OrganisationMemberType' && account.self) return <></>
 
@@ -113,77 +116,91 @@ export const UpdateAccountNetworkPolicies = ({
       </div>
       <div className="py-4">
         {userCanReadNetworkPolicies ? (
-          <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
-            <thead>
-              <tr>
-                <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
+          !noPolicies ? (
+            <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+              <thead>
+                <tr>
+                  <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
 
-                <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Allowlist
-                </th>
+                  <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Allowlist
+                  </th>
 
-                <th></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-500/20">
-              {globalPolicies.map((policy: NetworkAccessPolicyType) => (
-                <tr key={policy.id} className="group">
-                  <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
-                    {policy.name}{' '}
-                    {policy.isGlobal && (
-                      <FaGlobe title="Global policy" className="text-neutral-500" />
-                    )}
-                  </td>
-
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2 flex-wrap">
-                      {policy.allowedIps.split(',').map((ip) => (
-                        <IPChip key={ip} ip={ip}></IPChip>
-                      ))}
-                    </div>
-                  </td>
-
-                  <td
-                    className="px-6 py-4 flex items-center justify-end gap-2"
-                    title="This policy is enabled globally and cannot be disabled from this screen"
-                  >
-                    <ToggleSwitch value={true} disabled={true} onToggle={() => {}} />
-                  </td>
+                  <th></th>
                 </tr>
-              ))}
-              {accountPolicies.map((policy: NetworkAccessPolicyType) => (
-                <tr key={policy.id} className="group">
-                  <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
-                    {policy.name}{' '}
-                    {policy.isGlobal && (
-                      <FaGlobe title="Global policy" className="text-neutral-500" />
-                    )}
-                  </td>
+              </thead>
+              <tbody className="divide-y divide-zinc-500/20">
+                {globalPolicies.map((policy: NetworkAccessPolicyType) => (
+                  <tr key={policy.id} className="group">
+                    <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
+                      {policy.name}{' '}
+                      {policy.isGlobal && (
+                        <FaGlobe title="Global policy" className="text-neutral-500" />
+                      )}
+                    </td>
 
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2 flex-wrap">
-                      {policy.allowedIps.split(',').map((ip) => (
-                        <IPChip key={ip} ip={ip}></IPChip>
-                      ))}
-                    </div>
-                  </td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2 flex-wrap">
+                        {policy.allowedIps.split(',').map((ip) => (
+                          <IPChip key={ip} ip={ip}></IPChip>
+                        ))}
+                      </div>
+                    </td>
 
-                  <td
-                    className="px-6 py-4 flex items-center justify-end gap-2"
-                    title={`${selectedPolicies.map((p) => p.id).includes(policy.id) ? 'Disable' : 'Enable'} this policy`}
-                  >
-                    <ToggleSwitch
-                      value={selectedPolicies.map((p) => p.id).includes(policy.id)}
-                      disabled={!userCanUpdateAccount}
-                      onToggle={() => handleTogglePolicy(policy)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <td
+                      className="px-6 py-4 flex items-center justify-end gap-2"
+                      title="This policy is enabled globally and cannot be disabled from this screen"
+                    >
+                      <ToggleSwitch value={true} disabled={true} onToggle={() => {}} />
+                    </td>
+                  </tr>
+                ))}
+                {availablePolicies.map((policy: NetworkAccessPolicyType) => (
+                  <tr key={policy.id} className="group">
+                    <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
+                      {policy.name}{' '}
+                      {policy.isGlobal && (
+                        <FaGlobe title="Global policy" className="text-neutral-500" />
+                      )}
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2 flex-wrap">
+                        {policy.allowedIps.split(',').map((ip) => (
+                          <IPChip key={ip} ip={ip}></IPChip>
+                        ))}
+                      </div>
+                    </td>
+
+                    <td
+                      className="px-6 py-4 flex items-center justify-end gap-2"
+                      title={`${selectedPolicies.map((p) => p.id).includes(policy.id) ? 'Disable' : 'Enable'} this policy`}
+                    >
+                      <ToggleSwitch
+                        value={selectedPolicies.map((p) => p.id).includes(policy.id)}
+                        disabled={!userCanUpdateAccount}
+                        onToggle={() => handleTogglePolicy(policy)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState
+              title="No policies"
+              subtitle="There are no network policies created yet. Click below to create one."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaNetworkWired />
+                </div>
+              }
+            >
+              <CreateNetworkAccessPolicyDialog clientIp={data?.clientIp} />
+            </EmptyState>
+          )
         ) : (
           <EmptyState
             title="Access restricted"
@@ -199,19 +216,21 @@ export const UpdateAccountNetworkPolicies = ({
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-4">
-        <Button variant="secondary" onClick={closeModal}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          onClick={handleUpdatePolicy}
-          isLoading={updateIsPending}
-          disabled={!userCanUpdateAccount}
-        >
-          Save
-        </Button>
-      </div>
+      {!noPolicies && (
+        <div className="flex items-center justify-between mt-4">
+          <Button variant="secondary" onClick={closeModal}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleUpdatePolicy}
+            isLoading={updateIsPending}
+            disabled={!userCanUpdateAccount}
+          >
+            Save
+          </Button>
+        </div>
+      )}
     </GenericDialog>
   )
 }
