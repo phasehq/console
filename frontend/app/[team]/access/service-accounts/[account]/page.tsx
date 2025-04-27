@@ -349,7 +349,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                 subtitle={
                   <>
                     This service account does not have any Network Access Policies associated with
-                    it
+                    it.
                     <br /> Access is allowed from any IP address{' '}
                     <span className="font-semibold font-mono">(0.0.0.0/0, ::/0)</span>
                   </>
