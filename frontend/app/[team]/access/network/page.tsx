@@ -68,6 +68,10 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                       Allowlist
                     </th>
 
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Activity
+                    </th>
+
                     <th></th>
 
                     <th></th>
@@ -90,11 +94,11 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
 
                       <td className="px-6 py-2 text-neutral-500 text-xs whitespace-nowrap">
                         <div className="space-y-2">
-                          <div className="flex items-center gap-1">
-                            Updated {relativeTimeFromDates(new Date(policy.updatedAt))}
+                          <div className="flex flex-col">
+                            <div>Updated {relativeTimeFromDates(new Date(policy.updatedAt))}</div>
                             {policy.updatedBy && (
-                              <div className="flex items-center gap-1">
-                                <span className="text-neutral-500">by</span>
+                              <div className="flex items-center gap-1 mt-1">
+                                <span className="text-neutral-500 w-6">by</span>
                                 <Avatar member={policy.updatedBy} size="sm" />
                                 <span className="font-medium text-zinc-900 dark:text-zinc-100">
                                   {policy.updatedBy?.fullName}
@@ -102,11 +106,11 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                               </div>
                             )}
                           </div>
-                          <div className="flex items-center gap-1">
-                            Created {relativeTimeFromDates(new Date(policy.createdAt))}{' '}
+                          <div className="flex flex-col">
+                            <div>Created {relativeTimeFromDates(new Date(policy.createdAt))}</div>
                             {policy.createdBy && (
-                              <div className="flex items-center gap-1">
-                                <span className="text-neutral-500">by</span>
+                              <div className="flex items-center gap-1 mt-1">
+                                <span className="text-neutral-500 w-6">by</span>
                                 <Avatar member={policy.createdBy} size="sm" />
                                 <span className="font-medium text-zinc-900 dark:text-zinc-100">
                                   {policy.createdBy?.fullName}
