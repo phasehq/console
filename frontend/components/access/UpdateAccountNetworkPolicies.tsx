@@ -24,6 +24,7 @@ import { CreateNetworkAccessPolicyDialog } from '@/app/[team]/access/network/_co
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { isClientIpAllowed } from '@/utils/access/ip'
+import { isCloudHosted } from '@/utils/appConfig'
 
 export const UpdateAccountNetworkPolicies = ({
   account,
@@ -123,7 +124,10 @@ export const UpdateAccountNetworkPolicies = ({
       <UpsellDialog
         buttonLabel={
           <>
-            <FaNetworkWired /> Manage policy <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />{' '}
+            <FaNetworkWired /> Manage policy{' '}
+            <PlanLabel
+              plan={isCloudHosted() ? ApiOrganisationPlanChoices.Pr : ApiOrganisationPlanChoices.En}
+            />{' '}
           </>
         }
       />
