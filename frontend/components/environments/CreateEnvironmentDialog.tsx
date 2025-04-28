@@ -16,6 +16,7 @@ import { Alert } from '../common/Alert'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { sanitizeInput } from '@/utils/environment'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
+import { isCloudHosted } from '@/utils/appConfig'
 
 export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -107,14 +108,16 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
   if (!allowNewEnv())
     return (
       <UpsellDialog
-        title="Upgrade to Pro to create custom environments"
+        title={`Upgrade to ${isCloudHosted() ? 'Pro' : 'Enterprise'} to create custom environments`}
         buttonLabel={
           <>
             <FaPlus /> New Environment{' '}
             <PlanLabel
               plan={
                 organisation?.plan === ApiOrganisationPlanChoices.Fr
-                  ? ApiOrganisationPlanChoices.Pr
+                  ? isCloudHosted()
+                    ? ApiOrganisationPlanChoices.Pr
+                    : ApiOrganisationPlanChoices.En
                   : ApiOrganisationPlanChoices.En
               }
             />

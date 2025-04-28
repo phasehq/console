@@ -15,6 +15,7 @@ import { Button } from '@/components/common/Button'
 import { AppsView } from '@/components/apps/AppsView'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { isCloudHosted } from '@/utils/appConfig'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -88,7 +89,13 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                       <>
                         <FaPlus />
                         Create an App
-                        <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />
+                        <PlanLabel
+                          plan={
+                            isCloudHosted()
+                              ? ApiOrganisationPlanChoices.Pr
+                              : ApiOrganisationPlanChoices.En
+                          }
+                        />
                       </>
                     }
                   />
