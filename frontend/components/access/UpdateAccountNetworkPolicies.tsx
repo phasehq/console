@@ -186,7 +186,7 @@ export const UpdateAccountNetworkPolicies = ({
 
                     <td
                       className="px-6 py-4 flex items-center justify-end gap-2"
-                      title="This policy is enabled globally and cannot be disabled from this screen"
+                      title="This policy has been applied globally across the organisation and cannot be selectively disabled."
                     >
                       <ToggleSwitch value={true} disabled={true} onToggle={() => {}} />
                     </td>
