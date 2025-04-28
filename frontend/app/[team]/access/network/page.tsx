@@ -133,7 +133,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
             ) : (
               <EmptyState
                 title="No policies"
-                subtitle="There are no network policies created yet. Click below to create one."
+                subtitle="There are no network access policies created yet."
                 graphic={
                   <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                     <FaNetworkWired />
