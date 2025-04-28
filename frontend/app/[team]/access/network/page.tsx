@@ -219,7 +219,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                       There are no global policies set for your organisation.
                       <br /> Access is allowed from any IP address{' '}
                       <span className="font-semibold font-mono">(0.0.0.0/0, ::/0)</span> for any
-                      accounts that do not have an explicit network access policy
+                      accounts that do not have an explicit network access policy attached to them.
                     </>
                   }
                   graphic={
