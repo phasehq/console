@@ -165,7 +165,7 @@ export const UpdateAccountNetworkPolicies = ({
               <tbody className="divide-y divide-zinc-500/20">
                 {globalPolicies.map((policy: NetworkAccessPolicyType) => (
                   <tr key={policy.id} className="group">
-                    <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
+                    <td className="text-zinc-900 dark:text-zinc-100 font-medium inline-flex items-center gap-1">
                       {policy.name}{' '}
                       {policy.isGlobal && (
                         <FaGlobe title="Global policy" className="text-neutral-500" />
@@ -190,7 +190,7 @@ export const UpdateAccountNetworkPolicies = ({
                 ))}
                 {availablePolicies.map((policy: NetworkAccessPolicyType) => (
                   <tr key={policy.id} className="group">
-                    <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
+                    <td className="text-zinc-900 dark:text-zinc-100 font-medium break-all inline-flex items-center gap-1">
                       {policy.name}{' '}
                       {policy.isGlobal && (
                         <FaGlobe title="Global policy" className="text-neutral-500" />

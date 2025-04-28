@@ -166,7 +166,7 @@ export const ManageOrgGlobalPolicies = () => {
             <tbody className="divide-y divide-zinc-500/20">
               {policies.map((policy: NetworkAccessPolicyType) => (
                 <tr key={policy.id} className="group">
-                  <td className="text-zinc-900 dark:text-zinc-100 font-medium whitespace-nowrap inline-flex items-center gap-1">
+                  <td className="text-zinc-900 dark:text-zinc-100 font-medium break-all inline-flex items-center gap-1">
                     {policy.name}
                   </td>
 

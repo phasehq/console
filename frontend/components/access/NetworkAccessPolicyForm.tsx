@@ -134,6 +134,7 @@ export function NetworkAccessPolicyForm({
                   className="ml-1 text-neutral-500 hover:text-red-500 transition ease"
                   onClick={() => removeIp(ip)}
                   type="button"
+                  disabled={disabled}
                 >
                   <FaTimesCircle />
                 </button>
