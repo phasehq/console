@@ -7,11 +7,9 @@ import { Button } from '../common/Button'
 import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
 import { useQuery } from '@apollo/client'
 import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
-
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 import { Alert } from '../common/Alert'
-import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { createApplication } from '@/utils/app'
 import { userHasPermission } from '@/utils/access/permissions'
 import { Input } from '../common/Input'
@@ -128,20 +126,6 @@ const NewAppDialog = forwardRef(
           description: `The Pro plan is limited to ${organisation.planDetail?.maxApps} Apps. To create more Apps, please upgrade to Enterprise.`,
         }
     }
-
-    if (!allowNewApp() && !createSuccess)
-      return (
-        <div className="flex items-center justify-center cursor-pointer w-full h-full group">
-          <UpsellDialog
-            buttonLabel={
-              <>
-                <FaPlus />
-                Create an App
-              </>
-            }
-          />
-        </div>
-      )
 
     return (
       <>

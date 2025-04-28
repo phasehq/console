@@ -120,6 +120,7 @@ export const ManageOrgGlobalPolicies = () => {
   if (organisation.plan === ApiOrganisationPlanChoices.Pr)
     return (
       <UpsellDialog
+        title="Upgrade to Enterprise to manage global network access policies"
         buttonLabel={
           <>
             <FaNetworkWired /> Manage global policies{' '}

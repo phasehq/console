@@ -15,6 +15,7 @@ import Spinner from '../common/Spinner'
 import { Alert } from '../common/Alert'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { sanitizeInput } from '@/utils/environment'
+import { PlanLabel } from '../settings/organisation/PlanLabel'
 
 export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -109,7 +110,14 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
         title="Upgrade to Pro to create custom environments"
         buttonLabel={
           <>
-            <FaPlus /> New Environment
+            <FaPlus /> New Environment{' '}
+            <PlanLabel
+              plan={
+                organisation?.plan === ApiOrganisationPlanChoices.Fr
+                  ? ApiOrganisationPlanChoices.Pr
+                  : ApiOrganisationPlanChoices.En
+              }
+            />
           </>
         }
         buttonVariant="outline"

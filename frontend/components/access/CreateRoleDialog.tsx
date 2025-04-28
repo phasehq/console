@@ -6,7 +6,6 @@ import {
   togglePolicyResourcePermission,
   userHasPermission,
 } from '@/utils/access/permissions'
-import { ToggleSwitch } from '../common/ToggleSwitch'
 import { FaChevronRight, FaPlus } from 'react-icons/fa'
 import { camelCaseToSpaces, getRandomCuratedColor, stringContainsCharacters } from '@/utils/copy'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
@@ -25,6 +24,7 @@ import { AccessTemplateSelector } from './AccessTemplateSelector'
 import { PermissionToggle } from './PermissionToggle'
 import { ColorPicker } from '../common/ColorPicker'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
+import { PlanLabel } from '../settings/organisation/PlanLabel'
 
 export const CreateRoleDialog = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -133,7 +133,7 @@ export const CreateRoleDialog = () => {
       <UpsellDialog
         buttonLabel={
           <>
-            <FaPlus /> Create Role
+            <FaPlus /> Create Role <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />
           </>
         }
       />
