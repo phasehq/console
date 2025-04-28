@@ -15,6 +15,7 @@ import { DeleteNetworkAccessPolicyDialog } from './_components/DeleteNetworkPoli
 import { ManageOrgGlobalPolicies } from './_components/ManageOrgGlobalPolicies'
 import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 import { relativeTimeFromDates } from '@/utils/time'
+import { Avatar } from '@/components/common/Avatar'
 
 export default function NetworkPolicies({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -90,8 +91,30 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
 
                       <td className="px-6 py-2 text-neutral-500 text-xs whitespace-nowrap">
                         <div className="space-y-2">
-                          <div>Updated {relativeTimeFromDates(new Date(policy.updatedAt))}</div>
-                          <div>Created {relativeTimeFromDates(new Date(policy.createdAt))}</div>
+                          <div className="flex items-center gap-1">
+                            Updated {relativeTimeFromDates(new Date(policy.updatedAt))}
+                            {policy.updatedBy && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-neutral-500">by</span>
+                                <Avatar member={policy.updatedBy} size="sm" />
+                                <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                                  {policy.updatedBy?.fullName}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            Created {relativeTimeFromDates(new Date(policy.createdAt))}{' '}
+                            {policy.createdBy && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-neutral-500">by</span>
+                                <Avatar member={policy.createdBy} size="sm" />
+                                <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                                  {policy.createdBy?.fullName}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
 

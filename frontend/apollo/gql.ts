@@ -87,7 +87,7 @@ const documents = {
     "mutation CreateNewUserToken($orgId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!, $expiry: BigInt) {\n  createUserToken(\n    orgId: $orgId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n    expiry: $expiry\n  ) {\n    ok\n  }\n}": types.CreateNewUserTokenDocument,
     "mutation RevokeUserToken($tokenId: ID!) {\n  deleteUserToken(tokenId: $tokenId) {\n    ok\n  }\n}": types.RevokeUserTokenDocument,
     "query GetIP {\n  clientIp\n}": types.GetIpDocument,
-    "query GetNetworkPolicies($organisationId: ID!) {\n  networkAccessPolicies(organisationId: $organisationId) {\n    id\n    name\n    allowedIps\n    isGlobal\n    createdAt\n    updatedAt\n  }\n  clientIp\n}": types.GetNetworkPoliciesDocument,
+    "query GetNetworkPolicies($organisationId: ID!) {\n  networkAccessPolicies(organisationId: $organisationId) {\n    id\n    name\n    allowedIps\n    isGlobal\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    updatedAt\n  }\n  clientIp\n}": types.GetNetworkPoliciesDocument,
     "query GetAppMembers($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n  }\n}": types.GetAppMembersDocument,
     "query GetAppServiceAccounts($appId: ID!) {\n  appServiceAccounts(appId: $appId) {\n    id\n    identityKey\n    name\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n    tokens {\n      id\n      name\n    }\n  }\n}": types.GetAppServiceAccountsDocument,
     "query GetCheckoutDetails($stripeSessionId: String!) {\n  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}": types.GetCheckoutDetailsDocument,
@@ -452,7 +452,7 @@ export function graphql(source: "query GetIP {\n  clientIp\n}"): (typeof documen
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetNetworkPolicies($organisationId: ID!) {\n  networkAccessPolicies(organisationId: $organisationId) {\n    id\n    name\n    allowedIps\n    isGlobal\n    createdAt\n    updatedAt\n  }\n  clientIp\n}"): (typeof documents)["query GetNetworkPolicies($organisationId: ID!) {\n  networkAccessPolicies(organisationId: $organisationId) {\n    id\n    name\n    allowedIps\n    isGlobal\n    createdAt\n    updatedAt\n  }\n  clientIp\n}"];
+export function graphql(source: "query GetNetworkPolicies($organisationId: ID!) {\n  networkAccessPolicies(organisationId: $organisationId) {\n    id\n    name\n    allowedIps\n    isGlobal\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    updatedAt\n  }\n  clientIp\n}"): (typeof documents)["query GetNetworkPolicies($organisationId: ID!) {\n  networkAccessPolicies(organisationId: $organisationId) {\n    id\n    name\n    allowedIps\n    isGlobal\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    updatedAt\n  }\n  clientIp\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

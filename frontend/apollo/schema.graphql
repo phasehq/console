@@ -125,7 +125,9 @@ type NetworkAccessPolicyType {
   allowedIps: String!
   isGlobal: Boolean!
   createdAt: DateTime!
+  createdBy: OrganisationMemberType
   updatedAt: DateTime!
+  updatedBy: OrganisationMemberType
   members: [OrganisationMemberType!]!
   serviceAccounts: [ServiceAccountType!]
   organisationMembers: [OrganisationMemberType!]

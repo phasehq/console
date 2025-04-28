@@ -137,9 +137,17 @@ class CreateNetworkAccessPolicyMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have the permissions required to create Network Access Policies in this organisation"
             )
+        org_member = OrganisationMember.objects.get(
+            organisation=org, user=user, deleted_at=None
+        )
 
         policy = NetworkAccessPolicy.objects.create(
-            organisation=org, name=name, allowed_ips=allowed_ips, is_global=is_global
+            organisation=org,
+            name=name,
+            allowed_ips=allowed_ips,
+            is_global=is_global,
+            created_by=org_member,
+            updated_by=org_member,
         )
 
         return CreateNetworkAccessPolicyMutation(network_access_policy=policy)
@@ -164,6 +172,9 @@ class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
 
         for policy_input in policy_inputs:
             policy = NetworkAccessPolicy.objects.get(id=policy_input.id)
+            org_member = OrganisationMember.objects.get(
+                organisation=policy.organisation, user=user, deleted_at=None
+            )
             if not user_has_permission(
                 user, "update", "NetworkAccessPolicies", policy.organisation
             ):
@@ -179,6 +190,8 @@ class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
 
             if policy_input.is_global is not None:
                 policy.is_global = policy_input.is_global
+
+            policy.updated_by = org_member
 
             policy.save()
 
