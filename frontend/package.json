@@ -31,6 +31,7 @@
     "graphql": "^16.8.1",
     "graphql-tag": "^2.12.6",
     "install": "^0.13.0",
+    "ipaddr.js": "^2.2.0",
     "jsonwebtoken": "^9.0.2",
     "jspdf": "^3.0.1",
     "libsodium-wrappers-sumo": "^0.7.13",

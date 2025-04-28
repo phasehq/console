@@ -16,6 +16,7 @@ import {
   FaCog,
   FaEdit,
   FaKey,
+  FaNetworkWired,
   FaPlus,
   FaRobot,
 } from 'react-icons/fa'
@@ -32,6 +33,8 @@ import { toast } from 'react-toastify'
 import CopyButton from '@/components/common/CopyButton'
 import { SseLabel } from '@/components/apps/EncryptionModeIndicator'
 import clsx from 'clsx'
+import { IPChip } from '../../network/_components/IPChip'
+import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -51,6 +54,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
   const userCanReadAppMemberships = organisation
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read', true)
+    : false
+
+  const userCanViewNetworkAccess = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'NetworkAccessPolicies', 'read')
     : false
 
   const userCanUpdateSA = organisation
@@ -303,6 +310,61 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             </div>
           )}
         </div>
+
+        {userCanViewNetworkAccess && (
+          <div className="py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xl font-semibold">Network Access Policy</div>
+                <div className="text-neutral-500">
+                  Manage the network access policy for this Account
+                </div>
+              </div>
+              {account.networkPolicies?.length! > 0 && (
+                <UpdateAccountNetworkPolicies account={account} />
+              )}
+            </div>
+
+            {account.networkPolicies?.length! > 0 ? (
+              <div className="divide-y divide-neutral-500/20 py-6">
+                {account.networkPolicies?.map((policy) => (
+                  <div key={policy.id} className="flex items-center justify-between gap-2 py-2">
+                    <div className="flex items-center gap-2">
+                      <FaNetworkWired className="text-neutral-500 shrink-0" />
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                        {policy.name}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {policy.allowedIps.split(',').map((ip) => (
+                        <IPChip key={ip} ip={ip}></IPChip>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No Policy"
+                subtitle={
+                  <>
+                    This service account does not have any Network Access Policies associated with
+                    it.
+                    <br /> Access is allowed from any IP address -{' '}
+                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>
+                  </>
+                }
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-5xl text-center">
+                    <FaNetworkWired />
+                  </div>
+                }
+              >
+                <UpdateAccountNetworkPolicies account={account} />
+              </EmptyState>
+            )}
+          </div>
+        )}
 
         <div className="py-4">
           <div>

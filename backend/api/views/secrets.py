@@ -29,6 +29,7 @@ from api.utils.rest import (
 
 import json
 from api.content_negotiation import CamelCaseContentNegotiation
+from api.utils.access.middleware import IsIPAllowed
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
@@ -44,7 +45,7 @@ from rest_framework.renderers import JSONRenderer
 
 class E2EESecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsIPAllowed]
     content_negotiation_class = CamelCaseContentNegotiation
 
     def initial(self, request, *args, **kwargs):
@@ -351,7 +352,7 @@ class E2EESecretsView(APIView):
 
 class PublicSecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsIPAllowed]
     renderer_classes = [
         CamelCaseJSONRenderer,
     ]

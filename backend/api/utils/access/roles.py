@@ -14,6 +14,7 @@ default_roles = {
             "ServiceAccountTokens": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
             "IntegrationCredentials": ["create", "read", "update", "delete"],
+            "NetworkAccessPolicies": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -43,6 +44,7 @@ default_roles = {
             "ServiceAccountTokens": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
             "IntegrationCredentials": ["create", "read", "update", "delete"],
+            "NetworkAccessPolicies": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -71,6 +73,7 @@ default_roles = {
             "ServiceAccountTokens": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
             "IntegrationCredentials": ["create", "read", "update", "delete"],
+            "NetworkAccessPolicies": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -103,6 +106,7 @@ default_roles = {
                 "read",
                 "update",
             ],
+            "NetworkAccessPolicies": ["read"],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -131,6 +135,7 @@ default_roles = {
             "ServiceAccountTokens": ["read"],
             "Roles": ["read"],
             "IntegrationCredentials": ["read"],
+            "NetworkAccessPolicies": ["read"],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update", "delete"],

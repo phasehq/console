@@ -285,20 +285,22 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
           }
         >
           <Tab.List className="flex justify-center gap-8 border-b border-neutral-500/40">
-            <Tab>
-              {({ selected }) => (
-                <div
-                  className={clsx(
-                    'col-span-2 flex items-center justify-center gap-2 transition ease border-b -mb-px',
-                    selected
-                      ? 'opacity-100 grayscale-0 border-emerald-500'
-                      : 'opacity-50 grayscale border-transparent'
-                  )}
-                >
-                  <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />
-                </div>
-              )}
-            </Tab>
+            {activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr && (
+              <Tab>
+                {({ selected }) => (
+                  <div
+                    className={clsx(
+                      'col-span-2 flex items-center justify-center gap-2 transition ease border-b -mb-px',
+                      selected
+                        ? 'opacity-100 grayscale-0 border-emerald-500'
+                        : 'opacity-50 grayscale border-transparent'
+                    )}
+                  >
+                    <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />
+                  </div>
+                )}
+              </Tab>
+            )}
             <Tab>
               {({ selected }) => (
                 <div

@@ -7,7 +7,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext } from 'react'
-import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey } from 'react-icons/fa'
+import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey, FaNetworkWired } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { OrganisationMemberType, UserTokenType, AppType } from '@/apollo/graphql'
@@ -20,6 +20,8 @@ import clsx from 'clsx'
 import { DeleteUserTokenDialog } from '../_components/DeleteUserTokenDialog'
 import CopyButton from '@/components/common/CopyButton'
 import { AddAppToMemberButton } from '../_components/AddAppToMemberButton'
+import { IPChip } from '../../network/_components/IPChip'
+import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 
 export default function MemberDetail({ params }: { params: { team: string; memberId: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -39,6 +41,10 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
   const userCanReadAppMemberships = organisation
     ? userHasPermission(organisation.role!.permissions, 'Apps', 'read')
+    : false
+
+  const userCanViewNetworkAccess = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'NetworkAccessPolicies', 'read')
     : false
 
   const userCanWriteAppMemberships = organisation
@@ -269,6 +275,60 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {userCanViewNetworkAccess && (
+          <div className="py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xl font-semibold">Network Access Policy</div>
+                <div className="text-neutral-500">
+                  Manage the network access policy for this Account
+                </div>
+              </div>
+              {member.networkPolicies?.length! > 0 && (
+                <UpdateAccountNetworkPolicies account={member} />
+              )}
+            </div>
+
+            {member.networkPolicies?.length! > 0 ? (
+              <div className="divide-y divide-neutral-500/20 py-6">
+                {member.networkPolicies?.map((policy) => (
+                  <div key={policy.id} className="flex items-center justify-between gap-8 py-4">
+                    <div className="flex items-center gap-2">
+                      <FaNetworkWired className="text-neutral-500 shrink-0" />
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                        {policy.name}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {policy.allowedIps.split(',').map((ip) => (
+                        <IPChip key={ip} ip={ip}></IPChip>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No Policy"
+                subtitle={
+                  <>
+                    This member does not have any Network Access Policies associated with them.
+                    <br /> Access is allowed from any IP address -{' '}
+                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>
+                  </>
+                }
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <FaNetworkWired />
+                  </div>
+                }
+              >
+                <UpdateAccountNetworkPolicies account={member} />
+              </EmptyState>
+            )}
           </div>
         )}
 
