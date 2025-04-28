@@ -166,7 +166,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
             <h2 className="text-xl font-semibold">Global Policies</h2>
             <p className="text-neutral-500">
               Manage Network Access Policies that are applied globally to all user and service
-              accounts.
+              accounts across the organisation.
             </p>
           </div>
           <div className="space-y-4">
