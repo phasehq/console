@@ -333,7 +333,11 @@ def service_token_kms(request):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny, IsIPAllowed])
+@permission_classes(
+    [
+        AllowAny,
+    ]
+)
 def secrets_tokens(request):
     auth_token = request.headers["authorization"]
 
