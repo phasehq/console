@@ -316,8 +316,8 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                 subtitle={
                   <>
                     This user does not have any Network Access Policies associated with them.
-                    <br /> Access is allowed from any IP address{' '}
-                    <span className="font-semibold font-mono">(0.0.0.0/0, ::/0)</span>
+                    <br /> Access is allowed from any IP address -{' '}
+                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>
                   </>
                 }
                 graphic={
