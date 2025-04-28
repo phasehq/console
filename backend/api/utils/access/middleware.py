@@ -10,6 +10,10 @@ class IsIPAllowed(BasePermission):
     Checks if the client's IP is allowed based on attached network access policies.
     """
 
+    message = (
+        "Access denied: a network access policy restricts access from your IP address."
+    )
+
     def get_client_ip(self, request):
         x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
         if x_forwarded_for:
