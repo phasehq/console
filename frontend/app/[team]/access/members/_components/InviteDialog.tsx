@@ -11,12 +11,12 @@ import { useQuery, useMutation } from '@apollo/client'
 import { Listbox } from '@headlessui/react'
 import { useSearchParams } from 'next/navigation'
 import { useContext, useState, useRef, useEffect, Fragment, useMemo } from 'react'
-import { FaChevronDown, FaPlus, FaTimes } from 'react-icons/fa'
+import { FaChevronDown, FaPlus } from 'react-icons/fa'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import InviteMember from '@/graphql/mutations/organisation/inviteNewMember.gql'
-import { userHasPermission } from '@/utils/access/permissions'
+import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import clsx from 'clsx'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -45,7 +45,9 @@ export const InviteDialog = (props: { organisationId: string }) => {
   const roleOptions: RoleType[] = useMemo(() => {
     return (
       roleData?.roles.filter(
-        (option: RoleType) => option.name !== 'Owner' && option.name !== 'Admin'
+        (option: RoleType) =>
+          !userHasGlobalAccess(option.permissions) &&
+          !userHasPermission(option.permissions, 'ServiceAccountTokens', 'create')
       ) || []
     )
   }, [roleData])
