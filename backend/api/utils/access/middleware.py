@@ -25,6 +25,7 @@ class IsIPAllowed(BasePermission):
 
         org_member = request.auth.get("org_member", None)
         service_account = request.auth.get("service_account", None)
+        service_token = request.auth.get("service_token")
 
         org = None
         account_policies = NetworkAccessPolicy.objects.none()
@@ -35,8 +36,10 @@ class IsIPAllowed(BasePermission):
         elif service_account:
             account_policies = service_account.network_policies.all()
             org = service_account.organisation
+        elif service_token:
+            org = service_token.app.organisation
 
-        if org.plan == Organisation.FREE_PLAN:
+        if org is None or org.plan == Organisation.FREE_PLAN:
             return True
         else:
             from ee.access.utils.network import is_ip_allowed
