@@ -1,11 +1,14 @@
 'use client'
 
 import { GetAppSecretsLogs } from '@/graphql/queries/secrets/getAppSecretsLogs.gql'
-import { useLazyQuery } from '@apollo/client'
+import { useLazyQuery, useQuery } from '@apollo/client'
 import {
   ApiSecretEventEventTypeChoices,
   EnvironmentKeyType,
   SecretEventType,
+  OrganisationMemberType,
+  ServiceAccountType,
+  MemberType,
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -14,12 +17,15 @@ import {
   FaBan,
   FaChevronRight,
   FaExternalLinkAlt,
+  FaChevronDown,
+  FaCircle,
+  FaCheckCircle,
   FaKey,
   FaRobot,
 } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
-import { ReactNode, useContext, useEffect, useRef, useState } from 'react'
+import { ReactNode, Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { Avatar } from '../common/Avatar'
@@ -36,6 +42,10 @@ import {
 } from '@/utils/crypto'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
+import { Popover, Combobox, RadioGroup } from '@headlessui/react'
+import { FaFilter } from 'react-icons/fa'
+import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
+import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
@@ -54,6 +64,37 @@ export default function SecretLogs(props: { app: string }) {
   const [logList, setLogList] = useState<SecretEventType[]>([])
   const [envKeys, setEnvKeys] = useState<EnvKey[]>([])
   const [endofList, setEndofList] = useState<boolean>(false)
+  // Track indices where an additional page was appended so we can render a subtle separator
+  const [pageBreaks, setPageBreaks] = useState<number[]>([])
+
+  /* ---------------------- 🔍 Filter state ---------------------- */
+  const [eventTypes, setEventTypes] = useState<string[]>([])
+  const [selectedUser, setSelectedUser] = useState<OrganisationMemberType | null>(null)
+  const [selectedAccount, setSelectedAccount] = useState<ServiceAccountType | null>(null)
+  const [dateRange, setDateRange] = useState<'7' | '30' | '90' | 'custom'>('7')
+  const [customStart, setCustomStart] = useState<string>('')
+  const [customEnd, setCustomEnd] = useState<string>('')
+
+  // UI state helpers
+  const [showFilter, setShowFilter] = useState<boolean>(false)
+  const [identityQuery, setIdentityQuery] = useState('')
+
+  const [filterStart, setFilterStart] = useState<number>(LOGS_START_DATE)
+
+  /* ------------------ Data for combobox options ----------------- */
+  const { data: membersData } = useQuery(GetAppMembers, {
+    variables: { appId: props.app },
+    fetchPolicy: 'cache-first',
+  })
+
+  const { data: accountsData } = useQuery(GetAppServiceAccounts, {
+    variables: { appId: props.app },
+    fetchPolicy: 'cache-first',
+  })
+
+  // Ensure options are arrays to avoid undefined errors
+  const memberOptions: OrganisationMemberType[] = membersData?.appUsers ?? []
+  const accountOptions: ServiceAccountType[] = accountsData?.appServiceAccounts ?? []
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
@@ -97,6 +138,8 @@ export default function SecretLogs(props: { app: string }) {
   }
 
   const clearLogList = () => setLogList([])
+  // Also clear any existing page separators when the list is cleared (e.g., on new filters)
+  const resetPageBreaks = () => setPageBreaks([])
 
   /**
    * Gets the first page of logs, by resetting the log list and fetching logs using the current unix timestamp.
@@ -117,7 +160,9 @@ export default function SecretLogs(props: { app: string }) {
    * @returns {void}
    */
   const getNextPage = () => {
-    fetchLogs(LOGS_START_DATE, getLastLogTimestamp())
+    // Record the index where the new page will begin so we can render a separator later
+    setPageBreaks((prev) => [...prev, logList.length])
+    fetchLogs(filterStart, getLastLogTimestamp())
   }
 
   /**
