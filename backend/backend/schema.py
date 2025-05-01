@@ -245,6 +245,9 @@ class Query(graphene.ObjectType):
         app_id=graphene.ID(),
         start=graphene.BigInt(),
         end=graphene.BigInt(),
+        event_types=graphene.List(graphene.String),
+        member_id=graphene.ID(),
+        member_type=MemberType(),
     )
 
     kms_logs_count = graphene.Int(app_id=graphene.ID(), this_month=graphene.Boolean())
