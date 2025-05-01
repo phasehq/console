@@ -649,7 +649,7 @@ class Query(graphene.ObjectType):
     resolve_service_accounts = resolve_service_accounts
     resolve_service_account_handlers = resolve_service_account_handlers
 
-    def resolve_logs(root, info, app_id, start=0, end=0):
+    def resolve_logs(root, info, app_id, start=0, end=0, event_types=None, member_id=None, member_type=None):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
@@ -694,9 +694,17 @@ class Query(graphene.ObjectType):
         if user_has_permission(
             info.context.user, "read", "Logs", app.organisation, True
         ):
-            secret_events = SecretEvent.objects.filter(
+            secret_events_query = SecretEvent.objects.filter(
                 environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
-            ).order_by("-timestamp")[:25]
+            )
+            if event_types:
+                secret_events_query = secret_events_query.filter(event_type__in=event_types)
+            if member_id:
+                if member_type == MemberType.USER or member_type is None:
+                    secret_events_query = secret_events_query.filter(user_id=member_id)
+                elif member_type == MemberType.SERVICE:
+                    secret_events_query = secret_events_query.filter(service_account_id=member_id)
+            secret_events = secret_events_query.order_by("-timestamp")[:25]
         else:
             secret_events = []
 
