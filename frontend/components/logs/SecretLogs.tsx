@@ -83,6 +83,9 @@ export default function SecretLogs(props: { app: string }) {
         appId: props.app,
         start,
         end,
+        eventTypes: eventTypes.length ? eventTypes : null,
+        memberId: selectedUser ? selectedUser.id : selectedAccount ? selectedAccount.id : null,
+        memberType: selectedUser ? MemberType.User : selectedAccount ? MemberType.Service : null,
       },
       fetchPolicy: 'network-only',
     }).then((result) => {
@@ -102,7 +105,10 @@ export default function SecretLogs(props: { app: string }) {
    */
   const getFirstPage = () => {
     setEndofList(false)
-    fetchLogs(LOGS_START_DATE, getCurrentTimeStamp())
+    resetPageBreaks()
+    const { start, end } = computeStartEnd()
+    fetchLogs(start, end)
+    setFilterStart(start)
   }
 
   /**
@@ -434,21 +440,272 @@ export default function SecretLogs(props: { app: string }) {
     )
   }
 
+  /* ---------------------- Filter helpers ---------------------- */
+  const computeStartEnd = () => {
+    const end = getCurrentTimeStamp()
+    if (dateRange === 'custom') {
+      const start = customStart ? new Date(customStart).getTime() : LOGS_START_DATE
+      const customEndTs = customEnd ? new Date(customEnd).getTime() : end
+      return { start, end: customEndTs }
+    }
+    const days = parseInt(dateRange)
+    const start = end - days * 24 * 60 * 60 * 1000
+    return { start, end }
+  }
+
+  const applyFilters = () => {
+    clearLogList()
+    resetPageBreaks()
+    const { start, end } = computeStartEnd()
+    fetchLogs(start, end)
+    setFilterStart(start)
+    setShowFilter(false)
+  }
+
+  /* ----------------- Derived UI helpers ---------------- */
+  const hasActiveFilters =
+    eventTypes.length > 0 ||
+    selectedUser !== null ||
+    selectedAccount !== null ||
+    dateRange !== '7'
+
+  // Decide which count to display: overall or current filtered list
+  const displayCount = hasActiveFilters ? logList.length : totalCount
+
   return (
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
-          <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
+          <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
             <span className="text-neutral-500 font-light text-lg">
-              {totalCount && <Count from={0} to={totalCount} />} Events
+              {displayCount !== undefined && <Count from={0} to={displayCount} />} Events
             </span>
-            <Button variant="secondary" onClick={clearLogList} disabled={loading}>
-              <FiRefreshCw
-                size={20}
-                className={clsx('mr-1', loading && logList.length === 0 ? 'animate-spin' : '')}
-              />{' '}
-              Refresh
-            </Button>
+
+            <div className="flex items-center gap-2">
+              {/* Filter popover */}
+              <Popover className="relative">
+                {({ open }) => (
+                  <>
+                    <Popover.Button as={Fragment}>
+                      <Button variant="secondary" title="Filter logs">
+                        <div className="relative flex items-center gap-1">
+                          <FaFilter /> Filter
+                          {hasActiveFilters && (
+                            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-500"></span>
+                          )}
+                        </div>
+                      </Button>
+                    </Popover.Button>
+                    <Transition
+                      as={Fragment}
+                      enter="transition duration-100 ease-out"
+                      enterFrom="transform scale-95 opacity-0"
+                      enterTo="transform scale-100 opacity-100"
+                      leave="transition duration-75 ease-out"
+                      leaveFrom="transform scale-100 opacity-100"
+                      leaveTo="transform scale-95 opacity-0"
+                    >
+                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-80 p-4 rounded-md shadow-2xl bg-neutral-100 dark:bg-neutral-900 ring-1 ring-neutral-500/20 space-y-4">
+                        {/* Event types */}
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-neutral-500">EVENT TYPE</div>
+                          <div className="flex flex-wrap gap-2">
+                            {(
+                              [
+                                { code: 'C', label: 'Create', color: 'emerald' },
+                                { code: 'U', label: 'Update', color: 'yellow' },
+                                { code: 'R', label: 'Read', color: 'blue' },
+                                { code: 'D', label: 'Delete', color: 'red' },
+                              ] as const
+                            ).map((ev) => (
+                              <button
+                                key={ev.code}
+                                onClick={() =>
+                                  setEventTypes((prev) =>
+                                    prev.includes(ev.code) ? prev.filter((c) => c !== ev.code) : [...prev, ev.code]
+                                  )
+                                }
+                                className={clsx(
+                                  'flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200',
+                                  eventTypes.includes(ev.code)
+                                    ? 'bg-neutral-400/20 dark:bg-neutral-700/40 border border-neutral-500/40 text-neutral-800 dark:text-neutral-100'
+                                    : 'bg-transparent border border-neutral-500/40 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-500/10'
+                                )}
+                              >
+                                {/* Colored dot */}
+                                <span
+                                  className={clsx(
+                                    'inline-block h-2 w-2 rounded-full',
+                                    {
+                                      emerald: 'bg-emerald-500',
+                                      yellow: 'bg-yellow-500',
+                                      blue: 'bg-blue-500',
+                                      red: 'bg-red-500',
+                                    }[ev.color]
+                                  )}
+                                ></span>
+                                <span>{ev.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Identity (User or Service account) filter */}
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-neutral-500">FILTER BY ACCOUNT</div>
+                          <Combobox
+                            value={selectedUser || (selectedAccount as any)}
+                            by="id"
+                            onChange={(val) => {
+                              if ('fullName' in val || 'email' in val) {
+                                setSelectedUser(val as OrganisationMemberType)
+                                setSelectedAccount(null)
+                              } else {
+                                setSelectedAccount(val as ServiceAccountType)
+                                setSelectedUser(null)
+                              }
+                            }}
+                          >
+                            {({ open }) => (
+                              <>
+                                <div className="relative">
+                                  <Combobox.Input
+                                    className="w-full bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 text-sm"
+                                    onChange={(e) => setIdentityQuery(e.target.value)}
+                                    displayValue={(val: any) => {
+                                      if (!val) return ''
+                                      return 'fullName' in val || 'email' in val
+                                        ? val.fullName || val.email
+                                        : val.name
+                                    }}
+                                    placeholder="Search account"
+                                  />
+                                  <Combobox.Button className="absolute inset-y-0 right-2 flex items-center">
+                                    <FaChevronDown className="text-neutral-500" />
+                                  </Combobox.Button>
+                                </div>
+                                {open && (
+                                  <Combobox.Options as={Fragment}>
+                                    <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 shadow-xl space-y-1">
+                                      {[...memberOptions, ...accountOptions]
+                                        .filter((item) => {
+                                          if (!identityQuery) return true
+                                          const q = identityQuery.toLowerCase()
+                                          if ('name' in item) {
+                                            return item.name.toLowerCase().includes(q)
+                                          }
+                                          return (
+                                            (item.fullName || '').toLowerCase().includes(q) ||
+                                            (item.email || '').toLowerCase().includes(q)
+                                          )
+                                        })
+                                        .map((item) => (
+                                          <Combobox.Option key={item.id} value={item} as={Fragment}>
+                                            {({ active }) => (
+                                              <div
+                                                className={clsx(
+                                                  'flex items-center gap-2 p-2 rounded-md cursor-pointer',
+                                                  active && 'bg-neutral-300 dark:bg-neutral-700'
+                                                )}
+                                              >
+                                                {'name' in item ? (
+                                                  <FaRobot className="text-neutral-500" />
+                                                ) : (
+                                                  <Avatar member={item as OrganisationMemberType} size="sm" />
+                                                )}
+                                                <span>
+                                                  {'name' in item
+                                                    ? item.name
+                                                    : (item.fullName || item.email)}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </Combobox.Option>
+                                        ))}
+                                    </div>
+                                  </Combobox.Options>
+                                )}
+                              </>
+                            )}
+                          </Combobox>
+                        </div>
+
+                        {/* Date range */}
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-neutral-500">DATE</div>
+                          <RadioGroup value={dateRange} onChange={setDateRange} className="flex gap-2 flex-wrap">
+                            {[
+                              { value: '7', label: 'Last 7d' },
+                              { value: '30', label: 'Last 30d' },
+                              { value: '90', label: 'Last 90d' },
+                              { value: 'custom', label: 'Custom' },
+                            ].map(({ value, label }) => (
+                              <RadioGroup.Option key={value} value={value} as={Fragment}>
+                                {({ checked }) => (
+                                  <Button
+                                    type="button"
+                                    variant={checked ? 'primary' : 'secondary'}
+                                    classString="text-xs py-0.5 px-2"
+                                  >
+                                    {checked ? (
+                                      <FaCheckCircle className="text-emerald-500" />
+                                    ) : (
+                                      <FaCircle />
+                                    )}{' '}
+                                    {label}
+                                  </Button>
+                                )}
+                              </RadioGroup.Option>
+                            ))}
+                          </RadioGroup>
+                          {dateRange === 'custom' && (
+                            <div className="flex flex-col gap-2">
+                              <input
+                                type="datetime-local"
+                                className="flex-1 p-1 rounded-md bg-neutral-200 dark:bg-neutral-800 text-xs"
+                                value={customStart}
+                                onChange={(e) => setCustomStart(e.target.value)}
+                              />
+                              <input
+                                type="datetime-local"
+                                className="flex-1 p-1 rounded-md bg-neutral-200 dark:bg-neutral-800 text-xs"
+                                value={customEnd}
+                                onChange={(e) => setCustomEnd(e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between pt-2">
+                          <Button variant="outline" onClick={() => {
+                            setEventTypes([]);
+                            setSelectedUser(null);
+                            setSelectedAccount(null);
+                            setDateRange('7');
+                            setCustomStart('');
+                            setCustomEnd('');
+                          }}>
+                            Clear
+                          </Button>
+                          <Button variant="primary" onClick={applyFilters}>
+                            Apply
+                          </Button>
+                        </div>
+                      </Popover.Panel>
+                    </Transition>
+                  </>
+                )}
+              </Popover>
+
+              {/* Refresh */}
+              <Button variant="secondary" onClick={clearLogList} disabled={loading}>
+                <FiRefreshCw
+                  size={20}
+                  className={clsx('mr-1', loading && logList.length === 0 ? 'animate-spin' : '')}
+                />{' '}
+                Refresh
+              </Button>
+            </div>
           </div>
           <table className="table-auto w-full text-left text-sm font-light">
             <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-5  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
@@ -463,7 +720,16 @@ export default function SecretLogs(props: { app: string }) {
             </thead>
             <tbody className="h-full max-h-96 overflow-y-auto" ref={tableBodyRef}>
               {logList.map((log, n) => (
-                <LogRow log={log} key={log.id} />
+                <Fragment key={log.id}>
+                  {pageBreaks.includes(n) && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-2">
+                        <div className="border-t border-neutral-400/20 dark:border-neutral-500/30"></div>
+                      </td>
+                    </tr>
+                  )}
+                  <LogRow log={log} />
+                </Fragment>
               ))}
               {loading && <SkeletonRow rows={DEFAULT_PAGE_SIZE} />}
               <tr className="h-40">
