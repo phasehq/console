@@ -69,7 +69,7 @@ class CreateSubscriptionCheckoutSession(Mutation):
                 customer=organisation.stripe_customer_id,
                 payment_method_types=["card"],
                 subscription_data={
-                    "trial_period_days": 30,
+                    "trial_period_days": 14,
                 },
                 return_url=f"{settings.OAUTH_REDIRECT_URI}/{organisation.name}/settings?stripe_session_id={{CHECKOUT_SESSION_ID}}",
                 saved_payment_method_options={
