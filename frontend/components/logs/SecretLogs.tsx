@@ -1,7 +1,7 @@
 'use client'
 
 import { GetAppSecretsLogs } from '@/graphql/queries/secrets/getAppSecretsLogs.gql'
-import { useLazyQuery, useQuery } from '@apollo/client'
+import { NetworkStatus, useQuery } from '@apollo/client'
 import {
   ApiSecretEventEventTypeChoices,
   EnvironmentKeyType,
@@ -44,11 +44,11 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
 import { Popover, Combobox, RadioGroup } from '@headlessui/react'
 import { FaFilter } from 'react-icons/fa'
-import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
-import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
+import { GetAppAccounts } from '@/graphql/queries/apps/getAppAccounts.gql'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
+const getCurrentTimeStamp = () => Date.now()
 
 type EnvKey = {
   envId: string
@@ -59,41 +59,47 @@ export default function SecretLogs(props: { app: string }) {
   const DEFAULT_PAGE_SIZE = 25
   const loglistEndRef = useRef<HTMLTableCellElement>(null)
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
-  const [getAppLogs, { data, loading }] = useLazyQuery(GetAppSecretsLogs)
-  const [totalCount, setTotalCount] = useState<number>(0)
-  const [logList, setLogList] = useState<SecretEventType[]>([])
+
   const [envKeys, setEnvKeys] = useState<EnvKey[]>([])
-  const [endofList, setEndofList] = useState<boolean>(false)
-  // Track indices where an additional page was appended so we can render a subtle separator
-  const [pageBreaks, setPageBreaks] = useState<number[]>([])
+
+  const [queryStart, setQueryStart] = useState<number>(LOGS_START_DATE)
+  const [queryEnd, setQueryEnd] = useState<number>(getCurrentTimeStamp())
 
   /* ---------------------- 🔍 Filter state ---------------------- */
   const [eventTypes, setEventTypes] = useState<string[]>([])
   const [selectedUser, setSelectedUser] = useState<OrganisationMemberType | null>(null)
   const [selectedAccount, setSelectedAccount] = useState<ServiceAccountType | null>(null)
   const [dateRange, setDateRange] = useState<'7' | '30' | '90' | 'custom'>('7')
-  const [customStart, setCustomStart] = useState<string>('')
-  const [customEnd, setCustomEnd] = useState<string>('')
-
-  // UI state helpers
-  const [showFilter, setShowFilter] = useState<boolean>(false)
   const [identityQuery, setIdentityQuery] = useState('')
 
-  const [filterStart, setFilterStart] = useState<number>(LOGS_START_DATE)
-
-  /* ------------------ Data for combobox options ----------------- */
-  const { data: membersData } = useQuery(GetAppMembers, {
+  const { data: accountsData } = useQuery(GetAppAccounts, {
     variables: { appId: props.app },
-    fetchPolicy: 'cache-first',
+    fetchPolicy: 'cache-and-network',
   })
 
-  const { data: accountsData } = useQuery(GetAppServiceAccounts, {
-    variables: { appId: props.app },
-    fetchPolicy: 'cache-first',
+  const { data, loading, fetchMore, refetch, networkStatus } = useQuery(GetAppSecretsLogs, {
+    variables: {
+      appId: props.app,
+      start: queryStart,
+      end: queryEnd,
+      eventTypes: eventTypes.length ? eventTypes : null,
+      memberId: selectedUser ? selectedUser.id : selectedAccount ? selectedAccount.id : null,
+      memberType: selectedUser ? MemberType.User : selectedAccount ? MemberType.Service : null,
+      pageSize: DEFAULT_PAGE_SIZE,
+    },
+    fetchPolicy: 'network-only',
+    notifyOnNetworkStatusChange: true,
   })
+
+  const isRefetching = networkStatus === NetworkStatus.refetch
+  const isFetchingMore = networkStatus === NetworkStatus.fetchMore
+
+  const logs: Array<SecretEventType> = data?.secretLogs.logs || []
+  const totalCount = data?.secretLogs.count || 0
+  const endOfList = logs.length === totalCount
 
   // Ensure options are arrays to avoid undefined errors
-  const memberOptions: OrganisationMemberType[] = membersData?.appUsers ?? []
+  const memberOptions: OrganisationMemberType[] = accountsData?.appUsers ?? []
   const accountOptions: ServiceAccountType[] = accountsData?.appServiceAccounts ?? []
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -103,11 +109,8 @@ export default function SecretLogs(props: { app: string }) {
     ? userHasPermission(organisation?.role?.permissions, 'Logs', 'read', true)
     : false
 
-  const getCurrentTimeStamp = () => Date.now()
   const getLastLogTimestamp = () =>
-    logList.length > 0
-      ? dateToUnixTimestamp(logList[logList.length - 1].timestamp)
-      : getCurrentTimeStamp()
+    logs.length > 0 ? dateToUnixTimestamp(logs[logs.length - 1].timestamp) : getCurrentTimeStamp()
 
   /**
    * Fetches logs for the app with the given start and end timestamps,
@@ -118,67 +121,30 @@ export default function SecretLogs(props: { app: string }) {
    *
    * @returns {void}
    */
-  const fetchLogs = (start: number, end: number) => {
-    getAppLogs({
-      variables: {
-        appId: props.app,
-        start,
-        end,
-        eventTypes: eventTypes.length ? eventTypes : null,
-        memberId: selectedUser ? selectedUser.id : selectedAccount ? selectedAccount.id : null,
-        memberType: selectedUser ? MemberType.User : selectedAccount ? MemberType.Service : null,
+  const loadMore = () => {
+    if (loading || isFetchingMore) return
+
+    const lastTs = getLastLogTimestamp()
+
+    fetchMore({
+      variables: { end: lastTs },
+      updateQuery: (prev, { fetchMoreResult }) => {
+        if (!fetchMoreResult?.secretLogs?.logs?.length) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          secretLogs: {
+            ...prev.secretLogs,
+            logs: [...prev.secretLogs.logs, ...fetchMoreResult.secretLogs.logs],
+            count: prev.secretLogs.count,
+          },
+          environmentKeys: prev.environmentKeys,
+        }
       },
-      fetchPolicy: 'network-only',
-    }).then((result) => {
-      if (result.data?.logs.secrets.length) {
-        setLogList(logList.concat(result.data.logs.secrets))
-      }
-      if (result.data?.logs.length < DEFAULT_PAGE_SIZE) setEndofList(true)
     })
   }
-
-  const clearLogList = () => setLogList([])
-  // Also clear any existing page separators when the list is cleared (e.g., on new filters)
-  const resetPageBreaks = () => setPageBreaks([])
-
-  /**
-   * Gets the first page of logs, by resetting the log list and fetching logs using the current unix timestamp.
-   *
-   * @returns {void}
-   */
-  const getFirstPage = () => {
-    setEndofList(false)
-    resetPageBreaks()
-    const { start, end } = computeStartEnd()
-    fetchLogs(start, end)
-    setFilterStart(start)
-  }
-
-  /**
-   * Gets the new page of logs by using the last available timestamp from the current log list
-   *
-   * @returns {void}
-   */
-  const getNextPage = () => {
-    // Record the index where the new page will begin so we can render a separator later
-    setPageBreaks((prev) => [...prev, logList.length])
-    fetchLogs(filterStart, getLastLogTimestamp())
-  }
-
-  /**
-   * Hook to get the first page of logs on page load, or when the loglist is reset to empty
-   */
-  useEffect(() => {
-    if (logList.length === 0) getFirstPage()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.app, logList])
-
-  /**
-   * Hook to update the log count once its available
-   */
-  useEffect(() => {
-    if (data?.secretsLogsCount) setTotalCount(data.secretsLogsCount)
-  }, [data])
 
   useEffect(() => {
     const initEnvKeys = async () => {
@@ -213,29 +179,6 @@ export default function SecretLogs(props: { app: string }) {
     if (data && keyring) initEnvKeys()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, keyring])
-
-  // useEffect(() => {
-  //   const options = {
-  //     root: null,
-  //     rootMargin: '0px',
-  //     threshold: 1.0,
-  //   }
-  //   const observer = new IntersectionObserver((entries) => {
-  //     const [entry] = entries
-  //     if (entry.isIntersecting) getNextPage()
-  //   }, options)
-
-  //   if (loglistEndRef.current) {
-  //     if (endofList) observer.unobserve(loglistEndRef.current)
-  //     else observer.observe(loglistEndRef.current)
-  //   }
-
-  //   return () => {
-  //     if (loglistEndRef.current) observer.unobserve(loglistEndRef.current)
-  //   }
-
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [loglistEndRef])
 
   const LogRow = (props: { log: SecretEventType }) => {
     const { log } = props
@@ -334,7 +277,6 @@ export default function SecretLogs(props: { app: string }) {
                   : 'border-b hover:bg-neutral-200 dark:hover:bg-neutral-800'
               )}
             >
-              {/* <tr > */}
               <td
                 className={clsx(
                   'px-6 py-4 border-l',
@@ -371,7 +313,6 @@ export default function SecretLogs(props: { app: string }) {
               <td className="whitespace-nowrap px-6 py-4 font-medium capitalize">
                 {relativeTimeStamp()}
               </td>
-              {/* </tr> */}
             </Disclosure.Button>
             <Transition
               as="tr"
@@ -461,7 +402,7 @@ export default function SecretLogs(props: { app: string }) {
       <>
         {[...Array(props.rows)].map((_, n) => (
           <tr key={n} className="h-14 border-b border-neutral-500/20">
-            <td className="px-6">
+            <td className="pl-6 pr-10">
               <FaChevronRight className="dark:text-neutral-700 text-neutral-300 animate-pulse" />
             </td>
             <td className="px-6">
@@ -485,37 +426,21 @@ export default function SecretLogs(props: { app: string }) {
     )
   }
 
-  /* ---------------------- Filter helpers ---------------------- */
-  const computeStartEnd = () => {
-    const end = getCurrentTimeStamp()
-    if (dateRange === 'custom') {
-      const start = customStart ? new Date(customStart).getTime() : LOGS_START_DATE
-      const customEndTs = customEnd ? new Date(customEnd).getTime() : end
-      return { start, end: customEndTs }
-    }
-    const days = parseInt(dateRange)
-    const start = end - days * 24 * 60 * 60 * 1000
-    return { start, end }
+  const clearFilters = () => {
+    setEventTypes([])
+    setSelectedUser(null)
+    setSelectedAccount(null)
+    setDateRange('7')
+    setQueryStart(LOGS_START_DATE)
+    setQueryEnd(getCurrentTimeStamp())
   }
 
-  const applyFilters = () => {
-    clearLogList()
-    resetPageBreaks()
-    const { start, end } = computeStartEnd()
-    fetchLogs(start, end)
-    setFilterStart(start)
-    setShowFilter(false)
-  }
-
-  /* ----------------- Derived UI helpers ---------------- */
   const hasActiveFilters =
-    eventTypes.length > 0 ||
-    selectedUser !== null ||
-    selectedAccount !== null ||
-    dateRange !== '7'
+    eventTypes.length > 0 || selectedUser !== null || selectedAccount !== null || dateRange !== '7'
 
-  // Decide which count to display: overall or current filtered list
-  const displayCount = hasActiveFilters ? logList.length : totalCount
+  function formatTimestampForInput(ts: number): string {
+    return new Date(ts).toISOString().slice(0, 16) // "yyyy-MM-ddTHH:mm"
+  }
 
   return (
     <>
@@ -523,7 +448,7 @@ export default function SecretLogs(props: { app: string }) {
         <div className="w-full text-black dark:text-white flex flex-col">
           <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
             <span className="text-neutral-500 font-light text-lg">
-              {displayCount !== undefined && <Count from={0} to={displayCount} />} Events
+              {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
             </span>
 
             <div className="flex items-center gap-2">
@@ -532,14 +457,14 @@ export default function SecretLogs(props: { app: string }) {
                 {({ open }) => (
                   <>
                     <Popover.Button as={Fragment}>
-                      <Button variant="secondary" title="Filter logs">
-                        <div className="relative flex items-center gap-1">
+                      <div className="relative">
+                        <Button variant="secondary" title="Filter logs">
                           <FaFilter /> Filter
-                          {hasActiveFilters && (
-                            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-500"></span>
-                          )}
-                        </div>
-                      </Button>
+                        </Button>
+                        {hasActiveFilters && (
+                          <span className="absolute -top-0 -right-0 h-2 w-2 rounded-full bg-emerald-500"></span>
+                        )}
+                      </div>
                     </Popover.Button>
                     <Transition
                       as={Fragment}
@@ -550,10 +475,12 @@ export default function SecretLogs(props: { app: string }) {
                       leaveFrom="transform scale-100 opacity-100"
                       leaveTo="transform scale-95 opacity-0"
                     >
-                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-80 p-4 rounded-md shadow-2xl bg-neutral-100 dark:bg-neutral-900 ring-1 ring-neutral-500/20 space-y-4">
+                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-2xl bg-neutral-100 dark:bg-neutral-900 ring-1 ring-neutral-500/20 space-y-4">
                         {/* Event types */}
                         <div className="space-y-2">
-                          <div className="text-xs font-semibold text-neutral-500">EVENT TYPE</div>
+                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
+                            Event Type
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             {(
                               [
@@ -563,41 +490,42 @@ export default function SecretLogs(props: { app: string }) {
                                 { code: 'D', label: 'Delete', color: 'red' },
                               ] as const
                             ).map((ev) => (
-                              <button
+                              <Button
                                 key={ev.code}
+                                type="button"
+                                variant={eventTypes.includes(ev.code) ? 'primary' : 'secondary'}
                                 onClick={() =>
                                   setEventTypes((prev) =>
-                                    prev.includes(ev.code) ? prev.filter((c) => c !== ev.code) : [...prev, ev.code]
+                                    prev.includes(ev.code)
+                                      ? prev.filter((c) => c !== ev.code)
+                                      : [...prev, ev.code]
                                   )
                                 }
-                                className={clsx(
-                                  'flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200',
-                                  eventTypes.includes(ev.code)
-                                    ? 'bg-neutral-400/20 dark:bg-neutral-700/40 border border-neutral-500/40 text-neutral-800 dark:text-neutral-100'
-                                    : 'bg-transparent border border-neutral-500/40 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-500/10'
-                                )}
                               >
-                                {/* Colored dot */}
                                 <span
                                   className={clsx(
-                                    'inline-block h-2 w-2 rounded-full',
+                                    'text-2xs',
                                     {
-                                      emerald: 'bg-emerald-500',
-                                      yellow: 'bg-yellow-500',
-                                      blue: 'bg-blue-500',
-                                      red: 'bg-red-500',
+                                      emerald: 'text-emerald-500',
+                                      yellow: 'text-yellow-500',
+                                      blue: 'text-blue-500',
+                                      red: 'text-red-500',
                                     }[ev.color]
                                   )}
-                                ></span>
-                                <span>{ev.label}</span>
-                              </button>
+                                >
+                                  {eventTypes.includes(ev.code) ? <FaCheckCircle /> : <FaCircle />}
+                                </span>{' '}
+                                <span className="text-xs">{ev.label}</span>
+                              </Button>
                             ))}
                           </div>
                         </div>
 
                         {/* Identity (User or Service account) filter */}
                         <div className="space-y-2">
-                          <div className="text-xs font-semibold text-neutral-500">FILTER BY ACCOUNT</div>
+                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
+                            Account
+                          </div>
                           <Combobox
                             value={selectedUser || (selectedAccount as any)}
                             by="id"
@@ -656,12 +584,15 @@ export default function SecretLogs(props: { app: string }) {
                                                 {'name' in item ? (
                                                   <FaRobot className="text-neutral-500" />
                                                 ) : (
-                                                  <Avatar member={item as OrganisationMemberType} size="sm" />
+                                                  <Avatar
+                                                    member={item as OrganisationMemberType}
+                                                    size="sm"
+                                                  />
                                                 )}
                                                 <span>
                                                   {'name' in item
                                                     ? item.name
-                                                    : (item.fullName || item.email)}
+                                                    : item.fullName || item.email}
                                                 </span>
                                               </div>
                                             )}
@@ -677,8 +608,14 @@ export default function SecretLogs(props: { app: string }) {
 
                         {/* Date range */}
                         <div className="space-y-2">
-                          <div className="text-xs font-semibold text-neutral-500">DATE</div>
-                          <RadioGroup value={dateRange} onChange={setDateRange} className="flex gap-2 flex-wrap">
+                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
+                            Date
+                          </div>
+                          <RadioGroup
+                            value={dateRange}
+                            onChange={setDateRange}
+                            className="flex gap-2 flex-wrap"
+                          >
                             {[
                               { value: '7', label: 'Last 7d' },
                               { value: '30', label: 'Last 30d' },
@@ -705,35 +642,37 @@ export default function SecretLogs(props: { app: string }) {
                           </RadioGroup>
                           {dateRange === 'custom' && (
                             <div className="flex flex-col gap-2">
-                              <input
-                                type="datetime-local"
-                                className="flex-1 p-1 rounded-md bg-neutral-200 dark:bg-neutral-800 text-xs"
-                                value={customStart}
-                                onChange={(e) => setCustomStart(e.target.value)}
-                              />
-                              <input
-                                type="datetime-local"
-                                className="flex-1 p-1 rounded-md bg-neutral-200 dark:bg-neutral-800 text-xs"
-                                value={customEnd}
-                                onChange={(e) => setCustomEnd(e.target.value)}
-                              />
+                              <div className="flex justify-between items-center gap-2">
+                                <label className="text-neutral-500 text-2xs w-8">Start</label>
+                                <input
+                                  type="datetime-local"
+                                  className="flex-1 p-1 rounded-md bg-neutral-200 dark:bg-neutral-800 text-xs"
+                                  value={formatTimestampForInput(queryStart)}
+                                  onChange={(e) =>
+                                    setQueryStart(new Date(e.target.value).getTime())
+                                  }
+                                />
+                              </div>
+                              <div className="flex justify-between items-center gap-2">
+                                <label className="text-neutral-500 text-2xs w-8">End</label>
+                                <input
+                                  type="datetime-local"
+                                  className="flex-1 p-1 rounded-md bg-neutral-200 dark:bg-neutral-800 text-xs"
+                                  value={formatTimestampForInput(queryEnd)}
+                                  onChange={(e) => setQueryEnd(new Date(e.target.value).getTime())}
+                                />
+                              </div>
                             </div>
                           )}
                         </div>
 
                         <div className="flex justify-between pt-2">
-                          <Button variant="outline" onClick={() => {
-                            setEventTypes([]);
-                            setSelectedUser(null);
-                            setSelectedAccount(null);
-                            setDateRange('7');
-                            setCustomStart('');
-                            setCustomEnd('');
-                          }}>
+                          <Button
+                            variant="outline"
+                            disabled={!hasActiveFilters}
+                            onClick={clearFilters}
+                          >
                             Clear
-                          </Button>
-                          <Button variant="primary" onClick={applyFilters}>
-                            Apply
                           </Button>
                         </div>
                       </Popover.Panel>
@@ -743,17 +682,18 @@ export default function SecretLogs(props: { app: string }) {
               </Popover>
 
               {/* Refresh */}
-              <Button variant="secondary" onClick={clearLogList} disabled={loading}>
+
+              <Button variant="secondary" onClick={() => refetch()} disabled={isRefetching}>
                 <FiRefreshCw
                   size={20}
-                  className={clsx('mr-1', loading && logList.length === 0 ? 'animate-spin' : '')}
+                  className={clsx('mr-1', isRefetching ? 'animate-spin' : '')}
                 />{' '}
                 Refresh
               </Button>
             </div>
           </div>
           <table className="table-auto w-full text-left text-sm font-light">
-            <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-5  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+            <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-1  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-neutral-500">
                 <th></th>
                 <th className="px-6 py-4">Account</th>
@@ -763,29 +703,37 @@ export default function SecretLogs(props: { app: string }) {
                 <th className="px-6 py-4">Time</th>
               </tr>
             </thead>
-            <tbody className="h-full max-h-96 overflow-y-auto" ref={tableBodyRef}>
-              {logList.map((log, n) => (
+            <tbody className="h-full">
+              {logs.map((log, n) => (
                 <Fragment key={log.id}>
-                  {pageBreaks.includes(n) && (
+                  {n !== 0 && n % DEFAULT_PAGE_SIZE === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-2">
-                        <div className="border-t border-neutral-400/20 dark:border-neutral-500/30"></div>
+                      <td colSpan={6}>
+                        <div className="flex items-center justify-center bg-zinc-300 dark:bg-zinc-800 py-0.5 text-neutral-500 text-xs">
+                          Page {n / DEFAULT_PAGE_SIZE + 1}
+                        </div>
                       </td>
                     </tr>
                   )}
                   <LogRow log={log} />
                 </Fragment>
               ))}
+
               {loading && <SkeletonRow rows={DEFAULT_PAGE_SIZE} />}
+
               <tr className="h-40">
                 <td colSpan={6} ref={loglistEndRef}>
                   <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
-                    {!endofList && (
-                      <Button variant="secondary" onClick={getNextPage} disabled={loading}>
+                    {!endOfList && (
+                      <Button
+                        variant="secondary"
+                        onClick={loadMore}
+                        disabled={isFetchingMore || endOfList}
+                      >
                         <FiChevronsDown /> Load more
                       </Button>
                     )}
-                    {endofList && `No${logList.length ? ' more ' : ' '}logs to show`}
+                    {endOfList && `No${logs.length ? ' more ' : ' '}logs to show`}
                   </div>
                 </td>
               </tr>
