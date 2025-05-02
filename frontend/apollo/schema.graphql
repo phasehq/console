@@ -13,6 +13,7 @@ type Query {
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
   logs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType): LogsResponseType
+  secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType): SecretsLogsResponseType
   kmsLogsCount(appId: ID, thisMonth: Boolean): Int
   secretsLogsCount(appId: ID): Int
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
@@ -542,6 +543,11 @@ scalar BigInt
 enum MemberType {
   USER
   SERVICE
+}
+
+type SecretsLogsResponseType {
+  logs: [SecretEventType]
+  count: Int
 }
 
 type ChartDataPointType {
