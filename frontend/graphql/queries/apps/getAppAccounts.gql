@@ -1,0 +1,34 @@
+query GetAppAccounts($appId: ID!) {
+  appUsers(appId: $appId) {
+    id
+    identityKey
+    email
+    fullName
+    avatarUrl
+    createdAt
+    role {
+      id
+      name
+      description
+      permissions
+      color
+    }
+  }
+  appServiceAccounts(appId: $appId) {
+    id
+    identityKey
+    name
+    createdAt
+    role {
+      id
+      name
+      description
+      permissions
+      color
+    }
+    tokens {
+      id
+      name
+    }
+  }
+}
