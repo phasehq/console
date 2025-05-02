@@ -44,8 +44,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
 import { Popover, Combobox, RadioGroup } from '@headlessui/react'
 import { FaFilter } from 'react-icons/fa'
-import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
-import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
+import { GetAppAccounts } from '@/graphql/queries/apps/getAppAccounts.gql'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
@@ -75,25 +74,18 @@ export default function SecretLogs(props: { app: string }) {
   const [customStart, setCustomStart] = useState<string>('')
   const [customEnd, setCustomEnd] = useState<string>('')
 
-  // UI state helpers
   const [showFilter, setShowFilter] = useState<boolean>(false)
   const [identityQuery, setIdentityQuery] = useState('')
 
   const [filterStart, setFilterStart] = useState<number>(LOGS_START_DATE)
 
-  /* ------------------ Data for combobox options ----------------- */
-  const { data: membersData } = useQuery(GetAppMembers, {
+  const { data: accountsData } = useQuery(GetAppAccounts, {
     variables: { appId: props.app },
-    fetchPolicy: 'cache-first',
-  })
-
-  const { data: accountsData } = useQuery(GetAppServiceAccounts, {
-    variables: { appId: props.app },
-    fetchPolicy: 'cache-first',
+    fetchPolicy: 'cache-and-network',
   })
 
   // Ensure options are arrays to avoid undefined errors
-  const memberOptions: OrganisationMemberType[] = membersData?.appUsers ?? []
+  const memberOptions: OrganisationMemberType[] = accountsData?.appUsers ?? []
   const accountOptions: ServiceAccountType[] = accountsData?.appServiceAccounts ?? []
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -507,12 +499,18 @@ export default function SecretLogs(props: { app: string }) {
     setShowFilter(false)
   }
 
+  const clearFilters = () => {
+    setEventTypes([])
+    setSelectedUser(null)
+    setSelectedAccount(null)
+    setDateRange('7')
+    setCustomStart('')
+    setCustomEnd('')
+  }
+
   /* ----------------- Derived UI helpers ---------------- */
   const hasActiveFilters =
-    eventTypes.length > 0 ||
-    selectedUser !== null ||
-    selectedAccount !== null ||
-    dateRange !== '7'
+    eventTypes.length > 0 || selectedUser !== null || selectedAccount !== null || dateRange !== '7'
 
   // Decide which count to display: overall or current filtered list
   const displayCount = hasActiveFilters ? logList.length : totalCount
@@ -532,14 +530,14 @@ export default function SecretLogs(props: { app: string }) {
                 {({ open }) => (
                   <>
                     <Popover.Button as={Fragment}>
-                      <Button variant="secondary" title="Filter logs">
-                        <div className="relative flex items-center gap-1">
+                      <div className="relative">
+                        <Button variant="secondary" title="Filter logs">
                           <FaFilter /> Filter
-                          {hasActiveFilters && (
-                            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-500"></span>
-                          )}
-                        </div>
-                      </Button>
+                        </Button>
+                        {hasActiveFilters && (
+                          <span className="absolute -top-0 -right-0 h-2 w-2 rounded-full bg-emerald-500"></span>
+                        )}
+                      </div>
                     </Popover.Button>
                     <Transition
                       as={Fragment}
@@ -550,10 +548,12 @@ export default function SecretLogs(props: { app: string }) {
                       leaveFrom="transform scale-100 opacity-100"
                       leaveTo="transform scale-95 opacity-0"
                     >
-                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-80 p-4 rounded-md shadow-2xl bg-neutral-100 dark:bg-neutral-900 ring-1 ring-neutral-500/20 space-y-4">
+                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-2xl bg-neutral-100 dark:bg-neutral-900 ring-1 ring-neutral-500/20 space-y-4">
                         {/* Event types */}
                         <div className="space-y-2">
-                          <div className="text-xs font-semibold text-neutral-500">EVENT TYPE</div>
+                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
+                            Event Type
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             {(
                               [
@@ -563,41 +563,42 @@ export default function SecretLogs(props: { app: string }) {
                                 { code: 'D', label: 'Delete', color: 'red' },
                               ] as const
                             ).map((ev) => (
-                              <button
+                              <Button
                                 key={ev.code}
+                                type="button"
+                                variant={eventTypes.includes(ev.code) ? 'primary' : 'secondary'}
                                 onClick={() =>
                                   setEventTypes((prev) =>
-                                    prev.includes(ev.code) ? prev.filter((c) => c !== ev.code) : [...prev, ev.code]
+                                    prev.includes(ev.code)
+                                      ? prev.filter((c) => c !== ev.code)
+                                      : [...prev, ev.code]
                                   )
                                 }
-                                className={clsx(
-                                  'flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200',
-                                  eventTypes.includes(ev.code)
-                                    ? 'bg-neutral-400/20 dark:bg-neutral-700/40 border border-neutral-500/40 text-neutral-800 dark:text-neutral-100'
-                                    : 'bg-transparent border border-neutral-500/40 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-500/10'
-                                )}
                               >
-                                {/* Colored dot */}
                                 <span
                                   className={clsx(
-                                    'inline-block h-2 w-2 rounded-full',
+                                    'text-2xs',
                                     {
-                                      emerald: 'bg-emerald-500',
-                                      yellow: 'bg-yellow-500',
-                                      blue: 'bg-blue-500',
-                                      red: 'bg-red-500',
+                                      emerald: 'text-emerald-500',
+                                      yellow: 'text-yellow-500',
+                                      blue: 'text-blue-500',
+                                      red: 'text-red-500',
                                     }[ev.color]
                                   )}
-                                ></span>
-                                <span>{ev.label}</span>
-                              </button>
+                                >
+                                  {eventTypes.includes(ev.code) ? <FaCheckCircle /> : <FaCircle />}
+                                </span>{' '}
+                                <span className="text-xs">{ev.label}</span>
+                              </Button>
                             ))}
                           </div>
                         </div>
 
                         {/* Identity (User or Service account) filter */}
                         <div className="space-y-2">
-                          <div className="text-xs font-semibold text-neutral-500">FILTER BY ACCOUNT</div>
+                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
+                            Account
+                          </div>
                           <Combobox
                             value={selectedUser || (selectedAccount as any)}
                             by="id"
@@ -656,12 +657,15 @@ export default function SecretLogs(props: { app: string }) {
                                                 {'name' in item ? (
                                                   <FaRobot className="text-neutral-500" />
                                                 ) : (
-                                                  <Avatar member={item as OrganisationMemberType} size="sm" />
+                                                  <Avatar
+                                                    member={item as OrganisationMemberType}
+                                                    size="sm"
+                                                  />
                                                 )}
                                                 <span>
                                                   {'name' in item
                                                     ? item.name
-                                                    : (item.fullName || item.email)}
+                                                    : item.fullName || item.email}
                                                 </span>
                                               </div>
                                             )}
@@ -677,8 +681,14 @@ export default function SecretLogs(props: { app: string }) {
 
                         {/* Date range */}
                         <div className="space-y-2">
-                          <div className="text-xs font-semibold text-neutral-500">DATE</div>
-                          <RadioGroup value={dateRange} onChange={setDateRange} className="flex gap-2 flex-wrap">
+                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
+                            Date
+                          </div>
+                          <RadioGroup
+                            value={dateRange}
+                            onChange={setDateRange}
+                            className="flex gap-2 flex-wrap"
+                          >
                             {[
                               { value: '7', label: 'Last 7d' },
                               { value: '30', label: 'Last 30d' },
@@ -722,14 +732,11 @@ export default function SecretLogs(props: { app: string }) {
                         </div>
 
                         <div className="flex justify-between pt-2">
-                          <Button variant="outline" onClick={() => {
-                            setEventTypes([]);
-                            setSelectedUser(null);
-                            setSelectedAccount(null);
-                            setDateRange('7');
-                            setCustomStart('');
-                            setCustomEnd('');
-                          }}>
+                          <Button
+                            variant="outline"
+                            disabled={!hasActiveFilters}
+                            onClick={clearFilters}
+                          >
                             Clear
                           </Button>
                           <Button variant="primary" onClick={applyFilters}>
@@ -768,8 +775,10 @@ export default function SecretLogs(props: { app: string }) {
                 <Fragment key={log.id}>
                   {pageBreaks.includes(n) && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-2">
-                        <div className="border-t border-neutral-400/20 dark:border-neutral-500/30"></div>
+                      <td colSpan={6} className="">
+                        <div className="flex items-center justify-center bg-zinc-300 dark:bg-zinc-800 py-1 text-neutral-500">
+                          Page {pageBreaks.indexOf(n) + 2}
+                        </div>
                       </td>
                     </tr>
                   )}
