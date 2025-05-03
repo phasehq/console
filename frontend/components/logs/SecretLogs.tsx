@@ -9,6 +9,7 @@ import {
   OrganisationMemberType,
   ServiceAccountType,
   MemberType,
+  EnvironmentType,
 } from '@/apollo/graphql'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -45,6 +46,7 @@ import { EmptyState } from '../common/EmptyState'
 import { Popover, Combobox, RadioGroup } from '@headlessui/react'
 import { FaFilter } from 'react-icons/fa'
 import { GetAppAccounts } from '@/graphql/queries/apps/getAppAccounts.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
@@ -58,23 +60,26 @@ type EnvKey = {
 export default function SecretLogs(props: { app: string }) {
   const DEFAULT_PAGE_SIZE = 25
   const loglistEndRef = useRef<HTMLTableCellElement>(null)
-  const tableBodyRef = useRef<HTMLTableSectionElement>(null)
 
   const [envKeys, setEnvKeys] = useState<EnvKey[]>([])
 
+  /* ---------------------- 🔍 Filter state ---------------------- */
   const [queryStart, setQueryStart] = useState<number>(LOGS_START_DATE)
   const [queryEnd, setQueryEnd] = useState<number>(getCurrentTimeStamp())
-
-  /* ---------------------- 🔍 Filter state ---------------------- */
   const [eventTypes, setEventTypes] = useState<string[]>([])
   const [selectedUser, setSelectedUser] = useState<OrganisationMemberType | null>(null)
   const [selectedAccount, setSelectedAccount] = useState<ServiceAccountType | null>(null)
+  const [selectedEnvironment, setSelectedEnvironment] = useState<EnvironmentType | null>(null)
   const [dateRange, setDateRange] = useState<'7' | '30' | '90' | 'custom'>('7')
-  const [identityQuery, setIdentityQuery] = useState('')
+  const [accountQuery, setAccountQuery] = useState('')
+  const [envQuery, setEnvQuery] = useState('')
 
   const { data: accountsData } = useQuery(GetAppAccounts, {
     variables: { appId: props.app },
-    fetchPolicy: 'cache-and-network',
+  })
+
+  const { data: envsData } = useQuery(GetAppEnvironments, {
+    variables: { appId: props.app },
   })
 
   const { data, loading, fetchMore, refetch, networkStatus } = useQuery(GetAppSecretsLogs, {
@@ -85,7 +90,7 @@ export default function SecretLogs(props: { app: string }) {
       eventTypes: eventTypes.length ? eventTypes : null,
       memberId: selectedUser ? selectedUser.id : selectedAccount ? selectedAccount.id : null,
       memberType: selectedUser ? MemberType.User : selectedAccount ? MemberType.Service : null,
-      pageSize: DEFAULT_PAGE_SIZE,
+      environmentId: selectedEnvironment ? selectedEnvironment.id : null,
     },
     fetchPolicy: 'network-only',
     notifyOnNetworkStatusChange: true,
@@ -112,9 +117,10 @@ export default function SecretLogs(props: { app: string }) {
   const totalCount = data?.secretLogs.count || 0
   const endOfList = logs.length === totalCount
 
-  // Ensure options are arrays to avoid undefined errors
   const memberOptions: OrganisationMemberType[] = accountsData?.appUsers ?? []
   const accountOptions: ServiceAccountType[] = accountsData?.appServiceAccounts ?? []
+
+  const envOptions: EnvironmentType[] = envsData?.appEnvironments ?? []
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
@@ -459,10 +465,15 @@ export default function SecretLogs(props: { app: string }) {
     setDateRange('7')
     setQueryStart(LOGS_START_DATE)
     setQueryEnd(getCurrentTimeStamp())
+    setSelectedEnvironment(null)
   }
 
   const hasActiveFilters =
-    eventTypes.length > 0 || selectedUser !== null || selectedAccount !== null || dateRange !== '7'
+    eventTypes.length > 0 ||
+    selectedUser !== null ||
+    selectedAccount !== null ||
+    dateRange !== '7' ||
+    selectedEnvironment !== null
 
   function formatTimestampForInput(ts: number): string {
     const date = new Date(ts)
@@ -579,7 +590,7 @@ export default function SecretLogs(props: { app: string }) {
                                 <div className="relative">
                                   <Combobox.Input
                                     className="w-full bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 text-sm"
-                                    onChange={(e) => setIdentityQuery(e.target.value)}
+                                    onChange={(e) => setAccountQuery(e.target.value)}
                                     displayValue={(val: any) => {
                                       if (!val) return ''
                                       return 'fullName' in val || 'email' in val
@@ -597,8 +608,8 @@ export default function SecretLogs(props: { app: string }) {
                                     <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 shadow-xl space-y-1">
                                       {[...memberOptions, ...accountOptions]
                                         .filter((item) => {
-                                          if (!identityQuery) return true
-                                          const q = identityQuery.toLowerCase()
+                                          if (!accountQuery) return true
+                                          const q = accountQuery.toLowerCase()
                                           if ('name' in item) {
                                             return item.name.toLowerCase().includes(q)
                                           }
@@ -609,26 +620,91 @@ export default function SecretLogs(props: { app: string }) {
                                         })
                                         .map((item) => (
                                           <Combobox.Option key={item.id} value={item} as={Fragment}>
-                                            {({ active }) => (
+                                            {({ active, selected }) => (
                                               <div
                                                 className={clsx(
-                                                  'flex items-center gap-2 p-2 rounded-md cursor-pointer',
+                                                  'flex items-center justify-between px-2 py-1 rounded-md cursor-pointer text-xs',
                                                   active && 'bg-neutral-300 dark:bg-neutral-700'
                                                 )}
                                               >
-                                                {'name' in item ? (
-                                                  <FaRobot className="text-neutral-500" />
-                                                ) : (
-                                                  <Avatar
-                                                    member={item as OrganisationMemberType}
-                                                    size="sm"
-                                                  />
+                                                <div className="flex items-center gap-1">
+                                                  {'name' in item ? (
+                                                    <div className="size-5 flex items-center justify-center ring-1 ring-inset ring-neutral-500/40  bg-neutral-400/10 rounded-full">
+                                                      <FaRobot className="text-neutral-500" />
+                                                    </div>
+                                                  ) : (
+                                                    <Avatar
+                                                      member={item as OrganisationMemberType}
+                                                      size="sm"
+                                                    />
+                                                  )}
+                                                  <span>
+                                                    {'name' in item
+                                                      ? item.name
+                                                      : item.fullName || item.email}
+                                                  </span>
+                                                </div>
+                                                {selected && (
+                                                  <FaCheckCircle className="text-emerald-500" />
                                                 )}
-                                                <span>
-                                                  {'name' in item
-                                                    ? item.name
-                                                    : item.fullName || item.email}
-                                                </span>
+                                              </div>
+                                            )}
+                                          </Combobox.Option>
+                                        ))}
+                                    </div>
+                                  </Combobox.Options>
+                                )}
+                              </>
+                            )}
+                          </Combobox>
+                        </div>
+
+                        {/* Environment filter */}
+                        <div className="space-y-2">
+                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
+                            Environment
+                          </div>
+                          <Combobox
+                            value={selectedEnvironment}
+                            by="id"
+                            onChange={(env) => setSelectedEnvironment(env)}
+                          >
+                            {({ open }) => (
+                              <>
+                                <div className="relative">
+                                  <Combobox.Input
+                                    className="w-full bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 text-sm"
+                                    onChange={(e) => setEnvQuery(e.target.value)}
+                                    displayValue={(env: EnvironmentType | null) => env?.name || ''}
+                                    placeholder="Search environments"
+                                  />
+                                  <Combobox.Button className="absolute inset-y-0 right-2 flex items-center">
+                                    <FaChevronDown className="text-neutral-500" />
+                                  </Combobox.Button>
+                                </div>
+                                {open && (
+                                  <Combobox.Options as={Fragment}>
+                                    <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 shadow-xl space-y-1">
+                                      {envOptions
+                                        .filter((env) => {
+                                          if (!envQuery) return true
+                                          const q = envQuery.toLowerCase()
+
+                                          return env.name.toLowerCase().includes(q)
+                                        })
+                                        .map((env) => (
+                                          <Combobox.Option key={env.id} value={env} as={Fragment}>
+                                            {({ active, selected }) => (
+                                              <div
+                                                className={clsx(
+                                                  'flex items-center justify-between gap-2 px-2 py-1 rounded-md cursor-pointer text-xs',
+                                                  active && 'bg-neutral-300 dark:bg-neutral-700'
+                                                )}
+                                              >
+                                                {env.name}
+                                                {selected && (
+                                                  <FaCheckCircle className="text-emerald-500" />
+                                                )}
                                               </div>
                                             )}
                                           </Combobox.Option>

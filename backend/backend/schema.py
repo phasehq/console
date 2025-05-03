@@ -259,6 +259,7 @@ class Query(graphene.ObjectType):
         event_types=graphene.List(graphene.String),
         member_id=graphene.ID(),
         member_type=MemberType(),
+        environment_id=graphene.ID(),
     )
 
     kms_logs_count = graphene.Int(app_id=graphene.ID(), this_month=graphene.Boolean())
@@ -777,6 +778,7 @@ class Query(graphene.ObjectType):
         event_types=None,
         member_id=None,
         member_type=None,
+        environment_id=None,
     ):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
@@ -790,9 +792,18 @@ class Query(graphene.ObjectType):
             user=info.context.user, organisation=app.organisation, deleted_at=None
         )
 
-        env_keys = EnvironmentKey.objects.filter(
-            environment__app=app, user=org_member, deleted_at=None
-        ).select_related("environment")
+        env_keys_filter = {
+            "environment__app": app,
+            "user": org_member,
+            "deleted_at": None,
+        }
+
+        if environment_id is not None:
+            env_keys_filter["environment_id"] = environment_id
+
+        env_keys = EnvironmentKey.objects.filter(**env_keys_filter).select_related(
+            "environment"
+        )
 
         envs = [env_key.environment for env_key in env_keys]
 

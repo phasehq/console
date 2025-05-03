@@ -1617,6 +1617,7 @@ export type QuerySecretHistoryArgs = {
 export type QuerySecretLogsArgs = {
   appId?: InputMaybe<Scalars['ID']['input']>;
   end?: InputMaybe<Scalars['BigInt']['input']>;
+  environmentId?: InputMaybe<Scalars['ID']['input']>;
   eventTypes?: InputMaybe<Array<InputMaybe<Scalars['String']['input']>>>;
   memberId?: InputMaybe<Scalars['ID']['input']>;
   memberType?: InputMaybe<MemberType>;
