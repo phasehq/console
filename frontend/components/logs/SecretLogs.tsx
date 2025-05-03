@@ -455,7 +455,7 @@ export default function SecretLogs(props: { app: string }) {
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
-          <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
+          <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
             <span className="text-neutral-500 font-light text-lg">
               {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
             </span>
@@ -484,7 +484,7 @@ export default function SecretLogs(props: { app: string }) {
                       leaveFrom="transform scale-100 opacity-100"
                       leaveTo="transform scale-95 opacity-0"
                     >
-                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-2xl bg-neutral-100 dark:bg-neutral-900 ring-1 ring-neutral-500/20 space-y-4">
+                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-4">
                         {/* Event types */}
                         <div className="space-y-2">
                           <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
