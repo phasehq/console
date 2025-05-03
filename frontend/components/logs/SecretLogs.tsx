@@ -47,6 +47,7 @@ import { Popover, Combobox, RadioGroup } from '@headlessui/react'
 import { FaFilter } from 'react-icons/fa'
 import { GetAppAccounts } from '@/graphql/queries/apps/getAppAccounts.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { FaArrowRotateLeft } from 'react-icons/fa6'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
@@ -475,6 +476,9 @@ export default function SecretLogs(props: { app: string }) {
     dateRange !== '7' ||
     selectedEnvironment !== null
 
+  const filterCategoryTitleStyle =
+    'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
+
   function formatTimestampForInput(ts: number): string {
     const date = new Date(ts)
     const pad = (n: number) => n.toString().padStart(2, '0')
@@ -521,12 +525,10 @@ export default function SecretLogs(props: { app: string }) {
                       leaveFrom="transform scale-100 opacity-100"
                       leaveTo="transform scale-95 opacity-0"
                     >
-                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-4">
+                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6">
                         {/* Event types */}
                         <div className="space-y-2">
-                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
-                            Event Type
-                          </div>
+                          <div className={filterCategoryTitleStyle}>Event Type</div>
                           <div className="flex flex-wrap gap-2">
                             {(
                               [
@@ -569,9 +571,7 @@ export default function SecretLogs(props: { app: string }) {
 
                         {/* Identity (User or Service account) filter */}
                         <div className="space-y-2">
-                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
-                            Account
-                          </div>
+                          <div className={filterCategoryTitleStyle}>Account</div>
                           <Combobox
                             value={selectedUser || (selectedAccount as any)}
                             by="id"
@@ -597,7 +597,7 @@ export default function SecretLogs(props: { app: string }) {
                                         ? val.fullName || val.email
                                         : val.name
                                     }}
-                                    placeholder="Search account"
+                                    placeholder="Search accounts"
                                   />
                                   <Combobox.Button className="absolute inset-y-0 right-2 flex items-center">
                                     <FaChevronDown className="text-neutral-500" />
@@ -661,9 +661,7 @@ export default function SecretLogs(props: { app: string }) {
 
                         {/* Environment filter */}
                         <div className="space-y-2">
-                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
-                            Environment
-                          </div>
+                          <div className={filterCategoryTitleStyle}>Environment</div>
                           <Combobox
                             value={selectedEnvironment}
                             by="id"
@@ -719,9 +717,7 @@ export default function SecretLogs(props: { app: string }) {
 
                         {/* Date range */}
                         <div className="space-y-2">
-                          <div className="text-2xs font-semibold text-neutral-500 tracking-widest uppercase">
-                            Date
-                          </div>
+                          <div className={filterCategoryTitleStyle}>Date range</div>
                           <RadioGroup
                             value={dateRange}
                             onChange={setDateRange}
@@ -777,13 +773,13 @@ export default function SecretLogs(props: { app: string }) {
                           )}
                         </div>
 
-                        <div className="flex justify-between pt-2">
+                        <div className="flex justify-end pt-2">
                           <Button
                             variant="outline"
                             disabled={!hasActiveFilters}
                             onClick={clearFilters}
                           >
-                            Clear
+                            <FaArrowRotateLeft /> Reset filter
                           </Button>
                         </div>
                       </Popover.Panel>
