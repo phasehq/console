@@ -91,8 +91,22 @@ export default function SecretLogs(props: { app: string }) {
     notifyOnNetworkStatusChange: true,
   })
 
-  const isRefetching = networkStatus === NetworkStatus.refetch
+  const isRefetching = networkStatus === NetworkStatus.refetch || loading
   const isFetchingMore = networkStatus === NetworkStatus.fetchMore
+
+  const handleRefetch = async () => {
+    const now = Date.now()
+
+    await refetch({
+      appId: props.app,
+      start: queryStart,
+      end: dateRange === 'custom' ? queryEnd : now,
+      eventTypes: eventTypes.length ? eventTypes : null,
+      memberId: selectedUser?.id ?? selectedAccount?.id ?? null,
+      memberType: selectedUser ? MemberType.User : selectedAccount ? MemberType.Service : null,
+      pageSize: DEFAULT_PAGE_SIZE,
+    })
+  }
 
   const logs: Array<SecretEventType> = data?.secretLogs.logs || []
   const totalCount = data?.secretLogs.count || 0
@@ -239,22 +253,24 @@ export default function SecretLogs(props: { app: string }) {
     }
 
     const logCreatedBy = (log: SecretEventType) => {
+      const textStyle = 'text-sm font-medium text-zinc-900 dark:text-zinc-100'
+
       if (log.user)
         return (
-          <div className="flex items-center gap-1 text-sm">
+          <div className={clsx('flex items-center gap-1', textStyle)}>
             <Avatar member={log.user} size="sm" />
             {log.user.fullName || log.user.email}
           </div>
         )
       else if (log.serviceToken)
         return (
-          <div className="flex items-center gap-1 text-sm">
+          <div className={clsx('flex items-center gap-1', textStyle)}>
             <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
           </div>
         )
       else if (log.serviceAccount)
         return (
-          <div className="flex items-center gap-1 text-sm">
+          <div className={clsx('flex items-center gap-1', textStyle)}>
             <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-6">
               <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
             </div>{' '}
@@ -305,8 +321,8 @@ export default function SecretLogs(props: { app: string }) {
                   </div>
                 </div>
               </td>
-              <td className="whitespace-nowrap px-6 py-4 font-mono">{log.environment.name}</td>
-              <td className="whitespace-nowrap px-6 py-4 font-mono ph-no-capture">
+              <td className="whitespace-nowrap px-6 py-4">{log.environment.name}</td>
+              <td className="whitespace-nowrap px-6 py-4 font-mono ph-no-capture font-medium">
                 {decryptedEvent?.path !== '/' && `${decryptedEvent?.path}/`}
                 {decryptedEvent?.key}
               </td>
@@ -397,28 +413,38 @@ export default function SecretLogs(props: { app: string }) {
   }
 
   const SkeletonRow = (props: { rows: number }) => {
-    const SKELETON_BASE_STYLE = 'dark:bg-neutral-700 bg-neutral-300 animate-pulse'
+    const SKELETON_BASE = 'bg-neutral-300 dark:bg-neutral-700 animate-pulse'
+
     return (
       <>
         {[...Array(props.rows)].map((_, n) => (
-          <tr key={n} className="h-14 border-b border-neutral-500/20">
-            <td className="pl-6 pr-10">
-              <FaChevronRight className="dark:text-neutral-700 text-neutral-300 animate-pulse" />
+          <tr
+            key={n}
+            className="py-4 border-b border-neutral-500/20 transition duration-300 ease-in-out"
+          >
+            <td className="px-6 py-4 border-l border-l-transparent">
+              <FaChevronRight className="text-neutral-300 dark:text-neutral-700 animate-pulse" />
             </td>
-            <td className="px-6">
-              <div className={clsx(SKELETON_BASE_STYLE, 'h-6 w-6 rounded-full')}></div>
+            <td className="whitespace-nowrap px-6 py-4">
+              <div className="flex items-center gap-2 text-sm text-neutral-500">
+                <div className="rounded-full flex items-center justify-center size-6 bg-neutral-400/30" />
+                <div className={`${SKELETON_BASE} h-4 w-32 rounded-md`} />
+              </div>
             </td>
-            <td className="px-6">
-              <div className={clsx(SKELETON_BASE_STYLE, 'h-6 w-40 rounded-md')}></div>
+            <td className="whitespace-nowrap px-6 py-4">
+              <div className="flex items-center gap-2 -ml-1">
+                <span className="h-2 w-2 rounded-full bg-neutral-400" />
+                <div className={`${SKELETON_BASE} h-4 w-28 rounded-md`} />
+              </div>
             </td>
-            <td className="px-6">
-              <div className={clsx(SKELETON_BASE_STYLE, 'h-6 w-40 rounded-md')}></div>
+            <td className="whitespace-nowrap px-6 py-4 font-mono">
+              <div className={`${SKELETON_BASE} h-4 w-24 rounded-md`} />
             </td>
-            <td className="px-6">
-              <div className={clsx(SKELETON_BASE_STYLE, 'h-6 w-40 rounded-md')}></div>
+            <td className="whitespace-nowrap px-6 py-4 font-mono">
+              <div className={`${SKELETON_BASE} h-4 w-32 rounded-md`} />
             </td>
-            <td className="px-6">
-              <div className={clsx(SKELETON_BASE_STYLE, 'h-6 w-40 rounded-md')}></div>
+            <td className="whitespace-nowrap px-6 py-4 font-medium capitalize">
+              <div className={`${SKELETON_BASE} h-4 w-20 rounded-md`} />
             </td>
           </tr>
         ))}
@@ -692,7 +718,7 @@ export default function SecretLogs(props: { app: string }) {
 
               {/* Refresh */}
 
-              <Button variant="secondary" onClick={() => refetch()} disabled={isRefetching}>
+              <Button variant="secondary" onClick={handleRefetch} disabled={isRefetching}>
                 <FiRefreshCw
                   size={20}
                   className={clsx('mr-1', isRefetching ? 'animate-spin' : '')}
@@ -701,10 +727,10 @@ export default function SecretLogs(props: { app: string }) {
               </Button>
             </div>
           </div>
-          <table className="table-auto w-full text-left text-sm font-light">
+          <table className="table-fixed w-full text-left text-sm font-light">
             <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-1  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-neutral-500">
-                <th></th>
+                <th className="w-10"></th>
                 <th className="px-6 py-4">Account</th>
                 <th className="px-6 py-4">Event</th>
                 <th className="px-6 py-4">Environment</th>
