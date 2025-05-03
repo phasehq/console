@@ -439,7 +439,16 @@ export default function SecretLogs(props: { app: string }) {
     eventTypes.length > 0 || selectedUser !== null || selectedAccount !== null || dateRange !== '7'
 
   function formatTimestampForInput(ts: number): string {
-    return new Date(ts).toISOString().slice(0, 16) // "yyyy-MM-ddTHH:mm"
+    const date = new Date(ts)
+    const pad = (n: number) => n.toString().padStart(2, '0')
+
+    const year = date.getFullYear()
+    const month = pad(date.getMonth() + 1) // months are 0-indexed
+    const day = pad(date.getDate())
+    const hours = pad(date.getHours())
+    const minutes = pad(date.getMinutes())
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`
   }
 
   return (
