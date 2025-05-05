@@ -11,7 +11,7 @@ import {
   MemberType,
   EnvironmentType,
 } from '@/apollo/graphql'
-import { Disclosure, Transition } from '@headlessui/react'
+import { Disclosure, Menu, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
   FaArrowRight,
@@ -287,6 +287,8 @@ export default function SecretLogs(props: { app: string }) {
         )
     }
 
+    if (!decryptedEvent) return <SkeletonRow rows={1} />
+
     return (
       <Disclosure>
         {({ open }) => (
@@ -496,26 +498,30 @@ export default function SecretLogs(props: { app: string }) {
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
-          <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
+          <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-300 dark:bg-neutral-900">
             <span className="text-neutral-500 font-light text-lg">
               {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
             </span>
 
             <div className="flex items-center gap-2">
               {/* Filter popover */}
-              <Popover className="relative">
+
+              <Menu as="div" className="relative inline-block text-left">
                 {({ open }) => (
                   <>
-                    <Popover.Button as={Fragment}>
-                      <div className="relative">
-                        <Button variant="secondary" title="Filter logs">
-                          <FaFilter /> Filter
-                        </Button>
-                        {hasActiveFilters && (
-                          <span className="absolute -top-0 -right-0 h-2 w-2 rounded-full bg-emerald-500"></span>
-                        )}
-                      </div>
-                    </Popover.Button>
+                    <div className="relative">
+                      <Menu.Button as={Fragment}>
+                        <div className="relative">
+                          <Button variant="secondary" title="Filter logs">
+                            <FaFilter /> Filter
+                          </Button>
+                          {hasActiveFilters && (
+                            <span className="absolute -top-0 -right-0 h-2 w-2 rounded-full bg-emerald-500" />
+                          )}
+                        </div>
+                      </Menu.Button>
+                    </div>
+
                     <Transition
                       as={Fragment}
                       enter="transition duration-100 ease-out"
@@ -525,7 +531,10 @@ export default function SecretLogs(props: { app: string }) {
                       leaveFrom="transform scale-100 opacity-100"
                       leaveTo="transform scale-95 opacity-0"
                     >
-                      <Popover.Panel className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6">
+                      <Menu.Items
+                        static
+                        className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
+                      >
                         {/* Event types */}
                         <div className="space-y-2">
                           <div className={filterCategoryTitleStyle}>Event Type</div>
@@ -782,11 +791,11 @@ export default function SecretLogs(props: { app: string }) {
                             <FaArrowRotateLeft /> Reset filter
                           </Button>
                         </div>
-                      </Popover.Panel>
+                      </Menu.Items>
                     </Transition>
                   </>
                 )}
-              </Popover>
+              </Menu>
 
               {/* Refresh */}
 
