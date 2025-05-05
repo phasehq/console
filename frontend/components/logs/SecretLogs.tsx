@@ -799,9 +799,9 @@ export default function SecretLogs(props: { app: string }) {
               </Button>
             </div>
           </div>
-          <table className="table-fixed w-full text-left text-sm font-light">
-            <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-1  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
-              <tr className="text-neutral-500">
+          <table className="table-fixed w-full text-left text-sm">
+            <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+              <tr className="text-gray-500 uppercase text-2xs tracking-wider">
                 <th className="w-10"></th>
                 <th className="px-6 py-4">Account</th>
                 <th className="px-6 py-4">Event</th>
