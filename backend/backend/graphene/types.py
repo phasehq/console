@@ -896,13 +896,15 @@ class TimeRange(Enum):
     ALL_TIME = "allTime"
 
 
-class LogsResponseType(ObjectType):
-    kms = graphene.List(KMSLogType)
-    secrets = graphene.List(SecretEventType)
+class KMSLogsResponseType(ObjectType):
+    logs = graphene.List(KMSLogType)
+    count = graphene.Int()
 
-class SecretsLogsResponseType(ObjectType):
-  logs = graphene.List(SecretEventType)
-  count = graphene.Int()
+
+class SecretLogsResponseType(ObjectType):
+    logs = graphene.List(SecretEventType)
+    count = graphene.Int()
+
 
 class LockboxType(DjangoObjectType):
     class Meta:
