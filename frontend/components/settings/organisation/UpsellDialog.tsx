@@ -38,7 +38,7 @@ export const UpsellDialog = ({
     <GenericDialog
       title={
         title ||
-        `Upgrade to ${activeOrganisation.plan === ApiOrganisationPlanChoices.Fr ? 'Pro' : 'Enterprise'}`
+        `Upgrade to ${activeOrganisation.plan === ApiOrganisationPlanChoices.Fr ? (isCloudHosted() ? 'Pro' : 'Enterprise') : 'Enterprise'}`
       }
       buttonVariant={buttonVariant || 'primary'}
       buttonContent={buttonLabel || 'Upgrade'}
@@ -49,7 +49,11 @@ export const UpsellDialog = ({
       <div className="space-y-4">
         <div className="text-neutral-500">
           Get access to all the features in Phase{' '}
-          {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr ? 'Pro' : 'Enterprise'}
+          {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr
+            ? isCloudHosted()
+              ? 'Pro'
+              : 'Enterprise'
+            : 'Enterprise'}
         </div>
         {isCloudHosted() ? (
           UpgradeDialog && (

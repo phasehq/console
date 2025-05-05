@@ -39,6 +39,10 @@ export default function AccessLayout({
         name: 'Authentication',
         link: 'authentication',
       },
+      {
+        name: 'Network',
+        link: 'network',
+      },
     ],
     []
   )

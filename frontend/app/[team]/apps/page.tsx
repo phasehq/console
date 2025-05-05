@@ -2,10 +2,9 @@
 
 import { useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
-import { AppType } from '@/apollo/graphql'
+import { ApiOrganisationPlanChoices, AppType } from '@/apollo/graphql'
 import NewAppDialog from '@/components/apps/NewAppDialog'
 import { useContext, useEffect, useRef } from 'react'
-import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -14,6 +13,9 @@ import { FaBan, FaPlus } from 'react-icons/fa'
 import { FaBoxOpen } from 'react-icons/fa6'
 import { Button } from '@/components/common/Button'
 import { AppsView } from '@/components/apps/AppsView'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { isCloudHosted } from '@/utils/appConfig'
 
 export default function AppsHome({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -44,6 +46,11 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   const apps = (data?.apps as AppType[]) ?? []
 
+  const allowNewApp = () => {
+    if (!organisation?.planDetail?.maxApps) return true
+    return userCanCreateApps && apps.length < organisation.planDetail?.maxApps
+  }
+
   if (!organisation) return <></>
 
   return (
@@ -58,7 +65,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
         </p>
       </div>
 
-      {userCanCreateApps && organisation && (
+      {allowNewApp() && organisation && (
         <NewAppDialog
           organisation={organisation}
           appCount={apps?.length}
@@ -71,11 +78,27 @@ export default function AppsHome({ params }: { params: { team: string } }) {
           {apps?.length > 0 && (
             <div className="space-y-4">
               <div className="flex justify-end">
-                {organisation && apps && userCanCreateApps && (
+                {allowNewApp() && apps ? (
                   <Button variant="primary" onClick={openNewAppDialog}>
                     <FaPlus />
                     Create an App{' '}
                   </Button>
+                ) : (
+                  <UpsellDialog
+                    buttonLabel={
+                      <>
+                        <FaPlus />
+                        Create an App
+                        <PlanLabel
+                          plan={
+                            isCloudHosted()
+                              ? ApiOrganisationPlanChoices.Pr
+                              : ApiOrganisationPlanChoices.En
+                          }
+                        />
+                      </>
+                    }
+                  />
                 )}
               </div>
             </div>

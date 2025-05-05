@@ -30,5 +30,11 @@ query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
       createdAt
       expiresAt
     }
+    networkPolicies {
+      id
+      name
+      allowedIps
+      isGlobal
+    }
   }
 }

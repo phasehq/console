@@ -233,6 +233,9 @@ REST_FRAMEWORK = {
 
 GRAPHENE = {
     "SCHEMA": "backend.schema.schema",
+    "MIDDLEWARE": [
+        "backend.graphene.middleware.IPWhitelistMiddleware",
+    ],
 }
 
 ROOT_URLCONF = "backend.urls"
