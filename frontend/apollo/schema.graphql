@@ -12,9 +12,8 @@ type Query {
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
-  logs(appId: ID, start: BigInt, end: BigInt): LogsResponseType
-  kmsLogsCount(appId: ID, thisMonth: Boolean): Int
-  secretsLogsCount(appId: ID): Int
+  kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
+  secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
@@ -504,9 +503,9 @@ type OrganisationMemberInviteType {
   expiresAt: DateTime!
 }
 
-type LogsResponseType {
-  kms: [KMSLogType]
-  secrets: [SecretEventType]
+type KMSLogsResponseType {
+  logs: [KMSLogType]
+  count: Int
 }
 
 type KMSLogType implements Node {
@@ -539,6 +538,16 @@ compatible type.
 """
 scalar BigInt
 
+type SecretLogsResponseType {
+  logs: [SecretEventType]
+  count: Int
+}
+
+enum MemberType {
+  USER
+  SERVICE
+}
+
 type ChartDataPointType {
   index: Int
   date: BigInt
@@ -552,11 +561,6 @@ enum TimeRange {
   MONTH
   YEAR
   ALL_TIME
-}
-
-enum MemberType {
-  USER
-  SERVICE
 }
 
 type EnvironmentKeyType {
