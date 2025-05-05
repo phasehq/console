@@ -25,7 +25,7 @@ class Command(BaseCommand):
         org_name = options["org_name"]
         retain_days = options["retain"]
         app_id = options.get("app_id")
-        
+
         if retain_days < 0:
             raise CommandError("The --retain argument must be a non-negative integer.")
 
@@ -59,9 +59,22 @@ class Command(BaseCommand):
                 logs_to_delete = SecretEvent.objects.filter(
                     environment__in=app.environments.all(), timestamp__lte=time_cutoff
                 ).exclude(event_type=SecretEvent.CREATE)
+
+                # Get IDs to delete
+                log_ids = list(logs_to_delete.values_list("id", flat=True))
+
                 count = logs_to_delete.count()
+
+                # Construct queryset on the M2M through model
+                m2m_qs = SecretEvent.tags.through.objects.filter(
+                    secretevent_id__in=log_ids
+                )
+                m2m_qs._raw_delete(using="default")  # raw delete on M2M table
+
                 logs_to_delete._raw_delete("default")
-                self.stdout.write(f"Deleted {count} logs for app '{app.name}' (id: {app.id})")
+                self.stdout.write(
+                    f"Deleted {count} logs for app '{app.name}' (id: {app.id})"
+                )
 
             self.stdout.write(
                 self.style.SUCCESS("Log deletion completed successfully.")
