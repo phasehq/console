@@ -51,6 +51,10 @@ import { FaArrowRotateLeft } from 'react-icons/fa6'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
+
+// One day in ms
+const DAY = 24 * 60 * 60 * 1000
+
 const getCurrentTimeStamp = () => Date.now()
 
 type EnvKey = {
@@ -71,7 +75,7 @@ export default function SecretLogs(props: { app: string }) {
   const [selectedUser, setSelectedUser] = useState<OrganisationMemberType | null>(null)
   const [selectedAccount, setSelectedAccount] = useState<ServiceAccountType | null>(null)
   const [selectedEnvironment, setSelectedEnvironment] = useState<EnvironmentType | null>(null)
-  const [dateRange, setDateRange] = useState<'7' | '30' | '90' | 'custom'>('7')
+  const [dateRange, setDateRange] = useState<'7' | '30' | '90' | 'custom' | null>(null)
   const [accountQuery, setAccountQuery] = useState('')
   const [envQuery, setEnvQuery] = useState('')
 
@@ -82,6 +86,24 @@ export default function SecretLogs(props: { app: string }) {
   const { data: envsData } = useQuery(GetAppEnvironments, {
     variables: { appId: props.app },
   })
+
+  useEffect(() => {
+    const now = getCurrentTimeStamp()
+
+    if (dateRange === '7') {
+      setQueryStart(now - 7 * DAY)
+      setQueryEnd(now)
+    } else if (dateRange === '30') {
+      setQueryStart(now - 30 * DAY)
+      setQueryEnd(now)
+    } else if (dateRange === '90') {
+      setQueryStart(now - 90 * DAY)
+      setQueryEnd(now)
+    } else if (dateRange === null) {
+      setQueryStart(LOGS_START_DATE)
+      setQueryEnd(getCurrentTimeStamp())
+    }
+  }, [dateRange])
 
   const { data, loading, fetchMore, refetch, networkStatus } = useQuery(GetAppSecretsLogs, {
     variables: {
@@ -465,18 +487,15 @@ export default function SecretLogs(props: { app: string }) {
     setEventTypes([])
     setSelectedUser(null)
     setSelectedAccount(null)
-    setDateRange('7')
+    setDateRange(null)
     setQueryStart(LOGS_START_DATE)
     setQueryEnd(getCurrentTimeStamp())
     setSelectedEnvironment(null)
   }
 
   const hasActiveFilters =
-    eventTypes.length > 0 ||
-    selectedUser !== null ||
-    selectedAccount !== null ||
-    dateRange !== '7' ||
-    selectedEnvironment !== null
+    eventTypes.length > 0 || selectedUser !== null || selectedAccount !== null || dateRange !== null
+  selectedEnvironment !== null
 
   const filterCategoryTitleStyle =
     'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
