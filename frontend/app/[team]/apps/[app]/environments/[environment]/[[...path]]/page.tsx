@@ -30,7 +30,6 @@ import {
   FaMagic,
   FaCloudUploadAlt,
   FaBan,
-  FaFileImport,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -63,6 +62,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
+import { GenerateSecretDialog } from '@/components/environments/secrets/generate/GenerateSecretDialog'
 
 export default function EnvironmentPath({
   params,
@@ -86,6 +86,7 @@ export default function EnvironmentPath({
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const generateDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const [sort, setSort] = useState<SortOption>('-created')
 
@@ -210,6 +211,22 @@ export default function EnvironmentPath({
     start
       ? setClientSecrets([newSecret, ...clientSecrets])
       : setClientSecrets([...clientSecrets, newSecret])
+  }
+
+  const handleGeneratedSecret = (key: string, value: string) => {
+    const newSecret = {
+      id: `new-${crypto.randomUUID()}`,
+      updatedAt: null,
+      version: 1,
+      key: key || '',
+      value: value,
+      tags: [],
+      comment: '',
+      path: secretPath,
+      environment,
+    } as SecretType
+
+    setClientSecrets((prevSecrets) => [newSecret, ...prevSecrets])
   }
 
   const bulkAddSecrets = (secrets: SecretType[]) => {
@@ -769,15 +786,14 @@ export default function EnvironmentPath({
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
-            <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
+            <Button variant="secondary" onClick={() => generateDialogRef.current?.openModal()}>
               <div className="flex items-center gap-2">
-                <FaFolderPlus /> New Folder
+                <FaMagic /> Generate Secret
               </div>
             </Button>
-
             <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
               <div className="flex items-center gap-2">
-                <TbDownload /> Import secrets
+                <TbDownload /> Import Secrets
               </div>
             </Button>
           </div>
@@ -961,9 +977,15 @@ export default function EnvironmentPath({
 
             <SingleEnvImportDialog
               environment={environment}
-              path={'/'}
+              path={secretPath}
               addSecrets={bulkAddSecrets}
               ref={importDialogRef}
+            />
+
+            <GenerateSecretDialog
+              environment={environment}
+              onSecretGenerated={handleGeneratedSecret}
+              ref={generateDialogRef}
             />
 
             {(clientSecrets.length > 0 || folders.length > 0) && (
@@ -974,10 +996,10 @@ export default function EnvironmentPath({
                 <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
                   value
                   <div className="flex items-center gap-4">
-                    <Button variant="outline" onClick={toggleGlobalReveal}>
+                    <Button variant="outline" onClick={toggleGlobalReveal} title={globallyRevealed ? 'Mask all secrets' : 'Reveal all secrets'}>
                       <div className="flex items-center gap-2">
                         {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
-                        {globallyRevealed ? 'Mask all' : 'Reveal all'}
+                        <span className="hidden xl:inline">{globallyRevealed ? 'Mask all' : 'Reveal All'}</span>
                       </div>
                     </Button>
                     <Button
@@ -986,7 +1008,12 @@ export default function EnvironmentPath({
                       title="Download as .env file"
                     >
                       <div className="flex items-center gap-2">
-                        <FaDownload /> Export as .env
+                        <FaDownload /> <span className="hidden xl:inline">Export as .env</span>
+                      </div>
+                    </Button>
+                    <Button variant="outline" onClick={() => setFolderMenuIsOpen(true)} title="Create a new folder">
+                      <div className="flex items-center gap-2">
+                        <FaFolderPlus /> <span className="hidden xl:inline">New Folder</span>
                       </div>
                     </Button>
                     <NewSecretMenu />
@@ -1044,7 +1071,15 @@ export default function EnvironmentPath({
                   </div>
                 }
               >
-                <NewSecretMenu />
+                <div className="flex items-center gap-2 justify-center">
+                   <NewSecretMenu />
+                    {/* Add New Folder button specifically for the empty state */}
+                    <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
+                       <div className="flex items-center gap-2">
+                         <FaFolderPlus /> New Folder
+                       </div>
+                    </Button>
+                 </div>
                 {!searchQuery && (
                   <div className="w-full max-w-screen-sm h-40 rounded-lg">
                     <EmptyStateFileImport />
