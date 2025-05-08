@@ -320,8 +320,8 @@ export default function SecretLogs(props: { app: string }) {
               className={clsx(
                 'py-4 border-neutral-500/20 transition duration-300 ease-in-out cursor-pointer',
                 open
-                  ? 'bg-neutral-200 dark:bg-neutral-800 border-r'
-                  : 'border-b hover:bg-neutral-200 dark:hover:bg-neutral-800'
+                  ? 'bg-neutral-100 dark:bg-neutral-800 border-r'
+                  : 'border-b hover:bg-neutral-100 dark:hover:bg-neutral-800'
               )}
             >
               <td
@@ -373,7 +373,7 @@ export default function SecretLogs(props: { app: string }) {
               <td colSpan={6}>
                 <Disclosure.Panel
                   className={clsx(
-                    'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
+                    'p-4 w-full space-y-6 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
                     open
                       ? 'border-b  border-l-emerald-500 border-r shadow-xl'
                       : 'border-l-transparent'
@@ -517,7 +517,7 @@ export default function SecretLogs(props: { app: string }) {
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
-          <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-300 dark:bg-neutral-900">
+          <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-200 dark:bg-neutral-900">
             <span className="text-neutral-500 font-light text-lg">
               {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
             </span>
@@ -828,7 +828,7 @@ export default function SecretLogs(props: { app: string }) {
             </div>
           </div>
           <table className="table-fixed w-full text-left text-sm">
-            <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+            <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
                 <th className="w-10"></th>
                 <th className="px-6 py-4">Account</th>
