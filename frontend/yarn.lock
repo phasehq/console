@@ -3137,6 +3137,11 @@ bl@^4.1.0:
     inherits "^2.0.4"
     readable-stream "^3.4.0"
 
+body-scroll-lock-upgrade@^1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/body-scroll-lock-upgrade/-/body-scroll-lock-upgrade-1.1.0.tgz#3df63fca3d1db2f896bd9a050bd14c33cd0085d2"
+  integrity sha512-nnfVAS+tB7CS9RaksuHVTpgHWHF7fE/ptIBJnwZrMqImIvWJF1OGcLnMpBhC6qhkx9oelvyxmWXwmIJXCV98Sw==
+
 body-scroll-lock@^4.0.0-beta.0:
   version "4.0.0-beta.0"
   resolved "https://registry.npmjs.org/body-scroll-lock/-/body-scroll-lock-4.0.0-beta.0.tgz"
@@ -4920,6 +4925,15 @@ framer-motion@^11.0.3:
     tslib "^2.4.0"
   optionalDependencies:
     "@emotion/is-prop-valid" "^0.8.2"
+
+framer-motion@^11.0.6:
+  version "11.18.2"
+  resolved "https://registry.yarnpkg.com/framer-motion/-/framer-motion-11.18.2.tgz#0c6bd05677f4cfd3b3bdead4eb5ecdd5ed245718"
+  integrity sha512-5F5Och7wrvtLVElIpclDT0CBzMVg3dL22B64aZwHtsIY8RB4mXICLrkajK4G9R+ieSAGcgrLeae2SeUTg2pr6w==
+  dependencies:
+    motion-dom "^11.18.1"
+    motion-utils "^11.18.1"
+    tslib "^2.4.0"
 
 fs-minipass@^2.0.0:
   version "2.1.0"
@@ -7011,6 +7025,18 @@ mkdirp@^1.0.3:
   version "1.0.4"
   resolved "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz"
 
+motion-dom@^11.18.1:
+  version "11.18.1"
+  resolved "https://registry.yarnpkg.com/motion-dom/-/motion-dom-11.18.1.tgz#e7fed7b7dc6ae1223ef1cce29ee54bec826dc3f2"
+  integrity sha512-g76KvA001z+atjfxczdRtw/RXOM3OMSdd1f4DL77qCTF/+avrRJiawSG4yDibEQ215sr9kpinSlX2pCTJ9zbhw==
+  dependencies:
+    motion-utils "^11.18.1"
+
+motion-utils@^11.18.1:
+  version "11.18.1"
+  resolved "https://registry.yarnpkg.com/motion-utils/-/motion-utils-11.18.1.tgz#671227669833e991c55813cf337899f41327db5b"
+  integrity sha512-49Kt+HKjtbJKLtgO/LKj9Ld+6vw9BjH5d9sc40R/kVyH8GLAXgT42M2NnuPcJNuA3s9ZfZBUcwIgpmZWGEE+hA==
+
 mousetrap@^1.6.5:
   version "1.6.5"
   resolved "https://registry.yarnpkg.com/mousetrap/-/mousetrap-1.6.5.tgz#8a766d8c272b08393d5f56074e0b5ec183485bf9"
@@ -8032,10 +8058,20 @@ rdk@>=6.6.0:
     framer-motion "^10.16.16"
     popper.js "^1.16.1"
 
+rdk@>=6.6.2:
+  version "6.6.3"
+  resolved "https://registry.yarnpkg.com/rdk/-/rdk-6.6.3.tgz#0f13420154eb7aaca8adfc5dc2e566e448a3faae"
+  integrity sha512-+l6HyGiPDZnFMYci6/qv6cXxLEKiPrPPngAUV1iCBmtxMvEgMlhRi20x4SRAOwCUIsZDpjniibYbDOZ9/PfBcg==
+  dependencies:
+    body-scroll-lock-upgrade "^1.1.0"
+    classnames "^2.3.2"
+    framer-motion "^10.16.16"
+    popper.js "^1.16.1"
+
 reablocks@^5.8.6:
-  version "5.8.6"
-  resolved "https://registry.yarnpkg.com/reablocks/-/reablocks-5.8.6.tgz#7ab67cd36531cb505f74ff4b6b3f835b50da0a85"
-  integrity sha512-2HMRN2tnif0y0qVZhXZi9SEHoLcVezC6Lcv3HACZbo0jJMKGrCaZPIYdvji4yjnUtJNJHZnRQ0ctacEs1h4W9w==
+  version "5.10.4"
+  resolved "https://registry.yarnpkg.com/reablocks/-/reablocks-5.10.4.tgz#f622aaa960e94e04ba55b94b386f1b33e78cf585"
+  integrity sha512-N2YRqVdH/7YbgVOs4KxxhUdrlmF6gGnoeMHeJkFoY1YG25Sm0nepeHawaMAiy3TflfpRgHsi6xlsP8f1N8FMIg==
   dependencies:
     "@marko19907/string-to-color" "^1.0.0"
     "@reaviz/react-use-fuzzy" "^1.0.3"
@@ -8046,13 +8082,13 @@ reablocks@^5.8.6:
     date-fns "^2.30.0"
     ellipsize "^0.5.1"
     focus-trap-react "^8.7.1"
-    framer-motion "^10.16.16"
+    framer-motion "^11.0.6"
     fuse.js "^6.6.2"
     human-format "^1.2.0"
     mousetrap "^1.6.5"
     name-initials "^0.1.3"
     pluralize "^8.0.0"
-    rdk ">=6.6.0"
+    rdk ">=6.6.2"
     react-18-input-autosize "^3.0.0"
     react-fast-compare "^3.2.2"
     react-highlight-words "^0.20.0"
