@@ -2,9 +2,7 @@
 
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
-
 import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
-
 import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useState } from 'react'
 import { OrganisationMemberInviteType, OrganisationMemberType } from '@/apollo/graphql'
@@ -15,12 +13,10 @@ import { Dialog, Transition } from '@headlessui/react'
 import { FaBan, FaCopy, FaTimes, FaTrashAlt, FaUserAlt, FaChevronRight } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
-
 import { copyToClipBoard } from '@/utils/clipboard'
 import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
 import { RoleLabel } from '@/components/users/RoleLabel'
-
 import { getInviteLink } from '@/utils/crypto'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -65,10 +61,6 @@ export default function Members({ params }: { params: { team: string } }) {
   })
 
   const [deleteInvite] = useMutation(DeleteOrgInvite)
-
-  const activeUserCanDeleteUsers = organisation?.role?.permissions
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'delete', false)
-    : false
 
   const sortedInvites: OrganisationMemberInviteType[] =
     invitesData?.organisationInvites
@@ -187,23 +179,23 @@ export default function Members({ params }: { params: { team: string } }) {
 
   return (
     <section className="overflow-y-auto h-full">
-      <div className="w-full space-y-6 text-black dark:text-white">
-        <div className="space-y-1">
+      <div className="w-full space-y-4 text-zinc-900 dark:text-zinc-100">
+        <div>
           <h2 className="text-xl font-semibold">{params.team} Members</h2>
           <p className="text-neutral-500">Manage organisation members and roles.</p>
         </div>
-        <div className="Space-y-4">
+        <div className="space-y-4">
           {userCanInviteMembers && (
             <div className="flex justify-end">
               <InviteDialog organisationId={organisation!.id} />
             </div>
           )}
 
-          {userCanReadMembers ? (
+          {userCanReadMembers && membersData ? (
             <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
               <thead>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     User
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -216,26 +208,26 @@ export default function Members({ params }: { params: { team: string } }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-500/20">
-                {membersData?.organisationMembers.map((member: OrganisationMemberType) => (
+                {membersData.organisationMembers.map((member: OrganisationMemberType) => (
                   <tr key={member.id} className="group">
-                    <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                    <td className="py-2 flex items-center gap-2">
                       <Avatar member={member} size="md" />
                       <div>
                         <div className="font-medium">
                           {member.fullName || member.email} {member.self && ' (You)'}
                         </div>
                         {member.fullName && (
-                          <div className="text-sm text-gray-500">{member.email}</div>
+                          <div className="text-sm text-neutral-500">{member.email}</div>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-2 text-sm">
                       <RoleLabel role={member.role!} />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap capitalize">
+                    <td className="px-6 py-2 text-sm">
                       {relativeTimeFromDates(new Date(member.createdAt))}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <td className="px-6 py-2 whitespace-nowrap text-right">
                       <Link href={`/${params.team}/access/members/${member.id}`}>
                         <Button variant="secondary">
                           Manage <FaChevronRight />
@@ -246,7 +238,7 @@ export default function Members({ params }: { params: { team: string } }) {
                 ))}
                 {sortedInvites.map((invite: OrganisationMemberInviteType) => (
                   <tr key={invite.id} className="opacity-60">
-                    <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                    <td className="py-2 flex items-center gap-2">
                       <div className="flex rounded-full items-center justify-center h-10 w-10 bg-neutral-500">
                         <FaUserAlt />
                       </div>
@@ -263,12 +255,12 @@ export default function Members({ params }: { params: { team: string } }) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-2 text-sm">
                       {invite.role && <RoleLabel role={invite.role} />}
                     </td>
                     <td
                       className={clsx(
-                        'px-6 py-4 whitespace-nowrap',
+                        'px-6 py-2 text-sm',
                         inviteIsExpired(invite) && 'text-red-500'
                       )}
                     >
@@ -276,7 +268,7 @@ export default function Members({ params }: { params: { team: string } }) {
                         ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
                         : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
                     </td>
-                    <td className="px-6 py-4 flex items-center justify-end gap-2">
+                    <td className="px-6 py-2 flex items-center justify-end gap-2">
                       {!inviteIsExpired(invite) && (
                         <Button
                           variant="outline"

@@ -26,7 +26,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create')
     : false
 
-  const { data, loading } = useQuery(GetServiceAccounts, {
+  const { data } = useQuery(GetServiceAccounts, {
     variables: { orgId: organisation?.id },
     skip: !organisation || !userCanReadSA,
     fetchPolicy: 'cache-and-network',
@@ -35,7 +35,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
   return (
     <section className="overflow-y-auto">
       <div className="w-full space-y-4 text-zinc-900 dark:text-zinc-100">
-        <div className="space-y-1">
+        <div>
           <h2 className="text-xl font-semibold">{params.team} Service Accounts</h2>
           <p className="text-neutral-500">Manage service accounts.</p>
         </div>
@@ -65,8 +65,8 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
               <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
                 <thead>
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Account name
+                    <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Account
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Role
@@ -80,25 +80,25 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                 <tbody className="divide-y divide-zinc-500/20">
                   {data?.serviceAccounts.map((account: ServiceAccountType) => (
                     <tr key={account.id} className="group">
-                      <td className="flex items-center gap-2 py-4 font-semibold">
-                        <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-10">
+                      <td className="flex items-center gap-2 py-2">
+                        <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-8">
                           <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 text-xl" />
                         </div>
                         <div>
                           <div className="font-medium">{account.name}</div>
-                          <div className="text-sm text-gray-500">{account.id}</div>
+                          <div className="text-sm text-neutral-500">{account.id}</div>
                         </div>
                       </td>
 
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-2">
                         <ServiceAccountRoleSelector account={account} displayOnly={true} />
                       </td>
 
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-2 text-sm">
                         {relativeTimeFromDates(new Date(account.createdAt))}
                       </td>
 
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-2 text-right">
                         <Link href={`/${params.team}/access/service-accounts/${account.id}`}>
                           <Button variant="secondary">
                             Manage <FaChevronRight />
