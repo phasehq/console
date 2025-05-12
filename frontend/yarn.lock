@@ -2329,11 +2329,6 @@
   dependencies:
     undici-types "~5.26.4"
 
-"@types/nprogress@^0.2.1":
-  version "0.2.3"
-  resolved "https://registry.yarnpkg.com/@types/nprogress/-/nprogress-0.2.3.tgz#b2150b054a13622fabcba12cf6f0b54c48b14287"
-  integrity sha512-k7kRA033QNtC+gLc4VPlfnue58CM1iQLgn1IMAU8VPHGOj7oIHPp9UlhedEnD/Gl8evoCjwkZjlBORtZ3JByUA==
-
 "@types/prop-types@*":
   version "15.7.5"
   resolved "https://registry.npmjs.org/@types/prop-types/-/prop-types-15.7.5.tgz"
@@ -7102,12 +7097,11 @@ next@^14.2.25:
     "@next/swc-win32-ia32-msvc" "14.2.25"
     "@next/swc-win32-x64-msvc" "14.2.25"
 
-nextjs-toploader@^1.6.4:
-  version "1.6.4"
-  resolved "https://registry.yarnpkg.com/nextjs-toploader/-/nextjs-toploader-1.6.4.tgz#1a498fc8c9b073d937fb932382aeb5bb1d007339"
-  integrity sha512-KYLQ+0MvGdFk9JwOQfRtaYBAsyuX67Ca5QTa51RGNO4gQx64KLSE+ryHjUQ5LcDczHotp0l32GgksQW9vucUkw==
+nextjs-toploader@^3.8.16:
+  version "3.8.16"
+  resolved "https://registry.yarnpkg.com/nextjs-toploader/-/nextjs-toploader-3.8.16.tgz#6405116ffdd652ecc049f3a3f672bf7e8f5feef8"
+  integrity sha512-xiejFF9OQD8ovvHfrFhnEmRytvZtwIOY/mMtI9punOAACXpYpgC0y1afJ4DSIEmUi4Syy9A5BsFpUORTJ9z8Ng==
   dependencies:
-    "@types/nprogress" "^0.2.1"
     nprogress "^0.2.0"
     prop-types "^15.8.1"
 
