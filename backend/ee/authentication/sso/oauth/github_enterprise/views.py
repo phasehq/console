@@ -18,8 +18,8 @@ class GitHubEnterpriseOAuth2Adapter(GitHubOAuth2Adapter):
     provider_id = GitHubProvider.id
     settings = app_settings.PROVIDERS.get(provider_id, {})
 
-    web_url = settings.get("GITHUB_ENTERPRISE_BASE_URL").rstrip("/")
-    api_url = f"{settings.get("GITHUB_ENTERPRISE_API_URL").rstrip("/")}/v3"
+    web_url = os.getenv("GITHUB_ENTERPRISE_BASE_URL").rstrip("/")
+    api_url = f"{os.getenv("GITHUB_ENTERPRISE_API_URL").rstrip("/")}/v3"
 
     access_token_url = f"{web_url}/login/oauth/access_token"
     authorize_url = f"{web_url}/login/oauth/authorize"
