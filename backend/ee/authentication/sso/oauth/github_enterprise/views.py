@@ -7,8 +7,7 @@ from django.conf import settings
 import logging
 from django.utils import timezone
 from api.emails import send_login_email
-from api.models import ActivatedPhaseLicense, CustomUser
-from backend.api.notifier import notify_slack
+from api.models import ActivatedPhaseLicense
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ class GitHubEnterpriseOAuth2Adapter(GitHubOAuth2Adapter):
 
         try:
             full_name = extra_data.get("name", email.split("@")[0])
-            send_login_email(request, email, full_name, "GitHub")
+            send_login_email(request, email, full_name, "GitHub Enterprise")
         except Exception as e:
             print(f"Error sending email: {e}")
 
