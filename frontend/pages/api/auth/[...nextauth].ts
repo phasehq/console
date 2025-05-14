@@ -9,6 +9,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { getSecret } from '@/utils/secretConfig'
 import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvider'
 import { EntraIDProvider } from '@/ee/authentication/sso/oidc/util/entraidProvider'
+import GitHubEnterpriseProvider from '@/ee/authentication/sso/oidc/util/githubEnterpriseProvider'
 
 type AccessTokenResponse = {
   access_token: string
@@ -35,12 +36,24 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
   if (process.env.GITHUB_CLIENT_ID) {
     const clientSecret = getSecret('GITHUB_CLIENT_SECRET')
     if (clientSecret) {
+      providers.push(
+        GitHubProvider({
+          clientId: process.env.GITHUB_CLIENT_ID,
+          clientSecret: clientSecret,
+        })
+      )
+    }
+  }
+
+  if (process.env.GITHUB_ENTERPRISE_CLIENT_ID) {
+    const clientSecret = getSecret('GITHUB_ENTERPRISE_CLIENT_SECRET')
+    if (clientSecret) {
       const baseUrl = process.env.GITHUB_ENTERPRISE_BASE_URL || 'https://github.com'
       const apiBase = process.env.GITHUB_ENTERPRISE_API_URL || 'https://api.github.com'
 
       providers.push(
-        GitHubProvider({
-          clientId: process.env.GITHUB_CLIENT_ID,
+        GitHubEnterpriseProvider({
+          clientId: process.env.GITHUB_ENTERPRISE_CLIENT_ID,
           clientSecret,
           authorization: {
             url: `${baseUrl}/login/oauth/authorize`,
@@ -187,7 +200,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
                 access_token: id_token,
                 id_token: id_token,
               }
-            } else if (account.provider === 'github') {
+            } else if (account.provider === 'github' || account.provider === 'github-enterprise') {
               const { access_token } = account
               loginPayload = {
                 access_token: access_token,

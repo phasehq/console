@@ -58,6 +58,13 @@ const providerButtons: ProviderButton[] = [
     style:
       'bg-[#0078d4]/10 hover:bg-[#0078d4]/20 hover:ring-[#0078d4] text-[#0078d4]/90 hover:text-[#0078d4] ring-[#0078d4]/60',
   },
+  {
+    id: 'github-enterprise',
+    name: 'GitHub Enterprise',
+    icon: <FaGithub />,
+    style:
+      'bg-zinc-200/10 hover:bg-zinc-200/20 ring-zinc-200/40 hover:ring-zinc-100/80 text-zinc-100/80 hover:text-zinc-100',
+  },
 ]
 
 const BUTTON_BASE_STYLE =
@@ -121,7 +128,7 @@ export default function SignInButtons() {
                       onClick={() => handleProviderButtonClick(provider.id)}
                       className={clsx(BUTTON_BASE_STYLE, provider.style)}
                     >
-                      {provider.icon}
+                      <span className="text-xl">{provider.icon}</span>
                       {`Login with ${provider.name}`}
                     </button>
                   ))}

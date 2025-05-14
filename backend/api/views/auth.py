@@ -17,39 +17,28 @@ from api.utils.rest import (
 )
 from django.conf import settings
 from django.contrib.auth import logout
-
 from django.http import JsonResponse
 from django.http import JsonResponse
 from api.authentication.adapters.gitlab import CustomGitLabOAuth2Adapter
 from api.authentication.adapters.google import CustomGoogleOAuth2Adapter
+from api.authentication.adapters.github import CustomGitHubOAuth2Adapter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-
 from dj_rest_auth.registration.views import SocialLoginView
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from django.conf import settings
-from ee.authentication.sso.oidc.util.google.views import (
-    GoogleOpenIDConnectAdapter,
-)
+from ee.authentication.sso.oidc.util.google.views import GoogleOpenIDConnectAdapter
 from ee.authentication.sso.oidc.util.jumpcloud.views import (
     JumpCloudOpenIDConnectAdapter,
 )
 from ee.authentication.sso.oidc.entraid.views import CustomMicrosoftGraphOAuth2Adapter
-
+from ee.authentication.sso.oauth.github_enterprise.views import (
+    GitHubEnterpriseOAuth2Adapter,
+)
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
-
-
-if getattr(settings, "GITHUB_ENTERPRISE_ENABLED", False):
-    from ee.authentication.adapters.github_enterprise import (
-        GitHubEnterpriseOAuth2Adapter as GitHubAdapter,
-    )
-else:
-    from backend.api.authentication.adapters.github import (
-        CustomGitHubOAuth2Adapter as GitHubAdapter,
-    )
 
 
 class GoogleLoginView(SocialLoginView):
@@ -61,7 +50,14 @@ class GoogleLoginView(SocialLoginView):
 
 class GitHubLoginView(SocialLoginView):
     authentication_classes = []
-    adapter_class = GitHubAdapter
+    adapter_class = CustomGitHubOAuth2Adapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
+class GitHubEnterpriseLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = GitHubEnterpriseOAuth2Adapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
 

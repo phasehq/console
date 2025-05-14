@@ -120,6 +120,15 @@ SOCIALACCOUNT_PROVIDERS = {
             "client_id": os.getenv("GITHUB_CLIENT_ID"),
             "secret": get_secret("GITHUB_CLIENT_SECRET"),
         },
+    },
+    "github-enterprise": {
+        "SCOPE": [
+            "user read:user user:email",
+        ],
+        "APP": {
+            "client_id": os.getenv("GITHUB_ENTERPRISE_CLIENT_ID"),
+            "secret": get_secret("GITHUB_ENTERPRISE_CLIENT_SECRET"),
+        },
         "GITHUB_URL": os.getenv("GITHUB_ENTERPRISE_BASE_URL") or "https://github.com",
     },
     "gitlab": {
@@ -166,8 +175,6 @@ SOCIALACCOUNT_PROVIDERS = {
         ]
     },
 }
-
-GITHUB_ENTERPRISE_ENABLED = bool(os.getenv("GITHUB_ENTERPRISE_BASE_URL"))
 
 
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
