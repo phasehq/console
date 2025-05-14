@@ -63,6 +63,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
+import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 
 export default function EnvironmentPath({
   params,
@@ -152,6 +153,8 @@ export default function EnvironmentPath({
         secret.value !== updatedSecret.value
       )
     })
+
+  useWarnIfUnsavedChanges(unsavedChanges)
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
