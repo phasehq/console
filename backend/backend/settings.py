@@ -129,7 +129,7 @@ SOCIALACCOUNT_PROVIDERS = {
             "client_id": os.getenv("GITHUB_ENTERPRISE_CLIENT_ID"),
             "secret": get_secret("GITHUB_ENTERPRISE_CLIENT_SECRET"),
         },
-        "GITHUB_URL": os.getenv("GITHUB_ENTERPRISE_BASE_URL") or "https://github.com",
+        "GITHUB_URL": os.getenv("GITHUB_ENTERPRISE_BASE_URL"),
     },
     "gitlab": {
         "SCOPE": [
