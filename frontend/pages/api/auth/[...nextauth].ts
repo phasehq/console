@@ -35,10 +35,27 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
   if (process.env.GITHUB_CLIENT_ID) {
     const clientSecret = getSecret('GITHUB_CLIENT_SECRET')
     if (clientSecret) {
+      const baseUrl = process.env.GITHUB_ENTERPRISE_BASE_URL || 'https://github.com'
+      const apiBase = process.env.GITHUB_ENTERPRISE_API_URL || 'https://api.github.com'
+
       providers.push(
         GitHubProvider({
           clientId: process.env.GITHUB_CLIENT_ID,
-          clientSecret: clientSecret,
+          clientSecret,
+          authorization: {
+            url: `${baseUrl}/login/oauth/authorize`,
+            params: { scope: 'read:user user:email' },
+          },
+          token: `${baseUrl}/login/oauth/access_token`,
+          userinfo: `${apiBase}/user`,
+          profile(profile) {
+            return {
+              id: profile.id.toString(),
+              name: profile.name ?? profile.login,
+              email: profile.email,
+              image: profile.avatar_url,
+            }
+          },
         })
       )
     }
