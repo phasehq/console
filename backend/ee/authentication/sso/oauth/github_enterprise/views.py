@@ -8,6 +8,7 @@ import logging
 from django.utils import timezone
 from api.emails import send_login_email
 from api.models import ActivatedPhaseLicense
+import os
 
 logger = logging.getLogger(__name__)
 
