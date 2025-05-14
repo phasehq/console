@@ -7,7 +7,7 @@ export default function GitHubEnterpriseProvider<P extends GithubProfile>(
   options: OAuthUserConfig<P>
 ): OAuthConfig<P> {
   const baseUrl = process.env.GITHUB_ENTERPRISE_BASE_URL
-  const apiUrl = process.env.GITHUB_ENTERPRISE_API_URL
+  const apiUrl = `${process.env.GITHUB_ENTERPRISE_API_URL}/v3`
 
   if (!baseUrl || !apiUrl) {
     throw new Error('GITHUB_ENTERPRISE_BASE_URL and GITHUB_ENTERPRISE_API_URL must be set')
@@ -50,7 +50,7 @@ export default function GitHubEnterpriseProvider<P extends GithubProfile>(
       }
     },
     style: {
-      logo: '/github-enterprise.svg',
+      logo: '/github.svg',
       bg: '#8250df',
       text: '#fff',
     },

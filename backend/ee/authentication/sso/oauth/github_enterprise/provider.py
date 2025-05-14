@@ -1,5 +1,3 @@
-# backend/api/authentication/providers/github_enterprise/provider.py
-
 from allauth.socialaccount.providers.github.provider import GitHubProvider
 
 

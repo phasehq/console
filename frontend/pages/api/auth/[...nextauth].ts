@@ -48,8 +48,8 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
   if (process.env.GITHUB_ENTERPRISE_CLIENT_ID) {
     const clientSecret = getSecret('GITHUB_ENTERPRISE_CLIENT_SECRET')
     if (clientSecret) {
-      const baseUrl = process.env.GITHUB_ENTERPRISE_BASE_URL || 'https://github.com'
-      const apiBase = process.env.GITHUB_ENTERPRISE_API_URL || 'https://api.github.com'
+      const baseUrl = process.env.GITHUB_ENTERPRISE_BASE_URL
+      const apiBase = `${process.env.GITHUB_ENTERPRISE_API_URL}/v3`
 
       providers.push(
         GitHubEnterpriseProvider({
