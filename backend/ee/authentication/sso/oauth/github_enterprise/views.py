@@ -64,12 +64,6 @@ class GitHubEnterpriseOAuth2Adapter(GitHubOAuth2Adapter):
 
         email = extra_data["email"]
 
-        if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
-            try:
-                notify_slack(f"New user signup: {email}")
-            except Exception as e:
-                print(f"Error notifying Slack: {e}")
-
         try:
             full_name = extra_data.get("name", email.split("@")[0])
             send_login_email(request, email, full_name, "GitHub")
