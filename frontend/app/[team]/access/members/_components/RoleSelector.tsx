@@ -264,7 +264,7 @@ export const RoleSelector = (props: {
 
   // Render interactive Listbox otherwise
   return (
-    <div className="space-y-1 w-full">
+    <div className="space-y-1 w-full relative">
       <Listbox disabled={disabled} value={role} onChange={handleUpdateRole}>
         {({ open }) => (
           <>

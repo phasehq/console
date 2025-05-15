@@ -84,7 +84,7 @@ export const ServiceAccountRoleSelector = (props: {
   return disabled ? (
     <RoleLabel role={role} />
   ) : (
-    <div className="space-y-1 w-full">
+    <div className="space-y-1 w-full relative">
       <Listbox disabled={disabled} value={role} onChange={handleUpdateRole}>
         {({ open }) => (
           <>
