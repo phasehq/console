@@ -19,14 +19,7 @@ class GitHubEnterpriseOAuth2Adapter(GitHubOAuth2Adapter):
     provider_id = GitHubProvider.id
     settings = app_settings.PROVIDERS.get(provider_id, {})
 
-    web_url = os.getenv("GITHUB_ENTERPRISE_BASE_URL").rstrip("/")
-    api_url = f"{os.getenv("GITHUB_ENTERPRISE_API_URL").rstrip("/")}/v3"
-
-    access_token_url = f"{web_url}/login/oauth/access_token"
-    authorize_url = f"{web_url}/login/oauth/authorize"
-    profile_url = f"{api_url}/user"
-    emails_url = f"{api_url}/user/emails"
-
+    
     def complete_login(self, request, app, token, **kwargs):
 
         if settings.APP_HOST == "cloud":
@@ -44,6 +37,14 @@ class GitHubEnterpriseOAuth2Adapter(GitHubOAuth2Adapter):
             logger.error(f"GitHub Enterprise login failed: {str(error)}")
             raise OAuth2Error(str(error))
 
+        web_url = os.getenv("GITHUB_ENTERPRISE_BASE_URL").rstrip("/")
+        api_url = f"{os.getenv("GITHUB_ENTERPRISE_API_URL").rstrip("/")}/v3"
+
+        access_token_url = f"{web_url}/login/oauth/access_token"
+        authorize_url = f"{web_url}/login/oauth/authorize"
+        profile_url = f"{api_url}/user"
+        emails_url = f"{api_url}/user/emails"
+        
         headers = {"Authorization": f"token {token.token}"}
         resp = requests.get(self.profile_url, headers=headers)
         resp.raise_for_status()
