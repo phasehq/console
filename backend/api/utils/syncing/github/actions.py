@@ -1,10 +1,8 @@
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 import requests
 import json
-from api.utils.syncing.auth import store_oauth_token
 import graphene
 from graphene import ObjectType
-import os
 import nacl.encoding
 import nacl.public
 import base64
@@ -31,6 +29,12 @@ def list_repos(credential_id):
         credential.credentials["access_token"], sk.hex(), pk.hex()
     )
 
+    api_host = GITHUB_API_URL
+    if "host" in credential.credentials:
+        api_host = decrypt_asymmetric(
+            credential.credentials["api_url"], sk.hex(), pk.hex()
+        )
+
     def fetch_repos(url, token):
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.get(url, headers=headers)
@@ -52,7 +56,7 @@ def list_repos(credential_id):
 
     # Fetch user repos
     user_repos_response = fetch_repos(
-        f"{GITHUB_API_URL}/user/repos?per_page=100&type=all", access_token
+        f"{api_host}/user/repos?per_page=100&type=all", access_token
     )
     if user_repos_response.status_code == 200:
         all_repos.extend(serialize_repos(user_repos_response.json()))
@@ -69,7 +73,11 @@ def get_gh_actions_credentials(environment_sync):
         environment_sync.authentication.credentials["access_token"], sk.hex(), pk.hex()
     )
 
-    return access_token
+    api_host = decrypt_asymmetric(
+        environment_sync.authentication.credentials["api_url"], sk.hex(), pk.hex()
+    )
+
+    return access_token, api_host
 
 
 def encrypt_secret(public_key: str, secret_value: str) -> str:
@@ -82,12 +90,12 @@ def encrypt_secret(public_key: str, secret_value: str) -> str:
     return base64.b64encode(encrypted).decode("utf-8")
 
 
-def check_rate_limit(access_token):
+def check_rate_limit(access_token, api_host=GITHUB_API_URL):
     """
     Checks the current rate limit status with GitHub.
     """
     headers = {"Authorization": f"token {access_token}"}
-    response = requests.get(f"{GITHUB_API_URL}/rate_limit", headers=headers)
+    response = requests.get(f"{api_host}/rate_limit", headers=headers)
     rate_limit = response.json().get("resources", {}).get("core", {})
     if rate_limit.get("remaining", 1) == 0:
         print(
@@ -97,7 +105,7 @@ def check_rate_limit(access_token):
     return True
 
 
-def get_all_secrets(repo, owner, headers):
+def get_all_secrets(repo, owner, headers, api_host=GITHUB_API_URL):
     """
     Retrieves all secrets from a GitHub repository, handling pagination.
     """
@@ -105,7 +113,7 @@ def get_all_secrets(repo, owner, headers):
     page = 1
     while True:
         response = requests.get(
-            f"{GITHUB_API_URL}/repos/{owner}/{repo}/actions/secrets?page={page}",
+            f"{api_host}/repos/{owner}/{repo}/actions/secrets?page={page}",
             headers=headers,
         )
         if response.status_code != 200 or not response.json().get("secrets"):
@@ -115,7 +123,7 @@ def get_all_secrets(repo, owner, headers):
     return all_secrets
 
 
-def sync_github_secrets(secrets, access_token, repo, owner):
+def sync_github_secrets(secrets, access_token, repo, owner, api_host=GITHUB_API_URL):
     try:
         if not check_rate_limit(access_token):
             return False, {"message": "Rate limit exceeded"}
@@ -127,7 +135,7 @@ def sync_github_secrets(secrets, access_token, repo, owner):
 
         # Fetch public key for encryption
         public_key_response = requests.get(
-            f"{GITHUB_API_URL}/repos/{owner}/{repo}/actions/secrets/public-key",
+            f"{api_host}/repos/{owner}/{repo}/actions/secrets/public-key",
             headers=headers,
         )
         if public_key_response.status_code != 200:
@@ -156,7 +164,7 @@ def sync_github_secrets(secrets, access_token, repo, owner):
                 continue  # Skipping oversized secret
 
             secret_data = {"encrypted_value": encrypted_value, "key_id": key_id}
-            secret_url = f"{GITHUB_API_URL}/repos/{owner}/{repo}/actions/secrets/{key}"
+            secret_url = f"{api_host}/repos/{owner}/{repo}/actions/secrets/{key}"
             response = requests.put(secret_url, headers=headers, json=secret_data)
 
             if response.status_code not in [201, 204]:
@@ -168,7 +176,9 @@ def sync_github_secrets(secrets, access_token, repo, owner):
         # Delete secrets not in local file
         for secret_name in existing_secret_names:
             if secret_name not in local_secrets:
-                delete_url = f"{GITHUB_API_URL}/repos/{owner}/{repo}/actions/secrets/{secret_name}"
+                delete_url = (
+                    f"{api_host}/repos/{owner}/{repo}/actions/secrets/{secret_name}"
+                )
                 delete_response = requests.delete(delete_url, headers=headers)
                 if delete_response.status_code != 204:
                     return False, {

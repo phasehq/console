@@ -175,12 +175,14 @@ def github_callback(request):
     state_decoded = base64.b64decode(state).decode("utf-8")
     state = json.loads(state_decoded)
 
+    host_url = state.get("hostUrl", "https://github.com")
+    api_url = state.get("apiUrl", "https://github.com")
     original_url = state.get("returnUrl", "/")
     org_id = state.get("orgId")
 
     # Exchange code for token
     response = requests.post(
-        "https://github.com/login/oauth/access_token",
+        f"{host_url}/login/oauth/access_token",
         headers={"Accept": "application/json"},
         data={
             "client_id": client_id,
@@ -192,7 +194,7 @@ def github_callback(request):
 
     access_token = response.json().get("access_token")
 
-    store_oauth_token("github", access_token, org_id)
+    store_oauth_token("github", access_token, host_url, api_url, org_id)
 
     # Redirect back to Next.js app with token and original URL
     return redirect(f"{os.getenv('ALLOWED_ORIGINS')}{original_url}")
