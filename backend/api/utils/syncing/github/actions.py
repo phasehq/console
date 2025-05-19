@@ -9,7 +9,7 @@ import base64
 import datetime
 from django.apps import apps
 
-GITHUB_API_URL = "https://api.github.com"
+GITHUB_CLOUD_API_URL = "https://api.github.com"
 
 
 class GitHubRepoType(ObjectType):
@@ -18,22 +18,29 @@ class GitHubRepoType(ObjectType):
     type = graphene.String()
 
 
+def normalize_api_host(api_host):
+    if api_host.rstrip("/") != GITHUB_CLOUD_API_URL.rstrip("/"):
+        return f"{api_host.rstrip('/')}/v3"
+    return api_host.rstrip("/")
+
+
 def list_repos(credential_id):
     ProviderCredentials = apps.get_model("api", "ProviderCredentials")
 
     pk, sk = get_server_keypair()
-
     credential = ProviderCredentials.objects.get(id=credential_id)
 
     access_token = decrypt_asymmetric(
         credential.credentials["access_token"], sk.hex(), pk.hex()
     )
 
-    api_host = GITHUB_API_URL
+    api_host = GITHUB_CLOUD_API_URL
     if "host" in credential.credentials:
         api_host = decrypt_asymmetric(
             credential.credentials["api_url"], sk.hex(), pk.hex()
         )
+
+    api_host = normalize_api_host(api_host)
 
     def fetch_repos(url, token):
         headers = {"Authorization": f"Bearer {token}"}
@@ -41,16 +48,14 @@ def list_repos(credential_id):
         return response
 
     def serialize_repos(repos):
-        repo_list = []
-        for repo in repos:
-            repo_list.append(
-                {
-                    "name": repo["name"],
-                    "owner": repo["owner"]["login"],
-                    "type": "private" if repo["private"] else "public",
-                }
-            )
-        return repo_list
+        return [
+            {
+                "name": repo["name"],
+                "owner": repo["owner"]["login"],
+                "type": "private" if repo["private"] else "public",
+            }
+            for repo in repos
+        ]
 
     all_repos = []
 
@@ -77,23 +82,19 @@ def get_gh_actions_credentials(environment_sync):
         environment_sync.authentication.credentials["api_url"], sk.hex(), pk.hex()
     )
 
+    api_host = normalize_api_host(api_host)
     return access_token, api_host
 
 
 def encrypt_secret(public_key: str, secret_value: str) -> str:
-    """
-    Encrypts a secret using the repository's public key. This is necessary before storing the secret in GitHub.
-    """
     pk = nacl.public.PublicKey(public_key, nacl.encoding.Base64Encoder())
     box = nacl.public.SealedBox(pk)
     encrypted = box.encrypt(secret_value.encode())
     return base64.b64encode(encrypted).decode("utf-8")
 
 
-def check_rate_limit(access_token, api_host=GITHUB_API_URL):
-    """
-    Checks the current rate limit status with GitHub.
-    """
+def check_rate_limit(access_token, api_host=GITHUB_CLOUD_API_URL):
+    api_host = normalize_api_host(api_host)
     headers = {"Authorization": f"token {access_token}"}
     response = requests.get(f"{api_host}/rate_limit", headers=headers)
     rate_limit = response.json().get("resources", {}).get("core", {})
@@ -105,10 +106,8 @@ def check_rate_limit(access_token, api_host=GITHUB_API_URL):
     return True
 
 
-def get_all_secrets(repo, owner, headers, api_host=GITHUB_API_URL):
-    """
-    Retrieves all secrets from a GitHub repository, handling pagination.
-    """
+def get_all_secrets(repo, owner, headers, api_host=GITHUB_CLOUD_API_URL):
+    api_host = normalize_api_host(api_host)
     all_secrets = []
     page = 1
     while True:
@@ -123,9 +122,13 @@ def get_all_secrets(repo, owner, headers, api_host=GITHUB_API_URL):
     return all_secrets
 
 
-def sync_github_secrets(secrets, access_token, repo, owner, api_host=GITHUB_API_URL):
+def sync_github_secrets(
+    secrets, access_token, repo, owner, api_host=GITHUB_CLOUD_API_URL
+):
+    api_host = normalize_api_host(api_host)
+
     try:
-        if not check_rate_limit(access_token):
+        if not check_rate_limit(access_token, api_host):
             return False, {"message": "Rate limit exceeded"}
 
         headers = {
@@ -133,7 +136,6 @@ def sync_github_secrets(secrets, access_token, repo, owner, api_host=GITHUB_API_
             "Accept": "application/vnd.github+json",
         }
 
-        # Fetch public key for encryption
         public_key_response = requests.get(
             f"{api_host}/repos/{owner}/{repo}/actions/secrets/public-key",
             headers=headers,
@@ -148,20 +150,14 @@ def sync_github_secrets(secrets, access_token, repo, owner, api_host=GITHUB_API_
         key_id = public_key["key_id"]
         public_key_value = public_key["key"]
 
-        # Convert secrets list of tuples to a dictionary
         local_secrets = {k: v for k, v, _ in secrets}
-
-        # Fetch all existing secrets
-        existing_secrets = get_all_secrets(repo, owner, headers)
+        existing_secrets = get_all_secrets(repo, owner, headers, api_host)
         existing_secret_names = {secret["name"] for secret in existing_secrets}
 
-        # Update and create secrets
         for key, value in local_secrets.items():
             encrypted_value = encrypt_secret(public_key_value, value)
-            if (
-                len(encrypted_value) > 64 * 1024
-            ):  # Check if encrypted value exceeds 64 KB
-                continue  # Skipping oversized secret
+            if len(encrypted_value) > 64 * 1024:
+                continue  # Skip oversized secret
 
             secret_data = {"encrypted_value": encrypted_value, "key_id": key_id}
             secret_url = f"{api_host}/repos/{owner}/{repo}/actions/secrets/{key}"
@@ -173,7 +169,6 @@ def sync_github_secrets(secrets, access_token, repo, owner, api_host=GITHUB_API_
                     "message": f"Error syncing secret '{key}': {response.text}",
                 }
 
-        # Delete secrets not in local file
         for secret_name in existing_secret_names:
             if secret_name not in local_secrets:
                 delete_url = (
