@@ -165,20 +165,29 @@ def secrets_tokens(request):
         return JsonResponse({"error": "Invalid token type"}, status=403)
 
 
-def github_callback(request):
+def github_integration_callback(request):
     code = request.GET.get("code")
     state = request.GET.get("state")
-
-    client_id = os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
-    client_secret = get_secret("GITHUB_INTEGRATION_CLIENT_SECRET")
 
     state_decoded = base64.b64decode(state).decode("utf-8")
     state = json.loads(state_decoded)
 
+    is_enterprise = bool(state.get("isEnterprise", False))
     host_url = state.get("hostUrl", "https://github.com")
     api_url = state.get("apiUrl", "https://github.com")
     original_url = state.get("returnUrl", "/")
     org_id = state.get("orgId")
+
+    client_id = (
+        os.getenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID")
+        if is_enterprise
+        else os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
+    )
+    client_secret = (
+        get_secret("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_SECRET")
+        if is_enterprise
+        else get_secret("GITHUB_INTEGRATION_CLIENT_SECRET")
+    )
 
     # Exchange code for token
     response = requests.post(
