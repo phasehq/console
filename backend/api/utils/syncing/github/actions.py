@@ -78,9 +78,12 @@ def get_gh_actions_credentials(environment_sync):
         environment_sync.authentication.credentials["access_token"], sk.hex(), pk.hex()
     )
 
-    api_host = decrypt_asymmetric(
-        environment_sync.authentication.credentials["api_url"], sk.hex(), pk.hex()
-    )
+    api_host = GITHUB_CLOUD_API_URL
+
+    if "api_url" in environment_sync.authentication.credentials:
+        api_host = decrypt_asymmetric(
+            environment_sync.authentication.credentials["api_url"], sk.hex(), pk.hex()
+        )
 
     api_host = normalize_api_host(api_host)
     return access_token, api_host
