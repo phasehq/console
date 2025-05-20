@@ -60,6 +60,9 @@ export const SetupGhAuth = () => {
 
   const disabled = !clientId || clientId?.includes('BAKED')
 
+  const docsLink =
+    'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-enterprise-self-hosted-integration'
+
   return (
     <form className="space-y-6" onSubmit={initiateOAuth}>
       {isPending ? (
@@ -133,12 +136,7 @@ export const SetupGhAuth = () => {
                     This option is unavailable because the{' '}
                     <span className="font-mono">GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID</span> is
                     not configured for this authentication mode. Please refer to the{' '}
-                    <a
-                      className="underline"
-                      href="https://docs.phase.dev"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <a className="underline" href={docsLink} target="_blank" rel="noreferrer">
                       Docs
                     </a>{' '}
                     to correctly configure this option, or contact your admin.
