@@ -4,7 +4,6 @@ import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import Spinner from '@/components/common/Spinner'
-import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
 import { Tab } from '@headlessui/react'
@@ -12,7 +11,6 @@ import clsx from 'clsx'
 import { usePathname } from 'next/navigation'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaExternalLinkAlt } from 'react-icons/fa'
-import { FaGithub } from 'react-icons/fa6'
 
 export const SetupGhAuth = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -33,7 +31,7 @@ export const SetupGhAuth = () => {
   const initiateOAuth = (e: { preventDefault: () => void }) => {
     e.preventDefault()
     setIsPending(true)
-    //const clientId = process.env.NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
+
     const hostname = `${window.location.protocol}//${window.location.host}`
     const redirectUri = `${hostname}/service/oauth/github/callback`
     const scope = 'user,repo,admin:repo_hook,read:org'
@@ -56,7 +54,7 @@ export const SetupGhAuth = () => {
   useEffect(() => {
     if (tabIndex === 0) {
       setHostUrl('https://github.com')
-      setApiUrl('https://api.github.com') //api.github.com</|end_of_text|>)
+      setApiUrl('https://api.github.com')
     }
   }, [tabIndex])
 
@@ -99,7 +97,7 @@ export const SetupGhAuth = () => {
                           : ' border-transparent cursor-pointer'
                       )}
                     >
-                      GitHub Enterprise (Self-hosted)
+                      GitHub Enterprise Server
                     </div>
                   )}
                 </Tab>
@@ -109,21 +107,14 @@ export const SetupGhAuth = () => {
 
           {tabIndex === 0 ? (
             <div className="text-neutral-500">
-              {!isCloudHosted() && <p>Choose this option to authenticate with GitHub.</p>}
-              <p>
-                Authencation credentials will be created via OAuth 2.0 on{' '}
-                <span className="text-xs font-mono font-medium text-zinc-900 dark:text-zinc-100 ring-1 ring-inset ring-neutral-500/40 bg-neutral-500/20 rounded-md px-1">
-                  {hostUrl}
-                </span>
-                , and secrets will be synced via{' '}
-                <span className="text-xs font-mono font-medium text-zinc-900 dark:text-zinc-100 ring-1 ring-inset ring-neutral-500/40 bg-neutral-500/20 rounded-md px-1">
-                  {apiUrl}
-                </span>
-              </p>
+              {!isCloudHosted() && (
+                <p>Use OAuth to create authentication credentials on GitHub.com</p>
+              )}
+
               {disabled && (
                 <Alert variant="danger" size="sm">
-                  The <span className="font-mono">INTEGRATION_CLIENT_ID</span> is not configured for
-                  this authentication mode. Please
+                  The <span className="font-mono">GITHUB_INTEGRATION_CLIENT_ID</span> is not
+                  configured for this authentication mode. Please
                 </Alert>
               )}
             </div>
@@ -131,7 +122,7 @@ export const SetupGhAuth = () => {
             <div className="space-y-4">
               <div className="text-neutral-500">
                 <p>
-                  Choose this option to authenticate with a self-hosted GitHub Enterprise instance.
+                  Choose this option to authenticate with a self-hosted GitHub Enterprise Server.
                 </p>
                 <p>Enter your Host and API URL below.</p>
               </div>
@@ -140,8 +131,8 @@ export const SetupGhAuth = () => {
                 <Alert variant="warning" size="sm" icon={true}>
                   <p>
                     This option is unavailable because the{' '}
-                    <span className="font-mono">INTEGRATION_CLIENT_ID</span> is not configured for
-                    this authentication mode. Please refer to the{' '}
+                    <span className="font-mono">GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID</span> is
+                    not configured for this authentication mode. Please refer to the{' '}
                     <a
                       className="underline"
                       href="https://docs.phase.dev"
