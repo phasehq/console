@@ -84,7 +84,7 @@ export const SetupGhAuth = () => {
                           : ' border-transparent cursor-pointer'
                       )}
                     >
-                      GitHub Cloud
+                      GitHub
                     </div>
                   )}
                 </Tab>
@@ -109,7 +109,7 @@ export const SetupGhAuth = () => {
 
           {tabIndex === 0 ? (
             <div className="text-neutral-500">
-              {!isCloudHosted() && <p>Choose this option to authenticate with GitHub Cloud.</p>}
+              {!isCloudHosted() && <p>Choose this option to authenticate with GitHub.</p>}
               <p>
                 Authencation credentials will be created via OAuth 2.0 on{' '}
                 <span className="text-xs font-mono font-medium text-zinc-900 dark:text-zinc-100 ring-1 ring-inset ring-neutral-500/40 bg-neutral-500/20 rounded-md px-1">
