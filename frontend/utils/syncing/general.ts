@@ -1,13 +1,13 @@
 import { ProviderType } from '@/apollo/graphql'
 import { encryptAsymmetric } from '../crypto'
 
-export interface Crdentials {
+export interface Credentials {
   [key: string]: string | null | undefined
 }
 
 export const encryptProviderCredentials = async (
   provider: ProviderType,
-  credentials: Crdentials,
+  credentials: Credentials,
   serverKey: string
 ) => {
   if (provider?.expectedCredentials && serverKey) {
