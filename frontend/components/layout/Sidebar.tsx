@@ -233,7 +233,7 @@ const Sidebar = () => {
       name: 'Integrations',
       href: `/${team}/integrations/syncs`,
       icon: <FaProjectDiagram />,
-      active: usePathname() === `/${team}/integrations/syncs`,
+      active: usePathname()?.split('/')[2] === `integrations`,
     },
     {
       name: 'Access Control',
