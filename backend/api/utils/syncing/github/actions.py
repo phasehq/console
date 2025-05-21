@@ -59,14 +59,20 @@ def list_repos(credential_id):
 
     all_repos = []
 
-    # Fetch user repos
-    user_repos_response = fetch_repos(
-        f"{api_host}/user/repos?per_page=100&type=all", access_token
-    )
-    if user_repos_response.status_code == 200:
-        all_repos.extend(serialize_repos(user_repos_response.json()))
-    else:
-        raise Exception(f"Error fetching user repositories: {user_repos_response.text}")
+    # Fetch all user repos
+    page = 1
+    while True:
+        user_repos_response = fetch_repos(
+            f"{api_host}/user/repos?per_page=100&type=all&page={page}", access_token
+        )
+        if user_repos_response.status_code == 200:
+            repos_on_page = user_repos_response.json()
+            if not repos_on_page:  # No more repos on this page
+                break
+            all_repos.extend(serialize_repos(repos_on_page))
+            page += 1
+        else:
+            raise Exception(f"Error fetching user repositories: {user_repos_response.text}")
 
     return all_repos
 
