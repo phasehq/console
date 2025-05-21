@@ -118,7 +118,7 @@ export const SetupGhAuth = () => {
           {tabIndex === 0 ? (
             <div className="text-neutral-500 space-y-4">
               {!isCloudHosted() && (
-                <p>Use OAuth to create authentication credentials on GitHub.com</p>
+                <p className="pb-4">Use OAuth to generate authentication credentials on GitHub.com</p>
               )}
 
               <Input
@@ -131,9 +131,17 @@ export const SetupGhAuth = () => {
               />
 
               {disabled && (
-                <Alert variant="danger" size="sm">
-                  The <span className="font-mono">GITHUB_INTEGRATION_CLIENT_ID</span> is not
-                  configured for this authentication mode. Please
+                <Alert variant="danger" size="sm" icon={true}>
+                  <p>
+                    This integration has not been set up. Please supply the{' '}
+                    <span className="font-mono">GITHUB_INTEGRATION_CLIENT_ID</span> and{' '}
+                    <span className="font-mono">GITHUB_INTEGRATION_CLIENT_SECRET</span>.
+                    Please refer to the{' '}
+                    <a className="underline" href={githubComDocsLink} target="_blank" rel="noreferrer">
+                      Docs
+                    </a>{' '}
+                    to configure this integration, or contact your admin.
+                  </p>
                 </Alert>
               )}
             </div>
@@ -141,21 +149,26 @@ export const SetupGhAuth = () => {
             <div className="space-y-4">
               <div className="text-neutral-500">
                 <p>
-                  Choose this option to authenticate with a self-hosted GitHub Enterprise Server.
+                  Use OAuth to generate authentication credentials on GitHub Enterprise Server.
                 </p>
-                <p>Enter your Host and API URL below.</p>
               </div>
 
               {disabled && (
-                <Alert variant="warning" size="sm" icon={true}>
+                <Alert variant="danger" size="sm" icon={true}>
                   <p>
-                    This option is unavailable because the{' '}
-                    <span className="font-mono">GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID</span> is
-                    not configured for this authentication mode. Please refer to the{' '}
+                    This integration has not been set up. Please supply the{' '}
+                    <span className="font-mono">
+                      GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
+                    </span>{' '}
+                    and{' '}
+                    <span className="font-mono">
+                      GITHUB_ENTERPRISE_INTEGRATION_CLIENT_SECRET
+                    </span>
+                    . Please refer to the{' '}
                     <a className="underline" href={docsLink} target="_blank" rel="noreferrer">
                       Docs
                     </a>{' '}
-                    to correctly configure this option, or contact your admin.
+                    to configure this integration, or contact your admin.
                   </p>
                 </Alert>
               )}
