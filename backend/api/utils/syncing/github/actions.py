@@ -19,9 +19,14 @@ class GitHubRepoType(ObjectType):
 
 
 def normalize_api_host(api_host):
-    if api_host.rstrip("/") != GITHUB_CLOUD_API_URL.rstrip("/"):
-        return f"{api_host.rstrip('/')}/v3"
-    return api_host.rstrip("/")
+    stripped_host = api_host.rstrip("/")
+    
+    if stripped_host == GITHUB_CLOUD_API_URL.rstrip("/"):
+        return stripped_host
+    else:
+        if not stripped_host.endswith("/v3"):
+            return f"{stripped_host}/v3"  # Add version if not present
+        return stripped_host
 
 
 def list_repos(credential_id):

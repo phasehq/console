@@ -17,7 +17,11 @@ export const SetupGhAuth = () => {
 
   const path = usePathname()
 
+  const DEFAULT_NAME = 'GitHub OAuth credentials'
+  const DEFAULT_ENTERPRISE_NAME = 'GitHub Enterprise OAuth credentials'
+
   const [tabIndex, setTabIndex] = useState(0)
+  const [name, setName] = useState<string>(DEFAULT_NAME)
   const [hostUrl, setHostUrl] = useState<string>('https://github.com')
   const [apiUrl, setApiUrl] = useState<string>('https://api.github.com')
   const [isPending, setIsPending] = useState(false)
@@ -42,11 +46,10 @@ export const SetupGhAuth = () => {
       hostUrl,
       apiUrl,
       isEnterprise,
+      name,
     }
 
     const state = btoa(JSON.stringify(statePayload))
-
-    // Added prompt=consent so that the user can choose to provision access to GitHub assets (e.g. repositories, organizations, etc.) on subsequent authorization attempts.
 
     const authUrl = `${hostUrl}/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}&prompt=consent`
 
@@ -57,13 +60,17 @@ export const SetupGhAuth = () => {
     if (tabIndex === 0) {
       setHostUrl('https://github.com')
       setApiUrl('https://api.github.com')
-    }
+
+      setName(DEFAULT_NAME)
+    } else setName(DEFAULT_ENTERPRISE_NAME)
   }, [tabIndex])
 
   const disabled = !clientId || clientId?.includes('BAKED')
 
   const docsLink =
     'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-enterprise-self-hosted-integration'
+  const githubComDocsLink =
+    'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-integration'
 
   return (
     <form className="space-y-6" onSubmit={initiateOAuth}>
@@ -111,15 +118,32 @@ export const SetupGhAuth = () => {
           )}
 
           {tabIndex === 0 ? (
-            <div className="text-neutral-500">
+            <div className="text-neutral-500 space-y-4">
               {!isCloudHosted() && (
-                <p>Use OAuth to create authentication credentials on GitHub.com</p>
+                <p className="pb-4">Use OAuth to generate authentication credentials on GitHub.com</p>
               )}
 
+              <Input
+                value={name}
+                setValue={setName}
+                label="Name"
+                placeholder="GitHub OAuth credentials"
+                required
+                disabled={disabled}
+              />
+
               {disabled && (
-                <Alert variant="danger" size="sm">
-                  The <span className="font-mono">GITHUB_INTEGRATION_CLIENT_ID</span> is not
-                  configured for this authentication mode. Please
+                <Alert variant="danger" size="sm" icon={true}>
+                  <p>
+                    This integration has not been set up. Please supply the{' '}
+                    <span className="font-mono">GITHUB_INTEGRATION_CLIENT_ID</span> and{' '}
+                    <span className="font-mono">GITHUB_INTEGRATION_CLIENT_SECRET</span>.
+                    Please refer to the{' '}
+                    <a className="underline" href={githubComDocsLink} target="_blank" rel="noreferrer">
+                      Docs
+                    </a>{' '}
+                    to configure this integration, or contact your admin.
+                  </p>
                 </Alert>
               )}
             </div>
@@ -127,25 +151,38 @@ export const SetupGhAuth = () => {
             <div className="space-y-4">
               <div className="text-neutral-500">
                 <p>
-                  Choose this option to authenticate with a self-hosted GitHub Enterprise Server.
+                  Use OAuth to generate authentication credentials on GitHub Enterprise Server.
                 </p>
-                <p>Enter your Host and API URL below.</p>
               </div>
 
               {disabled && (
-                <Alert variant="warning" size="sm" icon={true}>
+                <Alert variant="danger" size="sm" icon={true}>
                   <p>
-                    This option is unavailable because the{' '}
-                    <span className="font-mono">GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID</span> is
-                    not configured for this authentication mode. Please refer to the{' '}
+                    This integration has not been set up. Please supply the{' '}
+                    <span className="font-mono">
+                      GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
+                    </span>{' '}
+                    and{' '}
+                    <span className="font-mono">
+                      GITHUB_ENTERPRISE_INTEGRATION_CLIENT_SECRET
+                    </span>
+                    . Please refer to the{' '}
                     <a className="underline" href={docsLink} target="_blank" rel="noreferrer">
                       Docs
                     </a>{' '}
-                    to correctly configure this option, or contact your admin.
+                    to configure this integration, or contact your admin.
                   </p>
                 </Alert>
               )}
 
+              <Input
+                value={name}
+                setValue={setName}
+                label="Name"
+                placeholder="GitHub OAuth credentials"
+                required
+                disabled={disabled}
+              />
               <Input
                 value={hostUrl}
                 setValue={setHostUrl}

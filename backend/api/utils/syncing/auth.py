@@ -3,7 +3,9 @@ from api.services import Providers
 from django.apps import apps
 
 
-def store_oauth_token(provider_id, access_token, host_url, api_url, org_id):
+def store_oauth_token(
+    provider_id, credential_name, access_token, host_url, api_url, org_id
+):
     Organisation = apps.get_model("api", "Organisation")
     ProviderCredentials = apps.get_model("api", "ProviderCredentials")
 
@@ -23,13 +25,9 @@ def store_oauth_token(provider_id, access_token, host_url, api_url, org_id):
 
     org = Organisation.objects.get(id=org_id)
 
-    provider_name = provider["name"]
-
-    name = f"{provider_name} OAuth credentials"
-
     credential = ProviderCredentials.objects.create(
         organisation=org,
-        name=name,
+        name=credential_name,
         provider=provider_id,
         credentials=credentials,
     )
