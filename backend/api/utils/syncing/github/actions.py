@@ -103,7 +103,7 @@ def check_rate_limit(access_token, api_host=GITHUB_CLOUD_API_URL):
     rate_limit = response.json().get("resources", {}).get("core", {})
     if rate_limit.get("remaining", 1) == 0:
         print(
-            f"Rate limit exceeded. Try again after {datetime.fromtimestamp(rate_limit.get('reset'))}."
+            f"Rate limit exceeded. Try again after {datetime.datetime.fromtimestamp(rate_limit.get('reset'))}."
         )
         return False
     return True
@@ -191,4 +191,7 @@ def sync_github_secrets(
     except json.JSONDecodeError:
         return False, {"message": "Error decoding JSON response"}
     except Exception as e:
+        import traceback
+
+        traceback.print_exc()
         return False, {"message": f"An unexpected error occurred: {str(e)}"}
