@@ -27,8 +27,8 @@ def get_mocked_response(url, *args, **kwargs):
     elif "/actions/secrets/public-key" in url:
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "key_id": "test-key-id",
-            "key": "test-public-key",
+            "key_id": "1380204578043523344",
+            "key": "V+kIG2GZl25Tlr9LC6uPA5EzVfrow9I3VcVCKFkkwVM=",
         }
         return mock_response
 
@@ -42,9 +42,8 @@ def get_mocked_response(url, *args, **kwargs):
 
 # Mock data
 MOCK_PUBLIC_KEY = base64.b64encode(b"A" * 32).decode("utf-8")
-MOCK_SECRET_VALUE = "super-secret-value"
 MOCK_ENCRYPTED_VALUE = base64.b64encode(b"encrypted").decode("utf-8")
-MOCK_ACCESS_TOKEN = "ghp_testtoken"
+MOCK_ACCESS_TOKEN = "ghp_x96ociStAXnGrAzhTrOJknn3vCzbqi1hsz4HR8iBPqk"
 MOCK_REPO = "demo-repo"
 MOCK_OWNER = "demo-owner"
 MOCK_API_HOST = "https://api.github.com"
