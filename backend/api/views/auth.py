@@ -166,16 +166,30 @@ def secrets_tokens(request):
 
 
 def github_integration_callback(request):
-    code = request.GET.get("code")
+    error = request.GET.get("error")
     state = request.GET.get("state")
 
+    # Safely decode the state so we always have the original returnUrl
     state_decoded = base64.b64decode(state).decode("utf-8")
     state = json.loads(state_decoded)
+    original_url = state.get("returnUrl", "/")
+
+    if error:
+        # User denied the OAuth consent
+        return redirect(
+            f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=access_denied"
+        )
+
+    code = request.GET.get("code")
+    if not code:
+        # Something went wrong (missing code)
+        return redirect(
+            f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=missing_code"
+        )
 
     is_enterprise = bool(state.get("isEnterprise", False))
     host_url = state.get("hostUrl", "https://github.com")
     api_url = state.get("apiUrl", "https://github.com")
-    original_url = state.get("returnUrl", "/")
     org_id = state.get("orgId")
 
     client_id = (
@@ -202,8 +216,12 @@ def github_integration_callback(request):
     )
 
     access_token = response.json().get("access_token")
+    if not access_token:
+        return redirect(
+            f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=token_exchange_failed"
+        )
 
     store_oauth_token("github", access_token, host_url, api_url, org_id)
 
-    # Redirect back to Next.js app with token and original URL
+    # Redirect back to Next.js app
     return redirect(f"{os.getenv('ALLOWED_ORIGINS')}{original_url}")
