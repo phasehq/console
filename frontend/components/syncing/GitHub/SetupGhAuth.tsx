@@ -69,6 +69,8 @@ export const SetupGhAuth = () => {
 
   const docsLink =
     'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-enterprise-self-hosted-integration'
+  const githubComDocsLink =
+    'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-integration'
 
   return (
     <form className="space-y-6" onSubmit={initiateOAuth}>
