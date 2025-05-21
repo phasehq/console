@@ -17,7 +17,11 @@ export const SetupGhAuth = () => {
 
   const path = usePathname()
 
+  const DEFAULT_NAME = 'GitHub OAuth credentials'
+  const DEFAULT_ENTERPRISE_NAME = 'GitHub Enterprise OAuth credentials'
+
   const [tabIndex, setTabIndex] = useState(0)
+  const [name, setName] = useState<string>(DEFAULT_NAME)
   const [hostUrl, setHostUrl] = useState<string>('https://github.com')
   const [apiUrl, setApiUrl] = useState<string>('https://api.github.com')
   const [isPending, setIsPending] = useState(false)
@@ -42,11 +46,10 @@ export const SetupGhAuth = () => {
       hostUrl,
       apiUrl,
       isEnterprise,
+      name,
     }
 
     const state = btoa(JSON.stringify(statePayload))
-
-    // Added prompt=consent so that the user can choose to provision access to GitHub assets (e.g. repositories, organizations, etc.) on subsequent authorization attempts.
 
     const authUrl = `${hostUrl}/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}&prompt=consent`
 
@@ -57,7 +60,9 @@ export const SetupGhAuth = () => {
     if (tabIndex === 0) {
       setHostUrl('https://github.com')
       setApiUrl('https://api.github.com')
-    }
+
+      setName(DEFAULT_NAME)
+    } else setName(DEFAULT_ENTERPRISE_NAME)
   }, [tabIndex])
 
   const disabled = !clientId || clientId?.includes('BAKED')
@@ -111,10 +116,19 @@ export const SetupGhAuth = () => {
           )}
 
           {tabIndex === 0 ? (
-            <div className="text-neutral-500">
+            <div className="text-neutral-500 space-y-4">
               {!isCloudHosted() && (
                 <p>Use OAuth to create authentication credentials on GitHub.com</p>
               )}
+
+              <Input
+                value={name}
+                setValue={setName}
+                label="Name"
+                placeholder="GitHub OAuth credentials"
+                required
+                disabled={disabled}
+              />
 
               {disabled && (
                 <Alert variant="danger" size="sm">
@@ -146,6 +160,14 @@ export const SetupGhAuth = () => {
                 </Alert>
               )}
 
+              <Input
+                value={name}
+                setValue={setName}
+                label="Name"
+                placeholder="GitHub OAuth credentials"
+                required
+                disabled={disabled}
+              />
               <Input
                 value={hostUrl}
                 setValue={setHostUrl}

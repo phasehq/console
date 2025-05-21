@@ -191,6 +191,7 @@ def github_integration_callback(request):
     host_url = state.get("hostUrl", "https://github.com")
     api_url = state.get("apiUrl", "https://github.com")
     org_id = state.get("orgId")
+    name = state.get("name")
 
     client_id = (
         os.getenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID")
@@ -221,7 +222,7 @@ def github_integration_callback(request):
             f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=token_exchange_failed"
         )
 
-    store_oauth_token("github", access_token, host_url, api_url, org_id)
+    store_oauth_token("github", name, access_token, host_url, api_url, org_id)
 
     # Redirect back to Next.js app
     return redirect(f"{os.getenv('ALLOWED_ORIGINS')}{original_url}")
