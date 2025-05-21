@@ -4,12 +4,8 @@ from api.utils.syncing.github.actions import (
     get_all_secrets,
     sync_github_secrets,
 )
-
-import pytest
 import base64
-from unittest.mock import patch, Mock, MagicMock
-
-import json
+from unittest.mock import patch, Mock
 
 
 def get_mocked_response(url, *args, **kwargs):
