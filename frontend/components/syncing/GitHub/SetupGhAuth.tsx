@@ -46,7 +46,9 @@ export const SetupGhAuth = () => {
 
     const state = btoa(JSON.stringify(statePayload))
 
-    const authUrl = `${hostUrl}/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`
+    // Added prompt=consent so that the user can choose to provision access to GitHub assets (e.g. repositories, organizations, etc.) on subsequent authorization attempts.
+
+    const authUrl = `${hostUrl}/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}&prompt=consent`
 
     window.open(authUrl, '_self')
   }
