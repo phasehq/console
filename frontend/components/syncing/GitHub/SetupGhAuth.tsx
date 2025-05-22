@@ -68,7 +68,7 @@ export const SetupGhAuth = () => {
   const disabled = !clientId || clientId?.includes('BAKED')
 
   const docsLink =
-    'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-enterprise-self-hosted-integration'
+    'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-enterprise-server-self-hosted-integration'
   const githubComDocsLink =
     'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-integration'
 
