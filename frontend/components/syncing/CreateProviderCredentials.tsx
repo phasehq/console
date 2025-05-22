@@ -105,8 +105,7 @@ export const CreateProviderCredentials = (props: {
       return 'https://docs.phase.dev/integrations/platforms/gitlab-ci'
     else if (provider.id === 'railway')
       return 'https://docs.phase.dev/integrations/platforms/railway'
-    else if (provider.id === 'vercel')
-      return 'https://docs.phase.dev/integrations/platforms/vercel'
+    else if (provider.id === 'vercel') return 'https://docs.phase.dev/integrations/platforms/vercel'
     else return 'https://docs.phase.dev/integrations'
   }
 
@@ -206,13 +205,11 @@ export const CreateProviderCredentials = (props: {
           <AWSRegionPicker onChange={(region) => handleCredentialChange('region', region)} />
         )}
 
-        {provider?.id === 'github' && <SetupGhAuth />}
-
         {provider && provider?.authScheme === 'token' && (
           <Input required value={name} setValue={(value) => setName(value)} label="Name" />
         )}
 
-        {provider && (
+        {provider && provider.authScheme !== 'oauth' && (
           <div className="flex justify-between">
             <Button variant="secondary" type="button" onClick={handleClickBack}>
               Back
@@ -224,6 +221,7 @@ export const CreateProviderCredentials = (props: {
           </div>
         )}
       </form>
+      {provider?.id === 'github' && <SetupGhAuth />}
     </>
   )
 }

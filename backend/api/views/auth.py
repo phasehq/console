@@ -165,22 +165,48 @@ def secrets_tokens(request):
         return JsonResponse({"error": "Invalid token type"}, status=403)
 
 
-def github_callback(request):
-    code = request.GET.get("code")
+def github_integration_callback(request):
+    error = request.GET.get("error")
     state = request.GET.get("state")
 
-    client_id = os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
-    client_secret = get_secret("GITHUB_INTEGRATION_CLIENT_SECRET")
-
+    # Safely decode the state so we always have the original returnUrl
     state_decoded = base64.b64decode(state).decode("utf-8")
     state = json.loads(state_decoded)
-
     original_url = state.get("returnUrl", "/")
+
+    if error:
+        # User denied the OAuth consent
+        return redirect(
+            f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=access_denied"
+        )
+
+    code = request.GET.get("code")
+    if not code:
+        # Something went wrong (missing code)
+        return redirect(
+            f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=missing_code"
+        )
+
+    is_enterprise = bool(state.get("isEnterprise", False))
+    host_url = state.get("hostUrl", "https://github.com")
+    api_url = state.get("apiUrl", "https://github.com")
     org_id = state.get("orgId")
+    name = state.get("name")
+
+    client_id = (
+        os.getenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID")
+        if is_enterprise
+        else os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
+    )
+    client_secret = (
+        get_secret("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_SECRET")
+        if is_enterprise
+        else get_secret("GITHUB_INTEGRATION_CLIENT_SECRET")
+    )
 
     # Exchange code for token
     response = requests.post(
-        "https://github.com/login/oauth/access_token",
+        f"{host_url}/login/oauth/access_token",
         headers={"Accept": "application/json"},
         data={
             "client_id": client_id,
@@ -191,8 +217,12 @@ def github_callback(request):
     )
 
     access_token = response.json().get("access_token")
+    if not access_token:
+        return redirect(
+            f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=token_exchange_failed"
+        )
 
-    store_oauth_token("github", access_token, org_id)
+    store_oauth_token("github", name, access_token, host_url, api_url, org_id)
 
-    # Redirect back to Next.js app with token and original URL
+    # Redirect back to Next.js app
     return redirect(f"{os.getenv('ALLOWED_ORIGINS')}{original_url}")

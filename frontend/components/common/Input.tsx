@@ -34,7 +34,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
           className={clsx(
             'custom w-full text-zinc-800 dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md',
             secret ? 'ph-no-capture' : '',
-            props.readOnly || props.disabled ? 'opacity-60' : ''
+            props.readOnly || props.disabled ? 'opacity-60 cursor-not-allowed' : ''
           )}
         />
         {secret && (

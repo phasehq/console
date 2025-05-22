@@ -50,7 +50,9 @@ export const ProviderCredentialPicker = (props: {
   }, [providerFilter, filteredCredentials, setDefault])
 
   const NewCredentialsLink = () => (
-    <Link href={`/${organisation!.name}/integrations${providerFilter ? `?provider=${providerFilter}` : ''}`}>
+    <Link
+      href={`/${organisation!.name}/integrations/credentials${providerFilter ? `?provider=${providerFilter}` : ''}`}
+    >
       <Button variant="secondary" onClick={newCredentialCallback}>
         <div className="flex items-center gap-2">
           <FaPlus /> Add service credentials

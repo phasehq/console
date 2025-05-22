@@ -479,7 +479,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   </div>
 
                   <div className="flex gap-4">
-                    <Link href={`/${organisation.name}/integrations`}>
+                    <Link href={`/${organisation.name}/integrations/syncs`}>
                       <Button variant="primary">Go to Integrations</Button>
                     </Link>
                     <Link

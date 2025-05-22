@@ -19,7 +19,7 @@ class Providers:
         "id": "github",
         "name": "GitHub",
         "expected_credentials": ["access_token"],
-        "optional_credentials": [],
+        "optional_credentials": ["host_url", "api_url"],
         "auth_scheme": "oauth",
     }
 
