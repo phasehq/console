@@ -16,8 +16,10 @@ import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
 import {
   FaArrowRight,
   FaBan,
+  FaCheckCircle,
   FaCheckSquare,
   FaChevronDown,
+  FaCircle,
   FaCog,
   FaPlus,
   FaSquare,
@@ -36,6 +38,7 @@ import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
+import GenericDialog from '@/components/common/GenericDialog'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { keyring } = useContext(KeyringContext)
@@ -193,237 +196,215 @@ export default function Members({ params }: { params: { team: string; app: strin
 
     return (
       <>
-        <div className="flex items-center justify-center">
-          <Button variant="primary" onClick={openModal} title="Add a member">
-            <FaPlus /> Add a member
-          </Button>
-        </div>
-
-        <Transition appear show={isOpen} as={Fragment}>
-          <Dialog as="div" className="relative z-10" onClose={closeModal}>
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0"
-              enterTo="opacity-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100"
-              leaveTo="opacity-0"
-            >
-              <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-            </Transition.Child>
-
-            <div className="fixed inset-0 overflow-y-auto">
-              <div className="flex min-h-full items-center justify-center p-4 text-center">
-                <Transition.Child
-                  as={Fragment}
-                  enter="ease-out duration-300"
-                  enterFrom="opacity-0 scale-95"
-                  enterTo="opacity-100 scale-100"
-                  leave="ease-in duration-200"
-                  leaveFrom="opacity-100 scale-100"
-                  leaveTo="opacity-0 scale-95"
-                >
-                  <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                    <Dialog.Title as="div" className="flex w-full justify-between">
-                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                        Add a member
-                      </h3>
-
-                      <Button variant="text" onClick={closeModal}>
-                        <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                      </Button>
-                    </Dialog.Title>
-
-                    {memberOptions.length === 0 ? (
-                      <div className="py-4">
-                        <Alert variant="info" icon={true}>
-                          <div className="flex flex-col gap-2">
-                            <p>
-                              All organisation members are added to this App. You can invite more
-                              users from the organisation members page.
-                            </p>
-                            <Link href={`/${params.team}/access/members`}>
-                              <Button variant="secondary">
-                                Go to Members <FaArrowRight />
-                              </Button>
-                            </Link>
+        <GenericDialog
+          title="Add a member"
+          buttonContent={
+            <>
+              <FaPlus /> Add a member
+            </>
+          }
+        >
+          {memberOptions.length === 0 ? (
+            <div className="py-4">
+              <Alert variant="info" icon={true}>
+                <div className="flex flex-col gap-2">
+                  <p>
+                    All organisation members are added to this App. You can invite more users from
+                    the organisation members page.
+                  </p>
+                  <Link href={`/${params.team}/access/members`}>
+                    <Button variant="secondary">
+                      Go to Members <FaArrowRight />
+                    </Button>
+                  </Link>
+                </div>
+              </Alert>
+            </div>
+          ) : (
+            <form className="space-y-6" onSubmit={handleAddMember}>
+              <p className="text-neutral-500 text-sm">
+                Select a member to add to this App, and choose the Environments that they will be
+                able to access.
+              </p>
+              <div className="relative">
+                <Combobox value={selectedMember} onChange={setSelectedMember}>
+                  {({ open }) => (
+                    <>
+                      <div className="space-y-1">
+                        <Combobox.Label as={Fragment}>
+                          <label className="block text-neutral-500 text-sm" htmlFor="user">
+                            Member
+                          </label>
+                        </Combobox.Label>
+                        <div className="w-full relative flex items-center text-sm">
+                          <Combobox.Input
+                            id="user"
+                            className="w-full"
+                            onChange={(event) => setQuery(event.target.value)}
+                            required
+                            placeholder="Select a member"
+                            displayValue={(person: OrganisationMemberType) =>
+                              person ? person?.fullName || person?.email! : ''
+                            }
+                          />
+                          <div className="absolute inset-y-0 right-2 flex items-center">
+                            <Combobox.Button>
+                              <FaChevronDown
+                                className={clsx(
+                                  'text-neutral-500 transform transition ease cursor-pointer',
+                                  open ? 'rotate-180' : 'rotate-0'
+                                )}
+                              />
+                            </Combobox.Button>
                           </div>
-                        </Alert>
+                        </div>
                       </div>
-                    ) : (
-                      <form className="space-y-6 p-4" onSubmit={handleAddMember}>
-                        <Combobox value={selectedMember} onChange={setSelectedMember}>
-                          {({ open }) => (
-                            <>
-                              <div className="space-y-1">
-                                <Combobox.Label as={Fragment}>
-                                  <label
-                                    className="block text-gray-700 text-sm font-bold"
-                                    htmlFor="name"
+                      <Transition
+                        enter="transition duration-100 ease-out"
+                        enterFrom="transform scale-95 opacity-0"
+                        enterTo="transform scale-100 opacity-100"
+                        leave="transition duration-75 ease-out"
+                        leaveFrom="transform scale-100 opacity-100"
+                        leaveTo="transform scale-95 opacity-0"
+                      >
+                        <Combobox.Options as={Fragment}>
+                          <div className="bg-neutral-200 dark:bg-neutral-800 p-1 rounded-b-md shadow-xl z-10 divide-y divide-neutral-500/20 absolute w-full max-h-96 overflow-y-auto ring-1 ring-inset ring-neutral-500/40">
+                            {filteredPeople.map((person: OrganisationMemberType) => (
+                              <Combobox.Option as={Fragment} key={person.id} value={person}>
+                                {({ active, selected }) => (
+                                  <div
+                                    className={clsx(
+                                      'flex items-center justify-between cursor-pointer transition ease',
+                                      active
+                                        ? 'text-zinc-900 dark:text-zinc-100 bg-neutral-100 dark:bg-neutral-700'
+                                        : 'text-zinc-700 dark:text-zinc-300'
+                                    )}
                                   >
-                                    User
-                                  </label>
-                                </Combobox.Label>
-                                <div className="w-full relative flex items-center">
-                                  <Combobox.Input
-                                    className="w-full"
-                                    onChange={(event) => setQuery(event.target.value)}
-                                    required
-                                    displayValue={(person: OrganisationMemberType) =>
-                                      person ? person?.fullName || person?.email! : 'Select a user'
-                                    }
-                                  />
-                                  <div className="absolute inset-y-0 right-2 flex items-center">
-                                    <Combobox.Button>
-                                      <FaChevronDown
-                                        className={clsx(
-                                          'text-neutral-500 transform transition ease cursor-pointer',
-                                          open ? 'rotate-180' : 'rotate-0'
-                                        )}
-                                      />
-                                    </Combobox.Button>
-                                  </div>
-                                </div>
-                              </div>
-                              <Transition
-                                enter="transition duration-100 ease-out"
-                                enterFrom="transform scale-95 opacity-0"
-                                enterTo="transform scale-100 opacity-100"
-                                leave="transition duration-75 ease-out"
-                                leaveFrom="transform scale-100 opacity-100"
-                                leaveTo="transform scale-95 opacity-0"
-                              >
-                                <Combobox.Options as={Fragment}>
-                                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20">
-                                    {filteredPeople.map((person: OrganisationMemberType) => (
-                                      <Combobox.Option key={person.id} value={person}>
-                                        {({ active, selected }) => (
-                                          <div
-                                            className={clsx(
-                                              'flex items-center gap-2 p-1 cursor-pointer',
-                                              active && 'font-semibold'
-                                            )}
-                                          >
-                                            <Avatar member={person} size="sm" />
-                                            <span className="text-black dark:text-white">
-                                              {person.fullName || person.email}
-                                            </span>
+                                    <div className={clsx('flex items-center gap-2 p-1 text-sm')}>
+                                      <Avatar member={person} size="md" />
+                                      <div>
+                                        <div className="font-semibold">
+                                          {person.fullName || person.email}
+                                        </div>
+                                        {person.fullName && (
+                                          <div className="text-neutral-500 text-xs leading-4">
+                                            {person.email}
                                           </div>
                                         )}
-                                      </Combobox.Option>
-                                    ))}
-                                  </div>
-                                </Combobox.Options>
-                              </Transition>
-                            </>
-                          )}
-                        </Combobox>
-
-                        {userCanReadEnvironments ? (
-                          <div className="space-y-1 w-full relative pb-8">
-                            {envScope.length === 0 && showEnvHint && (
-                              <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
-                                Select an environment scope
-                              </span>
-                            )}
-                            <Listbox
-                              value={envScope}
-                              by="id"
-                              onChange={setEnvScope}
-                              multiple
-                              name="environments"
-                            >
-                              {({ open }) => (
-                                <>
-                                  <Listbox.Label as={Fragment}>
-                                    <label
-                                      className="block text-gray-700 text-sm font-bold mb-2"
-                                      htmlFor="name"
-                                    >
-                                      Environment scope
-                                    </label>
-                                  </Listbox.Label>
-                                  <Listbox.Button as={Fragment} aria-required>
-                                    <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
-                                      <span className="text-black dark:text-white">
-                                        {envScope
-                                          .map((env: Partial<EnvironmentType>) => env.name)
-                                          .join(' + ')}
-                                      </span>
-                                      <FaChevronDown
-                                        className={clsx(
-                                          'transition-transform ease duration-300 text-neutral-500',
-                                          open ? 'rotate-180' : 'rotate-0'
-                                        )}
-                                      />
-                                    </div>
-                                  </Listbox.Button>
-                                  <Transition
-                                    enter="transition duration-100 ease-out"
-                                    enterFrom="transform scale-95 opacity-0"
-                                    enterTo="transform scale-100 opacity-100"
-                                    leave="transition duration-75 ease-out"
-                                    leaveFrom="transform scale-100 opacity-100"
-                                    leaveTo="transform scale-95 opacity-0"
-                                  >
-                                    <Listbox.Options>
-                                      <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full">
-                                        {envOptions.map((env: Partial<EnvironmentType>) => (
-                                          <Listbox.Option key={env.id} value={env} as={Fragment}>
-                                            {({ active, selected }) => (
-                                              <div
-                                                className={clsx(
-                                                  'flex items-center gap-2 p-1 cursor-pointer',
-                                                  active && 'font-semibold'
-                                                )}
-                                              >
-                                                {selected ? (
-                                                  <FaCheckSquare className="text-emerald-500" />
-                                                ) : (
-                                                  <FaSquare />
-                                                )}
-                                                <span className="text-black dark:text-white">
-                                                  {env.name}
-                                                </span>
-                                              </div>
-                                            )}
-                                          </Listbox.Option>
-                                        ))}
                                       </div>
-                                    </Listbox.Options>
-                                  </Transition>
-                                </>
-                              )}
-                            </Listbox>
+                                    </div>
+                                    <div className="px-2">
+                                      {selected && <FaCheckCircle className="text-emerald-500" />}
+                                    </div>
+                                  </div>
+                                )}
+                              </Combobox.Option>
+                            ))}
                           </div>
-                        ) : (
-                          <Alert variant="danger" icon={true} size="sm">
-                            You don&apos;t have permission to read Environments. This permission is
-                            required to set an environment scope for users in this App.
-                          </Alert>
-                        )}
-
-                        <div className="flex items-center gap-4">
-                          <Button variant="secondary" type="button" onClick={closeModal}>
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="primary"
-                            type="submit"
-                            disabled={envScope.length === 0 || selectedMember === null}
-                          >
-                            Add
-                          </Button>
-                        </div>
-                      </form>
-                    )}
-                  </Dialog.Panel>
-                </Transition.Child>
+                        </Combobox.Options>
+                      </Transition>
+                    </>
+                  )}
+                </Combobox>
               </div>
-            </div>
-          </Dialog>
-        </Transition>
+
+              {userCanReadEnvironments ? (
+                <div className="space-y-1 w-full relative">
+                  {envScope.length === 0 && showEnvHint && (
+                    <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
+                      Select an environment scope
+                    </span>
+                  )}
+                  <Listbox
+                    by="id"
+                    value={envScope}
+                    onChange={setEnvScope}
+                    multiple
+                    name="environments"
+                  >
+                    {({ open }) => (
+                      <>
+                        <Listbox.Label as={Fragment}>
+                          <label className="block text-neutral-500 text-sm" htmlFor="envs">
+                            Environment scope
+                          </label>
+                        </Listbox.Label>
+                        <Listbox.Button as={Fragment} aria-required>
+                          <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
+                            <span className="text-zinc-900 dark:text-zinc-100 text-sm">
+                              {envScope
+                                .map((env: Partial<EnvironmentType>) => env.name)
+                                .join(' + ')}
+                            </span>
+                            <FaChevronDown
+                              className={clsx(
+                                'transition-transform ease duration-300 text-neutral-500',
+                                open ? 'rotate-180' : 'rotate-0'
+                              )}
+                            />
+                          </div>
+                        </Listbox.Button>
+                        <Transition
+                          enter="transition duration-100 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-75 ease-out"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          <Listbox.Options>
+                            <div className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full divide-y divide-neutral-500/20">
+                              {envOptions.map((env: Partial<EnvironmentType>) => (
+                                <Listbox.Option key={env.id} value={env} as={Fragment}>
+                                  {({ active, selected }) => (
+                                    <div
+                                      className={clsx(
+                                        'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-sm transition ease',
+                                        active
+                                          ? 'text-zinc-900 dark:text-zinc-100 bg-neutral-100 dark:bg-neutral-700'
+                                          : '',
+                                        selected && 'text-zinc-900 dark:text-zinc-100'
+                                      )}
+                                    >
+                                      {selected ? (
+                                        <FaCheckCircle className="text-emerald-500" />
+                                      ) : (
+                                        <FaCircle />
+                                      )}
+                                      <div>{env.name}</div>
+                                    </div>
+                                  )}
+                                </Listbox.Option>
+                              ))}
+                            </div>
+                          </Listbox.Options>
+                        </Transition>
+                      </>
+                    )}
+                  </Listbox>
+                </div>
+              ) : (
+                <Alert variant="danger" icon={true} size="sm">
+                  You don&apos;t have permission to read Environments. This permission is required
+                  to set an environment scope for members in this App.
+                </Alert>
+              )}
+
+              <div className="flex items-center gap-4">
+                <Button variant="secondary" type="button" onClick={closeModal}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={envScope.length === 0 || selectedMember === null}
+                >
+                  Add
+                </Button>
+              </div>
+            </form>
+          )}
+        </GenericDialog>
       </>
     )
   }
