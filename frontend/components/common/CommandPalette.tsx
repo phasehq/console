@@ -109,7 +109,7 @@ const CommandPalette: React.FC = () => {
       name: 'Go to Integrations',
       description: 'Manage integrations',
       icon: <FaProjectDiagram />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations`),
+      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations/syncs`),
     },
     {
       id: 'go-pat',
