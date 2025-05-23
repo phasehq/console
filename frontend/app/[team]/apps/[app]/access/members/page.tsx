@@ -8,7 +8,7 @@ import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { OrganisationMemberType, EnvironmentType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -194,6 +194,8 @@ export default function Members({ params }: { params: { team: string; app: strin
       toast.success('Added member to App', { autoClose: 2000 })
     }
 
+    const comboboxButtonRef = useRef<HTMLButtonElement | null>(null)
+
     return (
       <>
         <GenericDialog
@@ -241,6 +243,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                             id="user"
                             className="w-full"
                             onChange={(event) => setQuery(event.target.value)}
+                            onFocus={() => comboboxButtonRef.current?.click()}
                             required
                             placeholder="Select a member"
                             displayValue={(person: OrganisationMemberType) =>
@@ -248,7 +251,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                             }
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
-                            <Combobox.Button>
+                            <Combobox.Button ref={comboboxButtonRef}>
                               <FaChevronDown
                                 className={clsx(
                                   'text-neutral-500 transform transition ease cursor-pointer',
