@@ -243,7 +243,7 @@ export const ManageUserAccessDialog = ({
                       leaveTo="transform scale-95 opacity-0"
                     >
                       <Listbox.Options>
-                        <div className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full divide-y divide-neutral-500/20">
+                        <div className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full divide-y divide-neutral-500/20">
                           {envOptions.map((env: Partial<EnvironmentType>) => (
                             <Listbox.Option key={env.id} value={env} as={Fragment}>
                               {({ active, selected }) => (

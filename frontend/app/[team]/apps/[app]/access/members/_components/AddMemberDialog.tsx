@@ -32,6 +32,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const comboboxButtonRef = useRef<HTMLButtonElement | null>(null)
 
   // Permissions
   const userCanReadAppMembers = organisation
@@ -164,8 +165,6 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
     toast.success('Added member to App', { autoClose: 2000 })
   }
 
-  const comboboxButtonRef = useRef<HTMLButtonElement | null>(null)
-
   return (
     <>
       <GenericDialog
@@ -214,7 +213,8 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                           id="user"
                           className="w-full"
                           onChange={(event) => setQuery(event.target.value)}
-                          onFocus={() => comboboxButtonRef.current?.click()}
+                          onClick={() => (!open ? comboboxButtonRef.current?.click() : {})}
+                          onFocus={() => (!open ? comboboxButtonRef.current?.click() : {})}
                           required
                           placeholder="Select a member"
                           displayValue={(person: OrganisationMemberType) =>
