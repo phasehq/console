@@ -54,6 +54,7 @@ import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
 import { duplicateKeysExist } from '@/utils/secrets'
+import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -151,6 +152,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         normalizeValues(clientSecret.envs.map((env) => env.secret?.value))
       )
     })
+
+  useWarnIfUnsavedChanges(unsavedChanges)
 
   const { appEnvironments, appSecrets, appFolders, fetching, refetch } = useAppSecrets(
     app,

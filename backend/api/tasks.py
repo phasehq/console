@@ -237,12 +237,17 @@ def perform_cloudflare_pages_sync(environment_sync):
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_github_actions_sync(environment_sync):
 
-    access_token = get_gh_actions_credentials(environment_sync)
+    access_token, api_host = get_gh_actions_credentials(environment_sync)
     repo_name = environment_sync.options.get("repo_name")
     repo_owner = environment_sync.options.get("owner")
 
     handle_sync_event(
-        environment_sync, sync_github_secrets, access_token, repo_name, repo_owner
+        environment_sync,
+        sync_github_secrets,
+        access_token,
+        repo_name,
+        repo_owner,
+        api_host,
     )
 
 

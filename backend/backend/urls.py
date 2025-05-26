@@ -5,7 +5,12 @@ from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
 from api.views.graphql import PrivateGraphQLView
 from api.views.secrets import E2EESecretsView, PublicSecretsView
-from api.views.auth import logout_view, health_check, github_callback, secrets_tokens
+from api.views.auth import (
+    logout_view,
+    health_check,
+    github_integration_callback,
+    secrets_tokens,
+)
 from api.views.kms import kms
 
 
@@ -23,7 +28,7 @@ urlpatterns = [
     path("secrets/", E2EESecretsView.as_view()),
     path("public/v1/secrets/", PublicSecretsView.as_view()),
     path("secrets/tokens/", secrets_tokens),
-    path("oauth/github/callback", github_callback),
+    path("oauth/github/callback", github_integration_callback),
     path("lockbox/<box_id>", LockboxView.as_view()),
 ]
 
