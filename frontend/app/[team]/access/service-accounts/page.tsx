@@ -39,7 +39,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
   const filteredAccounts = data?.serviceAccounts
     ? searchQuery !== ''
       ? data?.serviceAccounts.filter((account: ServiceAccountType) =>
-          account.name?.includes(searchQuery)
+          account.name?.toLowerCase().includes(searchQuery.toLowerCase())
         )
       : data?.serviceAccounts
     : []

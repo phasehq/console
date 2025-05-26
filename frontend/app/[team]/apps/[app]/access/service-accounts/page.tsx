@@ -2,10 +2,10 @@
 
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
 import { useQuery } from '@apollo/client'
-import { useContext } from 'react'
+import { useContext, useState } from 'react'
 import { ServiceAccountType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
-import { FaBan, FaRobot } from 'react-icons/fa'
+import { FaBan, FaRobot, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import { userHasPermission } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -13,9 +13,13 @@ import Spinner from '@/components/common/Spinner'
 import { AddAccountDialog } from './_components/AddAccountDialog'
 import { RemoveAccountConfirmDialog } from './_components/RemoveAccountDialog'
 import { ManageAccountAccessDialog } from './_components/ManageAccountAccessDialog'
+import { MdSearchOff } from 'react-icons/md'
+import clsx from 'clsx'
 
 export default function ServiceAccounts({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Permissions
   const userCanReadAppSA = organisation
@@ -36,6 +40,14 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
     skip: !userCanReadAppSA,
   })
 
+  const filteredAccounts = data?.appServiceAccounts
+    ? searchQuery !== ''
+      ? data?.appServiceAccounts.filter((account: ServiceAccountType) =>
+          account.name?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : data?.appServiceAccounts
+    : []
+
   if (!organisation || loading)
     return (
       <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
@@ -47,15 +59,37 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
     <div className="w-full space-y-6 text-black dark:text-white">
       <div className="px-4">
         <h2 className="text-xl font-bold">Service Accounts</h2>
-        <div className="text-neutral-500">Manage access for service accounts to this App</div>
+        <div className="text-neutral-500">Manage access for service accounts in this App</div>
       </div>
       {userCanReadAppSA ? (
         <div className="space-y-4">
-          {userCanAddAppSA && data?.appServiceAccounts.length > 0 && (
-            <div className="flex justify-end">
-              <AddAccountDialog appId={params.app} />
+          <div className="flex items-center justify-between pl-4">
+            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
+              <div className="">
+                <FaSearch className="text-neutral-500" />
+              </div>
+              <input
+                placeholder="Search"
+                className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <FaTimesCircle
+                className={clsx(
+                  'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                  searchQuery ? 'opacity-100' : 'opacity-0'
+                )}
+                role="button"
+                onClick={() => setSearchQuery('')}
+              />
             </div>
-          )}
+
+            {userCanAddAppSA && data?.appServiceAccounts.length > 0 && (
+              <div className="flex justify-end">
+                <AddAccountDialog appId={params.app} />
+              </div>
+            )}
+          </div>
 
           {data?.appServiceAccounts.length === 0 ? (
             <EmptyState
@@ -86,7 +120,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-500/20">
-                {data?.appServiceAccounts.map((account: ServiceAccountType) => (
+                {filteredAccounts.map((account: ServiceAccountType) => (
                   <tr className="group" key={account.id}>
                     <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
                       <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-12">
@@ -126,6 +160,20 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
               <FaBan />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
+      )}
+
+      {searchQuery && filteredAccounts.length === 0 && (
+        <EmptyState
+          title={`No results for "${searchQuery}"`}
+          subtitle="Try adjusting your search term"
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <MdSearchOff />
             </div>
           }
         >

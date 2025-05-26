@@ -194,7 +194,7 @@ export default function Members({ params }: { params: { team: string } }) {
   const filteredInvites =
     searchQuery !== ''
       ? sortedInvites.filter((invite: OrganisationMemberInviteType) =>
-          invite.inviteeEmail?.includes(searchQuery)
+          invite.inviteeEmail.toLowerCase()?.includes(searchQuery.toLowerCase())
         )
       : sortedInvites
 

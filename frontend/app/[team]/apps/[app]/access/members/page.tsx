@@ -2,10 +2,10 @@
 
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { useQuery } from '@apollo/client'
-import { useContext } from 'react'
+import { useContext, useState } from 'react'
 import { OrganisationMemberType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
-import { FaBan } from 'react-icons/fa'
+import { FaBan, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -15,9 +15,13 @@ import Spinner from '@/components/common/Spinner'
 import { AddMemberDialog } from './_components/AddMemberDialog'
 import { RemoveMemberConfirmDialog } from './_components/RemoveMemberDialog'
 import { ManageUserAccessDialog } from './_components/ManageUserAccessDialog'
+import clsx from 'clsx'
+import { MdSearchOff } from 'react-icons/md'
 
 export default function Members({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Permissions
   const userCanReadAppMembers = organisation
@@ -40,6 +44,16 @@ export default function Members({ params }: { params: { team: string; app: strin
 
   const { data: session } = useSession()
 
+  const filteredMembers = data?.appUsers
+    ? searchQuery !== ''
+      ? data?.appUsers.filter(
+          (member: OrganisationMemberType) =>
+            member.fullName?.toLowerCase().includes(searchQuery) ||
+            member.email?.includes(searchQuery.toLowerCase())
+        )
+      : data?.appUsers
+    : []
+
   if (!organisation || loading)
     return (
       <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
@@ -51,15 +65,37 @@ export default function Members({ params }: { params: { team: string; app: strin
     <div className="w-full space-y-6 text-black dark:text-white">
       <div className="px-4">
         <h2 className="text-xl font-bold">Members</h2>
-        <div className="text-neutral-500">Manage access for human users to this App</div>
+        <div className="text-neutral-500">Manage access for human users in this App</div>
       </div>
       {userCanReadAppMembers ? (
         <div className="space-y-4">
-          {userCanAddAppMembers && (
-            <div className="flex justify-end">
-              <AddMemberDialog appId={params.app} />
+          <div className="flex items-center justify-between pl-4">
+            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2  w-full max-w-sm">
+              <div className="">
+                <FaSearch className="text-neutral-500" />
+              </div>
+              <input
+                placeholder="Search"
+                className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <FaTimesCircle
+                className={clsx(
+                  'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                  searchQuery ? 'opacity-100' : 'opacity-0'
+                )}
+                role="button"
+                onClick={() => setSearchQuery('')}
+              />
             </div>
-          )}
+
+            {userCanAddAppMembers && (
+              <div className="flex justify-end">
+                <AddMemberDialog appId={params.app} />
+              </div>
+            )}
+          </div>
 
           <table className="table-auto min-w-full divide-y divide-zinc-500/40">
             <thead>
@@ -75,7 +111,7 @@ export default function Members({ params }: { params: { team: string; app: strin
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-500/20">
-              {data?.appUsers.map((member: OrganisationMemberType) => (
+              {filteredMembers.map((member: OrganisationMemberType) => (
                 <tr className="group" key={member.id}>
                   <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
                     <Avatar member={member} size="lg" />
@@ -116,6 +152,20 @@ export default function Members({ params }: { params: { team: string; app: strin
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
               <FaBan />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
+      )}
+
+      {searchQuery && filteredMembers?.length === 0 && (
+        <EmptyState
+          title={`No results for "${searchQuery}"`}
+          subtitle="Try adjusting your search term"
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <MdSearchOff />
             </div>
           }
         >
