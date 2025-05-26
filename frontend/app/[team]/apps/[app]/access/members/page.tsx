@@ -64,26 +64,24 @@ export default function Members({ params }: { params: { team: string; app: strin
           <table className="table-auto min-w-full divide-y divide-zinc-500/40">
             <thead>
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   User
                 </th>
 
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Environment Access
                 </th>
-                {userCanRemoveAppMembers && <th className="px-6 py-3"></th>}
+                {userCanRemoveAppMembers && <th className="px-6 py-2"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-500/20">
               {data?.appUsers.map((member: OrganisationMemberType) => (
                 <tr className="group" key={member.id}>
-                  <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                  <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
                     <Avatar member={member} size="lg" />
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg font-medium">
-                          {member.fullName || member.email}
-                        </span>
+                        <span className="font-medium">{member.fullName || member.email}</span>
                         <RoleLabel role={member.role!} />
                       </div>
                       {member.fullName && (
@@ -92,12 +90,12 @@ export default function Members({ params }: { params: { team: string; app: strin
                     </div>
                   </td>
 
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-2">
                     <ManageUserAccessDialog appId={params.app} member={member} />
                   </td>
 
                   {userCanRemoveAppMembers && (
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-2">
                       {member.email !== session?.user?.email &&
                         member.role!.name!.toLowerCase() !== 'owner' && (
                           <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">

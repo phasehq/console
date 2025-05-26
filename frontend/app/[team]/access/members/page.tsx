@@ -174,13 +174,13 @@ export default function Members({ params }: { params: { team: string } }) {
     )
   }
 
-  const filteredMembers = membersData.organisationMembers
+  const filteredMembers = membersData?.organisationMembers
     ? searchQuery !== ''
-      ? membersData.organisationMembers.filter(
+      ? membersData?.organisationMembers.filter(
           (member: OrganisationMemberType) =>
             member.fullName?.includes(searchQuery) || member.email?.includes(searchQuery)
         )
-      : membersData.organisationMembers
+      : membersData?.organisationMembers
     : []
 
   const sortedInvites: OrganisationMemberInviteType[] =

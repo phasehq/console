@@ -75,11 +75,11 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
             <table className="table-auto min-w-full divide-y divide-zinc-500/40">
               <thead>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Account
                   </th>
 
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Environment Access
                   </th>
                   {userCanRemoveAppSA && <th className="px-6 py-3"></th>}
@@ -88,26 +88,26 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
               <tbody className="divide-y divide-neutral-500/20">
                 {data?.appServiceAccounts.map((account: ServiceAccountType) => (
                   <tr className="group" key={account.id}>
-                    <td className="px-6 py-4 whitespace-nowrap flex items-center gap-2">
+                    <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
                       <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-12">
                         <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
                       </div>
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg font-medium">{account.name}</span>
+                          <span className="font-medium">{account.name}</span>
                           <RoleLabel role={account.role!} />
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-3">
                       <div className="flex items-center gap-2 ">
                         <ManageAccountAccessDialog appId={params.app} account={account} />
                       </div>
                     </td>
 
                     {userCanRemoveAppSA && (
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-3">
                         <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
                           <RemoveAccountConfirmDialog appId={params.app} account={account} />
                         </div>
