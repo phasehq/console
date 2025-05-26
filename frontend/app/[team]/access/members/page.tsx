@@ -10,7 +10,16 @@ import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
-import { FaBan, FaCopy, FaTimes, FaTrashAlt, FaUserAlt, FaChevronRight } from 'react-icons/fa'
+import {
+  FaBan,
+  FaCopy,
+  FaTimes,
+  FaTrashAlt,
+  FaUserAlt,
+  FaChevronRight,
+  FaSearch,
+  FaTimesCircle,
+} from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { copyToClipBoard } from '@/utils/clipboard'
@@ -22,6 +31,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { InviteDialog } from './_components/InviteDialog'
+import { MdSearchOff } from 'react-icons/md'
 
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
@@ -34,6 +44,8 @@ const inviteIsExpired = (invite: OrganisationMemberInviteType) => {
 
 export default function Members({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const [searchQuery, setSearchQuery] = useState('')
 
   const userCanInviteMembers = organisation
     ? userHasPermission(organisation.role!.permissions, 'Members', 'create')
@@ -61,14 +73,6 @@ export default function Members({ params }: { params: { team: string } }) {
   })
 
   const [deleteInvite] = useMutation(DeleteOrgInvite)
-
-  const sortedInvites: OrganisationMemberInviteType[] =
-    invitesData?.organisationInvites
-      ?.slice() // Create a shallow copy of the array to avoid modifying the original
-      .sort((a: OrganisationMemberInviteType, b: OrganisationMemberInviteType) => {
-        // Compare the createdAt timestamps in descending order
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      }) || []
 
   //const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
 
@@ -170,6 +174,30 @@ export default function Members({ params }: { params: { team: string } }) {
     )
   }
 
+  const filteredMembers = membersData.organisationMembers
+    ? searchQuery !== ''
+      ? membersData.organisationMembers.filter(
+          (member: OrganisationMemberType) =>
+            member.fullName?.includes(searchQuery) || member.email?.includes(searchQuery)
+        )
+      : membersData.organisationMembers
+    : []
+
+  const sortedInvites: OrganisationMemberInviteType[] =
+    invitesData?.organisationInvites
+      ?.slice() // Create a shallow copy of the array to avoid modifying the original
+      .sort((a: OrganisationMemberInviteType, b: OrganisationMemberInviteType) => {
+        // Compare the createdAt timestamps in descending order
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      }) || []
+
+  const filteredInvites =
+    searchQuery !== ''
+      ? sortedInvites.filter((invite: OrganisationMemberInviteType) =>
+          invite.inviteeEmail?.includes(searchQuery)
+        )
+      : sortedInvites
+
   if (!organisation)
     return (
       <div className="flex items-center justify-center p-10">
@@ -185,11 +213,33 @@ export default function Members({ params }: { params: { team: string } }) {
           <p className="text-neutral-500">Manage organisation members and roles.</p>
         </div>
         <div className="space-y-4">
-          {userCanInviteMembers && (
-            <div className="flex justify-end">
-              <InviteDialog organisationId={organisation!.id} />
+          <div className="flex items-center justify-between">
+            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
+              <div className="">
+                <FaSearch className="text-neutral-500" />
+              </div>
+              <input
+                placeholder="Search"
+                className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <FaTimesCircle
+                className={clsx(
+                  'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                  searchQuery ? 'opacity-100' : 'opacity-0'
+                )}
+                role="button"
+                onClick={() => setSearchQuery('')}
+              />
             </div>
-          )}
+
+            {userCanInviteMembers && (
+              <div className="flex justify-end">
+                <InviteDialog organisationId={organisation!.id} />
+              </div>
+            )}
+          </div>
 
           {userCanReadMembers && membersData ? (
             <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
@@ -208,7 +258,7 @@ export default function Members({ params }: { params: { team: string } }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-500/20">
-                {membersData.organisationMembers.map((member: OrganisationMemberType) => (
+                {filteredMembers.map((member: OrganisationMemberType) => (
                   <tr key={member.id} className="group">
                     <td className="py-2 flex items-center gap-2">
                       <Avatar member={member} size="md" />
@@ -236,7 +286,7 @@ export default function Members({ params }: { params: { team: string } }) {
                     </td>
                   </tr>
                 ))}
-                {sortedInvites.map((invite: OrganisationMemberInviteType) => (
+                {filteredInvites.map((invite: OrganisationMemberInviteType) => (
                   <tr key={invite.id} className="opacity-60">
                     <td className="py-2 flex items-center gap-2">
                       <div className="flex rounded-full items-center justify-center h-10 w-10 bg-neutral-500">
@@ -293,6 +343,20 @@ export default function Members({ params }: { params: { team: string } }) {
               graphic={
                 <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                   <FaBan />
+                </div>
+              }
+            >
+              <></>
+            </EmptyState>
+          )}
+
+          {searchQuery && filteredMembers?.length === 0 && filteredInvites.length === 0 && (
+            <EmptyState
+              title={`No results for "${searchQuery}"`}
+              subtitle="Try adjusting your search term"
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <MdSearchOff />
                 </div>
               }
             >
