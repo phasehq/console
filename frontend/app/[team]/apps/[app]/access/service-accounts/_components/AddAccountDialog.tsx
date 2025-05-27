@@ -3,7 +3,7 @@ import { BulkAddMembersToApp } from '@/graphql/mutations/apps/bulkAddAppMembers.
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
-import { useLazyQuery, useMutation, useMutation, useQuery } from '@apollo/client'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { EnvironmentType, ServiceAccountType, MemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
