@@ -207,11 +207,11 @@ export const InviteDialog = (props: { organisationId: string }) => {
           </>
         }
       >
-        <div className="space-y-4 divide-y divide-neutral-500/40 max-h-[90vh] overflow-y-auto">
+        <div className="space-y-4 divide-y divide-neutral-500/40 h-full ">
           <p className="text-neutral-500">Invite users to your Organisation.</p>
           <div>
             {inviteLinks.length === 0 && (
-              <form className="space-y-8 py-4" onSubmit={handleInvite}>
+              <form className="space-y-6 pt-4" onSubmit={handleInvite}>
                 {errorMessage && (
                   <Alert variant="danger" icon={true}>
                     {errorMessage}
@@ -307,7 +307,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   <FaPlus /> Add another member
                 </Button>
 
-                <div className="col-span-2 flex items-center gap-4 justify-end">
+                <div className="col-span-2 flex items-center gap-4 justify-between">
                   <Button variant="secondary" type="button" onClick={closeModal}>
                     Cancel
                   </Button>

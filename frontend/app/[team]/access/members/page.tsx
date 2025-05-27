@@ -12,18 +12,18 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
 import {
   FaBan,
-  FaCopy,
   FaTimes,
   FaTrashAlt,
   FaUserAlt,
   FaChevronRight,
   FaSearch,
   FaTimesCircle,
+  FaLink,
+  FaHourglass,
+  FaHourglassHalf,
 } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { copyToClipBoard } from '@/utils/clipboard'
-import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { getInviteLink } from '@/utils/crypto'
@@ -32,11 +32,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { InviteDialog } from './_components/InviteDialog'
 import { MdSearchOff } from 'react-icons/md'
-
-const handleCopy = (val: string) => {
-  copyToClipBoard(val)
-  toast.info('Copied', { autoClose: 2000 })
-}
+import CopyButton from '@/components/common/CopyButton'
 
 const inviteIsExpired = (invite: OrganisationMemberInviteType) => {
   return new Date(invite.expiresAt) < new Date()
@@ -287,15 +283,14 @@ export default function Members({ params }: { params: { team: string } }) {
                   </tr>
                 ))}
                 {filteredInvites.map((invite: OrganisationMemberInviteType) => (
-                  <tr key={invite.id} className="opacity-60">
-                    <td className="py-2 flex items-center gap-2">
-                      <div className="flex rounded-full items-center justify-center h-10 w-10 bg-neutral-500">
-                        <FaUserAlt />
-                      </div>
+                  <tr key={invite.id}>
+                    <td className="py-3 flex items-center gap-2 opacity-60">
+                      <Avatar user={{ email: invite.inviteeEmail }} size="md" />
+
                       <div>
                         <div className="font-medium">
                           {invite.inviteeEmail}{' '}
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-neutral-500">
                             (invited by{' '}
                             {invite.invitedBy.self
                               ? 'You'
@@ -305,30 +300,26 @@ export default function Members({ params }: { params: { team: string } }) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-2 text-sm">
+                    <td className="px-6 py-2 text-sm opacity-60">
                       {invite.role && <RoleLabel role={invite.role} />}
                     </td>
                     <td
                       className={clsx(
-                        'px-6 py-2 text-sm',
-                        inviteIsExpired(invite) && 'text-red-500'
+                        'px-6 py-3 text-sm',
+                        inviteIsExpired(invite) ? 'text-red-500' : 'text-amber-500'
                       )}
                     >
                       {inviteIsExpired(invite)
                         ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
                         : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
                     </td>
-                    <td className="px-6 py-2 flex items-center justify-end gap-2">
+                    <td className="px-6 py-3 flex items-center justify-end gap-2">
                       {!inviteIsExpired(invite) && (
-                        <Button
-                          variant="outline"
-                          title="Copy invite link"
-                          onClick={() => handleCopy(getInviteLink(invite.id))}
-                        >
-                          <div className="p-1">
-                            <FaCopy />
+                        <CopyButton value={getInviteLink(invite.id)}>
+                          <div className="flex items-center gap-2">
+                            <FaLink /> Invite link
                           </div>
-                        </Button>
+                        </CopyButton>
                       )}
                       <DeleteInviteConfirmDialog inviteId={invite.id} />
                     </td>
