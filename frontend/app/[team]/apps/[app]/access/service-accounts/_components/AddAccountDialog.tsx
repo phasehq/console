@@ -1,43 +1,30 @@
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
-import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
-import RemoveMemberFromApp from '@/graphql/mutations/apps/removeAppMember.gql'
-import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
+import { BulkAddMembersToApp } from '@/graphql/mutations/apps/bulkAddAppMembers.gql'
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useLazyQuery, useMutation, useMutation, useQuery } from '@apollo/client'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { EnvironmentType, ServiceAccountType, MemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Combobox, Dialog, Listbox, Transition } from '@headlessui/react'
+import { Combobox, Listbox, Transition } from '@headlessui/react'
 import {
   FaArrowRight,
   FaAsterisk,
-  FaBan,
   FaCheckCircle,
-  FaCheckSquare,
   FaChevronDown,
   FaCircle,
-  FaCog,
-  FaKey,
   FaPlus,
   FaRobot,
-  FaSquare,
-  FaTimes,
-  FaTrash,
 } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
-import { useSession } from 'next-auth/react'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
-import { RoleLabel } from '@/components/users/RoleLabel'
+import { userHasPermission } from '@/utils/access/permissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
-import { EmptyState } from '@/components/common/EmptyState'
-import Spinner from '@/components/common/Spinner'
 import { useSearchParams } from 'next/navigation'
 import GenericDialog from '@/components/common/GenericDialog'
 
@@ -64,14 +51,6 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create', true) &&
       userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
     : false
-  const userCanRemoveAppSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete', true)
-    : false
-  // AppMembers:update + Environments:read
-  const userCanUpdateSAAccess = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update', true) &&
-      userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
-    : false
 
   const { data: serviceAccountsData } = useQuery(GetServiceAccounts, {
     variables: {
@@ -95,7 +74,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
           .includes(account.id)
     ) ?? []
 
-  const [addMember] = useMutation(AddMemberToApp)
+  const [bulkAddMembers] = useMutation(BulkAddMembersToApp)
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
@@ -114,7 +93,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       }
     }) ?? []
 
-  const [selectedAccount, setSelectedAccount] = useState<ServiceAccountType | null>(null)
+  const [selectedAccounts, setSelectedAccounts] = useState<ServiceAccountType[]>([])
   const [query, setQuery] = useState('')
   const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
   const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
@@ -145,13 +124,13 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
         (account: ServiceAccountType) => account.id === preselectedAccountId
       )
       if (preselectedAccount) {
-        setSelectedAccount(preselectedAccount)
+        setSelectedAccounts(preselectedAccount)
         openModal()
       }
     }
   }, [preselectedAccountId, serviceAccountsData, data?.appServiceAccounts])
 
-  const handleAddMember = async (e: { preventDefault: () => void }) => {
+  const handleAddMembers = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
     if (envScope.length === 0) {
@@ -159,7 +138,6 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       return false
     }
 
-    // Clear just the ?new parameter before proceeding
     if (preselectedAccountId) {
       const url = new URL(window.location.href)
       url.searchParams.delete('new')
@@ -168,50 +146,58 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
 
     const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
-    const envKeyPromises = appEnvironments
-      .filter((env) => envScope.map((selectedEnv) => selectedEnv.id).includes(env.id))
-      .map(async (env: EnvironmentType) => {
-        const { data } = await getEnvKey({
-          variables: {
-            envId: env.id,
-            appId: appId,
-          },
-        })
+    const envKeyInputs: {
+      envId: string
+      userId: string
+      identityKey: string
+      wrappedSeed: string
+      wrappedSalt: string
+    }[] = []
 
-        const {
-          wrappedSeed: userWrappedSeed,
-          wrappedSalt: userWrappedSalt,
-          identityKey,
-        } = data.environmentKeys[0]
+    for (const env of appEnvironments) {
+      if (!envScope.map((e) => e.id).includes(env.id)) continue
 
-        const { seed, salt } = await unwrapEnvSecretsForUser(
-          userWrappedSeed,
-          userWrappedSalt,
-          keyring!
-        )
-
-        const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(
-          { seed, salt },
-          selectedAccount!
-        )
-
-        return {
+      const { data } = await getEnvKey({
+        variables: {
           envId: env.id,
-          userId: selectedAccount!.id,
+          appId: appId,
+        },
+      })
+
+      const {
+        wrappedSeed: userWrappedSeed,
+        wrappedSalt: userWrappedSalt,
+        identityKey,
+      } = data.environmentKeys[0]
+
+      const { seed, salt } = await unwrapEnvSecretsForUser(
+        userWrappedSeed,
+        userWrappedSalt,
+        keyring!
+      )
+
+      for (const account of selectedAccounts) {
+        const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount({ seed, salt }, account)
+
+        envKeyInputs.push({
+          envId: env.id,
+          userId: account.id,
           identityKey,
           wrappedSeed,
           wrappedSalt,
-        }
-      })
+        })
+      }
+    }
 
-    const envKeyInputs = await Promise.all(envKeyPromises)
-
-    await addMember({
+    await bulkAddMembers({
       variables: {
-        memberId: selectedAccount!.id,
-        memberType: MemberType.Service,
-        appId: appId,
-        envKeys: envKeyInputs,
+        members: selectedAccounts.map((account) => ({
+          memberId: account.id,
+          memberType: MemberType.Service,
+
+          envKeys: envKeyInputs.filter((k) => k.userId === account.id),
+        })),
+        appId,
       },
       refetchQueries: [
         {
@@ -221,7 +207,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       ],
     })
 
-    toast.success('Added account to App', { autoClose: 2000 })
+    toast.success('Added accounts to App', { autoClose: 2000 })
     closeModal()
   }
 
@@ -253,13 +239,17 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
             </Alert>
           </div>
         ) : (
-          <form className="space-y-6" onSubmit={handleAddMember}>
+          <form className="space-y-6" onSubmit={handleAddMembers}>
             <p className="text-neutral-500 text-sm">
               Select a service account to add to this App, and choose the Environments that it will
               be able to access.
             </p>
             <div className="relative">
-              <Combobox value={selectedAccount} onChange={setSelectedAccount}>
+              <Combobox
+                value={selectedAccounts}
+                onChange={(accounts) => setSelectedAccounts(accounts)}
+                multiple
+              >
                 {({ open }) => (
                   <>
                     <div className="space-y-1">
@@ -277,8 +267,8 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                           onFocus={() => (!open ? comboboxButtonRef.current?.click() : {})}
                           required
                           placeholder="Select an account"
-                          displayValue={(account: ServiceAccountType) =>
-                            account ? account?.name! : ''
+                          displayValue={(accounts: ServiceAccountType[]) =>
+                            accounts.map((account) => account.name).join(', ')
                           }
                         />
                         <div className="absolute inset-y-0 right-2 flex items-center">
@@ -431,7 +421,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
               <Button
                 variant="primary"
                 type="submit"
-                disabled={envScope.length === 0 || selectedAccount === null}
+                disabled={envScope.length === 0 || selectedAccounts === null}
               >
                 Add
               </Button>

@@ -1,11 +1,11 @@
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
-import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
+import { BulkAddMembersToApp } from '@/graphql/mutations/apps/bulkAddAppMembers.gql'
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useRef, useState } from 'react'
-import { OrganisationMemberType, EnvironmentType } from '@/apollo/graphql'
+import { OrganisationMemberType, EnvironmentType, MemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { Combobox, Listbox, Transition } from '@headlessui/react'
 import {
@@ -70,7 +70,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
         !data?.appUsers.map((appUser: OrganisationMemberType) => appUser.id).includes(orgMember.id)
     ) ?? []
 
-  const [addMember] = useMutation(AddMemberToApp)
+  const [bulkAddMembers] = useMutation(BulkAddMembersToApp)
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
@@ -89,7 +89,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
       }
     }) ?? []
 
-  const [selectedMember, setSelectedMember] = useState<OrganisationMemberType | null>(null)
+  const [selectedMembers, setSelectedMembers] = useState<OrganisationMemberType[]>([])
   const [query, setQuery] = useState('')
   const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
   const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
@@ -104,7 +104,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
 
   const closeModal = () => dialogRef.current?.closeModal()
 
-  const handleAddMember = async (e: { preventDefault: () => void }) => {
+  const handleAddMembers = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
     if (envScope.length === 0) {
@@ -114,46 +114,59 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
 
     const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
-    const envKeyPromises = appEnvironments
-      .filter((env) => envScope.map((selectedEnv) => selectedEnv.id).includes(env.id))
-      .map(async (env: EnvironmentType) => {
-        const { data } = await getEnvKey({
-          variables: {
-            envId: env.id,
-            appId: appId,
-          },
-        })
+    const envKeyInputs: {
+      envId: string
+      userId: string
+      identityKey: string
+      wrappedSeed: string
+      wrappedSalt: string
+    }[] = []
 
-        const {
-          wrappedSeed: userWrappedSeed,
-          wrappedSalt: userWrappedSalt,
-          identityKey,
-        } = data.environmentKeys[0]
+    for (const env of appEnvironments) {
+      if (!envScope.map((e) => e.id).includes(env.id)) continue
 
-        const { seed, salt } = await unwrapEnvSecretsForUser(
-          userWrappedSeed,
-          userWrappedSalt,
-          keyring!
-        )
-
-        const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(
-          { seed, salt },
-          selectedMember!
-        )
-
-        return {
+      const { data } = await getEnvKey({
+        variables: {
           envId: env.id,
-          userId: selectedMember!.id,
+          appId: appId,
+        },
+      })
+
+      const {
+        wrappedSeed: userWrappedSeed,
+        wrappedSalt: userWrappedSalt,
+        identityKey,
+      } = data.environmentKeys[0]
+
+      const { seed, salt } = await unwrapEnvSecretsForUser(
+        userWrappedSeed,
+        userWrappedSalt,
+        keyring!
+      )
+
+      for (const member of selectedMembers) {
+        const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount({ seed, salt }, member)
+
+        envKeyInputs.push({
+          envId: env.id,
+          userId: member.id,
           identityKey,
           wrappedSeed,
           wrappedSalt,
-        }
-      })
+        })
+      }
+    }
 
-    const envKeyInputs = await Promise.all(envKeyPromises)
+    await bulkAddMembers({
+      variables: {
+        members: selectedMembers.map((member) => ({
+          memberId: member.id,
+          memberType: MemberType.User,
 
-    await addMember({
-      variables: { memberId: selectedMember!.id, appId: appId, envKeys: envKeyInputs },
+          envKeys: envKeyInputs.filter((k) => k.userId === member.id),
+        })),
+        appId,
+      },
       refetchQueries: [
         {
           query: GetAppMembers,
@@ -162,7 +175,8 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
       ],
     })
 
-    toast.success('Added member to App', { autoClose: 2000 })
+    toast.success('Added accounts to App', { autoClose: 2000 })
+    closeModal()
   }
 
   return (
@@ -193,13 +207,17 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
             </Alert>
           </div>
         ) : (
-          <form className="space-y-6" onSubmit={handleAddMember}>
+          <form className="space-y-6" onSubmit={handleAddMembers}>
             <p className="text-neutral-500 text-sm">
               Select a member to add to this App, and choose the Environments that they will be able
               to access.
             </p>
             <div className="relative">
-              <Combobox value={selectedMember} onChange={setSelectedMember}>
+              <Combobox
+                multiple
+                value={selectedMembers}
+                onChange={(members) => setSelectedMembers(members)}
+              >
                 {({ open }) => (
                   <>
                     <div className="space-y-1">
@@ -217,8 +235,8 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                           onFocus={() => (!open ? comboboxButtonRef.current?.click() : {})}
                           required
                           placeholder="Select a member"
-                          displayValue={(person: OrganisationMemberType) =>
-                            person ? person?.fullName || person?.email! : ''
+                          displayValue={(members: OrganisationMemberType[]) =>
+                            members.map((member) => member.fullName || member.email).join(', ')
                           }
                         />
                         <div className="absolute inset-y-0 right-2 flex items-center">
@@ -375,7 +393,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
               <Button
                 variant="primary"
                 type="submit"
-                disabled={envScope.length === 0 || selectedMember === null}
+                disabled={envScope.length === 0 || selectedMembers === null}
               >
                 Add
               </Button>
