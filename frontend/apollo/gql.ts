@@ -55,6 +55,7 @@ const documents = {
     "mutation CreateSharedSecret($input: LockboxInput!) {\n  createLockbox(input: $input) {\n    lockbox {\n      id\n      allowedViews\n      expiresAt\n    }\n  }\n}": types.CreateSharedSecretDocument,
     "mutation SwapEnvOrder($environment1Id: ID!, $environment2Id: ID!) {\n  swapEnvironmentOrder(\n    environment1Id: $environment1Id\n    environment2Id: $environment2Id\n  ) {\n    ok\n  }\n}": types.SwapEnvOrderDocument,
     "mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {\n  createOrganisationMember(\n    orgId: $orgId\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n    inviteId: $inviteId\n  ) {\n    orgMember {\n      id\n      email\n      createdAt\n      role {\n        name\n      }\n    }\n  }\n}": types.AcceptOrganisationInviteDocument,
+    "mutation BulkInviteMembers($orgId: ID!, $invites: [InviteInput!]!) {\n  bulkInviteOrganisationMembers(orgId: $orgId, invites: $invites) {\n    invites {\n      id\n      inviteeEmail\n      expiresAt\n    }\n  }\n}": types.BulkInviteMembersDocument,
     "mutation DeleteOrgInvite($inviteId: ID!) {\n  deleteInvitation(inviteId: $inviteId) {\n    ok\n  }\n}": types.DeleteOrgInviteDocument,
     "mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}": types.RemoveMemberDocument,
     "mutation InviteMember($orgId: ID!, $email: String!, $apps: [String], $roleId: ID!) {\n  inviteOrganisationMember(\n    orgId: $orgId\n    email: $email\n    apps: $apps\n    roleId: $roleId\n  ) {\n    invite {\n      id\n    }\n  }\n}": types.InviteMemberDocument,
@@ -322,6 +323,10 @@ export function graphql(source: "mutation SwapEnvOrder($environment1Id: ID!, $en
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {\n  createOrganisationMember(\n    orgId: $orgId\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n    inviteId: $inviteId\n  ) {\n    orgMember {\n      id\n      email\n      createdAt\n      role {\n        name\n      }\n    }\n  }\n}"): (typeof documents)["mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {\n  createOrganisationMember(\n    orgId: $orgId\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n    inviteId: $inviteId\n  ) {\n    orgMember {\n      id\n      email\n      createdAt\n      role {\n        name\n      }\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation BulkInviteMembers($orgId: ID!, $invites: [InviteInput!]!) {\n  bulkInviteOrganisationMembers(orgId: $orgId, invites: $invites) {\n    invites {\n      id\n      inviteeEmail\n      expiresAt\n    }\n  }\n}"): (typeof documents)["mutation BulkInviteMembers($orgId: ID!, $invites: [InviteInput!]!) {\n  bulkInviteOrganisationMembers(orgId: $orgId, invites: $invites) {\n    invites {\n      id\n      inviteeEmail\n      expiresAt\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

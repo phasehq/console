@@ -133,6 +133,7 @@ from .graphene.mutations.app import (
     UpdateAppNameMutation,
 )
 from .graphene.mutations.organisation import (
+    BulkInviteOrganisationMembersMutation,
     CreateOrganisationMemberMutation,
     CreateOrganisationMutation,
     DeleteInviteMutation,
@@ -858,6 +859,7 @@ class Query(graphene.ObjectType):
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
     invite_organisation_member = InviteOrganisationMemberMutation.Field()
+    bulk_invite_organisation_members = BulkInviteOrganisationMembersMutation.Field()
     create_organisation_member = CreateOrganisationMemberMutation.Field()
     delete_organisation_member = DeleteOrganisationMemberMutation.Field()
     update_organisation_member_role = UpdateOrganisationMemberRole.Field()

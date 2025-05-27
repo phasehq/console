@@ -163,6 +163,76 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
             raise GraphQLError("You don't have permission to perform this action")
 
 
+class InviteInput(graphene.InputObjectType):
+    email = graphene.String(required=True)
+    apps = graphene.List(graphene.String)
+    role_id = graphene.ID(required=True)
+
+
+class BulkInviteOrganisationMembersMutation(graphene.Mutation):
+
+    class Arguments:
+        org_id = graphene.ID(required=True)
+        invites = graphene.List(InviteInput, required=True)
+
+    invites = graphene.List(OrganisationMemberInviteType)
+
+    @classmethod
+    def mutate(cls, root, info, org_id, invites):
+        org = Organisation.objects.get(id=org_id)
+
+        if not user_has_permission(info.context.user, "create", "Members", org):
+            raise GraphQLError("You don’t have permission to invite members")
+
+        if not user_is_org_member(info.context.user, org_id):
+            raise GraphQLError("You don’t have permission to perform this action")
+
+        invited_by = OrganisationMember.objects.get(
+            user=info.context.user, organisation_id=org_id, deleted_at=None
+        )
+
+        expiry = timezone.now() + timedelta(days=3)
+        created_invites = []
+
+        for invite in invites:
+            email = invite.email.lower().strip()
+            apps = invite.apps or []
+            role_id = invite.role_id
+
+            if OrganisationMember.objects.filter(
+                organisation_id=org_id, user__email=email, deleted_at=None
+            ).exists():
+                continue  # Skip already existing members
+
+            if OrganisationMemberInvite.objects.filter(
+                organisation_id=org_id,
+                invitee_email=email,
+                valid=True,
+                expires_at__gte=timezone.now(),
+            ).exists():
+                continue  # Skip if an active invite already exists
+
+            app_scope = App.objects.filter(id__in=apps)
+
+            new_invite = OrganisationMemberInvite.objects.create(
+                organisation=org,
+                role_id=role_id,
+                invited_by=invited_by,
+                invitee_email=email,
+                expires_at=expiry,
+            )
+            new_invite.apps.set(app_scope)
+
+            try:
+                send_invite_email(new_invite)
+            except Exception as e:
+                print(f"Error sending invite email to {email}: {e}")
+
+            created_invites.append(new_invite)
+
+        return BulkInviteOrganisationMembersMutation(invites=created_invites)
+
+
 class DeleteInviteMutation(graphene.Mutation):
     class Arguments:
         invite_id = graphene.ID(required=True)
