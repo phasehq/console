@@ -125,6 +125,7 @@ from api.utils.access.permissions import (
 )
 from .graphene.mutations.app import (
     AddAppMemberMutation,
+    BulkAddAppMembersMutation,
     CreateAppMutation,
     DeleteAppMutation,
     MemberType,
@@ -870,6 +871,7 @@ class Mutation(graphene.ObjectType):
     delete_app = DeleteAppMutation.Field()
     update_app_name = UpdateAppNameMutation.Field()
     add_app_member = AddAppMemberMutation.Field()
+    bulk_add_app_members = BulkAddAppMembersMutation.Field()
     remove_app_member = RemoveAppMemberMutation.Field()
     update_member_environment_scope = UpdateMemberEnvScopeMutation.Field()
 
