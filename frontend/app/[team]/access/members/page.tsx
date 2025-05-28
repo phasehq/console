@@ -14,13 +14,10 @@ import {
   FaBan,
   FaTimes,
   FaTrashAlt,
-  FaUserAlt,
   FaChevronRight,
   FaSearch,
   FaTimesCircle,
-  FaLink,
-  FaHourglass,
-  FaHourglassHalf,
+  FaCopy,
 } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
@@ -317,7 +314,7 @@ export default function Members({ params }: { params: { team: string } }) {
                       {!inviteIsExpired(invite) && (
                         <CopyButton value={getInviteLink(invite.id)}>
                           <div className="flex items-center gap-2">
-                            <FaLink /> Invite link
+                            <FaCopy /> Invite link
                           </div>
                         </CopyButton>
                       )}
