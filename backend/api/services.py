@@ -11,7 +11,7 @@ class Providers:
         "id": "aws",
         "name": "AWS",
         "expected_credentials": ["access_key_id", "secret_access_key", "region"],
-        "optional_credentials": [],
+        "optional_credentials": ["role_arn", "external_id"],
         "auth_scheme": "token",
     }
 
