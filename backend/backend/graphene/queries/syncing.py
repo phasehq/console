@@ -122,21 +122,25 @@ def resolve_cloudflare_workers(root, info, credential_id):
 
 def resolve_aws_secret_manager_secrets(root, info, credential_id):
     pk, sk = get_server_keypair()
-
     credential = ProviderCredentials.objects.get(id=credential_id)
-
-    access_key_id = decrypt_asymmetric(
-        credential.credentials["access_key_id"], sk.hex(), pk.hex()
-    )
-
-    secret_access_key = decrypt_asymmetric(
-        credential.credentials["secret_access_key"], sk.hex(), pk.hex()
-    )
-
-    region = decrypt_asymmetric(credential.credentials["region"], sk.hex(), pk.hex())
-
+    
     try:
-        secrets = list_aws_secrets(access_key_id, secret_access_key, region)
+        decrypted_creds = {}
+        
+        for key in ["role_arn", "external_id", "region", "access_key_id", "secret_access_key"]:
+            if key in credential.credentials:
+                decrypted_creds[key] = decrypt_asymmetric(
+                    credential.credentials[key], sk.hex(), pk.hex()
+                )
+        
+        secrets = list_aws_secrets(
+            region=decrypted_creds.get("region"),
+            AWS_ACCESS_KEY_ID=decrypted_creds.get("access_key_id"),
+            AWS_SECRET_ACCESS_KEY=decrypted_creds.get("secret_access_key"),
+            role_arn=decrypted_creds.get("role_arn"),
+            external_id=decrypted_creds.get("external_id")
+        )
+        
         return secrets
     except Exception as ex:
         raise GraphQLError(ex)
