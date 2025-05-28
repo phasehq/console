@@ -1,4 +1,4 @@
-from api.emails import send_invite_email, send_user_joined_email, send_welcome_email
+from api.emails import send_user_joined_email, send_welcome_email
 from api.utils.access.permissions import (
     role_has_global_access,
     user_has_permission,
@@ -6,6 +6,7 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
+from api.tasks.emails import send_invite_email_job
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -103,66 +104,6 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
 
 
-class InviteOrganisationMemberMutation(graphene.Mutation):
-    class Arguments:
-        org_id = graphene.ID(required=True)
-        email = graphene.String(required=True)
-        apps = graphene.List(graphene.String)
-        role_id = graphene.ID(required=True)
-
-    invite = graphene.Field(OrganisationMemberInviteType)
-
-    @classmethod
-    def mutate(cls, root, info, org_id, email, apps, role_id):
-
-        org = Organisation.objects.get(id=org_id)
-
-        if not user_has_permission(info.context.user, "create", "Members", org):
-            raise GraphQLError("You dont have permission to invite members")
-
-        if user_is_org_member(info.context.user, org_id):
-            user_already_exists = OrganisationMember.objects.filter(
-                organisation_id=org_id, user__email=email, deleted_at=None
-            ).exists()
-            if user_already_exists:
-                raise GraphQLError("This user is already a member of your organisation")
-
-            if OrganisationMemberInvite.objects.filter(
-                organisation_id=org_id,
-                invitee_email=email,
-                valid=True,
-                expires_at__gte=timezone.now(),
-            ).exists():
-                raise GraphQLError("An active invitation already exists for this user.")
-
-            invited_by = OrganisationMember.objects.get(
-                user=info.context.user, organisation_id=org_id, deleted_at=None
-            )
-
-            expiry = datetime.now() + timedelta(days=3)
-
-            app_scope = App.objects.filter(id__in=apps)
-
-            invite = OrganisationMemberInvite.objects.create(
-                organisation=org,
-                role_id=role_id,
-                invited_by=invited_by,
-                invitee_email=email,
-                expires_at=expiry,
-            )
-
-            invite.apps.set(app_scope)
-
-            try:
-                send_invite_email(invite)
-            except Exception as e:
-                print(f"Error sending invite email: {e}")
-
-            return InviteOrganisationMemberMutation(invite=invite)
-        else:
-            raise GraphQLError("You don't have permission to perform this action")
-
-
 class InviteInput(graphene.InputObjectType):
     email = graphene.String(required=True)
     apps = graphene.List(graphene.String)
@@ -224,7 +165,7 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
             new_invite.apps.set(app_scope)
 
             try:
-                send_invite_email(new_invite)
+                send_invite_email_job(new_invite)
             except Exception as e:
                 print(f"Error sending invite email to {email}: {e}")
 

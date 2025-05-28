@@ -138,7 +138,6 @@ from .graphene.mutations.organisation import (
     CreateOrganisationMutation,
     DeleteInviteMutation,
     DeleteOrganisationMemberMutation,
-    InviteOrganisationMemberMutation,
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
@@ -196,8 +195,7 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
 from django.utils import timezone
-from api.utils.crypto import get_server_keypair, decrypt_asymmetric
-from api.utils.syncing.cloudflare.workers import list_cloudflare_workers
+
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -858,7 +856,6 @@ class Query(graphene.ObjectType):
 
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
-    invite_organisation_member = InviteOrganisationMemberMutation.Field()
     bulk_invite_organisation_members = BulkInviteOrganisationMembersMutation.Field()
     create_organisation_member = CreateOrganisationMemberMutation.Field()
     delete_organisation_member = DeleteOrganisationMemberMutation.Field()
