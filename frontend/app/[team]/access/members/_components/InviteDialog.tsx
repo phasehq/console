@@ -11,7 +11,7 @@ import { useQuery, useMutation } from '@apollo/client'
 import { Listbox } from '@headlessui/react'
 import { useSearchParams } from 'next/navigation'
 import { useContext, useState, useRef, useEffect, Fragment, useMemo } from 'react'
-import { FaChevronDown, FaPlus, FaTrashAlt } from 'react-icons/fa'
+import { FaChevronDown, FaDownload, FaPlus, FaTrashAlt } from 'react-icons/fa'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
@@ -21,6 +21,7 @@ import { RoleLabel } from '@/components/users/RoleLabel'
 import clsx from 'clsx'
 import GenericDialog from '@/components/common/GenericDialog'
 import { toast } from 'react-toastify'
+import { FaEnvelope } from 'react-icons/fa6'
 
 type Invite = {
   email: string
@@ -182,12 +183,73 @@ export const InviteDialog = (props: { organisationId: string }) => {
     }
   }
 
+  const BulkAddEmailsDialog = () => {
+    const [bulkEmails, setBulkEmails] = useState('')
+
+    const handleBulkEmailImport = () => {
+      const seen = new Set(invites.map((i) => i.email))
+      const newEmails = bulkEmails
+        .split(/[\s,]+/) // split by spaces, commas, or newlines
+        .map((email) => email.trim().toLowerCase())
+        .filter((email) => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) // validate email format
+        .filter((email) => !seen.has(email))
+
+      if (newEmails.length === 0) {
+        toast.error('No valid or unique emails found.')
+        return
+      }
+
+      const imported = newEmails.map((email) => ({
+        email,
+        role: defaultRole,
+      }))
+
+      setInvites((prev) => [...prev.filter((invite) => invite.email !== ''), ...imported])
+      setBulkEmails('')
+
+      toast.success(`${imported.length} email(s) imported.`)
+    }
+
+    return (
+      <GenericDialog
+        title="Import emails"
+        buttonVariant="ghost"
+        buttonContent={
+          <>
+            <FaDownload />
+            Bulk import emails
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-neutral-500">
+            Paste email adresses separated by commas, spaces, or new lines
+          </p>
+          <div className="space-y-4">
+            <textarea
+              value={bulkEmails}
+              onChange={(e) => setBulkEmails(e.target.value)}
+              placeholder="Paste emails separated by commas, spaces, or new lines"
+              rows={10}
+              className="w-full text-sm"
+            ></textarea>
+            <div className="flex justify-end">
+              <Button onClick={handleBulkEmailImport} variant="primary" type="button">
+                Import
+              </Button>
+            </div>
+          </div>
+        </div>
+      </GenericDialog>
+    )
+  }
+
   if (upsell)
     return (
       <UpsellDialog
         buttonLabel={
           <>
-            <FaPlus /> Add a member
+            <FaPlus /> Add members
           </>
         }
       />
@@ -223,20 +285,20 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   invite link.
                 </p>
 
-                <div className="text-sm">
+                <div className="text-sm h-full max-h-[65vh] overflow-y-auto">
                   {invites.map((invite, index) => (
                     <div key={index} className="flex items-end gap-6 py-2">
                       <div className="w-full">
                         <Input
                           value={invite.email}
                           setValue={(value) => updateInvite(index, { email: value })}
-                          label="User email"
+                          label={index === 0 ? 'User email' : undefined}
                           type="email"
                           required
                         />
                       </div>
-                      <div className="space-y-1 w-full relative">
-                        <label className="text-neutral-500 text-sm">Role</label>
+                      <div className="space-y-1 w-full relative overflow-y-visible">
+                        {index === 0 && <label className="text-neutral-500 text-sm">Role</label>}
                         <Listbox
                           value={invite.role}
                           onChange={(value) => updateInvite(index, { role: value })}
@@ -298,21 +360,25 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   ))}
                 </div>
 
-                <Button
-                  variant="ghost"
-                  type="button"
-                  onClick={addInvite}
-                  className="text-sm text-left text-neutral-500 inline-flex items-center gap-2"
-                >
-                  <FaPlus /> Add another member
-                </Button>
+                <div className="flex items-center gap-4">
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    onClick={addInvite}
+                    className="text-sm text-left text-neutral-500 inline-flex items-center gap-2"
+                  >
+                    <FaPlus /> Add another member
+                  </Button>
+
+                  <BulkAddEmailsDialog />
+                </div>
 
                 <div className="col-span-2 flex items-center gap-4 justify-between">
                   <Button variant="secondary" type="button" onClick={closeModal}>
                     Cancel
                   </Button>
                   <Button variant="primary" type="submit" isLoading={mutationLoading}>
-                    Invite
+                    <FaEnvelope /> Invite {invites.length > 1 && ` ${invites.length} users`}
                   </Button>
                 </div>
               </form>
@@ -321,31 +387,32 @@ export const InviteDialog = (props: { organisationId: string }) => {
               <div className="py-8 space-y-6">
                 <div className="text-center max-w-lg mx-auto">
                   <h3 className="font-semibold text-xl text-black dark:text-white">
-                    Invites sent!
+                    Invite{inviteLinks.length > 0 ? 's' : ''} sent!
                   </h3>
                   <p className="text-neutral-500">
-                    Invite links have been sent by email. You can also copy the links below to share
-                    them manually. Each invite will expire in 72 hours.
+                    Invite link{inviteLinks.length > 0 ? 's have' : 'has'} been sent by email. You
+                    can also copy the invite link{inviteLinks.length > 0 ? 's' : ''} for each user
+                    and share them manually. Invites expire in 72 hours.
                   </p>
                 </div>
-
-                {inviteLinks.map(({ email, link }) => (
-                  <div key={email} className="space-y-2">
-                    <p className="text-sm font-medium text-black dark:text-white">{email}</p>
-                    <div className="group relative overflow-x-hidden rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-emerald-800 dark:text-emerald-300">
-                      <pre className="ph-no-capture text-sm whitespace-nowrap">{link}</pre>
-                      <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent to-zinc-300 dark:to-zinc-800" />
-                      <div className="absolute right-1 top-2.5">
-                        <CopyButton value={link} defaultHidden={false} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
                 <Alert variant="info" icon={true} size="sm">
                   You can add users to specific Apps and Environments once they accept their invite
                   and join your Organisation.
                 </Alert>
+
+                {inviteLinks.length <= 5 &&
+                  inviteLinks.map(({ email, link }) => (
+                    <div key={email} className="space-y-2">
+                      <p className="text-sm font-medium text-black dark:text-white">{email}</p>
+                      <div className="group relative overflow-x-hidden rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-emerald-800 dark:text-emerald-300">
+                        <pre className="ph-no-capture text-sm whitespace-nowrap">{link}</pre>
+                        <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent to-zinc-300 dark:to-zinc-800" />
+                        <div className="absolute right-1 top-2.5">
+                          <CopyButton value={link} defaultHidden={false} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
               </div>
             )}
           </div>
