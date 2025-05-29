@@ -74,7 +74,7 @@ export const CreateProviderCredentials = (props: {
           initialCredentials[cred] = ''
         })
       }
-      if (provider.id === 'aws') initialCredentials['region'] = awsRegions[0].region
+      if (provider.id === 'aws' || provider.id === 'aws_assume_role') initialCredentials['region'] = awsRegions[0].region
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
@@ -94,7 +94,7 @@ export const CreateProviderCredentials = (props: {
   const docsLink = (provider: ProviderType) => {
     if (provider.id === 'cloudflare')
       return 'https://docs.phase.dev/integrations/platforms/cloudflare-pages'
-    else if (provider.id === 'aws')
+    else if (provider.id === 'aws' || provider.id === 'aws_assume_role')
       return 'https://docs.phase.dev/integrations/platforms/aws-secrets-manager'
     else if (provider.id === 'hashicorp_vault')
       return 'https://docs.phase.dev/integrations/platforms/hashicorp-vault'
@@ -147,7 +147,7 @@ export const CreateProviderCredentials = (props: {
     props.onComplete()
   }
 
-  if (provider?.id === 'aws') {
+  if (provider?.id === 'aws' || provider?.id === 'aws_assume_role') {
     return (
       <SetupAWSAuth
         provider={provider}
@@ -178,7 +178,7 @@ export const CreateProviderCredentials = (props: {
 
         {provider === null && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {providers.map((provider) => (
+            {providers.filter(provider => provider.id !== 'aws_assume_role').map((provider) => (
               <button key={provider.id} type="button" onClick={() => setProvider(provider)}>
                 <ProviderCard provider={provider} />
               </button>
@@ -213,7 +213,7 @@ export const CreateProviderCredentials = (props: {
               />
             ))}
 
-        {provider?.id === 'aws' && (
+        {(provider?.id === 'aws' || provider?.id === 'aws_assume_role') && (
           <AWSRegionPicker 
             value={credentials['region']} 
             onChange={(region) => handleCredentialChange('region', region)} 
