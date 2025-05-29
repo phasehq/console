@@ -81,7 +81,7 @@ export const Avatar = ({ member, user, size, showTitle = true }: AvatarProps) =>
       className={clsx(
         'mr-1 rounded-full flex items-center justify-center select-none',
         sizeStyle,
-        useImage ? 'bg-cover bg-no-repeat' : getColorForName(fullName || '')
+        useImage ? 'bg-cover bg-no-repeat' : getColorForName(fullName || email || '')
       )}
       style={{ backgroundImage: useImage ? `url(${avatarUrl})` : undefined }}
     >

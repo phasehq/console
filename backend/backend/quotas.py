@@ -54,18 +54,18 @@ def can_add_app(organisation):
     return current_app_count < plan_limits["max_apps"]
 
 
-def can_add_account(organisation):
+def can_add_account(organisation, count=1):
     """Check if a new human or service account can be added to the organisation."""
 
+    Organisation = apps.get_model("api", "Organisation")
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     OrganisationMemberInvite = apps.get_model("api", "OrganisationMemberInvite")
     ServiceAccount = apps.get_model("api", "ServiceAccount")
-    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
-    plan_limits = PLAN_CONFIG[organisation.plan]
-    license_exists = ActivatedPhaseLicense.objects.filter(
-        organisation=organisation
-    ).exists()
+    if not CLOUD_HOSTED and organisation.plan == Organisation.FREE_PLAN:
+        return True
+
+    from ee.billing.utils import get_org_seat_limit
 
     # Calculate the current count of users and service accounts
     current_human_user_count = (
@@ -81,23 +81,14 @@ def can_add_account(organisation):
     ).count()
     total_account_count = current_human_user_count + current_service_account_count
 
-    # Determine the user limit
-    if license_exists:
-        license = (
-            ActivatedPhaseLicense.objects.filter(organisation=organisation)
-            .order_by("-activated_at")
-            .first()
-        )
-        user_limit = license.seats
-    else:
-        user_limit = plan_limits["max_users"]
+    seats = get_org_seat_limit(organisation)
 
     # If there's no limit, allow unlimited additions
-    if user_limit is None:
+    if seats is None:
         return True
 
     # Check if the total account count is below the limit
-    return total_account_count < user_limit
+    return total_account_count + count <= seats
 
 
 def can_add_environment(app):

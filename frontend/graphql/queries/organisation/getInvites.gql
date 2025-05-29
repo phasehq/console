@@ -13,6 +13,7 @@ query GetInvites($orgId: ID!) {
       id
       name
       description
+      color
     }
   }
 }
