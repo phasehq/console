@@ -2,7 +2,7 @@ import { ProviderType } from '@/apollo/graphql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
-import { useState, useEffect, useContext } from 'react'
+import { useState, useEffect, useContext, Fragment } from 'react'
 import { FaArrowRight, FaQuestionCircle } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { useMutation, useQuery } from '@apollo/client'
@@ -16,6 +16,7 @@ import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 import { awsRegions } from '@/utils/syncing/aws'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
+import { SetupAWSAuth } from './AWS/SetupAWSAuth'
 
 interface CredentialState {
   [key: string]: string
@@ -146,6 +147,17 @@ export const CreateProviderCredentials = (props: {
     props.onComplete()
   }
 
+  if (provider?.id === 'aws') {
+    return (
+      <SetupAWSAuth
+        provider={provider}
+        serverPublicKey={providersData.serverPublicKey}
+        onComplete={props.onComplete}
+        onBack={handleClickBack}
+      />
+    )
+  }
+
   return (
     <>
       <form className="space-y-6" onSubmit={handleSubmit}>
@@ -202,7 +214,10 @@ export const CreateProviderCredentials = (props: {
             ))}
 
         {provider?.id === 'aws' && (
-          <AWSRegionPicker onChange={(region) => handleCredentialChange('region', region)} />
+          <AWSRegionPicker 
+            value={credentials['region']} 
+            onChange={(region) => handleCredentialChange('region', region)} 
+          />
         )}
 
         {provider && provider?.authScheme === 'token' && (
