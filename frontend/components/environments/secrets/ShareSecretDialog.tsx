@@ -2,6 +2,7 @@ import { SecretType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { CreateSharedSecret } from '@/graphql/mutations/environments/shareSecret.gql'
+import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { useMutation } from '@apollo/client'
 import { Fragment, useContext, useState } from 'react'
 import { FaChevronDown, FaCircle, FaDotCircle, FaInfoCircle, FaShareAlt } from 'react-icons/fa'
@@ -52,7 +53,7 @@ const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
 }
 
-export const ShareSecretDialog = (props: { secret: SecretType }) => {
+export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanCreateLockbox = userHasPermission(
@@ -63,22 +64,33 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
   )
 
   const [createLockbox, { error, loading }] = useMutation(CreateSharedSecret)
+  const [readSecrets] = useMutation(LogSecretReads)
 
-  const [secretData, setSecretData] = useState({ text: props.secret.value })
+  const [tabIndex, setTabIndex] = useState(0)
+  const [secretData, setSecretData] = useState({ text: secret.value })
   const [allowedViews, setAllowedViews] = useState<number | undefined>(1)
   const [expiry, setExpiry] = useState<ExpiryOptionT>(lockboxExpiryOptions[1])
 
   const [box, setBox] = useState<{ lockboxId: string; password: string } | null>(null)
 
   const permalink = organisation
-    ? `${getHostname()}${getSecretPermalink(props.secret, organisation.name)}`
+    ? `${getHostname()}${getSecretPermalink(secret, organisation.name)}`
     : ''
 
   const reset = () => {
-    setSecretData({ text: props.secret.value })
+    setSecretData({ text: secret.value })
     setAllowedViews(1)
     setExpiry(lockboxExpiryOptions[1])
     setBox(null)
+  }
+
+  const handleLogSecretRead = () => readSecrets({ variables: { ids: [secret.id] } })
+
+  const handleTabChange = (index: number) => {
+    setTabIndex(index)
+    if (index === 1) {
+      handleLogSecretRead()
+    }
   }
 
   const handleTextChange = (value: string) => {
@@ -125,7 +137,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
 
   return (
     <GenericDialog
-      title={box ? 'Share this link' : `Share ${props.secret.key}`}
+      title={box ? 'Share this link' : `Share ${secret.key}`}
       buttonVariant="outline"
       buttonContent={
         <span className="py-1">
@@ -135,7 +147,7 @@ export const ShareSecretDialog = (props: { secret: SecretType }) => {
       onClose={reset}
     >
       <div className="pt-4">
-        <Tab.Group>
+        <Tab.Group selectedIndex={tabIndex} onChange={handleTabChange}>
           {userCanCreateLockbox && (
             <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
               <Tab as={Fragment}>
