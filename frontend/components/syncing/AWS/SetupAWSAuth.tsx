@@ -62,14 +62,32 @@ export const SetupAWSAuth = (props: {
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
+    // Determine the provider ID based on the selected tab
+    const providerId = tabIndex === 0 ? 'aws' : 'aws_assume_role'
+
+    // Create the appropriate provider object for encryption
+    const providerForEncryption = tabIndex === 0 ? {
+      // AWS Access Keys provider
+      id: 'aws',
+      name: 'AWS',
+      expectedCredentials: ['access_key_id', 'secret_access_key', 'region'],
+      optionalCredentials: []
+    } : {
+      // AWS Assume Role provider  
+      id: 'aws_assume_role',
+      name: 'AWS Assume Role',
+      expectedCredentials: ['role_arn', 'region'],
+      optionalCredentials: ['external_id']
+    }
+
     const encryptedCredentials = JSON.stringify(
-      await encryptProviderCredentials(props.provider, credentials, props.serverPublicKey)
+      await encryptProviderCredentials(providerForEncryption, credentials, props.serverPublicKey)
     )
 
     await saveNewCreds({
       variables: {
         orgId: organisation!.id,
-        provider: props.provider.id,
+        provider: providerId,
         name,
         credentials: encryptedCredentials,
       },
