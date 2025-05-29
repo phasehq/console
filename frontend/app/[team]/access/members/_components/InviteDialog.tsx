@@ -70,7 +70,9 @@ export const InviteDialog = (props: { organisationId: string }) => {
   const upsell =
     isCloudHosted() &&
     activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
-    data?.organisationPlan.seatsUsed.total === data?.organisationPlan.maxUsers
+    data?.organisationPlan.seatsUsed.total === data?.organisationPlan.seatLimit
+
+  const avaiableSeats = data?.organisationPlan.seatLimit - data?.organisationPlan.seatsUsed.total
 
   const [createInvites, { error, loading: mutationLoading }] = useMutation(BulkInviteMembers)
 
@@ -84,7 +86,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
   const [errorMessage, setErrorMessage] = useState<string>('')
 
   const addInvite = () => {
-    setInvites([...invites, { email: '', role: defaultRole }]) // default to first role
+    if (invites.length < avaiableSeats) setInvites([...invites, { email: '', role: defaultRole }])
   }
 
   const updateInvite = (index: number, updated: Partial<Invite>) => {
@@ -185,8 +187,10 @@ export const InviteDialog = (props: { organisationId: string }) => {
 
   const BulkAddEmailsDialog = () => {
     const [bulkEmails, setBulkEmails] = useState('')
+    const [error, setError] = useState<string | null>(null)
 
     const handleBulkEmailImport = () => {
+      setError('')
       const seen = new Set(invites.map((i) => i.email))
       const newEmails = bulkEmails
         .split(/[\s,]+/) // split by spaces, commas, or newlines
@@ -196,6 +200,13 @@ export const InviteDialog = (props: { organisationId: string }) => {
 
       if (newEmails.length === 0) {
         toast.error('No valid or unique emails found.')
+        return
+      }
+
+      if (newEmails.length > avaiableSeats) {
+        setError(
+          `You are trying to import ${newEmails.length} email addresses, but you only have ${avaiableSeats} available seats in your organisation plan.`
+        )
         return
       }
 
@@ -226,6 +237,11 @@ export const InviteDialog = (props: { organisationId: string }) => {
             Paste email adresses separated by commas, spaces, or new lines
           </p>
           <div className="space-y-4">
+            {error && (
+              <Alert size="sm" variant="warning" icon={true}>
+                {error}
+              </Alert>
+            )}
             <textarea
               value={bulkEmails}
               onChange={(e) => setBulkEmails(e.target.value)}
@@ -275,7 +291,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
             {inviteLinks.length === 0 && (
               <form className="space-y-6 pt-4" onSubmit={handleInvite}>
                 {errorMessage && (
-                  <Alert variant="danger" icon={true}>
+                  <Alert variant="danger" icon={true} size="sm">
                     {errorMessage}
                   </Alert>
                 )}
@@ -366,6 +382,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                     type="button"
                     onClick={addInvite}
                     className="text-sm text-left text-neutral-500 inline-flex items-center gap-2"
+                    disabled={invites.length >= avaiableSeats}
                   >
                     <FaPlus /> Add another member
                   </Button>

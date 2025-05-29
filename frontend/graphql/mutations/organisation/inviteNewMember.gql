@@ -1,7 +1,0 @@
-mutation InviteMember($orgId: ID!, $email: String!, $apps: [String], $roleId: ID!) {
-  inviteOrganisationMember(orgId: $orgId, email: $email, apps: $apps, roleId: $roleId) {
-    invite {
-      id
-    }
-  }
-}

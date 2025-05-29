@@ -7,6 +7,7 @@ from api.utils.access.permissions import (
 )
 from api.utils.access.roles import default_roles
 from api.tasks.emails import send_invite_email_job
+from backend.quotas import can_add_account
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -22,7 +23,7 @@ from backend.graphene.types import (
     OrganisationMemberType,
     OrganisationType,
 )
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
 
@@ -134,6 +135,11 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
 
         expiry = timezone.now() + timedelta(days=3)
         created_invites = []
+
+        if not can_add_account(org, len(invites)):
+            raise GraphQLError(
+                f"You cannot add {len(invites)} more members to this organisation"
+            )
 
         for invite in invites:
             email = invite.email.lower().strip()
