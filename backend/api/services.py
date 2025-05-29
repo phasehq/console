@@ -11,7 +11,15 @@ class Providers:
         "id": "aws",
         "name": "AWS",
         "expected_credentials": ["access_key_id", "secret_access_key", "region"],
-        "optional_credentials": ["role_arn", "external_id"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
+    AWS_ASSUME_ROLE = {
+        "id": "aws_assume_role",
+        "name": "AWS Assume Role",
+        "expected_credentials": ["role_arn", "region"],
+        "optional_credentials": ["external_id"],
         "auth_scheme": "token",
     }
 
