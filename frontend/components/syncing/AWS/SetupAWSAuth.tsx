@@ -237,31 +237,18 @@ export const SetupAWSAuth = (props: {
           <p>Use AWS Access Keys and Secret Access Keys for authentication.</p>
         ) : (
           <>
-            <p>Use AWS STS to assume a role for temporary credentials. Ideal for cross-account access and enhanced security.</p>
+            <p>Use AWS STS to assume a role for authentication.</p>
             
             {/* Auth validation alert */}
             {authValidation && !authValidation.valid && (
               <Alert variant="warning" icon={true}>
                 <div className="space-y-2">
-                  <div className="font-medium">Assume Role Authentication Warning</div>
+                  <div className="font-medium">Integration Credentials Warning</div>
                   <div className="text-sm">{authValidation.message}</div>
-                  {authValidation.method === 'none' && (
-                    <div className="text-xs">
-                      For Phase Cloud or self-hosted instances, set AWS_INTEGRATION_ACCESS_KEY_ID and AWS_INTEGRATION_SECRET_ACCESS_KEY environment variables.
-                    </div>
-                  )}
                 </div>
               </Alert>
             )}
-            
-            {/* Auth validation success */}
-            {authValidation && authValidation.valid && (
-              <Alert variant="info" icon={true} size="sm">
-                <div className="text-sm">
-                  ✓ Phase can assume AWS roles using {authValidation.method === 'integration_credentials' ? 'integration credentials' : 'machine roles'}
-                </div>
-              </Alert>
-            )}
+          
           </>
         )}
       </div>
@@ -315,7 +302,7 @@ export const SetupAWSAuth = (props: {
           {credentialsValidation && credentialsValidation.valid && (
             <Alert variant="success" icon={true} size="sm">
               <div className="text-xs">
-                ✓ Successfully validated role: {credentialsValidation.assumedRoleArn}
+                Successfully validated role: {credentialsValidation.assumedRoleArn}
               </div>
             </Alert>
           )}
