@@ -18,6 +18,7 @@ import Link from 'next/link'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { Alert } from '../../common/Alert'
+import _sodium from 'libsodium-wrappers-sumo'
 
 interface CredentialState {
   [key: string]: string
@@ -183,6 +184,14 @@ export const SetupAWSAuth = (props: {
 
   const docsLink = 'https://docs.phase.dev/integrations/platforms/aws-secrets-manager'
 
+  const generateExternalId = async () => {
+    await _sodium.ready
+    const sodium = _sodium
+    const key = sodium.crypto_kdf_keygen()
+    const externalId = sodium.to_hex(key)
+    handleCredentialChange('external_id', externalId)
+  }
+
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
       <div className="border-b border-neutral-500/20 pb-4 flex items-center justify-between">
@@ -281,14 +290,27 @@ export const SetupAWSAuth = (props: {
             required
             secret={false}
           />
-          <Input
-            value={credentials['external_id'] || ''}
-            setValue={(value) => handleCredentialChange('external_id', value)}
-            label="EXTERNAL ID (Optional)"
-            placeholder="Optional"
-            required={false}
-            secret={false}
-          />
+          <div className="space-y-2 w-full">
+            <label className="block text-neutral-500 text-sm mb-2">
+              EXTERNAL ID (Optional)
+            </label>
+            <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
+              <input
+                type="text"
+                value={credentials['external_id'] || ''}
+                onChange={(e) => handleCredentialChange('external_id', e.target.value)}
+                placeholder="Optional"
+                className="custom w-full text-zinc-800 dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
+              />
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={generateExternalId}
+              >
+                Generate
+              </Button>
+            </div>
+          </div>
         </>
       ) : (
         // Access Keys fields
