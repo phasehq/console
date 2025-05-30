@@ -1,10 +1,12 @@
 import { ProviderType } from '@/apollo/graphql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
+import ValidateAWSAssumeRoleAuth from '@/graphql/queries/syncing/aws/validateAssumeRoleAuth.gql'
+import ValidateAWSAssumeRoleCredentials from '@/graphql/queries/syncing/aws/validateAssumeRoleCredentials.gql'
 import { useState, useEffect, useContext, Fragment } from 'react'
-import { FaQuestionCircle } from 'react-icons/fa'
+import { FaQuestionCircle, FaExclamationTriangle } from 'react-icons/fa'
 import { Button } from '../../common/Button'
-import { useMutation } from '@apollo/client'
+import { useMutation, useLazyQuery } from '@apollo/client'
 import { Input } from '../../common/Input'
 import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
@@ -15,9 +17,18 @@ import { awsRegions } from '@/utils/syncing/aws'
 import Link from 'next/link'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
+import { Alert } from '../../common/Alert'
 
 interface CredentialState {
   [key: string]: string
+}
+
+interface ValidationResult {
+  valid: boolean
+  message: string
+  method?: string
+  error?: string
+  assumedRoleArn?: string
 }
 
 export const SetupAWSAuth = (props: {
@@ -31,8 +42,12 @@ export const SetupAWSAuth = (props: {
   const [tabIndex, setTabIndex] = useState(0)
   const [name, setName] = useState<string>('AWS credentials')
   const [credentials, setCredentials] = useState<CredentialState>({})
+  const [authValidation, setAuthValidation] = useState<ValidationResult | null>(null)
+  const [credentialsValidation, setCredentialsValidation] = useState<ValidationResult | null>(null)
 
   const [saveNewCreds] = useMutation(SaveNewProviderCreds)
+  const [validateAuth] = useLazyQuery(ValidateAWSAssumeRoleAuth)
+  const [validateCredentials] = useLazyQuery(ValidateAWSAssumeRoleCredentials)
 
   useEffect(() => {
     const initialCredentials: CredentialState = {}
@@ -45,15 +60,70 @@ export const SetupAWSAuth = (props: {
       initialCredentials['access_key_id'] = ''
       initialCredentials['secret_access_key'] = ''
       setName('AWS Access Keys credentials')
+      setAuthValidation(null)
+      setCredentialsValidation(null)
     } else {
       // Assume Role tab - initialize assume role fields
       initialCredentials['role_arn'] = ''
       initialCredentials['external_id'] = ''
       setName('AWS Assume Role credentials')
+      
+      // Validate assume role authentication when switching to assume role tab
+      validateAssumeRoleAuth()
     }
     
     setCredentials(initialCredentials)
   }, [tabIndex])
+
+  // Validate credentials when role ARN changes (for assume role tab)
+  useEffect(() => {
+    if (tabIndex === 1 && credentials['role_arn'] && credentials['role_arn'].trim() !== '') {
+      validateAssumeRoleCredentials()
+    } else {
+      setCredentialsValidation(null)
+    }
+  }, [credentials['role_arn'], credentials['external_id'], credentials['region'], tabIndex])
+
+  const validateAssumeRoleAuth = async () => {
+    try {
+      const { data } = await validateAuth()
+      if (data?.validateAwsAssumeRoleAuth) {
+        setAuthValidation(data.validateAwsAssumeRoleAuth)
+      }
+    } catch (error) {
+      setAuthValidation({
+        valid: false,
+        message: 'Failed to validate assume role authentication',
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
+  const validateAssumeRoleCredentials = async () => {
+    if (!credentials['role_arn'] || credentials['role_arn'].trim() === '') {
+      setCredentialsValidation(null)
+      return
+    }
+
+    try {
+      const { data } = await validateCredentials({
+        variables: {
+          roleArn: credentials['role_arn'],
+          region: credentials['region'],
+          externalId: credentials['external_id'] || null
+        }
+      })
+      if (data?.validateAwsAssumeRoleCredentials) {
+        setCredentialsValidation(data.validateAwsAssumeRoleCredentials)
+      }
+    } catch (error) {
+      setCredentialsValidation({
+        valid: false,
+        message: 'Failed to validate role credentials',
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
 
   const handleCredentialChange = (key: string, value: string) => {
     setCredentials({ ...credentials, [key]: value })
@@ -160,7 +230,33 @@ export const SetupAWSAuth = (props: {
         {tabIndex === 0 ? (
           <p>Use AWS Access Keys and Secret Access Keys for authentication.</p>
         ) : (
-          <p>Use AWS STS to assume a role for temporary credentials. Ideal for cross-account access and enhanced security.</p>
+          <>
+            <p>Use AWS STS to assume a role for temporary credentials. Ideal for cross-account access and enhanced security.</p>
+            
+            {/* Auth validation alert */}
+            {authValidation && !authValidation.valid && (
+              <Alert variant="warning" icon={true}>
+                <div className="space-y-2">
+                  <div className="font-medium">Assume Role Authentication Warning</div>
+                  <div className="text-sm">{authValidation.message}</div>
+                  {authValidation.method === 'none' && (
+                    <div className="text-xs">
+                      For Phase Cloud or self-hosted instances, set AWS_INTEGRATION_ACCESS_KEY_ID and AWS_INTEGRATION_SECRET_ACCESS_KEY environment variables.
+                    </div>
+                  )}
+                </div>
+              </Alert>
+            )}
+            
+            {/* Auth validation success */}
+            {authValidation && authValidation.valid && (
+              <Alert variant="info" icon={true} size="sm">
+                <div className="text-sm">
+                  ✓ Phase can assume AWS roles using {authValidation.method === 'integration_credentials' ? 'integration credentials' : 'machine roles'}
+                </div>
+              </Alert>
+            )}
+          </>
         )}
       </div>
 
@@ -199,6 +295,24 @@ export const SetupAWSAuth = (props: {
             required={false}
             secret={false}
           />
+          
+          {/* Credential validation alerts */}
+          {credentialsValidation && !credentialsValidation.valid && (
+            <Alert variant="danger" icon={true} size="sm">
+              <div className="space-y-1">
+                <div className="font-medium">Role Validation Failed</div>
+                <div className="text-xs">{credentialsValidation.message}</div>
+              </div>
+            </Alert>
+          )}
+          
+          {credentialsValidation && credentialsValidation.valid && (
+            <Alert variant="success" icon={true} size="sm">
+              <div className="text-xs">
+                ✓ Successfully validated role: {credentialsValidation.assumedRoleArn}
+              </div>
+            </Alert>
+          )}
         </>
       )}
 
