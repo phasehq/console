@@ -166,7 +166,7 @@ def validate_aws_assume_role_auth():
             except Exception as machine_role_error:
                 return {
                     'valid': False,
-                    'message': 'No AWS integration credentials found and machine roles are not available. Set AWS_INTEGRATION_ACCESS_KEY_ID and AWS_INTEGRATION_SECRET_ACCESS_KEY environment variables.',
+                    'message': 'AWS credentials or machine/instance roles that are required for assuming role have not been configured.',
                     'method': 'none',
                     'error': str(machine_role_error)
                 }
