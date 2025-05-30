@@ -40,8 +40,8 @@ def list_aws_secrets(region, AWS_ACCESS_KEY_ID=None, AWS_SECRET_ACCESS_KEY=None,
             for secret in page["SecretList"]:
                 secrets_list.append({"name": secret["Name"], "arn": secret["ARN"]})
         return secrets_list
-    except ClientError:
-        raise Exception("Failed to list AWS Secrets")
+    except ClientError as e:
+        raise Exception(f"Failed to list AWS Secrets: {str(e)}")
 
 
 def sync_aws_secrets(
