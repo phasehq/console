@@ -3,7 +3,7 @@ import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.g
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
 import ValidateAWSAssumeRoleAuth from '@/graphql/queries/syncing/aws/validateAssumeRoleAuth.gql'
 import ValidateAWSAssumeRoleCredentials from '@/graphql/queries/syncing/aws/validateAssumeRoleCredentials.gql'
-import { useState, useEffect, useContext, Fragment } from 'react'
+import { useState, useEffect, useContext, Fragment, useCallback } from 'react'
 import { FaQuestionCircle, FaExclamationTriangle } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 import { useMutation, useLazyQuery } from '@apollo/client'
@@ -49,6 +49,38 @@ export const SetupAWSAuth = (props: {
   const [validateAuth] = useLazyQuery(ValidateAWSAssumeRoleAuth)
   const [validateCredentials] = useLazyQuery(ValidateAWSAssumeRoleCredentials)
 
+  const validateAssumeRoleCredentials = useCallback(async () => {
+    if (!credentials['role_arn'] || credentials['role_arn'].trim() === '') {
+      setCredentialsValidation(null)
+      return
+    }
+
+    try {
+      const { data } = await validateCredentials({
+        variables: {
+          roleArn: credentials['role_arn'],
+          region: credentials['region'],
+          externalId: credentials['external_id'] || null
+        }
+      })
+      if (data?.validateAwsAssumeRoleCredentials) {
+        setCredentialsValidation(data.validateAwsAssumeRoleCredentials)
+      } else {
+        setCredentialsValidation({
+          valid: false,
+          message: 'Validation query did not return expected data.',
+          error: 'Empty or malformed response from validateAwsAssumeRoleCredentials query'
+        });
+      }
+    } catch (error) {
+      setCredentialsValidation({
+        valid: false,
+        message: 'Failed to validate role credentials',
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }, [credentials, validateCredentials, setCredentialsValidation]);
+
   useEffect(() => {
     const initialCredentials: CredentialState = {}
     
@@ -82,7 +114,7 @@ export const SetupAWSAuth = (props: {
     } else {
       setCredentialsValidation(null)
     }
-  }, [credentials['role_arn'], credentials['external_id'], credentials['region'], tabIndex])
+  }, [tabIndex, credentials, validateAssumeRoleCredentials, setCredentialsValidation])
 
   const validateAssumeRoleAuth = async () => {
     try {
@@ -94,32 +126,6 @@ export const SetupAWSAuth = (props: {
       setAuthValidation({
         valid: false,
         message: 'Failed to validate assume role authentication',
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
-  }
-
-  const validateAssumeRoleCredentials = async () => {
-    if (!credentials['role_arn'] || credentials['role_arn'].trim() === '') {
-      setCredentialsValidation(null)
-      return
-    }
-
-    try {
-      const { data } = await validateCredentials({
-        variables: {
-          roleArn: credentials['role_arn'],
-          region: credentials['region'],
-          externalId: credentials['external_id'] || null
-        }
-      })
-      if (data?.validateAwsAssumeRoleCredentials) {
-        setCredentialsValidation(data.validateAwsAssumeRoleCredentials)
-      }
-    } catch (error) {
-      setCredentialsValidation({
-        valid: false,
-        message: 'Failed to validate role credentials',
         error: error instanceof Error ? error.message : String(error)
       })
     }
