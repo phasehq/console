@@ -88,13 +88,6 @@ export const SetupAWSAuth = (props: {
     initialCredentials['region'] = awsRegions[0].region
     
     if (tabIndex === 0) {
-      // Access Keys tab - initialize access key fields
-      initialCredentials['access_key_id'] = ''
-      initialCredentials['secret_access_key'] = ''
-      setName('AWS Access Keys credentials')
-      setAuthValidation(null)
-      setCredentialsValidation(null)
-    } else {
       // Assume Role tab - initialize assume role fields
       initialCredentials['role_arn'] = ''
       initialCredentials['external_id'] = ''
@@ -102,6 +95,13 @@ export const SetupAWSAuth = (props: {
       
       // Validate assume role authentication when switching to assume role tab
       validateAssumeRoleAuth()
+    } else {
+      // Access Keys tab - initialize access key fields
+      initialCredentials['access_key_id'] = ''
+      initialCredentials['secret_access_key'] = ''
+      setName('AWS Access Keys credentials')
+      setAuthValidation(null)
+      setCredentialsValidation(null)
     }
     
     setCredentials(initialCredentials)
@@ -109,7 +109,7 @@ export const SetupAWSAuth = (props: {
 
   // Validate credentials when role ARN changes (for assume role tab)
   useEffect(() => {
-    if (tabIndex === 1 && credentials['role_arn'] && credentials['role_arn'].trim() !== '') {
+    if (tabIndex === 0 && credentials['role_arn'] && credentials['role_arn'].trim() !== '') {
       validateAssumeRoleCredentials()
     } else {
       setCredentialsValidation(null)
@@ -139,21 +139,21 @@ export const SetupAWSAuth = (props: {
     e.preventDefault()
 
     // Determine the provider ID based on the selected tab
-    const providerId = tabIndex === 0 ? 'aws' : 'aws_assume_role'
+    const providerId = tabIndex === 0 ? 'aws_assume_role' : 'aws'
 
     // Create the appropriate provider object for encryption
     const providerForEncryption = tabIndex === 0 ? {
-      // AWS Access Keys provider
-      id: 'aws',
-      name: 'AWS',
-      expectedCredentials: ['access_key_id', 'secret_access_key', 'region'],
-      optionalCredentials: []
-    } : {
       // AWS Assume Role provider  
       id: 'aws_assume_role',
       name: 'AWS Assume Role',
       expectedCredentials: ['role_arn', 'region'],
       optionalCredentials: ['external_id']
+    } : {
+      // AWS Access Keys provider
+      id: 'aws',
+      name: 'AWS',
+      expectedCredentials: ['access_key_id', 'secret_access_key', 'region'],
+      optionalCredentials: []
     }
 
     const encryptedCredentials = JSON.stringify(
@@ -210,7 +210,7 @@ export const SetupAWSAuth = (props: {
                     : ' border-transparent cursor-pointer'
                 )}
               >
-                Access Keys
+                Assume Role
               </div>
             )}
           </Tab>
@@ -225,7 +225,7 @@ export const SetupAWSAuth = (props: {
                     : ' border-transparent cursor-pointer'
                 )}
               >
-                Assume Role
+                Access Keys
               </div>
             )}
           </Tab>
@@ -234,8 +234,6 @@ export const SetupAWSAuth = (props: {
 
       <div className="text-neutral-500 space-y-4">
         {tabIndex === 0 ? (
-          <p>Use AWS Access Keys and Secret Access Keys for authentication.</p>
-        ) : (
           <>
             <p>Use AWS STS to assume a role for authentication.</p>
             
@@ -248,36 +246,20 @@ export const SetupAWSAuth = (props: {
                 </div>
               </Alert>
             )}
-          
           </>
+        ) : (
+          <p>Use AWS Access Keys and Secret Access Keys for authentication.</p>
         )}
       </div>
 
       {tabIndex === 0 ? (
-        // Access Keys fields
-        <>
-          <Input
-            value={credentials['access_key_id'] || ''}
-            setValue={(value) => handleCredentialChange('access_key_id', value)}
-            label="ACCESS KEY ID"
-            required
-            secret={false}
-          />
-          <Input
-            value={credentials['secret_access_key'] || ''}
-            setValue={(value) => handleCredentialChange('secret_access_key', value)}
-            label="SECRET ACCESS KEY"
-            required
-            secret={true}
-          />
-        </>
-      ) : (
         // Assume Role fields
         <>
           <Input
             value={credentials['role_arn'] || ''}
             setValue={(value) => handleCredentialChange('role_arn', value)}
-            label="ROLE ARN"
+            label="ARN OF ROLE TO BE ASSUMED"
+            placeholder="arn:aws:iam::123456789012:role/your-role"
             required
             secret={false}
           />
@@ -285,6 +267,7 @@ export const SetupAWSAuth = (props: {
             value={credentials['external_id'] || ''}
             setValue={(value) => handleCredentialChange('external_id', value)}
             label="EXTERNAL ID (Optional)"
+            placeholder="Optional"
             required={false}
             secret={false}
           />
@@ -306,6 +289,26 @@ export const SetupAWSAuth = (props: {
               </div>
             </Alert>
           )}
+        </>
+      ) : (
+        // Access Keys fields
+        <>
+          <Input
+            value={credentials['access_key_id'] || ''}
+            setValue={(value) => handleCredentialChange('access_key_id', value)}
+            label="ACCESS KEY ID"
+            placeholder="AKIAIOSFODNN7EXAMPLE"
+            required
+            secret={false}
+          />
+          <Input
+            value={credentials['secret_access_key'] || ''}
+            setValue={(value) => handleCredentialChange('secret_access_key', value)}
+            label="SECRET ACCESS KEY"
+            placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+            required
+            secret={true}
+          />
         </>
       )}
 
