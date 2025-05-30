@@ -2,8 +2,8 @@ import { ProviderType } from '@/apollo/graphql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
-import { useState, useEffect, useContext, Fragment } from 'react'
-import { FaArrowRight, FaQuestionCircle } from 'react-icons/fa'
+import { useState, useEffect, useContext } from 'react'
+import { FaArrowRight } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { useMutation, useQuery } from '@apollo/client'
 import { Input } from '../common/Input'
@@ -17,6 +17,7 @@ import { awsRegions } from '@/utils/syncing/aws'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
 import { SetupAWSAuth } from './AWS/SetupAWSAuth'
+import { MdMenuBook } from 'react-icons/md'
 
 interface CredentialState {
   [key: string]: string
@@ -168,9 +169,9 @@ export const CreateProviderCredentials = (props: {
               <span className="font-semibold text-black dark:text-white">{provider.name}</span>
             </div>
             <Link href={docsLink(provider)} target="_blank">
-              <Button type="button" variant="secondary">
-                <FaQuestionCircle className="my-1 shrink-0" />
-                Help
+              <Button type="button" variant="outline">
+                <MdMenuBook className="my-1 shrink-0" />
+                Docs
               </Button>
             </Link>
           </div>

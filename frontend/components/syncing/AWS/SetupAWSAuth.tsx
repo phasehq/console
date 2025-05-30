@@ -4,7 +4,6 @@ import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCre
 import ValidateAWSAssumeRoleAuth from '@/graphql/queries/syncing/aws/validateAssumeRoleAuth.gql'
 import ValidateAWSAssumeRoleCredentials from '@/graphql/queries/syncing/aws/validateAssumeRoleCredentials.gql'
 import { useState, useEffect, useContext, Fragment, useCallback } from 'react'
-import { FaQuestionCircle, FaExclamationTriangle } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 import { useMutation, useLazyQuery } from '@apollo/client'
 import { Input } from '../../common/Input'
@@ -19,6 +18,7 @@ import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { Alert } from '../../common/Alert'
 import _sodium from 'libsodium-wrappers-sumo'
+import { MdMenuBook } from 'react-icons/md'
 
 interface CredentialState {
   [key: string]: string
@@ -200,9 +200,9 @@ export const SetupAWSAuth = (props: {
           <span className="font-semibold text-black dark:text-white">AWS</span>
         </div>
         <Link href={docsLink} target="_blank">
-          <Button type="button" variant="secondary">
-            <FaQuestionCircle className="my-1 shrink-0" />
-            Help
+          <Button type="button" variant="outline">
+            <MdMenuBook className="my-1 shrink-0" />
+            Docs
           </Button>
         </Link>
       </div>
