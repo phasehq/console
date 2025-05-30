@@ -146,6 +146,32 @@ def resolve_aws_secret_manager_secrets(root, info, credential_id):
         raise GraphQLError(ex)
 
 
+def resolve_validate_aws_assume_role_auth(root, info):
+    """
+    Validate if AWS assume role authentication is available for the Phase instance.
+    """
+    from api.utils.syncing.aws.auth import validate_aws_assume_role_auth
+    
+    try:
+        validation_result = validate_aws_assume_role_auth()
+        return validation_result
+    except Exception as ex:
+        raise GraphQLError(str(ex))
+
+
+def resolve_validate_aws_assume_role_credentials(root, info, role_arn, region=None, external_id=None):
+    """
+    Validate if specific AWS assume role credentials can be successfully used.
+    """
+    from api.utils.syncing.aws.auth import validate_aws_assume_role_credentials
+    
+    try:
+        validation_result = validate_aws_assume_role_credentials(role_arn, region, external_id)
+        return validation_result
+    except Exception as ex:
+        raise GraphQLError(str(ex))
+
+
 def resolve_gh_repos(root, info, credential_id):
     try:
         secrets = list_repos(credential_id)
