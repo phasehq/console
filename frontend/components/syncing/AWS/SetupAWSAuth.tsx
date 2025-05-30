@@ -255,6 +255,24 @@ export const SetupAWSAuth = (props: {
       {tabIndex === 0 ? (
         // Assume Role fields
         <>
+          {/* Credential validation alerts */}
+          {credentialsValidation && !credentialsValidation.valid && (
+            <Alert variant="danger" icon={true} size="sm">
+              <div className="space-y-1">
+                <div className="font-medium">Role Validation Failed</div>
+                <div className="text-xs">{credentialsValidation.message}</div>
+              </div>
+            </Alert>
+          )}
+          
+          {credentialsValidation && credentialsValidation.valid && (
+            <Alert variant="success" icon={true} size="sm">
+              <div className="text-xs">
+                Successfully validated role: <span className="font-mono">{credentialsValidation.assumedRoleArn}</span>
+              </div>
+            </Alert>
+          )}
+          
           <Input
             value={credentials['role_arn'] || ''}
             setValue={(value) => handleCredentialChange('role_arn', value)}
@@ -271,24 +289,6 @@ export const SetupAWSAuth = (props: {
             required={false}
             secret={false}
           />
-          
-          {/* Credential validation alerts */}
-          {credentialsValidation && !credentialsValidation.valid && (
-            <Alert variant="danger" icon={true} size="sm">
-              <div className="space-y-1">
-                <div className="font-medium">Role Validation Failed</div>
-                <div className="text-xs">{credentialsValidation.message}</div>
-              </div>
-            </Alert>
-          )}
-          
-          {credentialsValidation && credentialsValidation.valid && (
-            <Alert variant="success" icon={true} size="sm">
-              <div className="text-xs">
-                Successfully validated role: {credentialsValidation.assumedRoleArn}
-              </div>
-            </Alert>
-          )}
         </>
       ) : (
         // Access Keys fields
