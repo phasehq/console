@@ -239,7 +239,7 @@ def validate_aws_assume_role_credentials(role_arn, region=None, external_id=None
         if 'AccessDenied' in error_message:
             return {
                 'valid': False,
-                'message': 'Access denied when assuming role. Check that the role trust policy allows the Phase credentials to assume this role.',
+                'message': 'Access denied when assuming role. Check that the role trust policy allows the Phase integration credentials to assume this role.',
                 'error': error_message
             }
         elif 'InvalidUserID.NotFound' in error_message:
