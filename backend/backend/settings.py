@@ -1,9 +1,7 @@
 import os
 from pathlib import Path
-from datetime import timedelta
 import logging.config
 from backend.utils.secrets import get_secret
-
 from ee.licensing.verifier import check_license
 
 # Clear prev config

@@ -3,7 +3,7 @@ import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
 import { useState, useEffect, useContext } from 'react'
-import { FaArrowRight, FaQuestionCircle } from 'react-icons/fa'
+import { FaArrowRight } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { useMutation, useQuery } from '@apollo/client'
 import { Input } from '../common/Input'
@@ -16,6 +16,8 @@ import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 import { awsRegions } from '@/utils/syncing/aws'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
+import { SetupAWSAuth } from './AWS/SetupAWSAuth'
+import { MdMenuBook } from 'react-icons/md'
 
 interface CredentialState {
   [key: string]: string
@@ -73,7 +75,7 @@ export const CreateProviderCredentials = (props: {
           initialCredentials[cred] = ''
         })
       }
-      if (provider.id === 'aws') initialCredentials['region'] = awsRegions[0].region
+      if (provider.id === 'aws' || provider.id === 'aws_assume_role') initialCredentials['region'] = awsRegions[0].region
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
@@ -93,7 +95,7 @@ export const CreateProviderCredentials = (props: {
   const docsLink = (provider: ProviderType) => {
     if (provider.id === 'cloudflare')
       return 'https://docs.phase.dev/integrations/platforms/cloudflare-pages'
-    else if (provider.id === 'aws')
+    else if (provider.id === 'aws' || provider.id === 'aws_assume_role')
       return 'https://docs.phase.dev/integrations/platforms/aws-secrets-manager'
     else if (provider.id === 'hashicorp_vault')
       return 'https://docs.phase.dev/integrations/platforms/hashicorp-vault'
@@ -146,6 +148,17 @@ export const CreateProviderCredentials = (props: {
     props.onComplete()
   }
 
+  if (provider?.id === 'aws' || provider?.id === 'aws_assume_role') {
+    return (
+      <SetupAWSAuth
+        provider={provider}
+        serverPublicKey={providersData.serverPublicKey}
+        onComplete={props.onComplete}
+        onBack={handleClickBack}
+      />
+    )
+  }
+
   return (
     <>
       <form className="space-y-6" onSubmit={handleSubmit}>
@@ -156,9 +169,9 @@ export const CreateProviderCredentials = (props: {
               <span className="font-semibold text-black dark:text-white">{provider.name}</span>
             </div>
             <Link href={docsLink(provider)} target="_blank">
-              <Button type="button" variant="secondary">
-                <FaQuestionCircle className="my-1 shrink-0" />
-                Help
+              <Button type="button" variant="outline">
+                <MdMenuBook className="my-1 shrink-0" />
+                Docs
               </Button>
             </Link>
           </div>
@@ -166,7 +179,7 @@ export const CreateProviderCredentials = (props: {
 
         {provider === null && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {providers.map((provider) => (
+            {providers.filter(provider => provider.id !== 'aws_assume_role').map((provider) => (
               <button key={provider.id} type="button" onClick={() => setProvider(provider)}>
                 <ProviderCard provider={provider} />
               </button>
@@ -201,8 +214,11 @@ export const CreateProviderCredentials = (props: {
               />
             ))}
 
-        {provider?.id === 'aws' && (
-          <AWSRegionPicker onChange={(region) => handleCredentialChange('region', region)} />
+        {(provider?.id === 'aws' || provider?.id === 'aws_assume_role') && (
+          <AWSRegionPicker 
+            value={credentials['region']} 
+            onChange={(region) => handleCredentialChange('region', region)} 
+          />
         )}
 
         {provider && provider?.authScheme === 'token' && (

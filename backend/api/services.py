@@ -15,6 +15,14 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    AWS_ASSUME_ROLE = {
+        "id": "aws_assume_role",
+        "name": "AWS Assume Role",
+        "expected_credentials": ["role_arn", "region"],
+        "optional_credentials": ["external_id"],
+        "auth_scheme": "token",
+    }
+
     GITHUB = {
         "id": "github",
         "name": "GitHub",
