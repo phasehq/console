@@ -9,7 +9,7 @@ export const Alert = (props: {
   size?: 'sm' | 'md'
 }) => {
   const variantStyles = {
-    success: 'bg-emerald-200/60 dark:bg-emerald-400/10 ring-emerald-500 text-emerald-500',
+    success: 'bg-emerald-200/60 dark:bg-emerald-400/10 ring-emerald-400/20 text-emerald-500',
     warning:
       'bg-amber-300/40 dark:bg-amber-400/10 ring-amber-500/40 text-black dark:text-amber-400',
     info: 'bg-cyan-300/40 dark:bg-cyan-800/30 ring-cyan-400/10 text-black dark:text-cyan-400',
