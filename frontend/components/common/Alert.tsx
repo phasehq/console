@@ -22,7 +22,7 @@ export const Alert = (props: {
   }
 
   const variantIcons = {
-    success: <FaCheck />,
+    success: <FaCheck className="shrink-0" />,
     warning: <FaExclamationTriangle className="shrink-0" />,
     danger: <FaExclamationTriangle className="shrink-0" />,
     info: <FaInfoCircle className="shrink-0" />,
