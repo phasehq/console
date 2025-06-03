@@ -1,3 +1,13 @@
+import sys
+import os
+
+# Add the project root to sys.path
+# Assuming this test file is at backend/tests/utils/syncing/aws/test_secrets_manager.py
+# The project root (containing the 'backend' package) is 5 levels up.
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import unittest
 from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
@@ -123,11 +133,10 @@ class TestSecretsManager(unittest.TestCase):
         mock_get_client.return_value = mock_secrets_client
         
         error_response = {'Error': {'Code': 'AccessDenied', 'Message': 'User not authorized'}}
-        # Make get_paginator itself raise the error, as it's called before paginate()
         mock_secrets_client.get_paginator.side_effect = ClientError(error_response, 'list_secrets')
 
         # Act & Assert
-        expected_error_message = "Failed to list AWS Secrets: An error occurred \(AccessDenied\) when calling the list_secrets operation: User not authorized"
+        expected_error_message = "Failed to list AWS Secrets: An error occurred \\(AccessDenied\\) when calling the list_secrets operation: User not authorized"
         with self.assertRaisesRegex(Exception, expected_error_message):
             list_aws_secrets(
                 region=mock_region,
