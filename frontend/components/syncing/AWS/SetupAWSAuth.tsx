@@ -62,7 +62,8 @@ export const SetupAWSAuth = (props: {
           roleArn: credentials['role_arn'],
           region: credentials['region'],
           externalId: credentials['external_id'] || null
-        }
+        },
+        fetchPolicy: 'network-only'
       })
       if (data?.validateAwsAssumeRoleCredentials) {
         setCredentialsValidation(data.validateAwsAssumeRoleCredentials)
