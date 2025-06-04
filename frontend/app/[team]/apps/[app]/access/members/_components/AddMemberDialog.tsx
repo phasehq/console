@@ -191,12 +191,12 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
       query === ''
         ? memberOptions
         : memberOptions.filter((member: OrganisationMemberType) => {
-            const memberQueryableName = member.fullName || member.email!
+            const memberQueryableName = `${member.fullName} ${member.email}`
             return memberQueryableName.toLowerCase().includes(query.toLowerCase())
           })
 
     return (
-      <Menu as="div" className="relative inline-block text-left group">
+      <Menu as="div" className="relative inline-block text-left group w-96">
         <Menu.Button as={Fragment}>
           <Button variant="ghost">
             <FaPlus className="mr-1" />{' '}
@@ -212,8 +212,8 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
           leaveFrom="transform scale-100 opacity-100"
           leaveTo="transform scale-95 opacity-0"
         >
-          <Menu.Items className="absolute z-10 left-0 origin-top-right mt-2 flex flex-col w-min divide-y divide-neutral-500/40 p-px rounded-md   shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-screen-lg text-sm">
+          <Menu.Items className="absolute z-10 left-0 origin-top-right mt-2 divide-y divide-neutral-500/40 p-px rounded-md shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full text-sm">
               <FaSearch className="text-neutral-500" />
 
               <input
@@ -236,7 +236,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
               />
             </div>
 
-            <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md">
+            <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-mdw-full max-w-screen-lg">
               {loading ? (
                 <div className="p-4">
                   <Spinner size="sm" />
@@ -247,7 +247,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                     {({ active }) => (
                       <div
                         className={clsx(
-                          'flex items-center w-full gap-2 p-2 text-sm cursor-pointer transition ease',
+                          'flex items-center gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
                           active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
                         )}
                         onClick={() => setSelectedMembers([...selectedMembers, member])}
@@ -439,7 +439,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
               ))}
             </div>
 
-            <div className="w-full">
+            <div className="flex w-full">
               <AddMemberMenu />
             </div>
 
