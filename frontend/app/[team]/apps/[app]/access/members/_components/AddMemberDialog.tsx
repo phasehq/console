@@ -4,7 +4,7 @@ import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useRef, useState } from 'react'
+import { Fragment, useContext, useMemo, useRef, useState } from 'react'
 import { OrganisationMemberType, EnvironmentType, MemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { Listbox, Menu, Transition } from '@headlessui/react'
@@ -54,7 +54,6 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
     ? userHasPermission(organisation?.role?.permissions, 'Members', 'create', true) &&
       userHasPermission(organisation?.role?.permissions, 'Members', 'read')
     : false
-  // AppMembers:update + Environments:read
 
   const { data: orgMembersData } = useQuery(GetOrganisationMembers, {
     variables: {
@@ -73,17 +72,20 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
 
   const [selectedMembers, setSelectedMembers] = useState<MemberWithEnvScope[]>([])
 
-  const memberOptions: MemberWithEnvScope[] =
-    orgMembersData?.organisationMembers
-      .filter(
-        (orgMember: OrganisationMemberType) =>
-          !data?.appUsers.some((appUser: OrganisationMemberType) => appUser.id === orgMember.id)
-      )
-      .map((member: OrganisationMemberType) => ({
-        ...member,
-        scope: [],
-      }))
-      .filter((m: MemberWithEnvScope) => !selectedMembers.map((sm) => sm.id).includes(m.id)) ?? []
+  const memberOptions = useMemo(() => {
+    return (
+      orgMembersData?.organisationMembers
+        .filter(
+          (orgMember: OrganisationMemberType) =>
+            !data?.appUsers.some((appUser: OrganisationMemberType) => appUser.id === orgMember.id)
+        )
+        .map((member: OrganisationMemberType) => ({
+          ...member,
+          scope: [],
+        }))
+        .filter((m: MemberWithEnvScope) => !selectedMembers.map((sm) => sm.id).includes(m.id)) ?? []
+    )
+  }, [orgMembersData, data, selectedMembers])
 
   const [bulkAddMembers] = useMutation(BulkAddMembersToApp)
 
@@ -184,7 +186,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
     closeModal()
   }
 
-  const AddMemberMenu = () => {
+  const SelectMemberMenu = () => {
     const [query, setQuery] = useState('')
 
     const filteredPeople =
@@ -303,7 +305,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
           </>
         }
       >
-        {memberOptions.length === 0 ? (
+        {memberOptions.length === 0 && selectedMembers.length === 0 ? (
           <div className="py-4">
             <Alert variant="info" icon={true}>
               <div className="flex flex-col gap-2">
@@ -440,7 +442,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
             </div>
 
             <div className="flex w-full">
-              <AddMemberMenu />
+              <SelectMemberMenu />
             </div>
 
             <div className="flex items-center justify-between gap-4">

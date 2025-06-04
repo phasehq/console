@@ -8,15 +8,16 @@ import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { EnvironmentType, ServiceAccountType, MemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Combobox, Listbox, Transition } from '@headlessui/react'
+import { Listbox, Menu, Transition } from '@headlessui/react'
 import {
   FaArrowRight,
-  FaAsterisk,
   FaCheckCircle,
-  FaChevronDown,
   FaCircle,
   FaPlus,
   FaRobot,
+  FaSearch,
+  FaTimesCircle,
+  FaTrashAlt,
 } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
@@ -27,6 +28,13 @@ import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { useSearchParams } from 'next/navigation'
 import GenericDialog from '@/components/common/GenericDialog'
+import { EmptyState } from '@/components/common/EmptyState'
+import Spinner from '@/components/common/Spinner'
+import { MdSearchOff } from 'react-icons/md'
+
+type AccountWithEnvScope = ServiceAccountType & {
+  scope: Partial<EnvironmentType>[]
+}
 
 export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const searchParams = useSearchParams()
@@ -66,14 +74,6 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
-  const accountOptions =
-    serviceAccountsData?.serviceAccounts.filter(
-      (account: ServiceAccountType) =>
-        !data?.appServiceAccounts
-          .map((account: ServiceAccountType) => account.id)
-          .includes(account.id)
-    ) ?? []
-
   const [bulkAddMembers] = useMutation(BulkAddMembersToApp)
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
@@ -83,7 +83,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
     skip: !userCanReadEnvironments,
   })
 
-  const envOptions =
+  const envOptions: Partial<EnvironmentType>[] =
     appEnvsData?.appEnvironments.map((env: EnvironmentType) => {
       const { id, name } = env
 
@@ -93,17 +93,27 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       }
     }) ?? []
 
-  const [selectedAccounts, setSelectedAccounts] = useState<ServiceAccountType[]>([])
-  const [query, setQuery] = useState('')
-  const [envScope, setEnvScope] = useState<Array<Record<string, string>>>([])
-  const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
+  const [selectedAccounts, setSelectedAccounts] = useState<AccountWithEnvScope[]>([])
 
-  const filteredAccounts =
-    query === ''
-      ? accountOptions
-      : accountOptions.filter((account: ServiceAccountType) => {
-          return account.name.toLowerCase().includes(query.toLowerCase())
-        })
+  const accountOptions =
+    serviceAccountsData?.serviceAccounts
+      .filter(
+        (account: ServiceAccountType) =>
+          !data?.appServiceAccounts
+            .map((account: ServiceAccountType) => account.id)
+            .includes(account.id)
+      )
+      .map((account: ServiceAccountType) => ({
+        ...account,
+        scope: [],
+      }))
+      .filter(
+        (acc: AccountWithEnvScope) => !selectedAccounts.map((sacc) => sacc.id).includes(acc.id)
+      ) ??
+    [] ??
+    []
+
+  const accountWithoutScope = selectedAccounts.some((account) => account.scope.length === 0)
 
   const openModal = () => dialogRef.current?.openModal()
   const closeModal = () => dialogRef.current?.closeModal()
@@ -133,15 +143,9 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const handleAddMembers = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
-    if (envScope.length === 0) {
-      setShowEnvHint(true)
+    if (accountWithoutScope) {
+      toast.error('Please select an Environment scope for all accounts')
       return false
-    }
-
-    if (preselectedAccountId) {
-      const url = new URL(window.location.href)
-      url.searchParams.delete('new')
-      window.history.replaceState({}, '', url.toString())
     }
 
     const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
@@ -155,28 +159,29 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
     }[] = []
 
     for (const env of appEnvironments) {
-      if (!envScope.map((e) => e.id).includes(env.id)) continue
-
-      const { data } = await getEnvKey({
-        variables: {
-          envId: env.id,
-          appId: appId,
-        },
-      })
-
-      const {
-        wrappedSeed: userWrappedSeed,
-        wrappedSalt: userWrappedSalt,
-        identityKey,
-      } = data.environmentKeys[0]
-
-      const { seed, salt } = await unwrapEnvSecretsForUser(
-        userWrappedSeed,
-        userWrappedSalt,
-        keyring!
-      )
-
       for (const account of selectedAccounts) {
+        const selectedEnvIds = account.scope.map((env) => env.id!) ?? []
+        if (!selectedEnvIds.includes(env.id)) continue
+
+        const { data } = await getEnvKey({
+          variables: {
+            envId: env.id,
+            appId: appId,
+          },
+        })
+
+        const {
+          wrappedSeed: userWrappedSeed,
+          wrappedSalt: userWrappedSalt,
+          identityKey,
+        } = data.environmentKeys[0]
+
+        const { seed, salt } = await unwrapEnvSecretsForUser(
+          userWrappedSeed,
+          userWrappedSalt,
+          keyring!
+        )
+
         const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount({ seed, salt }, account)
 
         envKeyInputs.push({
@@ -211,18 +216,125 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
     closeModal()
   }
 
+  const SelectAccountMenu = () => {
+    const [query, setQuery] = useState('')
+
+    const filteredAccounts =
+      query === ''
+        ? accountOptions
+        : accountOptions.filter((account: AccountWithEnvScope) => {
+            return account.name.toLowerCase().includes(query.toLowerCase())
+          })
+
+    return (
+      <Menu as="div" className="relative inline-block text-left group w-96">
+        <Menu.Button as={Fragment}>
+          <Button variant="ghost">
+            <FaPlus className="mr-1" />
+            {selectedAccounts.length ? 'Add another account' : 'Select a Service Account'}
+          </Button>
+        </Menu.Button>
+
+        <Transition
+          as={Fragment}
+          enter="transition duration-100 ease-out"
+          enterFrom="transform scale-95 opacity-0"
+          enterTo="transform scale-100 opacity-100"
+          leave="transition duration-75 ease-out"
+          leaveFrom="transform scale-100 opacity-100"
+          leaveTo="transform scale-95 opacity-0"
+        >
+          <Menu.Items className="absolute z-10 left-0 origin-top-right mt-2 divide-y divide-neutral-500/40 p-px rounded-md shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full text-sm">
+              <FaSearch className="text-neutral-500" />
+
+              <input
+                placeholder="Search Service Accounts"
+                className="custom bg-zinc-100 dark:bg-zinc-800"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <FaTimesCircle
+                className={clsx(
+                  'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                  query ? 'opacity-100' : 'opacity-0'
+                )}
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setQuery('')
+                }}
+              />
+            </div>
+
+            <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-lg">
+              {loading ? (
+                <div className="p-4">
+                  <Spinner size="sm" />
+                </div>
+              ) : filteredAccounts.length > 0 ? (
+                filteredAccounts.map((account: AccountWithEnvScope) => (
+                  <Menu.Item key={account.id}>
+                    {({ active }) => (
+                      <div
+                        className={clsx(
+                          'flex items-center gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
+                          active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
+                        )}
+                        onClick={() => setSelectedAccounts([...selectedAccounts, account])}
+                      >
+                        <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-8">
+                          <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                            {account.name}
+                          </div>
+                          <div className="text-neutral-500 text-xs leading-4">{account.id}</div>
+                        </div>
+                      </div>
+                    )}
+                  </Menu.Item>
+                ))
+              ) : query ? (
+                <div className="p-4 w-64">
+                  <EmptyState
+                    title={`No results for "${query}"`}
+                    subtitle="Try adjusting your search term"
+                    graphic={
+                      <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                        <MdSearchOff />
+                      </div>
+                    }
+                  >
+                    <></>
+                  </EmptyState>
+                </div>
+              ) : (
+                <div className="p-4 text-center text-neutral-500 text-sm w-64">
+                  All service accounts are already added to this app
+                </div>
+              )}
+            </div>
+          </Menu.Items>
+        </Transition>
+      </Menu>
+    )
+  }
+
   return (
     <>
       <GenericDialog
         ref={dialogRef}
-        title="Add a Service Account"
+        title="Add Service Accounts"
         buttonContent={
           <>
-            <FaPlus /> Add account
+            <FaPlus /> Add accounts
           </>
         }
       >
-        {accountOptions.length === 0 ? (
+        {accountOptions.length === 0 && selectedAccounts.length === 0 ? (
           <div className="py-4">
             <Alert variant="info" icon={true}>
               <div className="flex flex-col gap-2">
@@ -241,189 +353,135 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
         ) : (
           <form className="space-y-6" onSubmit={handleAddMembers}>
             <p className="text-neutral-500 text-sm">
-              Select a service account to add to this App, and choose the Environments that it will
+              Select Service Accounts to add to this App, and choose the Environments that they will
               be able to access.
             </p>
-            <div className="relative">
-              <Combobox
-                value={selectedAccounts}
-                onChange={(accounts) => setSelectedAccounts(accounts)}
-                multiple
-              >
-                {({ open }) => (
-                  <>
-                    <div className="space-y-1">
-                      <Combobox.Label as={Fragment}>
-                        <label className="block text-neutral-500 text-sm" htmlFor="user">
-                          Member
-                        </label>
-                      </Combobox.Label>
-                      <div className="w-full relative flex items-center text-sm">
-                        <Combobox.Input
-                          id="user"
-                          className="w-full"
-                          onChange={(event) => setQuery(event.target.value)}
-                          onClick={() => (!open ? comboboxButtonRef.current?.click() : {})}
-                          onFocus={() => (!open ? comboboxButtonRef.current?.click() : {})}
-                          required
-                          placeholder="Select an account"
-                          displayValue={(accounts: ServiceAccountType[]) =>
-                            accounts.map((account) => account.name).join(', ')
-                          }
-                        />
-                        <div className="absolute inset-y-0 right-2 flex items-center">
-                          <Combobox.Button ref={comboboxButtonRef}>
-                            <FaChevronDown
-                              className={clsx(
-                                'text-neutral-500 transform transition ease cursor-pointer',
-                                open ? 'rotate-180' : 'rotate-0'
-                              )}
-                            />
-                          </Combobox.Button>
-                        </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 justify-between">
+                <div className="w-1/2 text-2xs font-medium text-gray-500 uppercase tracking-wider">
+                  Account
+                </div>
+                <div className="w-1/2 text-2xs font-medium text-gray-500 uppercase tracking-wider">
+                  Environment scope
+                </div>
+                <div className="w-9"></div>
+              </div>
+              {selectedAccounts.map((account, index) => (
+                <div key={account.id} className="space-y-1 flex items-center justify-between gap-2">
+                  <div className={clsx('flex items-center gap-2 p-1 text-sm w-1/2')}>
+                    <div>
+                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                        {account.name}
                       </div>
                     </div>
-
-                    <Combobox.Options as={Fragment}>
-                      <div className="bg-neutral-200 dark:bg-neutral-800 p-1 rounded-b-md shadow-xl z-10 divide-y divide-neutral-500/20 absolute w-full max-h-96 overflow-y-auto ring-1 ring-inset ring-neutral-500/40">
-                        {filteredAccounts.map((account: ServiceAccountType) => (
-                          <Combobox.Option as={Fragment} key={account.id} value={account}>
-                            {({ active, selected }) => (
-                              <div
-                                className={clsx(
-                                  'flex items-center justify-between cursor-pointer transition ease',
-                                  active
-                                    ? 'text-zinc-900 dark:text-zinc-100 bg-neutral-100 dark:bg-neutral-700'
-                                    : 'text-zinc-700 dark:text-zinc-300'
-                                )}
-                              >
-                                <div className={clsx('flex items-center gap-2 p-1 text-sm')}>
-                                  <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-12">
-                                    <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold">{account.name}</div>
-                                    {account.id}
-                                  </div>
-                                </div>
-                                <div className="px-2">
-                                  {selected && <FaCheckCircle className="text-emerald-500" />}
-                                </div>
-                              </div>
+                  </div>
+                  <div className="w-1/2">
+                    <Listbox
+                      multiple
+                      by="id"
+                      value={account.scope ?? []}
+                      onChange={(newScopes) =>
+                        setSelectedAccounts((prev) =>
+                          prev.map((m) => (m.id === account.id ? { ...m, scope: newScopes } : m))
+                        )
+                      }
+                    >
+                      {({ open }) => (
+                        <div className="relative">
+                          <Listbox.Button
+                            className={clsx(
+                              'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  cursor-pointer min-h-10 text-sm text-left w-full',
+                              open ? 'rounded-t-md' : 'rounded-md',
+                              account.scope?.length
+                                ? 'text-zinc-900 dark:text-zinc-100'
+                                : 'text-zinc-500'
                             )}
-                          </Combobox.Option>
-                        ))}
+                          >
+                            {account.scope?.length
+                              ? envOptions
+                                  .filter((env) =>
+                                    account.scope
+                                      .map((selectedEnv) => selectedEnv.id)
+                                      .includes(env.id!)
+                                  )
+                                  .map((env) => env.name)
+                                  .join(', ')
+                              : 'Select environment scope'}
+                          </Listbox.Button>
+                          <Transition
+                            as={Fragment}
+                            leave="transition ease-in duration-100"
+                            leaveFrom="opacity-100"
+                            leaveTo="opacity-0"
+                          >
+                            <Listbox.Options className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md ring-1 ring-inset ring-neutral-500/40 shadow-2xl absolute -my-px z-10 w-full divide-y divide-neutral-500/20">
+                              {envOptions.map((env) => (
+                                <Listbox.Option key={`${account.id}-${env.id}`} value={env}>
+                                  {({ active, selected }) => (
+                                    <div
+                                      className={clsx(
+                                        'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
+                                        active ? ' bg-neutral-100 dark:bg-neutral-700' : ''
+                                      )}
+                                    >
+                                      {selected ? (
+                                        <FaCheckCircle className="text-emerald-500" />
+                                      ) : (
+                                        <FaCircle className="text-neutral-500" />
+                                      )}
+                                      <span
+                                        className={clsx(
+                                          'block truncate',
+                                          selected ? 'font-medium' : 'font-normal'
+                                        )}
+                                      >
+                                        {env.name}
+                                      </span>
+                                    </div>
+                                  )}
+                                </Listbox.Option>
+                              ))}
+                            </Listbox.Options>
+                          </Transition>
+                        </div>
+                      )}
+                    </Listbox>
+                  </div>
+
+                  <div className="">
+                    <Button
+                      variant="danger"
+                      title="Remove this account"
+                      onClick={() =>
+                        setSelectedAccounts(selectedAccounts.filter((acc) => acc.id !== account.id))
+                      }
+                    >
+                      <div className="py-1">
+                        <FaTrashAlt className="shrink-0" />
                       </div>
-                    </Combobox.Options>
-                  </>
-                )}
-              </Combobox>
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            {userCanReadEnvironments ? (
-              <div className="space-y-1 w-full relative">
-                <Listbox
-                  by="id"
-                  value={envScope}
-                  onChange={setEnvScope}
-                  multiple
-                  name="environments"
-                >
-                  {({ open }) => (
-                    <>
-                      <Listbox.Label as={Fragment}>
-                        <div className="flex items-center justify-between">
-                          <label className="block text-neutral-500 text-sm" htmlFor="envs">
-                            Environment scope
-                          </label>
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              type="button"
-                              onClick={() => setEnvScope(envOptions)}
-                              disabled={envScope.length === envOptions.length}
-                            >
-                              <div className="flex items-center gap-1 text-2xs">
-                                <FaAsterisk /> Select all
-                              </div>
-                            </Button>
-                            {envScope.length === 0 && showEnvHint && (
-                              <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
-                                Select an environment scope
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </Listbox.Label>
-                      <Listbox.Button as={Fragment} aria-required>
-                        <div className="p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md cursor-pointer h-10">
-                          <span className="text-zinc-900 dark:text-zinc-100 text-sm">
-                            {envScope.map((env: Partial<EnvironmentType>) => env.name).join(' + ')}
-                          </span>
-                          <FaChevronDown
-                            className={clsx(
-                              'transition-transform ease duration-300 text-neutral-500',
-                              open ? 'rotate-180' : 'rotate-0'
-                            )}
-                          />
-                        </div>
-                      </Listbox.Button>
-                      <Transition
-                        enter="transition duration-100 ease-out"
-                        enterFrom="transform scale-95 opacity-0"
-                        enterTo="transform scale-100 opacity-100"
-                        leave="transition duration-75 ease-out"
-                        leaveFrom="transform scale-100 opacity-100"
-                        leaveTo="transform scale-95 opacity-0"
-                      >
-                        <Listbox.Options>
-                          <div className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full divide-y divide-neutral-500/20">
-                            {envOptions.map((env: Partial<EnvironmentType>) => (
-                              <Listbox.Option key={env.id} value={env} as={Fragment}>
-                                {({ active, selected }) => (
-                                  <div
-                                    className={clsx(
-                                      'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-sm transition ease',
-                                      active
-                                        ? 'text-zinc-900 dark:text-zinc-100 bg-neutral-100 dark:bg-neutral-700'
-                                        : 'text-zinc-700 dark:text-zinc-300',
-                                      selected && 'text-zinc-900 dark:text-zinc-100'
-                                    )}
-                                  >
-                                    {selected ? (
-                                      <FaCheckCircle className="text-emerald-500" />
-                                    ) : (
-                                      <FaCircle className="text-neutral-500" />
-                                    )}
-                                    <div>{env.name}</div>
-                                  </div>
-                                )}
-                              </Listbox.Option>
-                            ))}
-                          </div>
-                        </Listbox.Options>
-                      </Transition>
-                    </>
-                  )}
-                </Listbox>
-              </div>
-            ) : (
-              <Alert variant="danger" icon={true} size="sm">
-                You don&apos;t have permission to read Environments. This permission is required to
-                set an environment scope for members in this App.
-              </Alert>
-            )}
+            <div className="flex w-full">
+              <SelectAccountMenu />
+            </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between gap-4">
               <Button variant="secondary" type="button" onClick={closeModal}>
                 Cancel
               </Button>
               <Button
                 variant="primary"
                 type="submit"
-                disabled={envScope.length === 0 || selectedAccounts === null}
+                disabled={accountWithoutScope || !selectedAccounts.length}
               >
-                Add
+                Add{' '}
+                {selectedAccounts.length > 0
+                  ? ` ${selectedAccounts.length} ${selectedAccounts.length === 1 ? 'account' : 'accounts'} `
+                  : ''}
               </Button>
             </div>
           </form>
