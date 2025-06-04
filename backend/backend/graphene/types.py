@@ -967,3 +967,11 @@ class NetworkAccessPolicyType(DjangoObjectType):
     class Meta:
         model = NetworkAccessPolicy
         fields = "__all__"
+
+
+class AWSValidationResultType(graphene.ObjectType):
+    valid = graphene.Boolean(required=True)
+    message = graphene.String(required=True)
+    method = graphene.String()
+    error = graphene.String()
+    assumed_role_arn = graphene.String()

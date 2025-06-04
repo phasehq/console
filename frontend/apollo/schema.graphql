@@ -46,6 +46,8 @@ type Query {
   testVercelCreds(credentialId: ID): Boolean
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
+  validateAwsAssumeRoleAuth: AWSValidationResultType
+  validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
 }
@@ -689,6 +691,14 @@ type VercelProjectType {
   id: ID!
   name: String!
   environment: [String]
+}
+
+type AWSValidationResultType {
+  valid: Boolean!
+  message: String!
+  method: String
+  error: String
+  assumedRoleArn: String
 }
 
 type StripeCheckoutDetails {
