@@ -1,6 +1,6 @@
 from django.utils import timezone
 from api.services import ServiceConfig
-from api.utils.syncing.aws.auth import get_aws_secrets_manager_credentials
+from api.utils.syncing.aws.auth import get_aws_secrets_manager_credentials, get_aws_assume_role_credentials
 from api.utils.syncing.aws.secrets_manager import sync_aws_secrets
 from api.utils.syncing.github.actions import (
     get_gh_actions_credentials,
@@ -253,19 +253,26 @@ def perform_github_actions_sync(environment_sync):
 
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_aws_sm_sync(environment_sync):
-
-    credentials = get_aws_secrets_manager_credentials(environment_sync)
     project_info = environment_sync.options
-
+    
+    # Determine authentication method and get appropriate credentials
+    has_role_arn = "role_arn" in environment_sync.authentication.credentials
+    
+    if has_role_arn:
+        credentials = get_aws_assume_role_credentials(environment_sync)
+    else:
+        credentials = get_aws_secrets_manager_credentials(environment_sync)
     handle_sync_event(
         environment_sync,
         sync_aws_secrets,
-        credentials.get("access_key_id"),
-        credentials.get("secret_access_key"),
         credentials.get("region"),
         project_info.get("secret_name"),
         project_info.get("arn"),
         project_info.get("kms_id"),
+        credentials.get("access_key_id"),
+        credentials.get("secret_access_key"),
+        credentials.get("role_arn"),
+        credentials.get("external_id"),
     )
 
 

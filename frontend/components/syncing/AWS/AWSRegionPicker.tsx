@@ -4,10 +4,12 @@ import clsx from 'clsx'
 import { Fragment, useState } from 'react'
 import { FaChevronDown } from 'react-icons/fa'
 
-export const AWSRegionPicker = (props: { onChange: (region: string) => void }) => {
-  const { onChange } = props
+export const AWSRegionPicker = (props: { onChange: (region: string) => void; value?: string }) => {
+  const { onChange, value } = props
 
-  const [region, setRegion] = useState<AwsRegion>(awsRegions[0])
+  const [region, setRegion] = useState<AwsRegion>(
+    value ? awsRegions.find(r => r.region === value) || awsRegions[0] : awsRegions[0]
+  )
   const [query, setQuery] = useState('')
 
   const handleSetRegion = (selectedRegion: AwsRegion) => {
