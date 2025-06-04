@@ -60,6 +60,8 @@ from .graphene.queries.syncing import (
     resolve_test_vault_creds,
     resolve_test_nomad_creds,
     resolve_railway_projects,
+    resolve_validate_aws_assume_role_auth,
+    resolve_validate_aws_assume_role_credentials,
 )
 from .graphene.queries.access import (
     resolve_roles,
@@ -171,6 +173,7 @@ from .graphene.types import (
     ServiceType,
     TimeRange,
     UserTokenType,
+    AWSValidationResultType,
 )
 import graphene
 from graphql import GraphQLError
@@ -363,6 +366,15 @@ class Query(graphene.ObjectType):
 
     test_nomad_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
+    validate_aws_assume_role_auth = graphene.Field(AWSValidationResultType)
+
+    validate_aws_assume_role_credentials = graphene.Field(
+        AWSValidationResultType,
+        role_arn=graphene.String(required=True),
+        region=graphene.String(),
+        external_id=graphene.String()
+    )
+
     stripe_checkout_details = graphene.Field(
         StripeCheckoutDetails, stripe_session_id=graphene.String(required=True)
     )
@@ -406,6 +418,10 @@ class Query(graphene.ObjectType):
     resolve_test_vault_creds = resolve_test_vault_creds
 
     resolve_test_nomad_creds = resolve_test_nomad_creds
+
+    resolve_validate_aws_assume_role_auth = resolve_validate_aws_assume_role_auth
+
+    resolve_validate_aws_assume_role_credentials = resolve_validate_aws_assume_role_credentials
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
