@@ -303,7 +303,12 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   invite link.
                 </p>
 
-                <div className="text-sm h-full max-h-[65vh] overflow-y-auto">
+                <div
+                  className={clsx(
+                    'text-sm h-full max-h-[65vh]',
+                    invites.length > 5 ? 'overflow-y-auto' : ''
+                  )}
+                >
                   {invites.map((invite, index) => (
                     <div key={index} className="flex items-end gap-6 py-2">
                       <div className="w-full">
@@ -315,7 +320,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                           required
                         />
                       </div>
-                      <div className="space-y-1 w-full relative overflow-y-visible">
+                      <div className="w-full relative overflow-y-visible">
                         {index === 0 && <label className="text-neutral-500 text-sm">Role</label>}
                         <Listbox
                           value={invite.role}
@@ -326,8 +331,9 @@ export const InviteDialog = (props: { organisationId: string }) => {
                               <Listbox.Button as={Fragment} aria-required>
                                 <div
                                   className={clsx(
-                                    'p-2 flex items-center justify-between gap-4 h-10 ring-1 ring-inset ring-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 rounded-lg',
-                                    !userCanReadRoles ? 'cursor-not-allowed' : 'cursor-pointer'
+                                    'p-2 flex items-center justify-between gap-4 h-10 ring-1 ring-inset ring-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 ',
+                                    !userCanReadRoles ? 'cursor-not-allowed' : 'cursor-pointer',
+                                    open ? 'rounded-t-lg' : 'rounded-lg'
                                   )}
                                 >
                                   {invite.role && <RoleLabel role={invite.role} />}
@@ -341,7 +347,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                                   )}
                                 </div>
                               </Listbox.Button>
-                              <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-full focus:outline-none">
+                              <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl absolute -my-px z-10 w-full focus:outline-none ring-1 ring-inset ring-neutral-500/40">
                                 {roleOptions.map((role) => (
                                   <Listbox.Option key={role.name} value={role} as={Fragment}>
                                     {({ active }) => (
