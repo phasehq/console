@@ -15,6 +15,7 @@ import { RemoveAccountConfirmDialog } from './_components/RemoveAccountDialog'
 import { ManageAccountAccessDialog } from './_components/ManageAccountAccessDialog'
 import { MdSearchOff } from 'react-icons/md'
 import clsx from 'clsx'
+import { Avatar } from '@/components/common/Avatar'
 
 export default function ServiceAccounts({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -123,9 +124,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                 {filteredAccounts.map((account: ServiceAccountType) => (
                   <tr className="group" key={account.id}>
                     <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
-                      <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-12">
-                        <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
-                      </div>
+                      <Avatar serviceAccount={account} size="lg" />
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{account.name}</span>
