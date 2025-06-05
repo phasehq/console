@@ -296,7 +296,9 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                           <div className="font-semibold text-zinc-900 dark:text-zinc-100">
                             {account.name}
                           </div>
-                          <div className="text-neutral-500 text-xs leading-4">{account.id}</div>
+                          <div className="text-neutral-500 text-xs leading-4 font-mono">
+                            {account.id}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -375,10 +377,6 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
               {selectedAccounts.map((account, index) => (
                 <div key={account.id} className="space-y-1 flex items-center justify-between gap-2">
                   <div className={clsx('flex items-center gap-2 p-1 text-sm w-1/2')}>
-                    {/* <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-8">
-                      <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
-                    </div> */}
-
                     <Avatar serviceAccount={account} />
 
                     <div className="font-semibold text-zinc-900 dark:text-zinc-100">

@@ -130,6 +130,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                           <span className="font-medium">{account.name}</span>
                           <RoleLabel role={account.role!} />
                         </div>
+                        <span className="text-neutral-500 text-sm font-mono">{account.id}</span>
                       </div>
                     </td>
 
