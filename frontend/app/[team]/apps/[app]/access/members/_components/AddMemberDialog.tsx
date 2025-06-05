@@ -36,129 +36,6 @@ type MemberWithEnvScope = OrganisationMemberType & {
   scope: Partial<EnvironmentType>[]
 }
 
-const dummyUsers: Partial<MemberWithEnvScope>[] = [
-  {
-    id: '6a0f5746-e4c0-4e45-8d9e-1cfe1d3a1b5a',
-    email: 'kelly.morrison@example.com',
-    fullName: 'Kelly Morrison',
-    scope: [],
-  },
-  {
-    id: 'b7b3c121-5054-4d7a-b35b-f327dadc5417',
-    email: 'edward.jackson@example.net',
-    fullName: 'Edward Jackson',
-    scope: [],
-  },
-  {
-    id: '2d7e3a56-8bc0-4e16-9a4e-c8c3ebc0e75d',
-    email: 'lucy.barnes@example.org',
-    fullName: 'Lucy Barnes',
-    scope: [],
-  },
-  {
-    id: 'f9b4a1ea-3c74-4c9f-b9d9-45d5e9b7e61b',
-    email: 'michael.williams@example.com',
-    fullName: 'Michael Williams',
-    scope: [],
-  },
-  {
-    id: '9a071a44-821a-4c13-b9b8-c68a58aeb3f4',
-    email: 'sophia.moore@example.net',
-    fullName: 'Sophia Moore',
-    scope: [],
-  },
-  {
-    id: '7c5f6c3b-9f2d-40e6-b10a-8df0c00c5fdb',
-    email: 'daniel.taylor@example.com',
-    fullName: 'Daniel Taylor',
-    scope: [],
-  },
-  {
-    id: 'd4a1c7b7-5e09-411d-b8e9-1d04eeec7d02',
-    email: 'amelia.white@example.org',
-    fullName: 'Amelia White',
-    scope: [],
-  },
-  {
-    id: '15e0bb28-85b7-4e19-9d63-ef1ee02b2aa7',
-    email: 'james.anderson@example.com',
-    fullName: 'James Anderson',
-    scope: [],
-  },
-  {
-    id: '4097d341-4778-4adf-a00f-97d0d3c98462',
-    email: 'olivia.jones@example.net',
-    fullName: 'Olivia Jones',
-    scope: [],
-  },
-  {
-    id: '93f3454d-11fa-48a7-b345-374a4177f58b',
-    email: 'benjamin.harris@example.org',
-    fullName: 'Benjamin Harris',
-    scope: [],
-  },
-  {
-    id: 'b9185b72-7ac1-4f09-8a8b-45349a10b875',
-    email: 'charlotte.martin@example.com',
-    fullName: 'Charlotte Martin',
-    scope: [],
-  },
-  {
-    id: 'a1c1a2b9-4ea8-456a-b69a-2d6edfe6c1e9',
-    email: 'liam.thomas@example.net',
-    fullName: 'Liam Thomas',
-    scope: [],
-  },
-  {
-    id: '3b17679f-1f71-4a36-9eec-3f65d7bda56f',
-    email: 'isabella.lewis@example.org',
-    fullName: 'Isabella Lewis',
-    scope: [],
-  },
-  {
-    id: 'c592db4f-1f31-4d0e-9b9e-6b16aaaf4f4a',
-    email: 'noah.robinson@example.com',
-    fullName: 'Noah Robinson',
-    scope: [],
-  },
-  {
-    id: 'd6e30b47-8d14-4b32-b597-57d6d3c12bde',
-    email: 'mia.walker@example.net',
-    fullName: 'Mia Walker',
-    scope: [],
-  },
-  {
-    id: '1d6e5f83-5c3a-434d-b0d6-11db9e50c331',
-    email: 'ethan.young@example.org',
-    fullName: 'Ethan Young',
-    scope: [],
-  },
-  {
-    id: '5a5e1a6e-413d-42e4-bb7e-2a235ca7515a',
-    email: 'amelia.king@example.com',
-    fullName: 'Amelia King',
-    scope: [],
-  },
-  {
-    id: 'f5d8f839-05ac-4a48-9a1b-285ade84e825',
-    email: 'jack.carter@example.net',
-    fullName: 'Jack Carter',
-    scope: [],
-  },
-  {
-    id: '8d5d84e3-2613-44a5-9c8a-56f9de135eab',
-    email: 'emily.mitchell@example.org',
-    fullName: 'Emily Mitchell',
-    scope: [],
-  },
-  {
-    id: '44e7e433-8056-4b67-9437-8577c2f44f6e',
-    email: 'oliver.scott@example.com',
-    fullName: 'Oliver Scott',
-    scope: [],
-  },
-]
-
 export const AddMemberDialog = ({ appId }: { appId: string }) => {
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -207,7 +84,6 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
           ...member,
           scope: [],
         }))
-        .concat(dummyUsers)
         .filter((m: MemberWithEnvScope) => !selectedMembers.map((sm) => sm.id).includes(m.id)) ?? []
     )
   }, [orgMembersData, data, selectedMembers])
