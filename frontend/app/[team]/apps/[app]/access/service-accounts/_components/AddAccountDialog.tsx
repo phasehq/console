@@ -306,7 +306,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                   </Menu.Item>
                 ))
               ) : query ? (
-                <div className="p-4 w-64">
+                <div className="p-4 w-full max-w-screen-lg">
                   <EmptyState
                     title={`No results for "${query}"`}
                     subtitle="Try adjusting your search term"
