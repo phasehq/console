@@ -1,8 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
-import { Maybe, OrganisationMemberType } from '@/apollo/graphql'
+import { Maybe, OrganisationMemberType, ServiceAccountType } from '@/apollo/graphql'
 import clsx from 'clsx'
 import { useState } from 'react'
-import { FaUserLarge } from 'react-icons/fa6'
+import { FaRobot, FaUserLarge } from 'react-icons/fa6'
 
 type GenericUser = {
   name?: string | null
@@ -12,12 +12,13 @@ type GenericUser = {
 
 interface AvatarProps {
   member?: OrganisationMemberType
+  serviceAccount?: ServiceAccountType
   user?: GenericUser
   size?: 'sm' | 'md' | 'lg' | 'xl' // Define the size prop with the correct type
   showTitle?: boolean
 }
 
-export const Avatar = ({ member, user, size, showTitle = true }: AvatarProps) => {
+export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }: AvatarProps) => {
   const [useFallBack, setUseFallBack] = useState(false)
 
   const sizes = {
@@ -27,8 +28,24 @@ export const Avatar = ({ member, user, size, showTitle = true }: AvatarProps) =>
     xl: 'h-20 w-20 text-2xl',
   }
 
+  const sizeStyle = sizes[size || 'md'] // Default to 'md' size if not provided
+
+  const getBgColor = (name: string) => {
+    const colors = [
+      'bg-red-500',
+      'bg-blue-500',
+      'bg-amber-500',
+      'bg-emerald-500',
+      'bg-purple-500',
+      'bg-pink-500',
+      'bg-indigo-500',
+    ]
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), name.length || 0)
+    return colors[hash % colors.length]
+  }
+
   // Ensure at least one of member or user is provided
-  if (!member && !user) {
+  if (!member && !user && !serviceAccount) {
     return (
       <div className="mr-1 rounded-full bg-center bg-no-repeat ring-1 ring-inset ring-neutral-500/40 flex items-center justify-center p-1">
         <FaUserLarge className="text-neutral-500" />
@@ -36,7 +53,19 @@ export const Avatar = ({ member, user, size, showTitle = true }: AvatarProps) =>
     )
   }
 
-  const sizeStyle = sizes[size || 'md'] // Default to 'md' size if not provided
+  if (serviceAccount) {
+    return (
+      <div
+        className={clsx(
+          'rounded-full flex items-center justify-center',
+          sizeStyle,
+          getBgColor(serviceAccount.name)
+        )}
+      >
+        <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
+      </div>
+    )
+  }
 
   let avatarUrl: Maybe<string> | undefined = undefined
   let fullName: Maybe<string> | undefined = undefined
@@ -59,19 +88,6 @@ export const Avatar = ({ member, user, size, showTitle = true }: AvatarProps) =>
   }
 
   // Function to generate a consistent color for a given name
-  const getColorForName = (name: string) => {
-    const colors = [
-      'bg-red-500',
-      'bg-blue-500',
-      'bg-amber-500',
-      'bg-emerald-500',
-      'bg-purple-500',
-      'bg-pink-500',
-      'bg-indigo-500',
-    ]
-    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), name.length || 0)
-    return colors[hash % colors.length]
-  }
 
   const useImage = avatarUrl && !useFallBack
 
@@ -81,7 +97,7 @@ export const Avatar = ({ member, user, size, showTitle = true }: AvatarProps) =>
       className={clsx(
         'mr-1 rounded-full flex items-center justify-center select-none',
         sizeStyle,
-        useImage ? 'bg-cover bg-no-repeat' : getColorForName(fullName || '')
+        useImage ? 'bg-cover bg-no-repeat' : getBgColor(fullName || '')
       )}
       style={{ backgroundImage: useImage ? `url(${avatarUrl})` : undefined }}
     >
