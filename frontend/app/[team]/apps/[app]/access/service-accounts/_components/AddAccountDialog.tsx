@@ -11,6 +11,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Listbox, Menu, Transition } from '@headlessui/react'
 import {
   FaArrowRight,
+  FaBan,
   FaCheckCircle,
   FaCircle,
   FaPlus,
@@ -384,76 +385,82 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                     </div>
                   </div>
                   <div className="w-1/2">
-                    <Listbox
-                      multiple
-                      by="id"
-                      value={account.scope ?? []}
-                      onChange={(newScopes) =>
-                        setSelectedAccounts((prev) =>
-                          prev.map((m) => (m.id === account.id ? { ...m, scope: newScopes } : m))
-                        )
-                      }
-                    >
-                      {({ open }) => (
-                        <div className="relative">
-                          <Listbox.Button
-                            className={clsx(
-                              'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  cursor-pointer min-h-10 text-sm text-left w-full',
-                              open ? 'rounded-t-md' : 'rounded-md',
-                              account.scope?.length
-                                ? 'text-zinc-900 dark:text-zinc-100'
-                                : 'text-zinc-500'
-                            )}
-                          >
-                            {account.scope?.length
-                              ? envOptions
-                                  .filter((env) =>
-                                    account.scope
-                                      .map((selectedEnv) => selectedEnv.id)
-                                      .includes(env.id!)
-                                  )
-                                  .map((env) => env.name)
-                                  .join(', ')
-                              : 'Select environment scope'}
-                          </Listbox.Button>
-                          <Transition
-                            as={Fragment}
-                            leave="transition ease-in duration-100"
-                            leaveFrom="opacity-100"
-                            leaveTo="opacity-0"
-                          >
-                            <Listbox.Options className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md ring-1 ring-inset ring-neutral-500/40 shadow-2xl absolute -my-px z-10 w-full divide-y divide-neutral-500/20">
-                              {envOptions.map((env) => (
-                                <Listbox.Option key={`${account.id}-${env.id}`} value={env}>
-                                  {({ active, selected }) => (
-                                    <div
-                                      className={clsx(
-                                        'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
-                                        active ? ' bg-neutral-100 dark:bg-neutral-700' : ''
-                                      )}
-                                    >
-                                      {selected ? (
-                                        <FaCheckCircle className="text-emerald-500" />
-                                      ) : (
-                                        <FaCircle className="text-neutral-500" />
-                                      )}
-                                      <span
+                    {userCanReadEnvironments ? (
+                      <Listbox
+                        multiple
+                        by="id"
+                        value={account.scope ?? []}
+                        onChange={(newScopes) =>
+                          setSelectedAccounts((prev) =>
+                            prev.map((m) => (m.id === account.id ? { ...m, scope: newScopes } : m))
+                          )
+                        }
+                      >
+                        {({ open }) => (
+                          <div className="relative">
+                            <Listbox.Button
+                              className={clsx(
+                                'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  cursor-pointer min-h-10 text-sm text-left w-full',
+                                open ? 'rounded-t-md' : 'rounded-md',
+                                account.scope?.length
+                                  ? 'text-zinc-900 dark:text-zinc-100'
+                                  : 'text-zinc-500'
+                              )}
+                            >
+                              {account.scope?.length
+                                ? envOptions
+                                    .filter((env) =>
+                                      account.scope
+                                        .map((selectedEnv) => selectedEnv.id)
+                                        .includes(env.id!)
+                                    )
+                                    .map((env) => env.name)
+                                    .join(', ')
+                                : 'Select environment scope'}
+                            </Listbox.Button>
+                            <Transition
+                              as={Fragment}
+                              leave="transition ease-in duration-100"
+                              leaveFrom="opacity-100"
+                              leaveTo="opacity-0"
+                            >
+                              <Listbox.Options className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md ring-1 ring-inset ring-neutral-500/40 shadow-2xl absolute -my-px z-10 w-full divide-y divide-neutral-500/20">
+                                {envOptions.map((env) => (
+                                  <Listbox.Option key={`${account.id}-${env.id}`} value={env}>
+                                    {({ active, selected }) => (
+                                      <div
                                         className={clsx(
-                                          'block truncate',
-                                          selected ? 'font-medium' : 'font-normal'
+                                          'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
+                                          active ? ' bg-neutral-100 dark:bg-neutral-700' : ''
                                         )}
                                       >
-                                        {env.name}
-                                      </span>
-                                    </div>
-                                  )}
-                                </Listbox.Option>
-                              ))}
-                            </Listbox.Options>
-                          </Transition>
-                        </div>
-                      )}
-                    </Listbox>
+                                        {selected ? (
+                                          <FaCheckCircle className="text-emerald-500" />
+                                        ) : (
+                                          <FaCircle className="text-neutral-500" />
+                                        )}
+                                        <span
+                                          className={clsx(
+                                            'block truncate',
+                                            selected ? 'font-medium' : 'font-normal'
+                                          )}
+                                        >
+                                          {env.name}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </Listbox.Option>
+                                ))}
+                              </Listbox.Options>
+                            </Transition>
+                          </div>
+                        )}
+                      </Listbox>
+                    ) : (
+                      <div className="flex items-center text-neutral-500 gap-2 text-sm">
+                        <FaBan /> Access restricted
+                      </div>
+                    )}
                   </div>
 
                   <div className="">

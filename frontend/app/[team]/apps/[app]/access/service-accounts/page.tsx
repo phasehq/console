@@ -156,7 +156,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
       ) : (
         <EmptyState
           title="Access restricted"
-          subtitle="You don't have the permissions required to view Members in this app."
+          subtitle="You don't have the permissions required to view Service Accounts in this app."
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
               <FaBan />
