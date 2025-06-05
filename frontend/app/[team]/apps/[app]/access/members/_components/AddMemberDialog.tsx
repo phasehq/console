@@ -108,7 +108,15 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
 
   const membersWithoutScope = selectedMembers.some((member) => member.scope.length === 0)
 
+  const reset = () => {
+    setSelectedMembers([])
+  }
   const closeModal = () => dialogRef.current?.closeModal()
+
+  const handleClose = () => {
+    closeModal()
+    reset()
+  }
 
   const handleAddMembers = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -183,7 +191,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
     })
 
     toast.success('Added accounts to App', { autoClose: 2000 })
-    closeModal()
+    handleClose()
   }
 
   const SelectMemberMenu = () => {
@@ -446,7 +454,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
             </div>
 
             <div className="flex items-center justify-between gap-4">
-              <Button variant="secondary" type="button" onClick={closeModal}>
+              <Button variant="secondary" type="button" onClick={handleClose}>
                 Cancel
               </Button>
               <Button

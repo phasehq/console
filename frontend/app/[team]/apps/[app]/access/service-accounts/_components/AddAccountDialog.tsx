@@ -14,7 +14,6 @@ import {
   FaCheckCircle,
   FaCircle,
   FaPlus,
-  FaRobot,
   FaSearch,
   FaTimesCircle,
   FaTrashAlt,
@@ -31,6 +30,7 @@ import GenericDialog from '@/components/common/GenericDialog'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { MdSearchOff } from 'react-icons/md'
+import { Avatar } from '@/components/common/Avatar'
 
 type AccountWithEnvScope = ServiceAccountType & {
   scope: Partial<EnvironmentType>[]
@@ -44,7 +44,6 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
-  const comboboxButtonRef = useRef<HTMLButtonElement | null>(null)
 
   // Permissions
   const userCanReadAppSA = organisation
@@ -115,8 +114,16 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
 
   const accountWithoutScope = selectedAccounts.some((account) => account.scope.length === 0)
 
+  const reset = () => {
+    setSelectedAccounts([])
+  }
   const openModal = () => dialogRef.current?.openModal()
   const closeModal = () => dialogRef.current?.closeModal()
+
+  const handleClose = () => {
+    closeModal()
+    reset()
+  }
 
   useEffect(() => {
     if (preselectedAccountId && serviceAccountsData?.serviceAccounts) {
@@ -213,7 +220,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
     })
 
     toast.success('Added accounts to App', { autoClose: 2000 })
-    closeModal()
+    handleClose()
   }
 
   const SelectAccountMenu = () => {
@@ -284,9 +291,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                         )}
                         onClick={() => setSelectedAccounts([...selectedAccounts, account])}
                       >
-                        <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-8">
-                          <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
-                        </div>
+                        <Avatar serviceAccount={account} />
                         <div>
                           <div className="font-semibold text-zinc-900 dark:text-zinc-100">
                             {account.name}
@@ -328,6 +333,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       <GenericDialog
         ref={dialogRef}
         title="Add Service Accounts"
+        size="lg"
         buttonContent={
           <>
             <FaPlus /> Add accounts
@@ -369,10 +375,14 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
               {selectedAccounts.map((account, index) => (
                 <div key={account.id} className="space-y-1 flex items-center justify-between gap-2">
                   <div className={clsx('flex items-center gap-2 p-1 text-sm w-1/2')}>
-                    <div>
-                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        {account.name}
-                      </div>
+                    {/* <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-8">
+                      <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
+                    </div> */}
+
+                    <Avatar serviceAccount={account} />
+
+                    <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                      {account.name}
                     </div>
                   </div>
                   <div className="w-1/2">
@@ -470,7 +480,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
             </div>
 
             <div className="flex items-center justify-between gap-4">
-              <Button variant="secondary" type="button" onClick={closeModal}>
+              <Button variant="secondary" type="button" onClick={handleClose}>
                 Cancel
               </Button>
               <Button
