@@ -80,8 +80,6 @@ export const InviteDialog = (props: { organisationId: string }) => {
 
   const [invites, setInvites] = useState<Invite[]>([{ email: '', role: undefined }])
 
-  const emailInputRef = useRef(null)
-
   const [inviteLinks, setInviteLinks] = useState<InviteLink[]>([])
   const [errorMessage, setErrorMessage] = useState<string>('')
 
@@ -189,6 +187,8 @@ export const InviteDialog = (props: { organisationId: string }) => {
     const [bulkEmails, setBulkEmails] = useState('')
     const [error, setError] = useState<string | null>(null)
 
+    const emailInputRef = useRef(null)
+
     const handleBulkEmailImport = () => {
       setError('')
       const seen = new Set(invites.map((i) => i.email))
@@ -225,6 +225,8 @@ export const InviteDialog = (props: { organisationId: string }) => {
       <GenericDialog
         title="Import emails"
         buttonVariant="ghost"
+        initialFocus={emailInputRef}
+        isStatic={true}
         buttonContent={
           <>
             <FaDownload />
@@ -244,6 +246,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
             )}
             <textarea
               value={bulkEmails}
+              ref={emailInputRef}
               onChange={(e) => setBulkEmails(e.target.value)}
               placeholder="Paste emails separated by commas, spaces, or new lines"
               rows={10}
@@ -277,7 +280,6 @@ export const InviteDialog = (props: { organisationId: string }) => {
         ref={dialogRef}
         size="lg"
         title="Invite members"
-        initialFocus={emailInputRef}
         onClose={reset}
         buttonContent={
           <>
