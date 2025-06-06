@@ -8,7 +8,7 @@ import { Fragment, useContext, useState } from 'react'
 import { OrganisationMemberInviteType, OrganisationMemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
-import { relativeTimeFromDates } from '@/utils/time'
+import { inviteIsExpired, relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
 import {
   FaBan,
@@ -30,10 +30,6 @@ import Spinner from '@/components/common/Spinner'
 import { InviteDialog } from './_components/InviteDialog'
 import { MdSearchOff } from 'react-icons/md'
 import CopyButton from '@/components/common/CopyButton'
-
-const inviteIsExpired = (invite: OrganisationMemberInviteType) => {
-  return new Date(invite.expiresAt) < new Date()
-}
 
 export default function Members({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)

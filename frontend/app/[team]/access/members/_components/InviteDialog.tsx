@@ -1,4 +1,9 @@
-import { ApiOrganisationPlanChoices, RoleType } from '@/apollo/graphql'
+import {
+  ApiOrganisationPlanChoices,
+  OrganisationMemberType,
+  OrganisationMemberInviteType,
+  RoleType,
+} from '@/apollo/graphql'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
@@ -11,9 +16,16 @@ import { useQuery, useMutation } from '@apollo/client'
 import { Listbox } from '@headlessui/react'
 import { useSearchParams } from 'next/navigation'
 import { useContext, useState, useRef, useEffect, Fragment, useMemo } from 'react'
-import { FaChevronDown, FaDownload, FaPlus, FaTrashAlt } from 'react-icons/fa'
+import {
+  FaChevronDown,
+  FaDownload,
+  FaExclamationTriangle,
+  FaPlus,
+  FaTrashAlt,
+} from 'react-icons/fa'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
+import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { BulkInviteMembers } from '@/graphql/mutations/organisation/bulkInviteMembers.gql'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
@@ -22,6 +34,7 @@ import clsx from 'clsx'
 import GenericDialog from '@/components/common/GenericDialog'
 import { toast } from 'react-toastify'
 import { FaEnvelope } from 'react-icons/fa6'
+import { inviteIsExpired } from '@/utils/time'
 
 type Invite = {
   email: string
@@ -36,20 +49,39 @@ type InviteLink = {
 export const InviteDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
 
-  const { activeOrganisation } = useContext(organisationContext)
+  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const searchParams = useSearchParams()
 
   // Permissions
-  const userCanReadRoles = userHasPermission(activeOrganisation?.role?.permissions, 'Roles', 'read')
+  const userCanReadRoles = userHasPermission(organisation?.role?.permissions, 'Roles', 'read')
+  const userCanReadMembers = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Members', 'read')
+    : false
 
   const { data } = useQuery(GetOrganisationPlan, {
     variables: { organisationId },
     fetchPolicy: 'cache-and-network',
   })
 
+  const { data: membersData } = useQuery(GetOrganisationMembers, {
+    variables: {
+      organisationId: organisation?.id,
+      role: null,
+    },
+    skip: !organisation || !userCanReadMembers,
+  })
+
+  const { data: invitesData } = useQuery(GetInvites, {
+    variables: {
+      orgId: organisation?.id,
+    },
+
+    skip: !organisation,
+  })
+
   const { data: roleData, loading: roleDataPending } = useQuery(GetRoles, {
-    variables: { orgId: activeOrganisation!.id },
+    variables: { orgId: organisation!.id },
     skip: !userCanReadRoles,
   })
 
@@ -69,7 +101,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
 
   const upsell =
     isCloudHosted() &&
-    activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr &&
+    organisation?.plan === ApiOrganisationPlanChoices.Fr &&
     data?.organisationPlan.seatsUsed.total === data?.organisationPlan.seatLimit
 
   const avaiableSeats = data?.organisationPlan.seatLimit - data?.organisationPlan.seatsUsed.total
@@ -82,6 +114,14 @@ export const InviteDialog = (props: { organisationId: string }) => {
 
   const [inviteLinks, setInviteLinks] = useState<InviteLink[]>([])
   const [errorMessage, setErrorMessage] = useState<string>('')
+
+  const members: OrganisationMemberType[] = membersData?.organisationMembers ?? []
+  const existingInvites: OrganisationMemberInviteType[] = invitesData?.organisationInvites ?? []
+
+  const existingEmails = new Set<string>([
+    ...members.map((m) => m.email!.toLowerCase()),
+    ...existingInvites.filter((i) => !inviteIsExpired(i)).map((i) => i.inviteeEmail.toLowerCase()),
+  ])
 
   const addInvite = () => {
     if (invites.length < avaiableSeats) setInvites([...invites, { email: '', role: defaultRole }])
@@ -147,6 +187,13 @@ export const InviteDialog = (props: { organisationId: string }) => {
 
     if (duplicates) {
       toast.error('Duplicate email addresses are not allowed.')
+      return
+    }
+
+    const conflicting = invites.find((invite) => existingEmails.has(invite.email.toLowerCase()))
+
+    if (conflicting) {
+      toast.error(`User with email ${conflicting.email} is already invited or is a member.`)
       return
     }
 
@@ -312,16 +359,34 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   {invites.map((invite, index) => (
                     <div key={index} className="flex items-end gap-6 py-2">
                       <div className="w-full">
-                        <Input
-                          value={invite.email}
-                          setValue={(value) => updateInvite(index, { email: value })}
-                          label={index === 0 ? 'User email' : undefined}
-                          type="email"
-                          required
-                        />
+                        {index === 0 && (
+                          <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                            User email
+                          </label>
+                        )}
+                        <div className="w-full relative">
+                          <Input
+                            value={invite.email}
+                            setValue={(value) => updateInvite(index, { email: value })}
+                            type="email"
+                            required
+                          />
+                          {existingEmails.has(invite.email?.toLowerCase()) && (
+                            <div
+                              className="absolute inset-y-0 flex items-center right-2"
+                              title="A user with this email is already invited or is a member"
+                            >
+                              <FaExclamationTriangle className="text-amber-500" />
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div className="w-full relative overflow-y-visible">
-                        {index === 0 && <label className="text-neutral-500 text-sm">Role</label>}
+                        {index === 0 && (
+                          <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                            Role
+                          </label>
+                        )}
                         <Listbox
                           value={invite.role}
                           onChange={(value) => updateInvite(index, { role: value })}
