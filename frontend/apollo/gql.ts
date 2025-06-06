@@ -21,6 +21,7 @@ const documents = {
     "mutation UpdateAccessPolicies($inputs: [UpdatePolicyInput]) {\n  updateNetworkAccessPolicy(policyInputs: $inputs) {\n    networkAccessPolicy {\n      id\n    }\n  }\n}": types.UpdateAccessPoliciesDocument,
     "mutation UpdateRole($id: ID!, $name: String!, $description: String!, $color: String!, $permissions: JSONString!) {\n  updateCustomRole(\n    id: $id\n    name: $name\n    description: $description\n    color: $color\n    permissions: $permissions\n  ) {\n    role {\n      id\n    }\n  }\n}": types.UpdateRoleDocument,
     "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.AddMemberToAppDocument,
+    "mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}": types.BulkAddMembersToAppDocument,
     "mutation RemoveMemberFromApp($memberId: ID!, $memberType: MemberType, $appId: ID!) {\n  removeAppMember(memberId: $memberId, memberType: $memberType, appId: $appId) {\n    app {\n      id\n    }\n  }\n}": types.RemoveMemberFromAppDocument,
     "mutation UpdateAppNameOp($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}": types.UpdateAppNameOpDocument,
     "mutation UpdateEnvScope($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.UpdateEnvScopeDocument,
@@ -188,6 +189,10 @@ export function graphql(source: "mutation UpdateRole($id: ID!, $name: String!, $
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
