@@ -25,7 +25,7 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
     sm: 'h-5 w-5 text-[8px]',
     md: 'h-8 w-8 text-2xs',
     lg: 'h-12 w-12 text-base',
-    xl: 'h-20 w-20 text-2xl',
+    xl: 'h-20 w-20 text-4xl',
   }
 
   const sizeStyle = sizes[size || 'md'] // Default to 'md' size if not provided
