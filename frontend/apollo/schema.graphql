@@ -756,6 +756,7 @@ type Mutation {
   deleteApp(id: ID!): DeleteAppMutation
   updateAppName(id: ID!, name: String!): UpdateAppNameMutation
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
+  bulkAddAppMembers(appId: ID!, members: [AppMemberInputType]!): BulkAddAppMembersMutation
   removeAppMember(appId: ID, memberId: ID, memberType: MemberType): RemoveAppMemberMutation
   updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): UpdateMemberEnvScopeMutation
   createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
@@ -880,6 +881,16 @@ input EnvironmentKeyInput {
   identityKey: String!
   wrappedSeed: String!
   wrappedSalt: String!
+}
+
+type BulkAddAppMembersMutation {
+  app: AppType
+}
+
+input AppMemberInputType {
+  memberId: ID!
+  memberType: MemberType = USER
+  envKeys: [EnvironmentKeyInput]!
 }
 
 type RemoveAppMemberMutation {
