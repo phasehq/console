@@ -105,6 +105,7 @@ type OrganisationPlanType {
   maxUsers: Int
   maxApps: Int
   maxEnvsPerApp: Int
+  seatLimit: Int
   seatsUsed: SeatsUsed
   appCount: Int
 }
@@ -745,7 +746,7 @@ enum PlanTypeEnum {
 
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
-  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, roleId: ID!): InviteOrganisationMemberMutation
+  bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
   updateOrganisationMemberRole(memberId: ID!, roleId: ID!): UpdateOrganisationMemberRole
@@ -831,8 +832,14 @@ type CreateOrganisationMutation {
   organisation: OrganisationType
 }
 
-type InviteOrganisationMemberMutation {
-  invite: OrganisationMemberInviteType
+type BulkInviteOrganisationMembersMutation {
+  invites: [OrganisationMemberInviteType]
+}
+
+input InviteInput {
+  email: String!
+  apps: [String]
+  roleId: ID!
 }
 
 type CreateOrganisationMemberMutation {

@@ -11,16 +11,16 @@ from api.utils.syncing.nomad.main import sync_nomad_secrets
 from api.utils.syncing.gitlab.main import sync_gitlab_secrets
 from api.utils.syncing.railway.main import sync_railway_secrets
 from api.utils.syncing.vercel.main import sync_vercel_secrets
-from .utils.syncing.cloudflare.pages import (
+from ..utils.syncing.cloudflare.pages import (
     get_cf_pages_credentials,
     sync_cloudflare_secrets,
 )
-from .utils.syncing.cloudflare.workers import (
+from ..utils.syncing.cloudflare.workers import (
     get_cf_workers_credentials,
     sync_cloudflare_worker_secrets,
 )
 from django.apps import apps
-from .utils.syncing.secrets import get_environment_secrets
+from ..utils.syncing.secrets import get_environment_secrets
 from django_rq import job
 from rq.timeouts import JobTimeoutException
 from rq.job import Job
