@@ -9,6 +9,7 @@ import { FaTimes, FaUserTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Avatar } from '@/components/common/Avatar'
+import { userHasGlobalAccess } from '@/utils/access/permissions'
 
 export const RemoveMemberConfirmDialog = ({
   appId,
@@ -34,6 +35,10 @@ export const RemoveMemberConfirmDialog = ({
       ],
     })
     toast.success('Removed member from app', { autoClose: 2000 })
+  }
+
+  if (userHasGlobalAccess(member.role!.permissions)) {
+    return <></>
   }
 
   return (
