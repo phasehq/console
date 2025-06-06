@@ -9,6 +9,7 @@ import { Button } from '@/components/common/Button'
 import { FaRobot, FaTrash } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
+import { Avatar } from '@/components/common/Avatar'
 
 export const RemoveAccountConfirmDialog = ({
   account,
@@ -52,9 +53,7 @@ export const RemoveAccountConfirmDialog = ({
           <p className="text-neutral-500 inline-flex gap-2">
             Are you sure you want to remove{' '}
             <div className="text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
-              <div className="rounded-full flex items-center bg-neutral-500/20 justify-center size-5 p-3">
-                <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
-              </div>{' '}
+              <Avatar serviceAccount={account} size="sm" />
               {account.name}
             </div>{' '}
             from this App?

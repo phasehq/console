@@ -16,6 +16,7 @@ import { Button } from '@/components/common/Button'
 import { ServiceAccountRoleSelector } from './_components/RoleSelector'
 import clsx from 'clsx'
 import { MdSearchOff } from 'react-icons/md'
+import { Avatar } from '@/components/common/Avatar'
 
 export default function ServiceAccounts({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -115,9 +116,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                   {filteredAccounts.map((account: ServiceAccountType) => (
                     <tr key={account.id} className="group">
                       <td className="flex items-center gap-2 py-2">
-                        <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-8">
-                          <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 text-xl" />
-                        </div>
+                        <Avatar serviceAccount={account} />
                         <div>
                           <div className="font-medium">{account.name}</div>
                           <div className="text-sm text-neutral-500">{account.id}</div>

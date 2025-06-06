@@ -160,9 +160,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
       </div>
       <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
         <div className="text-2xl font-semibold flex items-center gap-2">
-          <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-16">
-            <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
-          </div>{' '}
+          <Avatar serviceAccount={account} size="xl" />
           <h3 className="relative group w-full max-w-md">
             <input
               className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full "
