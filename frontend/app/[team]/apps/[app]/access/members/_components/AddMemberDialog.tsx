@@ -4,7 +4,7 @@ import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useMemo, useRef, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { OrganisationMemberType, EnvironmentType, MemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { Listbox, Menu, Transition } from '@headlessui/react'
@@ -12,6 +12,7 @@ import {
   FaArrowRight,
   FaBan,
   FaCheckCircle,
+  FaChevronDown,
   FaCircle,
   FaPlus,
   FaSearch,
@@ -31,6 +32,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { MdSearchOff } from 'react-icons/md'
+import { RoleLabel } from '@/components/users/RoleLabel'
 
 type MemberWithEnvScope = OrganisationMemberType & {
   scope: Partial<EnvironmentType>[]
@@ -198,6 +200,12 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
   const SelectMemberMenu = () => {
     const [query, setQuery] = useState('')
 
+    const buttonRef = useRef<HTMLButtonElement>(null)
+
+    useEffect(() => {
+      if (buttonRef.current && selectedMembers.length === 0) buttonRef.current.click()
+    }, [buttonRef])
+
     const filteredPeople =
       query === ''
         ? memberOptions
@@ -208,96 +216,105 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
 
     return (
       <Menu as="div" className="relative inline-block text-left group w-96">
-        <Menu.Button as={Fragment}>
-          <Button variant="ghost">
-            <FaPlus className="mr-1" />{' '}
-            {selectedMembers.length ? 'Add another member' : 'Select a Member'}
-          </Button>
-        </Menu.Button>
-        <Transition
-          as={Fragment}
-          enter="transition duration-100 ease-out"
-          enterFrom="transform scale-95 opacity-0"
-          enterTo="transform scale-100 opacity-100"
-          leave="transition duration-75 ease-out"
-          leaveFrom="transform scale-100 opacity-100"
-          leaveTo="transform scale-95 opacity-0"
-        >
-          <Menu.Items className="absolute z-10 left-0 origin-top-right mt-2 divide-y divide-neutral-500/40 p-px rounded-md shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full text-sm">
-              <FaSearch className="text-neutral-500" />
+        {({ open }) => (
+          <>
+            <Menu.Button as={Fragment}>
+              <Button variant={open ? 'secondary' : 'ghost'} ref={buttonRef}>
+                <FaPlus className="mr-1" />{' '}
+                {selectedMembers.length ? 'Add another member' : 'Select a Member'}
+              </Button>
+            </Menu.Button>
+            <Transition
+              as={Fragment}
+              enter="transition duration-100 ease-out"
+              enterFrom="transform scale-95 opacity-0"
+              enterTo="transform scale-100 opacity-100"
+              leave="transition duration-75 ease-out"
+              leaveFrom="transform scale-100 opacity-100"
+              leaveTo="transform scale-95 opacity-0"
+            >
+              <Menu.Items className="absolute z-10 left-0 origin-top-right mt-2 divide-y divide-neutral-500/40 p-px rounded-md shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full text-sm">
+                  <FaSearch className="text-neutral-500" />
 
-              <input
-                placeholder="Search Members"
-                className="custom bg-zinc-100 dark:bg-zinc-800"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-              />
-              <FaTimesCircle
-                className={clsx(
-                  'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
-                  query ? 'opacity-100' : 'opacity-0'
-                )}
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setQuery('')
-                }}
-              />
-            </div>
-
-            <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-lg">
-              {loading ? (
-                <div className="p-4">
-                  <Spinner size="sm" />
-                </div>
-              ) : filteredPeople.length > 0 ? (
-                filteredPeople.map((member: MemberWithEnvScope) => (
-                  <Menu.Item key={member.id}>
-                    {({ active }) => (
-                      <div
-                        className={clsx(
-                          'flex items-center gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
-                          active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
-                        )}
-                        onClick={() => setSelectedMembers([...selectedMembers, member])}
-                      >
-                        <Avatar member={member} size="md" />
-                        <div>
-                          <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                            {member.fullName || member.email}
-                          </div>
-                          {member.fullName && (
-                            <div className="text-neutral-500 text-xs leading-4">{member.email}</div>
-                          )}
-                        </div>
-                      </div>
+                  <input
+                    placeholder="Search Members"
+                    className="custom bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <FaTimesCircle
+                    className={clsx(
+                      'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                      query ? 'opacity-100' : 'opacity-0'
                     )}
-                  </Menu.Item>
-                ))
-              ) : query ? (
-                <div className="p-4 w-full max-w-screen-lg">
-                  <EmptyState
-                    title={`No results for "${query}"`}
-                    subtitle="Try adjusting your search term"
-                    graphic={
-                      <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                        <MdSearchOff />
-                      </div>
-                    }
-                  >
-                    <></>
-                  </EmptyState>
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setQuery('')
+                    }}
+                  />
                 </div>
-              ) : (
-                <div className="p-4 text-center text-neutral-500 text-sm w-64">
-                  All org members are already added to this app
+
+                <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-lg">
+                  {loading ? (
+                    <div className="p-4">
+                      <Spinner size="sm" />
+                    </div>
+                  ) : filteredPeople.length > 0 ? (
+                    filteredPeople.map((member: MemberWithEnvScope) => (
+                      <Menu.Item key={member.id}>
+                        {({ active }) => (
+                          <div
+                            className={clsx(
+                              'flex items-center justify-between gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
+                              active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
+                            )}
+                            onClick={() => setSelectedMembers([...selectedMembers, member])}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Avatar member={member} size="md" />
+                              <div>
+                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                  {member.fullName || member.email}
+                                </div>
+                                {member.fullName && (
+                                  <div className="text-neutral-500 text-xs leading-4">
+                                    {member.email}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <RoleLabel role={member.role!} />
+                          </div>
+                        )}
+                      </Menu.Item>
+                    ))
+                  ) : query ? (
+                    <div className="p-4 w-full max-w-screen-lg">
+                      <EmptyState
+                        title={`No results for "${query}"`}
+                        subtitle="Try adjusting your search term"
+                        graphic={
+                          <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                            <MdSearchOff />
+                          </div>
+                        }
+                      >
+                        <></>
+                      </EmptyState>
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-neutral-500 text-sm w-64">
+                      All org members are already added to this app
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </Menu.Items>
-        </Transition>
+              </Menu.Items>
+            </Transition>
+          </>
+        )}
       </Menu>
     )
   }
@@ -338,27 +355,32 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
             </p>
 
             <div className="space-y-2">
-              <div className="flex items-center gap-2 justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div className="w-1/2 text-2xs font-medium text-gray-500 uppercase tracking-wider">
                   Member
                 </div>
                 <div className="w-1/2 text-2xs font-medium text-gray-500 uppercase tracking-wider">
-                  Environment scope
+                  Environment scope <span className="text-red-500">*</span>
                 </div>
                 <div className="w-9"></div>
               </div>
               {selectedMembers.map((member, index) => (
                 <div key={member.id} className="space-y-1 flex items-center justify-between gap-2">
-                  <div className={clsx('flex items-center gap-2 p-1 text-sm w-1/2')}>
-                    <Avatar member={member} size="md" />
-                    <div>
-                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        {member.fullName || member.email}
+                  <div
+                    className={clsx('flex items-center justify-between gap-2 p-1 text-sm w-1/2')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Avatar member={member} size="md" />
+                      <div>
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                          {member.fullName || member.email}
+                        </div>
+                        {member.fullName && (
+                          <div className="text-neutral-500 text-xs leading-4">{member.email}</div>
+                        )}
                       </div>
-                      {member.fullName && (
-                        <div className="text-neutral-500 text-xs leading-4">{member.email}</div>
-                      )}
                     </div>
+                    <RoleLabel role={member.role!} />
                   </div>
                   <div className="w-1/2">
                     {userCanReadEnvironments ? (
@@ -391,8 +413,14 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                                         .includes(env.id!)
                                     )
                                     .map((env) => env.name)
-                                    .join(', ')
+                                    .join(' + ')
                                 : 'Select environment scope'}
+                              <FaChevronDown
+                                className={clsx(
+                                  'transform transition ease text-neutral-500',
+                                  open ? '-rotate-180' : 'rotate-0'
+                                )}
+                              />
                             </Listbox.Button>
                             <Transition
                               as={Fragment}
@@ -464,12 +492,8 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
               <Button variant="secondary" type="button" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                type="submit"
-                disabled={membersWithoutScope || !selectedMembers.length}
-              >
-                Add{' '}
+              <Button variant="primary" type="submit" disabled={!selectedMembers.length}>
+                <FaPlus /> Add{' '}
                 {selectedMembers.length > 0
                   ? ` ${selectedMembers.length} ${selectedMembers.length === 1 ? 'member' : 'members'} `
                   : ''}

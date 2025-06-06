@@ -62,7 +62,7 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
           getBgColor(serviceAccount.name)
         )}
       >
-        <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
+        <FaRobot className="shrink-0 text-zinc-100 grow" />
       </div>
     )
   }

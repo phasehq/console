@@ -13,6 +13,7 @@ import {
   FaArrowRight,
   FaBan,
   FaCheckCircle,
+  FaChevronDown,
   FaCircle,
   FaPlus,
   FaSearch,
@@ -32,6 +33,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { MdSearchOff } from 'react-icons/md'
 import { Avatar } from '@/components/common/Avatar'
+import { RoleLabel } from '@/components/users/RoleLabel'
 
 type AccountWithEnvScope = ServiceAccountType & {
   scope: Partial<EnvironmentType>[]
@@ -227,6 +229,12 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const SelectAccountMenu = () => {
     const [query, setQuery] = useState('')
 
+    const buttonRef = useRef<HTMLButtonElement>(null)
+
+    useEffect(() => {
+      if (buttonRef.current && selectedAccounts.length === 0) buttonRef.current.click()
+    }, [buttonRef])
+
     const filteredAccounts =
       query === ''
         ? accountOptions
@@ -236,97 +244,104 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
 
     return (
       <Menu as="div" className="relative inline-block text-left group w-96">
-        <Menu.Button as={Fragment}>
-          <Button variant="ghost">
-            <FaPlus className="mr-1" />
-            {selectedAccounts.length ? 'Add another account' : 'Select a Service Account'}
-          </Button>
-        </Menu.Button>
+        {({ open }) => (
+          <>
+            <Menu.Button as={Fragment}>
+              <Button variant={open ? 'secondary' : 'ghost'} ref={buttonRef}>
+                <FaPlus className="mr-1" />
+                {selectedAccounts.length ? 'Add another account' : 'Select a Service Account'}
+              </Button>
+            </Menu.Button>
 
-        <Transition
-          as={Fragment}
-          enter="transition duration-100 ease-out"
-          enterFrom="transform scale-95 opacity-0"
-          enterTo="transform scale-100 opacity-100"
-          leave="transition duration-75 ease-out"
-          leaveFrom="transform scale-100 opacity-100"
-          leaveTo="transform scale-95 opacity-0"
-        >
-          <Menu.Items className="absolute z-10 left-0 origin-top-right mt-2 divide-y divide-neutral-500/40 p-px rounded-md shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full text-sm">
-              <FaSearch className="text-neutral-500" />
+            <Transition
+              as={Fragment}
+              enter="transition duration-100 ease-out"
+              enterFrom="transform scale-95 opacity-0"
+              enterTo="transform scale-100 opacity-100"
+              leave="transition duration-75 ease-out"
+              leaveFrom="transform scale-100 opacity-100"
+              leaveTo="transform scale-95 opacity-0"
+            >
+              <Menu.Items className="absolute z-10 left-0 origin-top-right mt-2 divide-y divide-neutral-500/40 p-px rounded-md shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full text-sm">
+                  <FaSearch className="text-neutral-500" />
 
-              <input
-                placeholder="Search Service Accounts"
-                className="custom bg-zinc-100 dark:bg-zinc-800"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-              />
-              <FaTimesCircle
-                className={clsx(
-                  'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
-                  query ? 'opacity-100' : 'opacity-0'
-                )}
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setQuery('')
-                }}
-              />
-            </div>
-
-            <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-lg">
-              {loading ? (
-                <div className="p-4">
-                  <Spinner size="sm" />
-                </div>
-              ) : filteredAccounts.length > 0 ? (
-                filteredAccounts.map((account: AccountWithEnvScope) => (
-                  <Menu.Item key={account.id}>
-                    {({ active }) => (
-                      <div
-                        className={clsx(
-                          'flex items-center gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
-                          active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
-                        )}
-                        onClick={() => setSelectedAccounts([...selectedAccounts, account])}
-                      >
-                        <Avatar serviceAccount={account} />
-                        <div>
-                          <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                            {account.name}
-                          </div>
-                          <div className="text-neutral-500 text-xs leading-4 font-mono">
-                            {account.id}
-                          </div>
-                        </div>
-                      </div>
+                  <input
+                    placeholder="Search Service Accounts"
+                    className="custom bg-zinc-100 dark:bg-zinc-800"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <FaTimesCircle
+                    className={clsx(
+                      'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                      query ? 'opacity-100' : 'opacity-0'
                     )}
-                  </Menu.Item>
-                ))
-              ) : query ? (
-                <div className="p-4 w-full max-w-screen-lg">
-                  <EmptyState
-                    title={`No results for "${query}"`}
-                    subtitle="Try adjusting your search term"
-                    graphic={
-                      <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                        <MdSearchOff />
-                      </div>
-                    }
-                  >
-                    <></>
-                  </EmptyState>
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setQuery('')
+                    }}
+                  />
                 </div>
-              ) : (
-                <div className="p-4 text-center text-neutral-500 text-sm w-64">
-                  All service accounts are already added to this app
+
+                <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-2xl">
+                  {loading ? (
+                    <div className="p-4">
+                      <Spinner size="sm" />
+                    </div>
+                  ) : filteredAccounts.length > 0 ? (
+                    filteredAccounts.map((account: AccountWithEnvScope) => (
+                      <Menu.Item key={account.id}>
+                        {({ active }) => (
+                          <div
+                            className={clsx(
+                              'flex items-center justify-between gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
+                              active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
+                            )}
+                            onClick={() => setSelectedAccounts([...selectedAccounts, account])}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Avatar serviceAccount={account} />
+                              <div>
+                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                  {account.name}
+                                </div>
+                                <div className="text-neutral-500 text-2xs leading-4 font-mono">
+                                  {account.id}
+                                </div>
+                              </div>
+                            </div>
+                            <RoleLabel role={account.role!} />
+                          </div>
+                        )}
+                      </Menu.Item>
+                    ))
+                  ) : query ? (
+                    <div className="p-4 w-full max-w-screen-2xl">
+                      <EmptyState
+                        title={`No results for "${query}"`}
+                        subtitle="Try adjusting your search term"
+                        graphic={
+                          <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                            <MdSearchOff />
+                          </div>
+                        }
+                      >
+                        <></>
+                      </EmptyState>
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-neutral-500 text-sm w-64">
+                      All service accounts are already added to this app
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </Menu.Items>
-        </Transition>
+              </Menu.Items>
+            </Transition>
+          </>
+        )}
       </Menu>
     )
   }
@@ -377,12 +392,21 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
               </div>
               {selectedAccounts.map((account, index) => (
                 <div key={account.id} className="space-y-1 flex items-center justify-between gap-2">
-                  <div className={clsx('flex items-center gap-2 p-1 text-sm w-1/2')}>
-                    <Avatar serviceAccount={account} />
-
-                    <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                      {account.name}
+                  <div
+                    className={clsx('flex items-center justify-between gap-2 p-1 text-sm w-1/2')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Avatar serviceAccount={account} />
+                      <div>
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                          {account.name}
+                        </div>
+                        <div className="text-neutral-500 text-2xs leading-4 font-mono">
+                          {account.id}
+                        </div>
+                      </div>
                     </div>
+                    <RoleLabel role={account.role!} />
                   </div>
                   <div className="w-1/2">
                     {userCanReadEnvironments ? (
@@ -415,8 +439,14 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                                         .includes(env.id!)
                                     )
                                     .map((env) => env.name)
-                                    .join(', ')
+                                    .join(' + ')
                                 : 'Select environment scope'}
+                              <FaChevronDown
+                                className={clsx(
+                                  'transform transition ease text-neutral-500',
+                                  open ? '-rotate-180' : 'rotate-0'
+                                )}
+                              />
                             </Listbox.Button>
                             <Transition
                               as={Fragment}
@@ -488,11 +518,8 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
               <Button variant="secondary" type="button" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                type="submit"
-                disabled={accountWithoutScope || !selectedAccounts.length}
-              >
+              <Button variant="primary" type="submit" disabled={!selectedAccounts.length}>
+                <FaPlus />
                 Add{' '}
                 {selectedAccounts.length > 0
                   ? ` ${selectedAccounts.length} ${selectedAccounts.length === 1 ? 'account' : 'accounts'} `

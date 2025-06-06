@@ -249,17 +249,14 @@ export const ManageUserAccessDialog = ({
                               {({ active, selected }) => (
                                 <div
                                   className={clsx(
-                                    'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-sm transition ease',
-                                    active
-                                      ? 'text-zinc-900 dark:text-zinc-100 bg-neutral-100 dark:bg-neutral-700'
-                                      : '',
-                                    selected && 'text-zinc-900 dark:text-zinc-100'
+                                    'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
+                                    active ? ' bg-neutral-100 dark:bg-neutral-700' : ''
                                   )}
                                 >
                                   {selected ? (
                                     <FaCheckCircle className="text-emerald-500" />
                                   ) : (
-                                    <FaCircle />
+                                    <FaCircle className="text-neutral-500" />
                                   )}
                                   <div>{env.name}</div>
                                 </div>

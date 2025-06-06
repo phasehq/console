@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import clsx from 'clsx'
-import type { ReactNode } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import Spinner from './Spinner'
 
 export type ButtonVariant =
@@ -19,11 +19,6 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode
   arrow?: 'left' | 'right'
   isLoading?: boolean
-}
-
-interface ComponentProps {
-  props: ButtonProps
-  className: string
 }
 
 function ArrowIcon(props: { className: string }) {
@@ -57,18 +52,18 @@ const variantStyles: Record<string, string> = {
   text: 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-500',
 }
 
-export function Button(buttonProps: ButtonProps) {
-  let { variant, classString, children, arrow, isLoading } = buttonProps
-  const Component = 'button'
-
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant, classString, children, arrow, isLoading, ...rest },
+  ref
+) {
   const computedClassName = clsx(
     'inline-flex gap-1 justify-center items-center overflow-hidden text-sm font-medium transition-all ease-in-out whitespace-nowrap',
     variantStyles[variant],
     classString,
-    (buttonProps.disabled || isLoading) && 'opacity-60 pointer-events-none'
+    (rest.disabled || isLoading) && 'opacity-60 pointer-events-none'
   )
 
-  let arrowIcon = (
+  const arrowIcon = (
     <ArrowIcon
       className={clsx(
         'mt-0.5 h-5 w-5',
@@ -88,7 +83,6 @@ export function Button(buttonProps: ButtonProps) {
       case 'warning':
         return 'amber'
       case 'secondary':
-        return 'neutral'
       case 'outline':
         return 'neutral'
       default:
@@ -97,15 +91,11 @@ export function Button(buttonProps: ButtonProps) {
   }
 
   return (
-    <button
-      {...buttonProps}
-      className={computedClassName}
-      disabled={buttonProps.disabled || isLoading}
-    >
+    <button ref={ref} className={computedClassName} disabled={rest.disabled || isLoading} {...rest}>
       {!isLoading && arrow === 'left' && arrowIcon}
-      {isLoading && <Spinner size={'sm'} color={spinnerColor()} />}
+      {isLoading && <Spinner size="sm" color={spinnerColor()} />}
       {children}
       {!isLoading && arrow === 'right' && arrowIcon}
     </button>
   )
-}
+})
