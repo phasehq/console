@@ -195,7 +195,7 @@ export const ManageUserAccessDialog = ({
                 </p>
               </Alert>
             )}
-            <div className="space-y-1 w-full relative">
+            <div className="w-full relative">
               {scope.length === 0 && showEnvHint && (
                 <span className="absolute right-2 inset-y-0 text-red-500 text-xs">
                   Select an environment scope
@@ -219,8 +219,9 @@ export const ManageUserAccessDialog = ({
                     <Listbox.Button as={Fragment} aria-required>
                       <div
                         className={clsx(
-                          'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 border border-neutral-500/40 rounded-md h-10',
-                          memberHasGlobalAccess(member) ? 'cursor-not-allowed' : 'cursor-pointer'
+                          'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 h-10',
+                          memberHasGlobalAccess(member) ? 'cursor-not-allowed' : 'cursor-pointer',
+                          open ? 'rounded-t-md' : 'rounded-md'
                         )}
                       >
                         <span className="text-zinc-900 dark:text-zinc-100 text-sm">
@@ -243,7 +244,7 @@ export const ManageUserAccessDialog = ({
                       leaveTo="transform scale-95 opacity-0"
                     >
                       <Listbox.Options>
-                        <div className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md border border-neutral-500/40 shadow-2xl absolute z-10 w-full divide-y divide-neutral-500/20">
+                        <div className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md border border-neutral-500/40 shadow-2xl absolute z-10 -my-px w-full divide-y divide-neutral-500/20">
                           {envOptions.map((env: Partial<EnvironmentType>) => (
                             <Listbox.Option key={env.id} value={env} as={Fragment}>
                               {({ active, selected }) => (
