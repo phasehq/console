@@ -15,7 +15,16 @@ import { getInviteLink } from '@/utils/crypto'
 import { useQuery, useMutation } from '@apollo/client'
 import { Listbox } from '@headlessui/react'
 import { useSearchParams } from 'next/navigation'
-import { useContext, useState, useRef, useEffect, Fragment, useMemo } from 'react'
+import {
+  useContext,
+  useState,
+  useRef,
+  useEffect,
+  Fragment,
+  useMemo,
+  Dispatch,
+  SetStateAction,
+} from 'react'
 import {
   FaChevronDown,
   FaDownload,
@@ -44,6 +53,98 @@ type Invite = {
 type InviteLink = {
   email: string
   link: string
+}
+
+const BulkAddEmailsDialog = ({
+  invites,
+  setInvites,
+  avaiableSeats,
+  defaultRole,
+}: {
+  invites: Invite[]
+  setInvites: Dispatch<SetStateAction<Invite[]>>
+  avaiableSeats: number
+  defaultRole: RoleType
+}) => {
+  const [bulkEmails, setBulkEmails] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const emailInputRef = useRef(null)
+
+  const handleBulkEmailImport = () => {
+    setError('')
+    const seen = new Set(invites.map((i) => i.email))
+    const newEmails = bulkEmails
+      .split(/[\s,]+/) // split by spaces, commas, or newlines
+      .map((email) => email.trim().toLowerCase())
+      .filter((email) => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) // validate email format
+      .filter((email) => !seen.has(email))
+
+    if (newEmails.length === 0) {
+      toast.error('No valid or unique emails found.')
+      return
+    }
+
+    if (newEmails.length > avaiableSeats) {
+      setError(
+        `You are trying to import ${newEmails.length} email addresses, but you only have ${avaiableSeats} available seats in your organisation plan.`
+      )
+      return
+    }
+
+    const imported = newEmails.map((email) => ({
+      email,
+      role: defaultRole,
+    }))
+
+    setInvites((prev) => [...prev.filter((invite) => invite.email !== ''), ...imported])
+    setBulkEmails('')
+    dialogRef.current?.closeModal()
+    toast.success(`${imported.length} email(s) imported.`)
+  }
+
+  return (
+    <GenericDialog
+      ref={dialogRef}
+      title="Import emails"
+      buttonVariant="ghost"
+      initialFocus={emailInputRef}
+      isStatic={true}
+      buttonContent={
+        <>
+          <FaDownload />
+          Bulk import emails
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-neutral-500">
+          Paste email adresses separated by commas, spaces, or new lines
+        </p>
+        <div className="space-y-4">
+          {error && (
+            <Alert size="sm" variant="warning" icon={true}>
+              {error}
+            </Alert>
+          )}
+          <textarea
+            value={bulkEmails}
+            ref={emailInputRef}
+            onChange={(e) => setBulkEmails(e.target.value)}
+            placeholder="Paste emails separated by commas, spaces, or new lines"
+            rows={10}
+            className="w-full text-sm"
+          ></textarea>
+          <div className="flex justify-end">
+            <Button onClick={handleBulkEmailImport} variant="primary" type="button">
+              Import
+            </Button>
+          </div>
+        </div>
+      </div>
+    </GenericDialog>
+  )
 }
 
 export const InviteDialog = (props: { organisationId: string }) => {
@@ -230,86 +331,6 @@ export const InviteDialog = (props: { organisationId: string }) => {
     }
   }
 
-  const BulkAddEmailsDialog = () => {
-    const [bulkEmails, setBulkEmails] = useState('')
-    const [error, setError] = useState<string | null>(null)
-
-    const emailInputRef = useRef(null)
-
-    const handleBulkEmailImport = () => {
-      setError('')
-      const seen = new Set(invites.map((i) => i.email))
-      const newEmails = bulkEmails
-        .split(/[\s,]+/) // split by spaces, commas, or newlines
-        .map((email) => email.trim().toLowerCase())
-        .filter((email) => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) // validate email format
-        .filter((email) => !seen.has(email))
-
-      if (newEmails.length === 0) {
-        toast.error('No valid or unique emails found.')
-        return
-      }
-
-      if (newEmails.length > avaiableSeats) {
-        setError(
-          `You are trying to import ${newEmails.length} email addresses, but you only have ${avaiableSeats} available seats in your organisation plan.`
-        )
-        return
-      }
-
-      const imported = newEmails.map((email) => ({
-        email,
-        role: defaultRole,
-      }))
-
-      setInvites((prev) => [...prev.filter((invite) => invite.email !== ''), ...imported])
-      setBulkEmails('')
-
-      toast.success(`${imported.length} email(s) imported.`)
-    }
-
-    return (
-      <GenericDialog
-        title="Import emails"
-        buttonVariant="ghost"
-        initialFocus={emailInputRef}
-        isStatic={true}
-        buttonContent={
-          <>
-            <FaDownload />
-            Bulk import emails
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-neutral-500">
-            Paste email adresses separated by commas, spaces, or new lines
-          </p>
-          <div className="space-y-4">
-            {error && (
-              <Alert size="sm" variant="warning" icon={true}>
-                {error}
-              </Alert>
-            )}
-            <textarea
-              value={bulkEmails}
-              ref={emailInputRef}
-              onChange={(e) => setBulkEmails(e.target.value)}
-              placeholder="Paste emails separated by commas, spaces, or new lines"
-              rows={10}
-              className="w-full text-sm"
-            ></textarea>
-            <div className="flex justify-end">
-              <Button onClick={handleBulkEmailImport} variant="primary" type="button">
-                Import
-              </Button>
-            </div>
-          </div>
-        </div>
-      </GenericDialog>
-    )
-  }
-
   if (upsell)
     return (
       <UpsellDialog
@@ -328,6 +349,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
         size="lg"
         title="Invite members"
         onClose={reset}
+        isStatic={true}
         buttonContent={
           <>
             <FaPlus /> Add members
@@ -454,13 +476,17 @@ export const InviteDialog = (props: { organisationId: string }) => {
                     variant="ghost"
                     type="button"
                     onClick={addInvite}
-                    className="text-sm text-left text-neutral-500 inline-flex items-center gap-2"
                     disabled={invites.length >= avaiableSeats}
                   >
                     <FaPlus /> Add another member
                   </Button>
 
-                  <BulkAddEmailsDialog />
+                  <BulkAddEmailsDialog
+                    invites={invites}
+                    setInvites={setInvites}
+                    avaiableSeats={avaiableSeats}
+                    defaultRole={defaultRole!}
+                  />
                 </div>
 
                 <div className="col-span-2 flex items-center gap-4 justify-between">
@@ -477,11 +503,11 @@ export const InviteDialog = (props: { organisationId: string }) => {
               <div className="py-8 space-y-6">
                 <div className="text-center max-w-lg mx-auto">
                   <h3 className="font-semibold text-xl text-black dark:text-white">
-                    Invite{inviteLinks.length > 0 ? 's' : ''} sent!
+                    Invite{inviteLinks.length > 1 ? 's' : ''} sent!
                   </h3>
                   <p className="text-neutral-500">
-                    Invite link{inviteLinks.length > 0 ? 's have' : 'has'} been sent by email. You
-                    can also copy the invite link{inviteLinks.length > 0 ? 's' : ''} for each user
+                    Invite link{inviteLinks.length > 1 ? 's have' : ' has'} been sent by email. You
+                    can also copy the invite link{inviteLinks.length > 1 ? 's' : ''} for each user
                     and share them manually. Invites expire in 72 hours.
                   </p>
                 </div>
@@ -490,7 +516,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   and join your Organisation.
                 </Alert>
 
-                {inviteLinks.length <= 5 &&
+                {inviteLinks.length === 1 &&
                   inviteLinks.map(({ email, link }) => (
                     <div key={email} className="space-y-2">
                       <p className="text-sm font-medium text-black dark:text-white">{email}</p>
