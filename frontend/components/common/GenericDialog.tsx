@@ -20,6 +20,7 @@ interface GenericDialogProps {
   buttonContent?: ReactNode
   size?: 'lg' | 'md' | 'sm'
   initialFocus?: MutableRefObject<null>
+  isStatic?: boolean
 }
 
 const GenericDialog = forwardRef(
@@ -33,6 +34,7 @@ const GenericDialog = forwardRef(
       buttonContent,
       size,
       initialFocus,
+      isStatic = false,
     }: GenericDialogProps,
     ref
   ) => {
@@ -65,7 +67,7 @@ const GenericDialog = forwardRef(
       <>
         {buttonContent && (
           <div className="flex items-center justify-center">
-            <Button variant={buttonVariant} onClick={openModal} title={title}>
+            <Button variant={buttonVariant} onClick={openModal} title={title} type="button">
               {buttonContent}
             </Button>
           </div>
@@ -77,6 +79,7 @@ const GenericDialog = forwardRef(
             className="relative z-10"
             onClose={closeModal}
             initialFocus={initialFocus}
+            static={isStatic}
           >
             <Transition.Child
               as={Fragment}

@@ -134,9 +134,7 @@ export const HistoryDialog = ({
     else if (log.serviceAccount)
       return (
         <div className="flex items-center gap-1 text-sm">
-          <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-6">
-            <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
-          </div>{' '}
+          <Avatar serviceAccount={log.serviceAccount} size="sm" />
           {log.serviceAccount.name}
           {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
         </div>

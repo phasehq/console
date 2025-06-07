@@ -5,9 +5,9 @@ import clsx from 'clsx'
 
 export const RoleLabel = ({ role, size }: { role: RoleType; size?: 'sm' | 'md' | 'lg' }) => {
   const sizeStyles = {
-    sm: 'text-2xs',
-    md: 'text-sm',
-    lg: 'text-base',
+    sm: 'text-2xs px-1',
+    md: 'text-sm px-2 py-0.5',
+    lg: 'text-base px-2 py-0.5',
   }
 
   const roleStyle = () => {
@@ -31,7 +31,7 @@ export const RoleLabel = ({ role, size }: { role: RoleType; size?: 'sm' | 'md' |
   return (
     <span
       className={clsx(
-        'px-2 py-0.5 rounded-md ring-1 ring-inset  uppercase font-medium tracking-wide',
+        ' rounded-md ring-1 ring-inset  uppercase font-medium tracking-wide',
         size ? sizeStyles[size] : sizeStyles['sm'],
         roleStyle()
       )}

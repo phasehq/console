@@ -160,34 +160,33 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
       </div>
       <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
         <div className="text-2xl font-semibold flex items-center gap-2">
-          <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-16">
-            <FaRobot className="shrink-0 text-zinc-900 dark:text-zinc-100 grow" />
-          </div>{' '}
-          <h3 className="relative group w-full max-w-md">
-            <input
-              className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full "
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              readOnly={!userCanUpdateSA}
-              maxLength={64}
-            />
-
-            {nameUpdated ? (
-              <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
-                <Button variant="secondary" onClick={resetName}>
-                  <span className="text-2xs">Discard</span>
-                </Button>
-
-                <Button variant="primary" onClick={updateName}>
-                  <span className="text-2xs">Save</span>
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center inset-y-0 gap-1 absolute right-2 opacity-0 group-hover:opacity-100 transition ease ">
-                <FaEdit className="text-neutral-500 text-base" />
-              </div>
-            )}
-          </h3>
+          <Avatar serviceAccount={account} size="xl" />
+          <div className="flex flex-col">
+            <h3 className="relative group w-full max-w-md">
+              <input
+                className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full "
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                readOnly={!userCanUpdateSA}
+                maxLength={64}
+              />
+              {nameUpdated ? (
+                <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
+                  <Button variant="secondary" onClick={resetName}>
+                    <span className="text-2xs">Discard</span>
+                  </Button>
+                  <Button variant="primary" onClick={updateName}>
+                    <span className="text-2xs">Save</span>
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center inset-y-0 gap-1 absolute right-2 opacity-0 group-hover:opacity-100 transition ease ">
+                  <FaEdit className="text-neutral-500 text-base" />
+                </div>
+              )}
+            </h3>
+            <span className="text-neutral-500 text-sm font-mono pl-2">{account.id}</span>
+          </div>
         </div>
 
         <div className="py-4 space-y-4">

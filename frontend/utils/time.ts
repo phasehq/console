@@ -1,3 +1,5 @@
+import { OrganisationMemberInviteType } from '@/apollo/graphql'
+
 const units: { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
   { unit: 'year', ms: 31536000000 },
   { unit: 'month', ms: 2628000000 },
@@ -66,4 +68,8 @@ export const getUnixTimeStampinFuture = (
 export const dateToUnixTimestamp = (dateString: string): number => {
   const dateObj = new Date(dateString)
   return Math.floor(dateObj.getTime())
+}
+
+export const inviteIsExpired = (invite: OrganisationMemberInviteType) => {
+  return new Date(invite.expiresAt) < new Date()
 }
