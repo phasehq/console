@@ -8,23 +8,15 @@ import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'reac
 import { EnvironmentType, ServiceAccountType, MemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Dialog, Listbox, Transition } from '@headlessui/react'
-import {
-  FaCheckCircle,
-  FaCheckSquare,
-  FaChevronDown,
-  FaCircle,
-  FaCog,
-  FaSquare,
-  FaTimes,
-} from 'react-icons/fa'
+import { Listbox, Transition } from '@headlessui/react'
+import { FaCheckCircle, FaChevronDown, FaCircle, FaCog } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
+import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
 
 export const ManageAccountAccessDialog = ({
@@ -85,25 +77,25 @@ export const ManageAccountAccessDialog = ({
       }
     }) ?? []
 
-  const [isOpen, setIsOpen] = useState<boolean>(false)
-
   const [scope, setScope] = useState<Array<Record<string, string>>>([])
   const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
+
+  const scopeUpdated = !arraysEqual(
+    scope.map((env) => env.id),
+    envScope.map((env) => env.id)
+  )
 
   const memberHasGlobalAccess = (account: ServiceAccountType) =>
     userHasGlobalAccess(account.role?.permissions)
 
-  const closeModal = () => {
-    setIsOpen(false)
-  }
-
-  const openModal = () => {
-    setIsOpen(true)
-  }
-
   useEffect(() => {
     setScope(envScope)
   }, [envScope])
+
+  const handleClose = () => {
+    setScope(envScope)
+    dialogRef.current?.closeModal()
+  }
 
   const handleUpdateScope = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -171,7 +163,7 @@ export const ManageAccountAccessDialog = ({
         },
       ],
     })
-
+    dialogRef.current?.closeModal()
     toast.success('Updated account access', { autoClose: 2000 })
   }
 
@@ -315,10 +307,14 @@ export const ManageAccountAccessDialog = ({
               </div>
 
               <div className="flex items-center justify-between gap-4">
-                <Button variant="secondary" type="button" onClick={closeModal}>
+                <Button variant="secondary" type="button" onClick={handleClose}>
                   Cancel
                 </Button>
-                <Button variant="primary" type="submit" disabled={memberHasGlobalAccess(account)}>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={memberHasGlobalAccess(account) || !scopeUpdated}
+                >
                   Save
                 </Button>
               </div>

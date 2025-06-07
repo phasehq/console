@@ -6,16 +6,8 @@ import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'reac
 import { OrganisationMemberType, EnvironmentType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Dialog, Listbox, Transition } from '@headlessui/react'
-import {
-  FaCheckCircle,
-  FaCheckSquare,
-  FaChevronDown,
-  FaCircle,
-  FaCog,
-  FaSquare,
-  FaTimes,
-} from 'react-icons/fa'
+import { Listbox, Transition } from '@headlessui/react'
+import { FaCheckCircle, FaChevronDown, FaCircle, FaCog } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
@@ -23,7 +15,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
+import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
 
 export const ManageUserAccessDialog = ({
@@ -86,14 +78,22 @@ export const ManageUserAccessDialog = ({
   const [scope, setScope] = useState<Array<Record<string, string>>>([])
   const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
 
+  const scopeUpdated = !arraysEqual(
+    scope.map((env) => env.id),
+    envScope.map((env) => env.id)
+  )
+
   const memberHasGlobalAccess = (user: OrganisationMemberType) =>
     userHasGlobalAccess(user.role?.permissions)
-
-  const closeModal = () => dialogRef.current?.closeModal()
 
   useEffect(() => {
     setScope(envScope)
   }, [envScope])
+
+  const handleClose = () => {
+    setScope(envScope)
+    dialogRef.current?.closeModal()
+  }
 
   const handleUpdateScope = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -152,7 +152,7 @@ export const ManageUserAccessDialog = ({
         },
       ],
     })
-
+    dialogRef.current?.closeModal()
     toast.success('Updated user access', { autoClose: 2000 })
   }
 
@@ -272,10 +272,14 @@ export const ManageUserAccessDialog = ({
               </Listbox>
             </div>
             <div className="flex items-center gap-4 justify-between">
-              <Button variant="secondary" type="button" onClick={closeModal}>
+              <Button variant="secondary" type="button" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button variant="primary" type="submit" disabled={memberHasGlobalAccess(member)}>
+              <Button
+                variant="primary"
+                type="submit"
+                disabled={memberHasGlobalAccess(member) || !scopeUpdated}
+              >
                 Save
               </Button>
             </div>
