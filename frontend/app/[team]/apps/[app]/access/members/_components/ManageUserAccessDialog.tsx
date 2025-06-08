@@ -215,8 +215,11 @@ export const ManageUserAccessDialog = ({
                 {({ open }) => (
                   <>
                     <Listbox.Label as={Fragment}>
-                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">
-                        Environment scope
+                      <label
+                        className="block text-2xs font-medium text-gray-500 uppercase tracking-wider mb-2"
+                        htmlFor="name"
+                      >
+                        Environment scope <span className="text-red-500">*</span>
                       </label>
                     </Listbox.Label>
                     <Listbox.Button as={Fragment} aria-required>

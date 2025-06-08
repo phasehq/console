@@ -227,8 +227,11 @@ export const ManageAccountAccessDialog = ({
                     {({ open }) => (
                       <>
                         <Listbox.Label as={Fragment}>
-                          <label className="block text-neutral-500 text-sm mb-2" htmlFor="name">
-                            Environment scope
+                          <label
+                            className="block text-2xs font-medium text-gray-500 uppercase tracking-wider mb-2"
+                            htmlFor="name"
+                          >
+                            Environment scope <span className="text-red-500">*</span>
                           </label>
                         </Listbox.Label>
                         <Listbox.Button as={Fragment} aria-required>
@@ -294,7 +297,7 @@ export const ManageAccountAccessDialog = ({
 
                 <div className="flex items-end gap-4 justify-between py-2">
                   <div>
-                    <label className="block text-neutral-500 text-sm mb-2" htmlFor="name">
+                    <label className="block text-2xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                       Account Tokens
                     </label>
                     <div className="text-zinc-900 dark:text-zinc-100 font-medium">
