@@ -386,7 +386,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                   Account
                 </div>
                 <div className="w-1/2 text-2xs font-medium text-gray-500 uppercase tracking-wider">
-                  Environment scope
+                  Environment scope <span className="text-red-500">*</span>
                 </div>
                 <div className="w-9"></div>
               </div>
