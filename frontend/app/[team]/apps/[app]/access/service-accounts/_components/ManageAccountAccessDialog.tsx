@@ -18,6 +18,7 @@ import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
+import { sortEnvs } from '@/utils/secrets'
 
 export const ManageAccountAccessDialog = ({
   account,
@@ -48,7 +49,7 @@ export const ManageAccountAccessDialog = ({
   })
 
   // Get the environemnts that the account has access to
-  const { data: userEnvScopeData } = useQuery(GetAppEnvironments, {
+  const { data: accountEnvScopeData } = useQuery(GetAppEnvironments, {
     variables: {
       appId: appId,
       memberId: account.id,
@@ -60,24 +61,26 @@ export const ManageAccountAccessDialog = ({
 
   const envScope: Array<Record<string, string>> = useMemo(() => {
     return (
-      userEnvScopeData?.appEnvironments.map((env: EnvironmentType) => ({
+      accountEnvScopeData?.appEnvironments.map((env: EnvironmentType) => ({
         id: env.id,
         name: env.name,
+        index: env.index,
       })) ?? []
     )
-  }, [userEnvScopeData])
+  }, [accountEnvScopeData])
 
   const envOptions =
     appEnvsData?.appEnvironments.map((env: EnvironmentType) => {
-      const { id, name } = env
+      const { id, name, index } = env
 
       return {
         id,
         name,
+        index,
       }
     }) ?? []
 
-  const [scope, setScope] = useState<Array<Record<string, string>>>([])
+  const [scope, setScope] = useState<Array<Partial<EnvironmentType>>>([])
   const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
 
   const scopeUpdated = !arraysEqual(
@@ -89,11 +92,11 @@ export const ManageAccountAccessDialog = ({
     userHasGlobalAccess(account.role?.permissions)
 
   useEffect(() => {
-    setScope(envScope)
+    setScope(sortEnvs(envScope))
   }, [envScope])
 
   const handleClose = () => {
-    setScope(envScope)
+    setScope(sortEnvs(envScope))
     dialogRef.current?.closeModal()
   }
 
@@ -216,7 +219,7 @@ export const ManageAccountAccessDialog = ({
                   <Listbox
                     value={scope}
                     by="id"
-                    onChange={setScope}
+                    onChange={(value) => setScope(sortEnvs(value))}
                     multiple
                     name="environments"
                     disabled={memberHasGlobalAccess(account)}

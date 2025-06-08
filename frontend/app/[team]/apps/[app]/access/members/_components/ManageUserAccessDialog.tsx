@@ -17,6 +17,7 @@ import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
+import { sortEnvs } from '@/utils/secrets'
 
 export const ManageUserAccessDialog = ({
   member,
@@ -56,26 +57,28 @@ export const ManageUserAccessDialog = ({
     },
   })
 
-  const envScope: Array<Record<string, string>> = useMemo(() => {
+  const envScope: Array<Partial<EnvironmentType>> = useMemo(() => {
     return (
       userEnvScopeData?.appEnvironments.map((env: EnvironmentType) => ({
         id: env.id,
         name: env.name,
+        index: env.index,
       })) ?? []
     )
   }, [userEnvScopeData])
 
   const envOptions =
     appEnvsData?.appEnvironments.map((env: EnvironmentType) => {
-      const { id, name } = env
+      const { id, name, index } = env
 
       return {
         id,
         name,
+        index,
       }
     }) ?? []
 
-  const [scope, setScope] = useState<Array<Record<string, string>>>([])
+  const [scope, setScope] = useState<Array<Partial<EnvironmentType>>>([])
   const [showEnvHint, setShowEnvHint] = useState<boolean>(false)
 
   const scopeUpdated = !arraysEqual(
@@ -87,11 +90,11 @@ export const ManageUserAccessDialog = ({
     userHasGlobalAccess(user.role?.permissions)
 
   useEffect(() => {
-    setScope(envScope)
+    setScope(sortEnvs(envScope))
   }, [envScope])
 
   const handleClose = () => {
-    setScope(envScope)
+    setScope(sortEnvs(envScope))
     dialogRef.current?.closeModal()
   }
 
@@ -204,7 +207,7 @@ export const ManageUserAccessDialog = ({
               <Listbox
                 value={scope}
                 by="id"
-                onChange={setScope}
+                onChange={(value) => setScope(sortEnvs(value))}
                 multiple
                 name="environments"
                 disabled={memberHasGlobalAccess(member)}
