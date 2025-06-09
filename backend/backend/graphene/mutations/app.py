@@ -146,7 +146,7 @@ class UpdateAppNameMutation(graphene.Mutation):
         # Validate name is not blank
         if not name or name.strip() == "":
             raise GraphQLError("App name cannot be blank")
-            
+
         # Validate name length
         if len(name) > 64:
             raise GraphQLError("App name cannot exceed 64 characters")
@@ -193,6 +193,71 @@ class DeleteAppMutation(graphene.Mutation):
         app.delete()
 
         return DeleteAppMutation(ok=True)
+
+
+class AppMemberInputType(graphene.InputObjectType):
+    member_id = graphene.ID(required=True)
+    member_type = MemberType(required=False, default_value=MemberType.USER)
+    env_keys = graphene.List(EnvironmentKeyInput, required=True)
+
+
+class BulkAddAppMembersMutation(graphene.Mutation):
+    class Arguments:
+        app_id = graphene.ID(required=True)
+        members = graphene.List(AppMemberInputType, required=True)
+
+    app = graphene.Field(AppType)
+
+    @classmethod
+    def mutate(cls, root, info, app_id, members):
+        user = info.context.user
+        app = App.objects.get(id=app_id)
+
+        if not user_can_access_app(user.userId, app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        for member_input in members:
+            member_id = member_input.member_id
+            member_type = member_input.member_type
+            env_keys = member_input.env_keys
+
+            if member_type == MemberType.USER:
+                permission_key = "Members"
+                member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
+            else:
+                permission_key = "ServiceAccounts"
+                member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
+
+            if not user_has_permission(
+                user, "create", permission_key, app.organisation, True
+            ):
+                raise GraphQLError(
+                    f"You don't have permission to add {member_type.lower()}s to this App"
+                )
+
+            if member_type == MemberType.USER:
+                app.members.add(member)
+            else:
+                app.service_accounts.add(member)
+
+            for key in env_keys:
+                defaults = {
+                    "wrapped_seed": key.wrapped_seed,
+                    "wrapped_salt": key.wrapped_salt,
+                    "identity_key": key.identity_key,
+                }
+
+                condition = {
+                    "environment_id": key.env_id,
+                    "user_id": key.user_id if member_type == MemberType.USER else None,
+                    "service_account_id": (
+                        key.user_id if member_type == MemberType.SERVICE else None
+                    ),
+                }
+
+                EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
+
+        return BulkAddAppMembersMutation(app=app)
 
 
 class AddAppMemberMutation(graphene.Mutation):
