@@ -1,4 +1,4 @@
-from api.tasks import trigger_sync_tasks
+from api.tasks.syncing import trigger_sync_tasks
 from api.utils.secrets import normalize_path_string
 
 import graphene
@@ -731,9 +731,7 @@ class CreateCloudflareWorkersSync(graphene.Mutation):
 
         for es in existing_syncs:
             if es.options == sync_options:
-                raise GraphQLError(
-                    "A sync already exists for this Cloudflare Worker!"
-                )
+                raise GraphQLError("A sync already exists for this Cloudflare Worker!")
 
         sync = EnvironmentSync.objects.create(
             environment=env,

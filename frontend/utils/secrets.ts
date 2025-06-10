@@ -163,3 +163,19 @@ FOO=BAR
 API_BASE_URL=https://api.myapp.com # Inline comments will also be parsed
 
 HEALTH_CHECK_URL=$\{API_BASE_URL} # You can also reference secrets`
+
+/**
+ * Sorts an array of environment objects by their `index` property in ascending order.
+ *
+ * This function filters out any `undefined` entries or objects that are missing a numeric `index`,
+ * and then returns a sorted array based on the `index` property.
+ *
+ * @param envs - An array of environment objects, some of which may be `undefined` or partially defined.
+ * @returns A sorted array of environment objects with valid `index` values.
+ */
+export const sortEnvs = (
+  envs: Array<Partial<EnvironmentType> | undefined>
+): Array<Partial<EnvironmentType>> =>
+  envs
+    .filter((e): e is Partial<EnvironmentType> => !!e && typeof e.index === 'number')
+    .sort((a, b) => a.index! - b.index!)

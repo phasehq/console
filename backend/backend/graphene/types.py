@@ -56,6 +56,7 @@ class OrganisationPlanType(ObjectType):
     max_users = graphene.Int()
     max_apps = graphene.Int()
     max_envs_per_app = graphene.Int()
+    seat_limit = graphene.Int()
     seats_used = graphene.Field(SeatsUsed)
     app_count = graphene.Int()
 

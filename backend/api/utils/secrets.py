@@ -377,7 +377,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             )
         except:
             unresolved_local_references.append(
-                f"The referenced environment or key either does not exist or the server does not have access to it."
+                f"The referenced key {ref_key} does not exist in the {secret.environment.name} environment."
             )
 
     if require_resolved_references and unresolved_local_references:

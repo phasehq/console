@@ -21,6 +21,7 @@ const documents = {
     "mutation UpdateAccessPolicies($inputs: [UpdatePolicyInput]) {\n  updateNetworkAccessPolicy(policyInputs: $inputs) {\n    networkAccessPolicy {\n      id\n    }\n  }\n}": types.UpdateAccessPoliciesDocument,
     "mutation UpdateRole($id: ID!, $name: String!, $description: String!, $color: String!, $permissions: JSONString!) {\n  updateCustomRole(\n    id: $id\n    name: $name\n    description: $description\n    color: $color\n    permissions: $permissions\n  ) {\n    role {\n      id\n    }\n  }\n}": types.UpdateRoleDocument,
     "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.AddMemberToAppDocument,
+    "mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}": types.BulkAddMembersToAppDocument,
     "mutation RemoveMemberFromApp($memberId: ID!, $memberType: MemberType, $appId: ID!) {\n  removeAppMember(memberId: $memberId, memberType: $memberType, appId: $appId) {\n    app {\n      id\n    }\n  }\n}": types.RemoveMemberFromAppDocument,
     "mutation UpdateAppNameOp($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}": types.UpdateAppNameOpDocument,
     "mutation UpdateEnvScope($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.UpdateEnvScopeDocument,
@@ -55,9 +56,9 @@ const documents = {
     "mutation CreateSharedSecret($input: LockboxInput!) {\n  createLockbox(input: $input) {\n    lockbox {\n      id\n      allowedViews\n      expiresAt\n    }\n  }\n}": types.CreateSharedSecretDocument,
     "mutation SwapEnvOrder($environment1Id: ID!, $environment2Id: ID!) {\n  swapEnvironmentOrder(\n    environment1Id: $environment1Id\n    environment2Id: $environment2Id\n  ) {\n    ok\n  }\n}": types.SwapEnvOrderDocument,
     "mutation AcceptOrganisationInvite($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!, $inviteId: ID!) {\n  createOrganisationMember(\n    orgId: $orgId\n    identityKey: $identityKey\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n    inviteId: $inviteId\n  ) {\n    orgMember {\n      id\n      email\n      createdAt\n      role {\n        name\n      }\n    }\n  }\n}": types.AcceptOrganisationInviteDocument,
+    "mutation BulkInviteMembers($orgId: ID!, $invites: [InviteInput!]!) {\n  bulkInviteOrganisationMembers(orgId: $orgId, invites: $invites) {\n    invites {\n      id\n      inviteeEmail\n      expiresAt\n    }\n  }\n}": types.BulkInviteMembersDocument,
     "mutation DeleteOrgInvite($inviteId: ID!) {\n  deleteInvitation(inviteId: $inviteId) {\n    ok\n  }\n}": types.DeleteOrgInviteDocument,
     "mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}": types.RemoveMemberDocument,
-    "mutation InviteMember($orgId: ID!, $email: String!, $apps: [String], $roleId: ID!) {\n  inviteOrganisationMember(\n    orgId: $orgId\n    email: $email\n    apps: $apps\n    roleId: $roleId\n  ) {\n    invite {\n      id\n    }\n  }\n}": types.InviteMemberDocument,
     "mutation UpdateMemberRole($memberId: ID!, $roleId: ID!) {\n  updateOrganisationMemberRole(memberId: $memberId, roleId: $roleId) {\n    orgMember {\n      id\n      role {\n        name\n      }\n    }\n  }\n}": types.UpdateMemberRoleDocument,
     "mutation UpdateWrappedSecrets($orgId: ID!, $wrappedKeyring: String!, $wrappedRecovery: String!) {\n  updateMemberWrappedSecrets(\n    orgId: $orgId\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n  ) {\n    orgMember {\n      id\n    }\n  }\n}": types.UpdateWrappedSecretsDocument,
     "mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}": types.RotateAppKeyDocument,
@@ -101,11 +102,11 @@ const documents = {
     "query GetOrganisations {\n  organisations {\n    id\n    name\n    identityKey\n    createdAt\n    plan\n    planDetail {\n      name\n      maxUsers\n      maxApps\n      maxEnvsPerApp\n      seatsUsed {\n        users\n        serviceAccounts\n        total\n      }\n      appCount\n    }\n    role {\n      name\n      description\n      color\n      permissions\n    }\n    memberId\n    keyring\n    recovery\n  }\n}": types.GetOrganisationsDocument,
     "query CheckOrganisationNameAvailability($name: String!) {\n  organisationNameAvailable(name: $name)\n}": types.CheckOrganisationNameAvailabilityDocument,
     "query GetGlobalAccessUsers($organisationId: ID!) {\n  organisationGlobalAccessUsers(organisationId: $organisationId) {\n    id\n    role {\n      name\n      permissions\n    }\n    identityKey\n    self\n  }\n}": types.GetGlobalAccessUsersDocument,
-    "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n    role {\n      id\n      name\n      description\n    }\n  }\n}": types.GetInvitesDocument,
+    "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n    role {\n      id\n      name\n      description\n      color\n    }\n  }\n}": types.GetInvitesDocument,
     "query GetLicenseData {\n  license {\n    id\n    customerName\n    organisationName\n    expiresAt\n    plan\n    seats\n    isActivated\n    organisationOwner {\n      fullName\n      email\n    }\n  }\n}": types.GetLicenseDataDocument,
     "query GetOrgLicense($organisationId: ID!) {\n  organisationLicense(organisationId: $organisationId) {\n    id\n    customerName\n    issuedAt\n    expiresAt\n    activatedAt\n    plan\n    seats\n    tokens\n  }\n}": types.GetOrgLicenseDocument,
     "query GetOrganisationMembers($organisationId: ID!, $role: [String]) {\n  organisationMembers(organisationId: $organisationId, role: $role) {\n    id\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    lastLogin\n    self\n    appMemberships {\n      id\n      name\n      sseEnabled\n      environments {\n        id\n        name\n      }\n    }\n    tokens {\n      id\n      name\n      createdAt\n      expiresAt\n    }\n    networkPolicies {\n      id\n      name\n      allowedIps\n      isGlobal\n    }\n  }\n}": types.GetOrganisationMembersDocument,
-    "query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    seatsUsed {\n      users\n      serviceAccounts\n      total\n    }\n    appCount\n  }\n}": types.GetOrganisationPlanDocument,
+    "query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    seatsUsed {\n      users\n      serviceAccounts\n      total\n    }\n    seatLimit\n    appCount\n  }\n}": types.GetOrganisationPlanDocument,
     "query GetRoles($orgId: ID!) {\n  roles(orgId: $orgId) {\n    id\n    name\n    description\n    color\n    permissions\n    isDefault\n  }\n}": types.GetRolesDocument,
     "query VerifyInvite($inviteId: ID!) {\n  validateInvite(inviteId: $inviteId) {\n    id\n    organisation {\n      id\n      name\n    }\n    inviteeEmail\n    invitedBy {\n      fullName\n      email\n    }\n    apps {\n      id\n      name\n    }\n  }\n}": types.VerifyInviteDocument,
     "query GetAppEnvironments($appId: ID!, $memberId: ID, $memberType: MemberType) {\n  appEnvironments(\n    appId: $appId\n    environmentId: null\n    memberId: $memberId\n    memberType: $memberType\n  ) {\n    id\n    name\n    envType\n    identityKey\n    wrappedSeed\n    wrappedSalt\n    createdAt\n    app {\n      name\n      id\n    }\n    secretCount\n    folderCount\n    index\n    members {\n      email\n      fullName\n      avatarUrl\n    }\n  }\n  sseEnabled(appId: $appId)\n  serverPublicKey\n}": types.GetAppEnvironmentsDocument,
@@ -188,6 +189,10 @@ export function graphql(source: "mutation UpdateRole($id: ID!, $name: String!, $
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}"): (typeof documents)["mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -327,15 +332,15 @@ export function graphql(source: "mutation AcceptOrganisationInvite($orgId: ID!, 
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation BulkInviteMembers($orgId: ID!, $invites: [InviteInput!]!) {\n  bulkInviteOrganisationMembers(orgId: $orgId, invites: $invites) {\n    invites {\n      id\n      inviteeEmail\n      expiresAt\n    }\n  }\n}"): (typeof documents)["mutation BulkInviteMembers($orgId: ID!, $invites: [InviteInput!]!) {\n  bulkInviteOrganisationMembers(orgId: $orgId, invites: $invites) {\n    invites {\n      id\n      inviteeEmail\n      expiresAt\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation DeleteOrgInvite($inviteId: ID!) {\n  deleteInvitation(inviteId: $inviteId) {\n    ok\n  }\n}"): (typeof documents)["mutation DeleteOrgInvite($inviteId: ID!) {\n  deleteInvitation(inviteId: $inviteId) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}"): (typeof documents)["mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "mutation InviteMember($orgId: ID!, $email: String!, $apps: [String], $roleId: ID!) {\n  inviteOrganisationMember(\n    orgId: $orgId\n    email: $email\n    apps: $apps\n    roleId: $roleId\n  ) {\n    invite {\n      id\n    }\n  }\n}"): (typeof documents)["mutation InviteMember($orgId: ID!, $email: String!, $apps: [String], $roleId: ID!) {\n  inviteOrganisationMember(\n    orgId: $orgId\n    email: $email\n    apps: $apps\n    roleId: $roleId\n  ) {\n    invite {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -511,7 +516,7 @@ export function graphql(source: "query GetGlobalAccessUsers($organisationId: ID!
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n    role {\n      id\n      name\n      description\n    }\n  }\n}"): (typeof documents)["query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n    role {\n      id\n      name\n      description\n    }\n  }\n}"];
+export function graphql(source: "query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n    role {\n      id\n      name\n      description\n      color\n    }\n  }\n}"): (typeof documents)["query GetInvites($orgId: ID!) {\n  organisationInvites(orgId: $orgId) {\n    id\n    createdAt\n    expiresAt\n    invitedBy {\n      email\n      fullName\n      self\n    }\n    inviteeEmail\n    role {\n      id\n      name\n      description\n      color\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -527,7 +532,7 @@ export function graphql(source: "query GetOrganisationMembers($organisationId: I
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    seatsUsed {\n      users\n      serviceAccounts\n      total\n    }\n    appCount\n  }\n}"): (typeof documents)["query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    seatsUsed {\n      users\n      serviceAccounts\n      total\n    }\n    appCount\n  }\n}"];
+export function graphql(source: "query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    seatsUsed {\n      users\n      serviceAccounts\n      total\n    }\n    seatLimit\n    appCount\n  }\n}"): (typeof documents)["query GetOrganisationPlan($organisationId: ID!) {\n  organisationPlan(organisationId: $organisationId) {\n    name\n    maxUsers\n    maxApps\n    maxEnvsPerApp\n    seatsUsed {\n      users\n      serviceAccounts\n      total\n    }\n    seatLimit\n    appCount\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
