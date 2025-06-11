@@ -122,15 +122,17 @@ export default function Integrations({ params }: { params: { team: string } }) {
                 {noCredentials ? (
                   <div className="">
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
-                      {providers.map((provider: ProviderType) => (
-                        <button
-                          key={provider.id}
-                          type="button"
-                          onClick={() => setProvider(provider)}
-                        >
-                          <ProviderCard provider={provider} />
-                        </button>
-                      ))}
+                      {providers
+                        .filter((provider: ProviderType) => provider.id !== 'aws_assume_role')
+                        .map((provider: ProviderType) => (
+                          <button
+                            key={provider.id}
+                            type="button"
+                            onClick={() => setProvider(provider)}
+                          >
+                            <ProviderCard provider={provider} />
+                          </button>
+                        ))}
                     </div>
                   </div>
                 ) : (
