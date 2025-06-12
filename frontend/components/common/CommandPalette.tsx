@@ -277,13 +277,11 @@ const CommandPalette: React.FC = () => {
   const secretCommands: CommandItem[] = secretResults.map((secret) => ({
     id: secret.id,
     name: secret.key,
-    description: `${secret.appName} • ${secret.envName}${
-      secret.path && secret.path !== '/' ? ` • ${secret.path}` : ''
-    }`,
+    description: `${secret.appName} • ${secret.envName} • ${secret.path}`,
     icon: <FaKey />,
     action: () =>
       handleNavigation(
-        `/${activeOrganisation?.name}/apps/${secret.appId}/environments/${secret.envId}?secret=${secret.id}`
+        `/${activeOrganisation?.name}/apps/${secret.appId}/environments/${secret.envId}${secret.path === '/' ? '' : secret.path}?secret=${secret.id}`
       ),
   }))
 
