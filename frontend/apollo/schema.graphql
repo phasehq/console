@@ -258,6 +258,7 @@ type EnvironmentType {
   updatedAt: DateTime!
   folders: [SecretFolderType]!
   secrets: [SecretType]!
+  allSecrets: [SecretType]!
   folderCount: Int
   secretCount: Int
   members: [OrganisationMemberType]!
