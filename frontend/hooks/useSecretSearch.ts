@@ -35,8 +35,11 @@ export const useSecretSearch = (
     let cancelled = false
 
     const executeSearch = async () => {
-      const trimmed = query.trim().toLowerCase()
-      if (!trimmed) {
+      // Simple normalisation: remove spaces/underscores, lowercase.
+      const normalize = (str: string) => str.replace(/[\\s_]/g, '').toLowerCase()
+      const normalizedQuery = normalize(query)
+
+      if (!normalizedQuery) {
         setResults([])
         return
       }
@@ -61,7 +64,7 @@ export const useSecretSearch = (
                 keyring
               )
 
-              for (const secret of env.secrets) {
+              for (const secret of env.allSecrets) {
                 const decryptedKey = await decryptAsymmetric(
                   secret.key,
                   privateKey,
@@ -89,7 +92,7 @@ export const useSecretSearch = (
       }
 
       const filtered = cacheRef.current!.filter((s) =>
-        s.key.toLowerCase().includes(trimmed)
+        normalize(s.key).includes(normalizedQuery)
       )
       setResults(filtered)
     }
