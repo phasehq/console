@@ -29,6 +29,10 @@ import { ThemeContext } from '@/contexts/themeContext'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { FaArrowsRotate, FaCodeMerge, FaListCheck } from 'react-icons/fa6'
 import { userHasPermission } from '@/utils/access/permissions'
+import { KeyringContext } from '@/contexts/keyringContext'
+import { useSecretSearch } from '@/hooks/useSecretSearch'
+import debounce from 'lodash/debounce'
+import Spinner from './Spinner'
 
 type CommandItem = {
   id: string
@@ -51,6 +55,7 @@ const CommandPalette: React.FC = () => {
   const router = useRouter()
   const { activeOrganisation, organisations } = useContext(organisationContext)
   const { theme, setTheme } = useContext(ThemeContext)
+  const { keyring } = useContext(KeyringContext)
 
   // Permission checks
   const userCanReadApps = userHasPermission(activeOrganisation?.role?.permissions, 'Apps', 'read')
@@ -251,6 +256,37 @@ const CommandPalette: React.FC = () => {
       ],
     })) || []
 
+  // Debounce helper for query input
+  const debouncedSetQuery = React.useMemo(
+    () => debounce((val: string) => setQuery(val), 250),
+    []
+  )
+  React.useEffect(() => {
+    return () => {
+      debouncedSetQuery.cancel()
+    }
+  }, [debouncedSetQuery])
+
+  // Secret search hook (fetches/decrypts keys only when query is set)
+  const { results: secretResults, loading: secretLoading } = useSecretSearch(
+    query,
+    activeOrganisation?.id,
+    keyring
+  )
+
+  const secretCommands: CommandItem[] = secretResults.map((secret) => ({
+    id: secret.id,
+    name: secret.key,
+    description: `${secret.appName} • ${secret.envName}${
+      secret.path && secret.path !== '/' ? ` • ${secret.path}` : ''
+    }`,
+    icon: <FaKey />,
+    action: () =>
+      handleNavigation(
+        `/${activeOrganisation?.name}/apps/${secret.appId}/environments/${secret.envId}?secret=${secret.id}`
+      ),
+  }))
+
   const allCommands: CommandGroup[] = [
     {
       name: 'Actions',
@@ -262,6 +298,15 @@ const CommandPalette: React.FC = () => {
       icon: <FaCompass />,
       items: navigationCommands,
     },
+    ...(secretCommands.length > 0
+      ? [
+          {
+            name: 'Secrets',
+            icon: <FaKey />,
+            items: secretCommands,
+          },
+        ]
+      : []),
     ...(appCommands.length > 0 ? appCommands : []),
     {
       name: 'Resources',
@@ -380,8 +425,13 @@ const CommandPalette: React.FC = () => {
                 <Combobox.Input
                   className="w-full custom caret-emerald-400 border-0 rounded-xl bg-transparent pl-12 pr-4 py-3 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 focus:ring-0"
                   placeholder="Type a command or search..."
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => debouncedSetQuery(event.target.value)}
                 />
+                {secretLoading && (
+                  <div className="absolute right-4 top-0 bottom-0 flex items-center">
+                    <Spinner size="sm" color="neutral" />
+                  </div>
+                )}
               </div>
 
               {filteredCommands.length > 0 && (
