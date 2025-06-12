@@ -115,6 +115,7 @@ const documents = {
     "query GetEnvironmentKey($envId: ID!, $appId: ID!) {\n  environmentKeys(environmentId: $envId, appId: $appId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvironmentKeyDocument,
     "query GetEnvironmentTokens($envId: ID!) {\n  environmentTokens(environmentId: $envId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n  }\n}": types.GetEnvironmentTokensDocument,
     "query GetFolders($envId: ID!, $path: String) {\n  folders(envId: $envId, path: $path) {\n    id\n    name\n    path\n    createdAt\n    folderCount\n    secretCount\n  }\n}": types.GetFoldersDocument,
+    "query GetOrgSecretKeys($organisationId: ID!) {\n  apps(organisationId: $organisationId) {\n    id\n    name\n    environments {\n      id\n      name\n      wrappedSeed\n      wrappedSalt\n      allSecrets {\n        id\n        key\n        path\n      }\n    }\n  }\n}": types.GetOrgSecretKeysDocument,
     "query GetSecretHistory($appId: ID!, $envId: ID!, $id: ID!) {\n  secrets(envId: $envId, id: $id) {\n    id\n    history {\n      id\n      key\n      value\n      path\n      tags {\n        id\n        name\n        color\n      }\n      version\n      comment\n      timestamp\n      ipAddress\n      userAgent\n      user {\n        email\n        username\n        fullName\n        avatarUrl\n      }\n      serviceToken {\n        id\n        name\n      }\n      serviceAccount {\n        id\n        name\n      }\n      eventType\n    }\n  }\n  environmentKeys(appId: $appId, environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetSecretHistoryDocument,
     "query GetEnvSecretsKV($envId: ID!) {\n  folders(envId: $envId, path: \"/\") {\n    id\n    name\n  }\n  secrets(envId: $envId, path: \"/\") {\n    id\n    key\n    value\n    comment\n    path\n  }\n  environmentKeys(environmentId: $envId) {\n    id\n    identityKey\n    wrappedSeed\n    wrappedSalt\n  }\n}": types.GetEnvSecretsKvDocument,
     "query GetSecretTags($orgId: ID!) {\n  secretTags(orgId: $orgId) {\n    id\n    name\n    color\n  }\n}": types.GetSecretTagsDocument,
@@ -565,6 +566,10 @@ export function graphql(source: "query GetEnvironmentTokens($envId: ID!) {\n  en
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetFolders($envId: ID!, $path: String) {\n  folders(envId: $envId, path: $path) {\n    id\n    name\n    path\n    createdAt\n    folderCount\n    secretCount\n  }\n}"): (typeof documents)["query GetFolders($envId: ID!, $path: String) {\n  folders(envId: $envId, path: $path) {\n    id\n    name\n    path\n    createdAt\n    folderCount\n    secretCount\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetOrgSecretKeys($organisationId: ID!) {\n  apps(organisationId: $organisationId) {\n    id\n    name\n    environments {\n      id\n      name\n      wrappedSeed\n      wrappedSalt\n      allSecrets {\n        id\n        key\n        path\n      }\n    }\n  }\n}"): (typeof documents)["query GetOrgSecretKeys($organisationId: ID!) {\n  apps(organisationId: $organisationId) {\n    id\n    name\n    environments {\n      id\n      name\n      wrappedSeed\n      wrappedSalt\n      allSecrets {\n        id\n        key\n        path\n      }\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
