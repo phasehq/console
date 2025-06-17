@@ -10,9 +10,9 @@ export const getHostname = () => {
     return `${window.location.protocol}//${window.location.host}`
   }
 
-  // Server-side: use environment variables
-  return process.env.HTTP_PROTOCOL && process.env.HOST
-    ? `${process.env.HTTP_PROTOCOL}${process.env.HOST}`
+  // Server-side: use NEXTAUTH_URL environment variable
+  return process.env.NEXTAUTH_URL
+    ? `${process.env.NEXTAUTH_URL}`
     : ''
 }
 
