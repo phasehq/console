@@ -4,7 +4,18 @@ export const isCloudHosted = () => {
   )
 }
 
-export const getHostname = () => process.env.HTTP_PROTOCOL ? `${process.env.HTTP_PROTOCOL}${process.env.HOST}` :  `${window.location.protocol}//${window.location.host}`
+export const getHostname = () => {
+  if (typeof window !== 'undefined') {
+    // Client-side: use window.location
+    return `${window.location.protocol}//${window.location.host}`
+  }
+
+  // Server-side: use environment variables
+  return process.env.HTTP_PROTOCOL && process.env.HOST
+    ? `${process.env.HTTP_PROTOCOL}${process.env.HOST}`
+    : ''
+}
+
 
 export const getApiHost = () => {
   return isCloudHosted() ? 'https://api.phase.dev' : `${getHostname()}/service/public`
