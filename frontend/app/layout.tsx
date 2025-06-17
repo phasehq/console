@@ -36,7 +36,7 @@ export const metadata: Metadata = {
       {
         url: `${host}/assets/images/meta.png`,
         width: 1200,
-        height: 630,
+        height: 675,
         alt: 'Phase Console Preview',
       },
     ],
