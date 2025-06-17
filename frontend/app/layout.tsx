@@ -21,10 +21,34 @@ const jetbrains_mono = JetBrains_Mono({
   variable: '--font-jetbrains-mono',
 })
 
+const host = `${process.env.HTTP_PROTOCOL}${process.env.HOST}`
+
 // TODO: Set metadata for specific page routes
 export const metadata: Metadata = {
   title: 'Phase Console',
   description: 'Open source secrets manager',
+  openGraph: {
+    title: 'Phase Console',
+    description: 'Open source secrets manager',
+    url: host,
+    siteName: 'Phase',
+    images: [
+      {
+        url: `${host}/assets/images/meta.png`,
+        width: 1200,
+        height: 630,
+        alt: 'Phase Console Preview',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Phase Console',
+    description: 'Open source secrets manager',
+    images: [`${host}/assets/images/meta.png`],
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
