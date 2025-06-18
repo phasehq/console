@@ -66,5 +66,5 @@ tomli==2.0.1
 Twisted==23.10.0
 txaio==23.1.1
 typing_extensions==4.6.0
-urllib3==1.26.18
+urllib3==2.5.0
 zope.interface==5.5.2
