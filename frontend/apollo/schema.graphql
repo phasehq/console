@@ -7,7 +7,7 @@ type Query {
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
   organisationPlan(organisationId: ID): OrganisationPlanType
-  organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
+  organisationMembers(organisationId: ID, memberId: ID, role: [String]): [OrganisationMemberType]
   organisationGlobalAccessUsers(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
@@ -171,106 +171,21 @@ type OrganisationMemberType {
   avatarUrl: String
   self: Boolean
   lastLogin: DateTime
-  appMemberships: [AppType!]
+  appMemberships: [AppMembershipType!]
   tokens: [UserTokenType!]
   networkPolicies: [NetworkAccessPolicyType!]
 }
 
-type AppType {
+type AppMembershipType {
   id: String!
   name: String!
-  identityKey: String!
-  appVersion: Int!
-  appToken: String!
-  appSeed: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
   sseEnabled: Boolean!
-  serviceAccounts: [ServiceAccountType!]!
   environments: [EnvironmentType]!
-  members: [OrganisationMemberType]!
-}
-
-type ServiceAccountType {
-  id: String!
-  name: String!
-  role: RoleType
-  identityKey: String
-  createdAt: DateTime
-  updatedAt: DateTime!
-  thirdPartyAuthEnabled: Boolean
-  handlers: [ServiceAccountHandlerType]
-  tokens: [ServiceAccountTokenType]
-  appMemberships: [AppType!]
-  networkPolicies: [NetworkAccessPolicyType!]
-}
-
-type ServiceAccountHandlerType {
-  id: String!
-  serviceAccount: ServiceAccountType!
-  user: OrganisationMemberType!
-  wrappedKeyring: String!
-  wrappedRecovery: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-type ServiceAccountTokenType {
-  id: String!
-  serviceAccount: ServiceAccountType!
-  name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  createdBy: OrganisationMemberType
-  createdAt: DateTime
-  updatedAt: DateTime!
-  deletedAt: DateTime
-  expiresAt: DateTime
-  secreteventSet: [SecretEventType!]!
-  lastUsed: DateTime
-}
-
-type SecretEventType {
-  id: String!
-  secret: SecretType!
-  environment: EnvironmentType!
-  path: String!
-  user: OrganisationMemberType
-  serviceToken: ServiceTokenType
-  serviceAccount: ServiceAccountType
-  serviceAccountToken: ServiceAccountTokenType
-  key: String!
-  value: String!
-  version: Int!
-  tags: [SecretTagType!]!
-  comment: String!
-  eventType: ApiSecretEventEventTypeChoices!
-  timestamp: DateTime!
-  ipAddress: String
-  userAgent: String
-}
-
-type SecretType {
-  id: String!
-  environment: EnvironmentType!
-  folder: SecretFolderType
-  path: String!
-  key: String!
-  value: String!
-  version: Int!
-  tags: [SecretTagType!]!
-  comment: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  history: [SecretEventType]
-  override: PersonalSecretType
 }
 
 type EnvironmentType {
   id: String!
-  app: AppType!
+  app: AppMembershipType!
   name: String!
   envType: ApiEnvironmentEnvTypeChoices!
   index: Int!
@@ -280,7 +195,7 @@ type EnvironmentType {
   createdAt: DateTime
   updatedAt: DateTime!
   folders: [SecretFolderType]!
-  secrets(path: String): [SecretType]!
+  secrets: [SecretType]!
   folderCount: Int
   secretCount: Int
   members: [OrganisationMemberType]!
@@ -318,6 +233,143 @@ type SecretFolderType {
   updatedAt: DateTime!
   folderCount: Int
   secretCount: Int
+}
+
+type SecretType {
+  id: String!
+  environment: EnvironmentType!
+  folder: SecretFolderType
+  path: String!
+  key: String!
+  value: String!
+  version: Int!
+  tags: [SecretTagType!]!
+  comment: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  history: [SecretEventType]
+  override: PersonalSecretType
+}
+
+type SecretTagType {
+  id: String!
+  name: String!
+  color: String!
+}
+
+type SecretEventType {
+  id: String!
+  secret: SecretType!
+  environment: EnvironmentType!
+  path: String!
+  user: OrganisationMemberType
+  serviceToken: ServiceTokenType
+  serviceAccount: ServiceAccountType
+  serviceAccountToken: ServiceAccountTokenType
+  key: String!
+  value: String!
+  version: Int!
+  tags: [SecretTagType!]!
+  comment: String!
+  eventType: ApiSecretEventEventTypeChoices!
+  timestamp: DateTime!
+  ipAddress: String
+  userAgent: String
+}
+
+type ServiceTokenType {
+  id: String!
+  keys: [ServerEnvironmentKeyType!]!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  name: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime
+}
+
+type ServerEnvironmentKeyType {
+  id: String!
+  environment: EnvironmentType!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type ServiceAccountType {
+  id: String!
+  name: String!
+  role: RoleType
+  identityKey: String
+  createdAt: DateTime
+  updatedAt: DateTime!
+  thirdPartyAuthEnabled: Boolean
+  handlers: [ServiceAccountHandlerType]
+  tokens: [ServiceAccountTokenType]
+  appMemberships: [AppMembershipType!]
+  networkPolicies: [NetworkAccessPolicyType!]
+}
+
+type ServiceAccountHandlerType {
+  id: String!
+  serviceAccount: ServiceAccountType!
+  user: OrganisationMemberType!
+  wrappedKeyring: String!
+  wrappedRecovery: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type ServiceAccountTokenType {
+  id: String!
+  serviceAccount: ServiceAccountType!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  expiresAt: DateTime
+  secreteventSet: [SecretEventType!]!
+  lastUsed: DateTime
+}
+
+enum ApiSecretEventEventTypeChoices {
+  """
+  Create
+  """
+  C
+
+  """
+  Read
+  """
+  R
+
+  """
+  Update
+  """
+  U
+
+  """
+  Delete
+  """
+  D
+}
+
+type PersonalSecretType {
+  id: String!
+  secret: SecretType!
+  user: OrganisationMemberType!
+  value: String
+  isActive: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime!
 }
 
 type EnvironmentSyncType {
@@ -422,67 +474,6 @@ enum ApiEnvironmentSyncEventStatusChoices {
   FAILED
 }
 
-type SecretTagType {
-  id: String!
-  name: String!
-  color: String!
-}
-
-type PersonalSecretType {
-  id: String!
-  secret: SecretType!
-  user: OrganisationMemberType!
-  value: String
-  isActive: Boolean!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-type ServiceTokenType {
-  id: String!
-  keys: [ServerEnvironmentKeyType!]!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  name: String!
-  createdBy: OrganisationMemberType
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
-}
-
-type ServerEnvironmentKeyType {
-  id: String!
-  environment: EnvironmentType!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-enum ApiSecretEventEventTypeChoices {
-  """
-  Create
-  """
-  C
-
-  """
-  Read
-  """
-  R
-
-  """
-  Update
-  """
-  U
-
-  """
-  Delete
-  """
-  D
-}
-
 type UserTokenType {
   id: String!
   name: String!
@@ -561,7 +552,7 @@ enum ApiActivatedPhaseLicensePlanChoices {
 type OrganisationMemberInviteType {
   id: String!
   organisation: OrganisationType!
-  apps: [AppType!]!
+  apps: [AppMembershipType!]!
   role: RoleType
   invitedBy: OrganisationMemberType!
   inviteeEmail: String!
@@ -569,6 +560,22 @@ type OrganisationMemberInviteType {
   createdAt: DateTime
   updatedAt: DateTime!
   expiresAt: DateTime!
+}
+
+type AppType {
+  id: String!
+  name: String!
+  identityKey: String!
+  appVersion: Int!
+  appToken: String!
+  appSeed: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  sseEnabled: Boolean!
+  serviceAccounts: [ServiceAccountType!]!
+  environments: [EnvironmentType]!
+  members: [OrganisationMemberType]!
 }
 
 type KMSLogsResponseType {
