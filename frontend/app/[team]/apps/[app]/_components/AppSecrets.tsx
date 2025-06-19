@@ -845,7 +845,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                   className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
                 >
                   <tr>
-                    <th className="pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                    <th className={clsx("pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide", filteredSecrets.length > 999 && "pl-14")}>
                       key
                     </th>
                     {appEnvironments?.map((env: EnvironmentType) => (
