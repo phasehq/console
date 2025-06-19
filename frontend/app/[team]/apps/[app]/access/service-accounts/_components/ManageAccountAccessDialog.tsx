@@ -19,6 +19,7 @@ import Link from 'next/link'
 import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
 import { sortEnvs } from '@/utils/secrets'
+import { useSearchParams } from 'next/navigation'
 
 export const ManageAccountAccessDialog = ({
   account,
@@ -30,7 +31,10 @@ export const ManageAccountAccessDialog = ({
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const searchParams = useSearchParams()
+  const preselectedAccountId = searchParams?.get('manageAccount') ?? null
+
+  const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
   // AppMembers:update + Environments:read
@@ -94,6 +98,12 @@ export const ManageAccountAccessDialog = ({
   useEffect(() => {
     setScope(sortEnvs(envScope))
   }, [envScope])
+
+  useEffect(() => {
+    if (preselectedAccountId && preselectedAccountId === account.id) {
+      dialogRef.current?.openModal()
+    }
+  }, [account.id, preselectedAccountId])
 
   const handleClose = () => {
     setScope(sortEnvs(envScope))

@@ -266,7 +266,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                     <div className="flex justify-end">
                       <Link
                         className="opacity-0 group-hover:opacity-100 transition ease"
-                        href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts`}
+                        href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
                       >
                         <Button variant="secondary" className="flex items-center gap-2">
                           <FaCog className="h-4 w-4" />
