@@ -394,7 +394,8 @@ export const AppSecretRow = ({
             <td
               className={clsx(
                 `px-2 py-0.5 whitespace-nowrap font-mono ${rowInputColor()} flex items-center gap-2 ph-no-capture`,
-                isExpanded ? 'font-bold' : 'font-medium'
+                isExpanded ? 'font-bold' : 'font-medium',
+                index > 999 && 'px-4'
               )}
             >
               <button
@@ -412,7 +413,8 @@ export const AppSecretRow = ({
                 <span
                   className={clsx(
                     'text-neutral-500 font-mono absolute transition ease',
-                    isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
+                    isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0',
+                    index > 999 ? 'w-10' : 'w-5'
                   )}
                 >
                   {index + 1}
