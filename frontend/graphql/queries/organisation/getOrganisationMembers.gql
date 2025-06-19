@@ -15,26 +15,5 @@ query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
     createdAt
     lastLogin
     self
-    appMemberships {
-      id
-      name
-      sseEnabled
-      environments {
-        id
-        name
-      }
-    }
-    tokens {
-      id
-      name
-      createdAt
-      expiresAt
-    }
-    networkPolicies {
-      id
-      name
-      allowedIps
-      isGlobal
-    }
   }
 }
