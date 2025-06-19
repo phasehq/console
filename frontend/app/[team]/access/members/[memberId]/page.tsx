@@ -255,7 +255,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                     <div className="flex justify-end">
                       <Link
                         className="opacity-0 group-hover:opacity-100 transition ease"
-                        href={`/${params.team}/apps/${app?.id}/access/members`}
+                        href={`/${params.team}/apps/${app?.id}/access/members?manageAccount=${member.id}`}
                         title={`Manage ${member.fullName || member.email}'s access to ${app?.name}`}
                       >
                         <Button variant="secondary" className="flex items-center gap-2">
