@@ -115,19 +115,24 @@ export const AddAppButton = ({
                       )}
                     </Menu.Item>
                   ))}
-                  {filteredApps.length === 0 && searchQuery && (
-                    <EmptyState
-                      title={`No results for "${searchQuery}"`}
-                      subtitle="Try adjusting your search term"
-                      graphic={
-                        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                          <MdSearchOff />
-                        </div>
-                      }
-                    >
-                      <></>
-                    </EmptyState>
-                  )}
+                  {filteredApps.length === 0 &&
+                    (searchQuery ? (
+                      <EmptyState
+                        title={`No results for "${searchQuery}"`}
+                        subtitle="Try adjusting your search term"
+                        graphic={
+                          <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                            <MdSearchOff />
+                          </div>
+                        }
+                      >
+                        <></>
+                      </EmptyState>
+                    ) : (
+                      <div className="p-4 text-center text-neutral-500 text-sm w-64">
+                        Account already has access to all available apps.
+                      </div>
+                    ))}
                 </div>
               </div>
             </Menu.Items>
