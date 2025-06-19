@@ -140,11 +140,16 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
         return
       }
 
-      const preselectedAccount = serviceAccountsData.serviceAccounts.find(
+      const preselectedAccount: ServiceAccountType = serviceAccountsData.serviceAccounts.find(
         (account: ServiceAccountType) => account.id === preselectedAccountId
       )
       if (preselectedAccount) {
-        setSelectedAccounts(preselectedAccount)
+        setSelectedAccounts([
+          {
+            ...preselectedAccount,
+            scope: [],
+          },
+        ])
         openModal()
       }
     }
