@@ -195,7 +195,7 @@ type EnvironmentType {
   createdAt: DateTime
   updatedAt: DateTime!
   folders: [SecretFolderType]!
-  secrets: [SecretType]!
+  secrets(path: String): [SecretType]!
   folderCount: Int
   secretCount: Int
   members: [OrganisationMemberType]!
