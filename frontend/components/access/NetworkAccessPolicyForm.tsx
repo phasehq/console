@@ -160,7 +160,6 @@ export function NetworkAccessPolicyForm({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="w-full rounded-b-lg"
                   onClick={() => addIp(clientIp)}
                   disabled={disabled}
                 >
