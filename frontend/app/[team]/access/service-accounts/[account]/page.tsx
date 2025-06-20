@@ -219,30 +219,35 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
               </div>
             </div>
             {userCanReadAppMemberships && account.appMemberships?.length! > 0 && (
-              <AddAppButton teamSlug={params.team} serviceAccountId={params.account} />
+              <AddAppButton
+                serviceAccountId={params.account}
+                appMemberships={account.appMemberships ?? []}
+              />
             )}
           </div>
 
           {userCanReadAppMemberships ? (
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {account.appMemberships && account.appMemberships.length > 0 ? (
-                account.appMemberships.map((app) => (
+                account.appMemberships.map((appMembership) => (
                   <div
-                    key={app?.id}
+                    key={appMembership?.id}
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-2 group"
                   >
                     {/* App Name and ID */}
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100">
-                          {app?.name}
+                          {appMembership?.name}
                         </div>
-                        <SseLabel sseEnabled={Boolean(app?.sseEnabled)} />
+                        <SseLabel sseEnabled={Boolean(appMembership?.sseEnabled)} />
                       </div>
                       <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
                         <span className="text-neutral-500 text-2xs flex items-center">App ID:</span>
-                        <CopyButton value={app.id} buttonVariant="ghost">
-                          <span className="text-neutral-500 text-2xs font-mono">{app.id}</span>
+                        <CopyButton value={appMembership.id} buttonVariant="ghost">
+                          <span className="text-neutral-500 text-2xs font-mono">
+                            {appMembership.id}
+                          </span>
                         </CopyButton>
                       </div>
                     </div>
@@ -253,7 +258,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                         Environments
                       </div>
                       <div className="text-sm text-zinc-700 dark:text-zinc-300">
-                        {app?.environments?.map((env) => env?.name).join(' + ')}
+                        {appMembership?.environments?.map((env) => env?.name).join(' + ')}
                       </div>
                     </div>
 
@@ -261,7 +266,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                     <div className="flex justify-end">
                       <Link
                         className="opacity-0 group-hover:opacity-100 transition ease"
-                        href={`/${params.team}/apps/${app?.id}/access/service-accounts`}
+                        href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
                       >
                         <Button variant="secondary" className="flex items-center gap-2">
                           <FaCog className="h-4 w-4" />
@@ -284,8 +289,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   >
                     {userCanReadAppMemberships && (
                       <AddAppButton
-                        teamSlug={params.team}
                         serviceAccountId={params.account}
+                        appMemberships={account.appMemberships ?? []}
                         align={'right'}
                       />
                     )}

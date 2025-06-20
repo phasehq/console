@@ -2,7 +2,7 @@
 
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
-import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
+import { GetOrganisationMemberDetail } from '@/graphql/queries/users/getOrganisationMemberDetail.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
@@ -10,7 +10,7 @@ import { useContext } from 'react'
 import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey, FaNetworkWired } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
-import { OrganisationMemberType, UserTokenType, AppType } from '@/apollo/graphql'
+import { OrganisationMemberType, UserTokenType, AppMembershipType } from '@/apollo/graphql'
 import { DeleteMemberConfirmDialog } from '../_components/DeleteMemberConfirmDialog'
 import { RoleSelector } from '../_components/RoleSelector'
 import { relativeTimeFromDates } from '@/utils/time'
@@ -59,19 +59,16 @@ export default function MemberDetail({ params }: { params: { team: string; membe
     ? userHasPermission(organisation.role!.permissions, 'MemberPersonalAccessTokens', 'delete')
     : false
 
-  const { data, loading, error } = useQuery(GetOrganisationMembers, {
+  const { data, loading, error } = useQuery(GetOrganisationMemberDetail, {
     variables: {
       organisationId: organisation?.id,
-      role: null, // Fetch all roles
+      id: params.memberId,
     },
     skip: !organisation || !userCanReadMembers,
     fetchPolicy: 'cache-and-network',
   })
 
-  // Find the specific member from the list
-  const member: OrganisationMemberType | undefined = data?.organisationMembers.find(
-    (m: OrganisationMemberType) => m.id === params.memberId
-  )
+  const member: OrganisationMemberType | undefined = data?.organisationMembers[0]
 
   if (loading || !organisation) {
     return (
@@ -224,7 +221,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {member.appMemberships && member.appMemberships.length > 0 ? (
-                member.appMemberships.map((app: AppType) => (
+                member.appMemberships.map((app: AppMembershipType) => (
                   <div
                     key={app?.id}
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-2 group"
@@ -258,7 +255,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                     <div className="flex justify-end">
                       <Link
                         className="opacity-0 group-hover:opacity-100 transition ease"
-                        href={`/${params.team}/apps/${app?.id}/access/members`}
+                        href={`/${params.team}/apps/${app?.id}/access/members?manageAccount=${member.id}`}
                         title={`Manage ${member.fullName || member.email}'s access to ${app?.name}`}
                       >
                         <Button variant="secondary" className="flex items-center gap-2">

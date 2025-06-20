@@ -103,7 +103,7 @@ export const AddAppToMemberButton = (props: {
                 <Menu.Item key={app.id}>
                   {({ active }) => (
                     <Link
-                      href={`/${teamSlug}/apps/${app.id}/access/members`}
+                      href={`/${teamSlug}/apps/${app.id}/access/members?new=${member.id}`}
                       className={clsx(
                         'px-4 py-2 flex items-center justify-between gap-4 transition ease',
                         active
