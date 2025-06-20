@@ -497,7 +497,10 @@ class SecretType(DjangoObjectType):
 
 class EnvironmentType(DjangoObjectType):
     folders = graphene.NonNull(graphene.List(SecretFolderType))
-    secrets = graphene.NonNull(graphene.List(SecretType))
+    secrets = graphene.NonNull(
+        graphene.List(SecretType),
+        path=graphene.String(required=False)
+    )
     folder_count = graphene.Int()
     secret_count = graphene.Int()
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
@@ -520,7 +523,7 @@ class EnvironmentType(DjangoObjectType):
             "updated_at",
         )
 
-    def resolve_secrets(self, info, path="/"):
+    def resolve_secrets(self, info, path=None):
 
         org = self.app.organisation
         if not user_has_permission(
@@ -535,10 +538,11 @@ class EnvironmentType(DjangoObjectType):
 
         filter = {"environment": self, "deleted_at": None}
 
-        if path:
+        if path is not None:
             filter["path"] = path
 
         return Secret.objects.filter(**filter).order_by("-created_at")
+
 
     def resolve_folders(self, info, path=None):
         if not user_can_access_environment(info.context.user.userId, self.id):
