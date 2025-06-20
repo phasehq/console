@@ -366,6 +366,27 @@ const CommandPalette: React.FC = () => {
     }, 100)
   }
 
+  function highlightMatch(text: string, query: string) {
+    if (!query) return [text]
+
+    const lowerText = text.toLowerCase()
+    const lowerQuery = query.toLowerCase()
+    const matchIndex = lowerText.indexOf(lowerQuery)
+
+    if (matchIndex === -1) return [text]
+
+    return [
+      text.slice(0, matchIndex),
+      <mark
+        key="highlight"
+        className="bg-emerald-200 dark:bg-emerald-400/20 text-inherit font-semibold"
+      >
+        {text.slice(matchIndex, matchIndex + query.length)}
+      </mark>,
+      text.slice(matchIndex + query.length),
+    ]
+  }
+
   return (
     <>
       <button
@@ -468,9 +489,12 @@ const CommandPalette: React.FC = () => {
                                         group.name === 'Secrets' ? 'font-mono' : ''
                                       )}
                                     >
-                                      {item.name}
+                                      {highlightMatch(item.name, query)}
                                     </div>
-                                    <div className="text-zinc-500 text-xs">{item.description}</div>
+
+                                    <div className="text-zinc-500 dark:text-zinc-400 text-xs">
+                                      {highlightMatch(item.description, query)}
+                                    </div>
                                   </div>
                                 </div>
                                 <div>
