@@ -33,6 +33,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { useSecretSearch } from '@/hooks/useSecretSearch'
 import debounce from 'lodash/debounce'
 import Spinner from './Spinner'
+import clsx from 'clsx'
 
 type CommandItem = {
   id: string
@@ -257,10 +258,7 @@ const CommandPalette: React.FC = () => {
     })) || []
 
   // Debounce helper for query input
-  const debouncedSetQuery = React.useMemo(
-    () => debounce((val: string) => setQuery(val), 250),
-    []
-  )
+  const debouncedSetQuery = React.useMemo(() => debounce((val: string) => setQuery(val), 250), [])
   React.useEffect(() => {
     return () => {
       debouncedSetQuery.cancel()
@@ -464,7 +462,12 @@ const CommandPalette: React.FC = () => {
                                     {item.icon}
                                   </div>
                                   <div>
-                                    <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm">
+                                    <div
+                                      className={clsx(
+                                        'font-medium text-zinc-900 dark:text-zinc-100 text-sm',
+                                        group.name === 'Secrets' ? 'font-mono' : ''
+                                      )}
+                                    >
                                       {item.name}
                                     </div>
                                     <div className="text-zinc-500 text-xs">{item.description}</div>
