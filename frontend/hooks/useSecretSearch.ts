@@ -64,7 +64,7 @@ export const useSecretSearch = (
                 keyring
               )
 
-              for (const secret of env.allSecrets) {
+              for (const secret of env.secrets) {
                 const decryptedKey = await decryptAsymmetric(
                   secret.key,
                   privateKey,
