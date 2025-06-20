@@ -15,7 +15,7 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
 
   // Fetch environments and secrets in a single query with polling
   const { data: appSecretsData, refetch } = useQuery(GetAppSecrets, {
-    variables: { appId },
+    variables: { appId, path: "/" },
     fetchPolicy: 'cache-and-network',
     skip: !allowFetch,
     pollInterval, // Polling for environments and secrets
