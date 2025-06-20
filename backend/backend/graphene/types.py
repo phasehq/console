@@ -171,7 +171,7 @@ class OrganisationMemberType(DjangoObjectType):
     role = graphene.Field(RoleType)
     self = graphene.Boolean()
     last_login = graphene.DateTime()
-    app_memberships = graphene.List(graphene.NonNull(lambda: AppType))
+    app_memberships = graphene.List(graphene.NonNull(lambda: AppMembershipType))
     tokens = graphene.List(graphene.NonNull(lambda: UserTokenType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
 
@@ -497,7 +497,10 @@ class SecretType(DjangoObjectType):
 
 class EnvironmentType(DjangoObjectType):
     folders = graphene.NonNull(graphene.List(SecretFolderType))
-    secrets = graphene.NonNull(graphene.List(SecretType))
+    secrets = graphene.NonNull(
+        graphene.List(SecretType),
+        path=graphene.String(required=False)
+    )
     folder_count = graphene.Int()
     secret_count = graphene.Int()
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
@@ -520,7 +523,7 @@ class EnvironmentType(DjangoObjectType):
             "updated_at",
         )
 
-    def resolve_secrets(self, info, path="/"):
+    def resolve_secrets(self, info, path=None):
 
         org = self.app.organisation
         if not user_has_permission(
@@ -535,10 +538,11 @@ class EnvironmentType(DjangoObjectType):
 
         filter = {"environment": self, "deleted_at": None}
 
-        if path:
+        if path is not None:
             filter["path"] = path
 
         return Secret.objects.filter(**filter).order_by("-created_at")
+
 
     def resolve_folders(self, info, path=None):
         if not user_can_access_environment(info.context.user.userId, self.id):
@@ -655,13 +659,29 @@ class AppType(DjangoObjectType):
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)
 
+class AppMembershipType(DjangoObjectType):
+    environments = graphene.NonNull(graphene.List(EnvironmentType))
+
+    class Meta:
+        model = App
+        fields = (
+            "id",
+            "name",
+            "sse_enabled",
+        )
+
+    def resolve_environments(self, info):
+        # Only return filtered environments if set
+        return getattr(self, "filtered_environments", [])
+
+
 
 class ServiceAccountType(DjangoObjectType):
 
     third_party_auth_enabled = graphene.Boolean()
     handlers = graphene.List(ServiceAccountHandlerType)
     tokens = graphene.List(ServiceAccountTokenType)
-    app_memberships = graphene.List(graphene.NonNull(AppType))
+    app_memberships = graphene.List(graphene.NonNull(AppMembershipType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
 
     class Meta:
