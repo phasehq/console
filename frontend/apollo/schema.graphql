@@ -195,7 +195,7 @@ type EnvironmentType {
   createdAt: DateTime
   updatedAt: DateTime!
   folders: [SecretFolderType]!
-  secrets: [SecretType]!
+  secrets(path: String): [SecretType]!
   folderCount: Int
   secretCount: Int
   members: [OrganisationMemberType]!
@@ -334,35 +334,32 @@ type ServiceAccountTokenType {
   createdBy: OrganisationMemberType
   createdAt: DateTime
   updatedAt: DateTime!
-  folders: [SecretFolderType]!
-  secrets(path: String): [SecretType]!
-  folderCount: Int
-  secretCount: Int
-  members: [OrganisationMemberType]!
-  syncs: [EnvironmentSyncType]!
+  deletedAt: DateTime
+  expiresAt: DateTime
+  secreteventSet: [SecretEventType!]!
+  lastUsed: DateTime
 }
 
-enum ApiEnvironmentEnvTypeChoices {
+enum ApiSecretEventEventTypeChoices {
   """
-  Development
+  Create
   """
-  DEV
+  C
 
   """
-  Staging
+  Read
   """
-  STAGING
+  R
 
   """
-  Production
+  Update
   """
-  PROD
+  U
 
   """
-  Custom
+  Delete
   """
-  CUSTOM
-
+  D
 }
 
 type PersonalSecretType {
@@ -475,68 +472,6 @@ enum ApiEnvironmentSyncEventStatusChoices {
   Failed
   """
   FAILED
-}
-
-
-type SecretTagType {
-  id: String!
-  name: String!
-  color: String!
-}
-
-type PersonalSecretType {
-  id: String!
-  secret: SecretType!
-  user: OrganisationMemberType!
-  value: String
-  isActive: Boolean!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-type ServiceTokenType {
-  id: String!
-  keys: [ServerEnvironmentKeyType!]!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  name: String!
-  createdBy: OrganisationMemberType
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
-}
-
-type ServerEnvironmentKeyType {
-  id: String!
-  environment: EnvironmentType!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-enum ApiSecretEventEventTypeChoices {
-  """
-  Create
-  """
-  C
-
-  """
-  Read
-  """
-  R
-
-  """
-  Update
-  """
-  U
-
-  """
-  Delete
-  """
-  D
 }
 
 type UserTokenType {
