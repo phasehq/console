@@ -228,8 +228,8 @@ class Query(graphene.ObjectType):
     organisation_members = graphene.List(
         OrganisationMemberType,
         organisation_id=graphene.ID(),
-        user_id=graphene.ID(),
-        role=graphene.List(graphene.String),
+        member_id=graphene.ID(required=False),
+        role=graphene.List(graphene.String, required=False),
     )
     organisation_global_access_users = graphene.List(
         OrganisationMemberType, organisation_id=graphene.ID()
@@ -440,13 +440,16 @@ class Query(graphene.ObjectType):
     resolve_license = resolve_license
     resolve_organisation_license = resolve_organisation_license
 
-    def resolve_organisation_members(root, info, organisation_id, role, user_id=None):
+    def resolve_organisation_members(root, info, organisation_id, role = None, member_id=None):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
 
         filter = {"organisation_id": organisation_id, "deleted_at": None}
 
-        if role:
+        if member_id is not None:
+            filter["id"] = member_id
+        
+        if role is not None:
             roles = [user_role.lower() for user_role in role]
             filter["roles__in"] = roles
 

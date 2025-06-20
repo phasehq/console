@@ -171,7 +171,7 @@ class OrganisationMemberType(DjangoObjectType):
     role = graphene.Field(RoleType)
     self = graphene.Boolean()
     last_login = graphene.DateTime()
-    app_memberships = graphene.List(graphene.NonNull(lambda: AppType))
+    app_memberships = graphene.List(graphene.NonNull(lambda: AppMembershipType))
     tokens = graphene.List(graphene.NonNull(lambda: UserTokenType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
 
@@ -655,13 +655,29 @@ class AppType(DjangoObjectType):
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)
 
+class AppMembershipType(DjangoObjectType):
+    environments = graphene.NonNull(graphene.List(EnvironmentType))
+
+    class Meta:
+        model = App
+        fields = (
+            "id",
+            "name",
+            "sse_enabled",
+        )
+
+    def resolve_environments(self, info):
+        # Only return filtered environments if set
+        return getattr(self, "filtered_environments", [])
+
+
 
 class ServiceAccountType(DjangoObjectType):
 
     third_party_auth_enabled = graphene.Boolean()
     handlers = graphene.List(ServiceAccountHandlerType)
     tokens = graphene.List(ServiceAccountTokenType)
-    app_memberships = graphene.List(graphene.NonNull(AppType))
+    app_memberships = graphene.List(graphene.NonNull(AppMembershipType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
 
     class Meta:
