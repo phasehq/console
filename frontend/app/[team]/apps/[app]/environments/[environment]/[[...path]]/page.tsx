@@ -971,7 +971,7 @@ export default function EnvironmentPath({
 
             {(clientSecrets.length > 0 || folders.length > 0) && (
               <div className="flex items-center w-full">
-                <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
+                <div className={clsx("px-12 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3 ", filteredAndSortedSecrets.length > 999 && "px-18")}>
                   key
                 </div>
                 <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
@@ -1022,7 +1022,11 @@ export default function EnvironmentPath({
                   )}
                   key={secret.id}
                 >
-                  <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
+                  <span
+                    className={clsx('text-neutral-500 font-mono', index > 999 ? 'w-10' : 'w-5')}
+                  >
+                    {index + 1}
+                  </span>
                   <SecretRow
                     orgId={organisation.id}
                     secret={secret as SecretType}
