@@ -1018,7 +1018,7 @@ export default function EnvironmentPath({
                   className={clsx(
                     'flex items-center gap-2 py-1 px-3 rounded-md',
                     secretToHighlight === secret.id &&
-                      'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/10'
+                      'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
                   )}
                   key={secret.id}
                 >
