@@ -20,8 +20,8 @@ A developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manage
 ---
 
 # Phase Console
-https://github.com/user-attachments/assets/160c721d-a941-440a-bc42-afd419c1df18
 
+[console.webm](https://github.com/user-attachments/assets/09f316a7-a0d9-467d-b135-3e8dbf62d2c3)
 
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
