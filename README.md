@@ -21,9 +21,7 @@ A developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manage
 
 # Phase Console
 
-![Phase Console Demo](https://github.com/user-attachments/assets/cd6b1ffe-6cb4-4a2b-8ae1-9daa61ed3a5a)
-
-<video controls autoplay="true" muted loop><source src="https://github.com/user-attachments/assets/cd6b1ffe-6cb4-4a2b-8ae1-9daa61ed3a5a" /></video>
+[Phase Console Demo](https://github.com/user-attachments/assets/cd6b1ffe-6cb4-4a2b-8ae1-9daa61ed3a5a)
 
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
