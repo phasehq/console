@@ -21,15 +21,16 @@ A developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manage
 
 # Phase Console
 
-[console.webm](https://github.com/user-attachments/assets/c6d6ab9e-869a-4d45-a1b2-e666a69776bf)
+![Phase Console Demo](https://github.com/user-attachments/assets/cd6b1ffe-6cb4-4a2b-8ae1-9daa61ed3a5a)
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 📈  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets, and environment variables                |
 | ⌨️  | **[CLI](https://github.com/phasehq/cli)**: Import existing secrets from `.env` files, encrypt them, and securely inject them in your application at runtime  |
 | 🤫  | **[Secret management](https://docs.phase.dev/console/apps)**: Secret Diffs, version control, and recovery                                                                                    |
 | 🙋  | **[RBAC](https://docs.phase.dev/console/users#user-roles)**: Fine-grained, role-based, and cryptographic access control, per application, per environment.                                                      |
-| 🔌  | **[Integrations](https://docs.phase.dev/#integrate-phase)**: Automatically sync secrets to GitHub, Cloudflare Pages, GitLab CI, Railway, AWS Secrets Manager, etc.                                                        |
-| ![Kubernetes](img/kubernetes.svg)  | **[Kubernetes](https://docs.phase.dev/integrations/platforms/kubernetes)**: Automatically deploy secrets to your Kubernetes Cluster with End-to-End encryption via Phase Secrets Operator   |
+| 🔌  | **[Secret sync](https://docs.phase.dev/#integrate-phase)**: Automatically sync secrets to GitHub, Cloudflare Pages, Vercel, GitLab CI, Railway, AWS Secrets Manager, etc.                                                        |
+| ![Kubernetes](img/kubernetes.svg)  | **[Kubernetes](https://docs.phase.dev/integrations/platforms/kubernetes)**: Automatically deploy secrets to your Kubernetes Cluster via the Phase Secrets Operator   |
+| ![Terraform](img/terraform.svg)    | **[Terraform](https://docs.phase.dev/integrations/platforms/hashicorp-terraform)**: Manage secrets in your HashiCorp Terraform Iac workflows. |
 | ⛓️  | **[Secret referencing & overrides](https://docs.phase.dev/console/secrets)**: Create personal secrets. Inherit values from other secrets                                                              |
 | 🌐  | **[REST API](https://docs.phase.dev/public-api/secrets#get-secrets)**: Access and manage secrets programmatically                                                                                      |
 | 📦  | **[SDKs](https://docs.phase.dev/sdks)**: SDKs for integrating Phase with various programming languages and frameworks              
