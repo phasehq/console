@@ -45,37 +45,30 @@ A developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manage
 ![Phase CI](img/phase-cli-import-run.webp)
 
 ```fish
-λ phase
+λ phase --help
 Securely manage application secrets and environment variables with Phase.
 
-                     @@@             
-              @@@@@@@@@@     
-          @@@@@@@@@@@@@@@@
-       P@@@@@&@@@?&@@&@@@@@P
-     P@@@@#        @&@    @P@@@
-    &@@@#         *@&      #@@@&
-   &@@@5          &@?       5@@@&
-  Y@@@#          ^@@         #@@@J
-  #@@@7          B@5         7@@@#
-  #@@@?         .@@.         ?@@@#
-  @@@@&         5@G          &@@@7
-   #@@@B        @@^         #@@@B
-    B@@@@      .@#        7@@@@B
-     @@@@@@    &.@       P@@@@@7
-       @@@@@@@@@@@@@@@@@@@@@
-          @@@@@@@@@@@@@@@
-             @@@@@@@@
-             @@@   
+           /$$
+          | $$
+  /$$$$$$ | $$$$$$$   /$$$$$$   /$$$$$$$  /$$$$$$
+ /$$__  $$| $$__  $$ |____  $$ /$$_____/ /$$__  $$
+| $$  \ $$| $$  \ $$  /$$$$$$$|  $$$$$$ | $$$$$$$$
+| $$  | $$| $$  | $$ /$$__  $$ \____  $$| $$_____/
+| $$$$$$$/| $$  | $$|  $$$$$$$ /$$$$$$$/|  $$$$$$$
+| $$____/ |__/  |__/ \_______/|_______/  \_______/
+| $$
+|__/
 
 options:
   -h, --help   show this help message and exit
   --version, -v
                show program's version number and exit
-
 Commands:
+
     auth             💻 Authenticate with Phase
     init             🔗 Link your project with your Phase app
     run              🚀 Run and inject secrets to your app
+    shell            🐚 Launch a sub-shell with secrets as environment variables (BETA)
     secrets          🗝️ Manage your secrets
     secrets list     📇 List all the secrets
     secrets get      🔍 Get a specific secret by key
@@ -86,6 +79,7 @@ Commands:
     secrets export   🥡 Export secrets in a dotenv format
     users            👥 Manage users and accounts
     users whoami     🙋 See details of the current user
+    users switch     🪄 Switch between Phase users, orgs and hosts
     users logout     🏃 Logout from phase-cli
     users keyring    🔐 Display information about the Phase keyring
     docs             📖 Open the Phase CLI Docs in your browser
