@@ -21,8 +21,7 @@ A developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manage
 
 # Phase Console
 
-[console.webm](https://github.com/user-attachments/assets/09f316a7-a0d9-467d-b135-3e8dbf62d2c3)
-
+[console.webm](https://github.com/user-attachments/assets/c6d6ab9e-869a-4d45-a1b2-e666a69776bf)
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 📈  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets, and environment variables                |
