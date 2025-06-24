@@ -4,7 +4,7 @@
   <img height="120" width="450" src="img/phase-lattice-logo.svg" alt="Phase">
   </a>
 
-  <h4>Repos</h4>
+  <h5>Repos</h5>
   <p>
     <a href="https://github.com/phasehq/docs">Docs</a> |
     <a href="https://github.com/phasehq/cli">CLI</a> |
@@ -13,7 +13,7 @@
     <br/>
     <a href="https://github.com/phasehq/golang-sdk">Golang SDK</a> |
     <a href="https://github.com/phasehq/kubernetes-secrets-operator/tree/main/phase-console">Helm Chart</a> |
-    <a href="https://github.com/phasehq/kubernetes-secrets-operator">Kubernetes Secrets Operator</a> |
+    <a href="https://github.com/phasehq/kubernetes-secrets-operator">Kubernetes Operator</a> |
     <a href="https://github.com/phasehq/terraform-provider-phase">Terraform Provider</a>
   </p>
 </div>
@@ -21,12 +21,7 @@
 ---
 
 Open source platform for fast-moving engineering teams to secure and deploy application secrets — from development to production.
-
-A developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manager** that works with your whole team 🧑‍💻.
-
 ---
-
-# Phase Console
 
 [Phase Console Demo](https://github.com/user-attachments/assets/cd6b1ffe-6cb4-4a2b-8ae1-9daa61ed3a5a)
 
