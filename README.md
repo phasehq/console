@@ -20,7 +20,7 @@
 
 ---
 
-Open source platform for fast-moving engineering teams to secure and deploy application secrets — from development to production.
+#### Open source platform for fast-moving engineering teams to secure and deploy application secrets — from development to production.
 ---
 
 [Phase Console Demo](https://github.com/user-attachments/assets/cd6b1ffe-6cb4-4a2b-8ae1-9daa61ed3a5a)
