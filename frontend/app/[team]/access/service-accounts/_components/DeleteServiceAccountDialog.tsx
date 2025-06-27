@@ -52,7 +52,7 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
           associated with this account.
         </div>
         <div className="flex justify-end">
-          <Button variant="danger" onClick={handleDelete} className="flex items-center gap-1">
+          <Button variant="danger" onClick={handleDelete}>
             <FaTrashAlt /> Delete
           </Button>
         </div>
