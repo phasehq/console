@@ -563,8 +563,8 @@ export default function EnvironmentPath({
     const [name, setName] = useState<string>('')
     const inputRef = useRef(null)
 
-    // Regular expression to match only alphanumeric characters
-    const regex = /^[a-zA-Z0-9]*$/
+    // Regular expression to match only alphanumeric characters along with dashes (-) and underscores (_)
+    const folder_name_pattern = /^[a-zA-Z0-9_-]*$/
 
     const closeModal = () => {
       setFolderMenuIsOpen(false)
@@ -580,11 +580,9 @@ export default function EnvironmentPath({
     }
 
     const handleUpdateName = (newName: string) => {
-      // Regular expression to match only alphanumeric characters
-      const regex = /^[a-zA-Z0-9]*$/
 
       // Check if the new value matches the regular expression
-      if (regex.test(newName) || newName === '') {
+      if (folder_name_pattern.test(newName) || newName === '') {
         // Update the state if the value is alphanumeric or empty (to allow clearing the input)
         setName(newName)
       }
