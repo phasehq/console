@@ -171,9 +171,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
             <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Phase Environment
-                  </label>
+                  <label className="block text-neutral-500 text-sm mb-2">Phase Environment</label>
                 </RadioGroup.Label>
                 <div className="flex flex-wrap items-center gap-2">
                   {appEnvsData.appEnvironments.map((env: EnvironmentType) => (
@@ -206,12 +204,12 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
 
             <div className="grid grid-cols-2 gap-8">
               <div className="relative">
-                <Combobox value={vercelTeam} onChange={setVercelTeam}>
+                <Combobox as="div" value={vercelTeam} onChange={setVercelTeam}>
                   {({ open }) => (
                     <>
                       <div className="space-y-2">
                         <Combobox.Label as={Fragment}>
-                          <label className="block text-gray-700 text-sm font-bold">
+                          <label className="block text-neutral-500 text-sm">
                             Vercel Team <span className="text-red-500">*</span>
                           </label>
                         </Combobox.Label>
@@ -243,9 +241,9 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full">
+                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                             {filteredTeams.map((team) => (
-                              <Combobox.Option key={team.id} value={team}>
+                              <Combobox.Option as="div" key={team.id} value={team}>
                                 {({ active }) => (
                                   <div
                                     className={clsx(
@@ -275,7 +273,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                       <>
                         <div className="space-y-2">
                           <Combobox.Label as={Fragment}>
-                            <label className="block text-gray-700 text-sm font-bold">
+                            <label className="block text-neutral-500 text-sm">
                               Vercel Project <span className="text-red-500">*</span>
                             </label>
                           </Combobox.Label>
@@ -339,7 +337,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
               <div>
                 <RadioGroup value={environment} onChange={setEnvironment}>
                   <RadioGroup.Label as={Fragment}>
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                    <label className="block text-neutral-500 text-sm  mb-2">
                       Target Environment <span className="text-red-500">*</span>
                     </label>
                   </RadioGroup.Label>
@@ -367,7 +365,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
               <div>
                 <RadioGroup value={secretType} onChange={setSecretType}>
                   <RadioGroup.Label as={Fragment}>
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                    <label className="block text-neutral-500 text-sm mb-2">
                       Secret Type <span className="text-red-500">*</span>
                     </label>
                   </RadioGroup.Label>
