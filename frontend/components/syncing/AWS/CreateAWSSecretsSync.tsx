@@ -156,9 +156,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
             <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Phase Environment
-                  </label>
+                  <label className="block text-neutral-500 text-sm mb-2">Phase Environment</label>
                 </RadioGroup.Label>
                 <div className="flex flex-wrap items-center gap-2">
                   {appEnvsData.appEnvironments.map((env: EnvironmentType) => (

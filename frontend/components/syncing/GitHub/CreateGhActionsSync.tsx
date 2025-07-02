@@ -153,9 +153,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
             <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Phase Environment
-                  </label>
+                  <label className="block text-neutral-500 text-sm mb-2">Phase Environment</label>
                 </RadioGroup.Label>
                 <div className="flex flex-wrap items-center gap-2">
                   {appEnvsData.appEnvironments.map((env: EnvironmentType) => (
@@ -188,12 +186,12 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
             <div className="grid grid-cols-2 gap-8">
               <div className="relative col-span-2">
-                <Combobox value={selectedRepo} onChange={setSelectedRepo}>
+                <Combobox as="div" value={selectedRepo} onChange={setSelectedRepo}>
                   {({ open }) => (
                     <>
                       <div className="space-y-2">
                         <Combobox.Label as={Fragment}>
-                          <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
+                          <label className="block text-neutral-500 text-sm" htmlFor="name">
                             GitHub Repo
                           </label>
                         </Combobox.Label>
@@ -227,9 +225,13 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto">
+                          <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
                             {filteredRepos.map((repo: GitHubRepoType) => (
-                              <Combobox.Option key={`${repo.owner}/${repo.name}`} value={repo}>
+                              <Combobox.Option
+                                as="div"
+                                key={`${repo.owner}/${repo.name}`}
+                                value={repo}
+                              >
                                 {({ active, selected }) => (
                                   <div
                                     className={clsx(
