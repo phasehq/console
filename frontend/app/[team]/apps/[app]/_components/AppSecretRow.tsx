@@ -394,8 +394,7 @@ export const AppSecretRow = ({
             <td
               className={clsx(
                 `px-2 py-0.5 whitespace-nowrap font-mono ${rowInputColor()} flex items-center gap-2 ph-no-capture`,
-                isExpanded ? 'font-bold' : 'font-medium',
-                index > 999 && 'px-4'
+                isExpanded ? 'font-bold' : 'font-medium'
               )}
             >
               <button
@@ -404,7 +403,7 @@ export const AppSecretRow = ({
               >
                 <FaChevronRight
                   className={clsx(
-                    'transform transition ease font-light cursor-pointer',
+                    'transform transition ease font-light cursor-pointer absolute ',
                     isExpanded
                       ? 'opacity-100 rotate-90'
                       : 'opacity-0 group-hover:opacity-100 rotate-0'
@@ -412,9 +411,8 @@ export const AppSecretRow = ({
                 />
                 <span
                   className={clsx(
-                    'text-neutral-500 font-mono absolute transition ease',
-                    isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0',
-                    index > 999 ? 'w-10' : 'w-5'
+                    'text-neutral-500 font-mono transition ease  w-full',
+                    isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
                   )}
                 >
                   {index + 1}

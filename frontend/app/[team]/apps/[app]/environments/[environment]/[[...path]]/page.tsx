@@ -1023,9 +1023,9 @@ export default function EnvironmentPath({
                   key={secret.id}
                 >
                   <span
-                    className={clsx('text-neutral-500 font-mono', index > 999 ? 'w-10' : 'w-5')}
+                    className="text-neutral-500 font-mono"
                   >
-                    {index + 1}
+                    {index +1}
                   </span>
                   <SecretRow
                     orgId={organisation.id}
