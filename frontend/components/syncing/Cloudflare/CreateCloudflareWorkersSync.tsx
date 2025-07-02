@@ -202,7 +202,7 @@ export const CreateCloudflareWorkersSync = (props: { appId: string; closeModal: 
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
+                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                             {filteredWorkers.map((worker: CloudflareWorkerType) => (
                               <Combobox.Option as="div" key={worker.scriptId} value={worker}>
                                 {({ active, selected }) => (
