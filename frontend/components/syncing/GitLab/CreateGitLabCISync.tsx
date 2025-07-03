@@ -187,9 +187,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
             <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Phase Environment
-                  </label>
+                  <label className="block text-neutral-500 text-sm mb-2">Phase Environment</label>
                 </RadioGroup.Label>
                 <div className="flex flex-wrap items-center gap-2">
                   {appEnvsData.appEnvironments.map((env: EnvironmentType) => (
@@ -258,13 +256,13 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                   </Tab.List>
                   <Tab.Panels className="py-4">
                     <Tab.Panel>
-                      <Combobox value={selectedProject} onChange={setSelectedProject}>
+                      <Combobox as="div" value={selectedProject} onChange={setSelectedProject}>
                         {({ open }) => (
                           <>
                             <div className="space-y-2">
                               <Combobox.Label as={Fragment}>
                                 <label
-                                  className="block text-gray-700 text-sm font-bold"
+                                  className="block text-neutral-500 text-sm font-bold"
                                   htmlFor="name"
                                 >
                                   GitLab Project
@@ -302,9 +300,10 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                               leaveTo="transform scale-95 opacity-0"
                             >
                               <Combobox.Options as={Fragment}>
-                                <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-96 w-full overflow-y-auto">
+                                <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 w-full overflow-y-auto border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                                   {filteredProjects.map((project: GitLabProjectType) => (
                                     <Combobox.Option
+                                      as="div"
                                       key={`${project.namespace?.fullPath}/${project.name}`}
                                       value={project}
                                     >
@@ -346,10 +345,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                           <>
                             <div className="space-y-2">
                               <Combobox.Label as={Fragment}>
-                                <label
-                                  className="block text-gray-700 text-sm font-bold"
-                                  htmlFor="name"
-                                >
+                                <label className="block text-neutral-500 text-sm" htmlFor="name">
                                   GitLab Group
                                 </label>
                               </Combobox.Label>
