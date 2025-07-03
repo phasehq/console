@@ -183,6 +183,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           const searchRegex = new RegExp(searchQuery, 'i')
           return searchRegex.test(folder.name)
         })
+  
+  const maxIndexDigits = filteredSecrets.length.toString().length ?? 1;
 
   const { data: syncsData } = useQuery(GetAppSyncStatus, {
     variables: {
@@ -845,8 +847,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                   className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
                 >
                   <tr>
-                    <th className={clsx("pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide", filteredSecrets.length > 999 && "pl-14")}>
-                      key
+                    <th className="text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                      <span style={{ minWidth: `calc(${maxIndexDigits}ch + 2rem)` }} className="inline-block"></span>
+                      <span className="inline-block">key</span>
                     </th>
                     {appEnvironments?.map((env: EnvironmentType) => (
                       <th

@@ -527,6 +527,8 @@ export default function EnvironmentPath({
 
   const filteredAndSortedSecrets = sortSecrets(filteredSecrets, sort)
 
+  const maxIndexDigits = filteredAndSortedSecrets.length.toString().length ?? 1;
+
   const downloadEnvFile = () => {
     const envContent = serverSecrets
       .map((secret) => {
@@ -971,7 +973,8 @@ export default function EnvironmentPath({
 
             {(clientSecrets.length > 0 || folders.length > 0) && (
               <div className="flex items-center w-full">
-                <div className={clsx("px-12 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3 ", filteredAndSortedSecrets.length > 999 && "px-18")}>
+                <div style={{ minWidth: `calc(${maxIndexDigits}ch + 2rem)` }}></div>
+                <div className="py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3 ">
                   key
                 </div>
                 <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
@@ -1025,7 +1028,7 @@ export default function EnvironmentPath({
                   <span
                     className="text-neutral-500 font-mono"
                   >
-                    {index +1}
+                    {index + 1}
                   </span>
                   <SecretRow
                     orgId={organisation.id}
