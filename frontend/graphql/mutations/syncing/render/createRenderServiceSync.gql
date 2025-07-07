@@ -1,0 +1,31 @@
+mutation CreateNewRenderServiceSync(
+  $envId: ID!
+  $path: String!
+  $credentialId: ID!
+  $serviceId: String!
+  $serviceName: String!
+) {
+  createRenderSync(
+    envId: $envId
+    path: $path
+    credentialId: $credentialId
+    serviceId: $serviceId
+    serviceName: $serviceName
+  ) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}

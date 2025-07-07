@@ -1,6 +1,9 @@
 from django.utils import timezone
 from api.services import ServiceConfig
-from api.utils.syncing.aws.auth import get_aws_secrets_manager_credentials, get_aws_assume_role_credentials
+from api.utils.syncing.aws.auth import (
+    get_aws_secrets_manager_credentials,
+    get_aws_assume_role_credentials,
+)
 from api.utils.syncing.aws.secrets_manager import sync_aws_secrets
 from api.utils.syncing.github.actions import (
     get_gh_actions_credentials,
@@ -11,6 +14,7 @@ from api.utils.syncing.nomad.main import sync_nomad_secrets
 from api.utils.syncing.gitlab.main import sync_gitlab_secrets
 from api.utils.syncing.railway.main import sync_railway_secrets
 from api.utils.syncing.vercel.main import sync_vercel_secrets
+from api.utils.syncing.render.main import sync_render_service_env_vars
 from ..utils.syncing.cloudflare.pages import (
     get_cf_pages_credentials,
     sync_cloudflare_secrets,
@@ -117,6 +121,15 @@ def trigger_sync_tasks(env_sync):
         env_sync.save()
 
         job = perform_vercel_sync.delay(env_sync)
+        job_id = job.get_id()
+
+        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+
+    elif env_sync.service == ServiceConfig.RENDER["id"]:
+        env_sync.status = EnvironmentSync.IN_PROGRESS
+        env_sync.save()
+
+        job = perform_render_service_sync.delay(env_sync)
         job_id = job.get_id()
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
@@ -254,10 +267,10 @@ def perform_github_actions_sync(environment_sync):
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_aws_sm_sync(environment_sync):
     project_info = environment_sync.options
-    
+
     # Determine authentication method and get appropriate credentials
     has_role_arn = "role_arn" in environment_sync.authentication.credentials
-    
+
     if has_role_arn:
         credentials = get_aws_assume_role_credentials(environment_sync)
     else:
@@ -374,4 +387,17 @@ def perform_cloudflare_workers_sync(environment_sync):
         account_id,
         access_token,
         worker_info["worker_name"],
+    )
+
+
+@job("default", timeout=DEFAULT_TIMEOUT)
+def perform_render_service_sync(environment_sync):
+    render_service_options = environment_sync.options
+    render_service_id = render_service_options.get("service_id")
+
+    handle_sync_event(
+        environment_sync,
+        sync_render_service_env_vars,
+        environment_sync.authentication.id,
+        render_service_id,
     )

@@ -1,0 +1,7 @@
+query GetRenderServices($credentialId: ID!) {
+  renderServices(credentialId: $credentialId) {
+    id
+    name
+    type
+  }
+}
