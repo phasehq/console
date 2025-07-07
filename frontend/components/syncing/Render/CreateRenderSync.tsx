@@ -109,7 +109,7 @@ export const CreateRenderSync = ({
           <SiRender />
           Render
         </div>
-        <div className="text-neutral-500 text-sm">Sync an environment with Railway.</div>
+        <div className="text-neutral-500 text-sm">Sync an environment with Render.</div>
       </div>
 
       <form onSubmit={handleSubmit}>
