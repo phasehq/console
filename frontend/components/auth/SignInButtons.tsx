@@ -3,7 +3,7 @@
 import clsx from 'clsx'
 import { signIn, useSession } from 'next-auth/react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useState } from 'react'
 import { FaGithub, FaGitlab, FaGoogle } from 'react-icons/fa'
 import Spinner from '../common/Spinner'
 import { LogoWordMark } from '../common/LogoWordMark'
@@ -74,10 +74,23 @@ export default function SignInButtons() {
   const [loading, setLoading] = useState<boolean>(false)
   const { status } = useSession()
   const router = useRouter()
-
   const searchParams = useSearchParams()
 
+  const callbackUrl = searchParams?.get('callbackUrl')
+
+  const handleProviderButtonClick = useCallback(
+    (providerId: string) => {
+      setLoading(true)
+      signIn(providerId, {
+        redirect: callbackUrl ? true : false,
+        callbackUrl: callbackUrl || '',
+      })
+    },
+    [callbackUrl]
+  )
+
   useEffect(() => {
+    const providerId = searchParams?.get('provider')
     const error = searchParams?.get('error')
     if (error) {
       toast.error(
@@ -85,9 +98,12 @@ export default function SignInButtons() {
         { autoClose: 5000 }
       )
     }
-  }, [searchParams])
 
-  const callbackUrl = searchParams?.get('callbackUrl')
+    if (providerId) {
+      console.log(providerId)
+      handleProviderButtonClick(providerId)
+    }
+  }, [handleProviderButtonClick, searchParams])
 
   const titleText = () => (loading ? 'Logging in' : 'CONSOLE')
 
@@ -99,14 +115,6 @@ export default function SignInButtons() {
   useEffect(() => {
     if (status === 'authenticated') router.push('/')
   }, [router, status])
-
-  const handleProviderButtonClick = (providerId: string) => {
-    setLoading(true)
-    signIn(providerId, {
-      redirect: callbackUrl ? true : false,
-      callbackUrl: callbackUrl || '',
-    })
-  }
 
   return (
     <>
