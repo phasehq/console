@@ -215,11 +215,32 @@ export default function EnvironmentPath({
       : setClientSecrets([...clientSecrets, newSecret])
   }
 
+  /**
+   * Bulk adds secrets to client state from an import
+   * 
+   * If a secret key being imported already exists, we update the value and comment.
+   * Otherwise, we process the import as normal, adding it as a new secret
+   * 
+   * @param {SecretType[]} secrets - Secrets being imported into client state
+   */
   const bulkAddSecrets = (secrets: SecretType[]) => {
-    const secretsWithImportFlag = secrets.map((secret) => ({
+    const existingSecrets = new Map(clientSecrets.map((secret) => [secret.key, secret]))
+    const newSecretsToAdd = secrets.filter((secret) => !existingSecrets.has(secret.key))
+    const secretsToUpdate = secrets.filter((secret) => existingSecrets.has(secret.key))
+
+    secretsToUpdate.forEach((secret) => {
+      setClientSecrets((prev) =>
+        prev.map((s) =>
+          s.key === secret.key ? { ...s, ...{ value: secret.value, comment: secret.comment } } : s
+        )
+      )
+    })
+
+    const secretsWithImportFlag = newSecretsToAdd.map((secret) => ({
       ...secret,
       isImported: true,
     }))
+
     setClientSecrets((prev) => [...prev, ...secretsWithImportFlag])
   }
 
