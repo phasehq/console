@@ -9,7 +9,6 @@ import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
 import {
   EnvironmentType,
   ProviderCredentialsType,
-  RailwayProjectType,
   RenderEnvGroupType,
   RenderResourceType,
   RenderServiceType,
@@ -23,6 +22,7 @@ import clsx from 'clsx'
 import { FaDotCircle, FaAngleDoubleDown } from 'react-icons/fa'
 import { FaCircle, FaChevronDown } from 'react-icons/fa6'
 import { Button } from '@/components/common/Button'
+import { Alert } from '@/components/common/Alert'
 
 export const CreateRenderSync = ({
   appId,
@@ -240,7 +240,7 @@ export const CreateRenderSync = ({
 
             <div>
               <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-                <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 mb-2">
+                <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 mb-4">
                   {tabs.map((tab) => (
                     <Tab as={Fragment} key={tab.name}>
                       {({ selected }) => (
@@ -326,7 +326,11 @@ export const CreateRenderSync = ({
                       </Combobox>
                     </div>
                   </Tab.Panel>
-                  <Tab.Panel>
+                  <Tab.Panel className="space-y-4">
+                    <Alert variant="info" size="sm" icon={true}>
+                      Secrets synced to Environment Groups on Render are added as Secret Files.
+                    </Alert>
+
                     <div className="relative">
                       <Combobox as="div" value={renderEnvgroup} onChange={setRenderEnvgroup}>
                         {({ open }) => (
@@ -398,6 +402,7 @@ export const CreateRenderSync = ({
                         value={secretFileName}
                         setValue={setSecretFileName}
                         label="Secret file name"
+                        required
                       />
                     </div>
                   </Tab.Panel>
