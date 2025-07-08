@@ -5,7 +5,7 @@ import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.g
 import CreateNewRenderServiceSync from '@/graphql/mutations/syncing/render/createRenderServiceSync.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import {
   EnvironmentType,
   ProviderCredentialsType,
@@ -56,6 +56,20 @@ export const CreateRenderSync = ({
 
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
+
+  useEffect(() => {
+    if (credentialsData && credentialsData.savedCredentials.length > 0) {
+      setCredential(credentialsData.savedCredentials[0])
+    }
+  }, [credentialsData])
+
+  // Preselect the first available env
+  useEffect(() => {
+    if (appEnvsData?.appEnvironments.length > 0) {
+      const defaultEnv: EnvironmentType = appEnvsData.appEnvironments[0]
+      setPhaseEnv(defaultEnv)
+    }
+  }, [appEnvsData])
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
