@@ -403,7 +403,7 @@ export const AppSecretRow = ({
               >
                 <FaChevronRight
                   className={clsx(
-                    'transform transition ease font-light cursor-pointer',
+                    'transform transition ease font-light cursor-pointer absolute ',
                     isExpanded
                       ? 'opacity-100 rotate-90'
                       : 'opacity-0 group-hover:opacity-100 rotate-0'
@@ -411,7 +411,7 @@ export const AppSecretRow = ({
                 />
                 <span
                   className={clsx(
-                    'text-neutral-500 font-mono absolute transition ease',
+                    'text-neutral-500 font-mono transition ease  w-full',
                     isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
                   )}
                 >
