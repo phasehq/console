@@ -403,10 +403,66 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     ])
   }
 
-  const bulkAddNewClientSecrets = (newSecrets: AppSecret[]) => {
-    setClientAppSecrets((prevSecrets) => {
-      const updatedSecrets = [...newSecrets, ...prevSecrets]
-      return updatedSecrets
+  /**
+   * Bulk adds or updates client secrets in state from an import.
+   *
+   * For each secret in `newSecrets`:
+   * - If the secret key already exists, update each environment value if it differs.
+   *   - If the environment exists but has no secret yet, initialize it.
+   *   - If it exists and already has a secret, overwrite its value/comment.
+   *   - If the environment does not exist, add it.
+   * - If the secret key does not exist at all, add it as a new secret.
+   *
+   *
+   * @param {AppSecret[]} newSecrets - Secrets being imported into client state
+   */
+  function bulkAddNewClientSecrets(newSecrets: AppSecret[]) {
+    setClientAppSecrets((prev) => {
+      // Clone all existing secrets so we work on new objects,
+      // avoiding in-place mutations of previous state.
+      const existingMap = new Map(prev.map((s) => [s.key, structuredClone(s)]))
+
+      newSecrets.forEach((ns) => {
+        const existing = existingMap.get(ns.key)
+
+        if (existing) {
+          // This secret key already exists, update environments as needed
+          ns.envs.forEach(({ env, secret }) => {
+            // Find matching environment in existing secret
+            const match = existing.envs.find((e) => e.env.id === env.id)
+
+            if (secret && match && !match.secret) {
+              // Environment exists but has no secret yet → initialize it
+              match.secret = {
+                id: `new-${crypto.randomUUID()}`,
+                updatedAt: null,
+                version: 1,
+                key: '',
+                value: secret.value,
+                tags: [],
+                comment: secret.comment,
+                path: '/',
+                environment: env as EnvironmentType,
+              }
+            } else if (match && secret) {
+              // Environment already has a secret → overwrite value and comment
+              match.secret = {
+                ...match.secret,
+                value: secret.value,
+                comment: secret.comment,
+              } as SecretType
+            } else {
+              // Environment does not exist → add it
+              existing.envs.push({ env, secret })
+            }
+          })
+        } else {
+          // This secret key does not exist at all → add as new secret
+          existingMap.set(ns.key, structuredClone(ns))
+        }
+      })
+
+      return Array.from(existingMap.values())
     })
   }
 
