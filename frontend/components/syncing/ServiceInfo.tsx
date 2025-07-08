@@ -82,7 +82,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
       </div>
     )
   } else if (sync.serviceInfo?.id?.includes('render')) {
-    const serviceName: string = JSON.parse(sync.options)['service_name']
-    return <div className="flex gap-2 text-xs text-neutral-500">{serviceName}</div>
+    const resourceName: string = JSON.parse(sync.options)['resource_name']
+    return <div className="flex gap-2 text-xs text-neutral-500">{resourceName}</div>
   } else return <>{sync.serviceInfo?.id}</>
 }

@@ -4,7 +4,7 @@ from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
-from api.utils.syncing.render.main import RenderServiceType
+from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
@@ -62,6 +62,7 @@ from .graphene.queries.syncing import (
     resolve_test_nomad_creds,
     resolve_railway_projects,
     resolve_render_services,
+    resolve_render_envgroups,
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
@@ -362,6 +363,7 @@ class Query(graphene.ObjectType):
     vercel_projects = graphene.List(VercelTeamProjectsType, credential_id=graphene.ID())
 
     render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
+    render_envgroups = graphene.List(RenderEnvGroupType, credential_id=graphene.ID())
 
     test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
@@ -420,6 +422,7 @@ class Query(graphene.ObjectType):
     resolve_vercel_projects = resolve_vercel_projects
 
     resolve_render_services = resolve_render_services
+    resolve_render_envgroups = resolve_render_envgroups
 
     resolve_test_vault_creds = resolve_test_vault_creds
 

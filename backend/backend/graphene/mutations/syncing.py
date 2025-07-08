@@ -1,6 +1,7 @@
 from api.tasks.syncing import trigger_sync_tasks
 from api.utils.secrets import normalize_path_string
 
+from api.utils.syncing.render.main import RenderResourceType
 import graphene
 from graphql import GraphQLError
 from api.utils.access.permissions import (
@@ -751,8 +752,10 @@ class CreateRenderSync(graphene.Mutation):
         env_id = graphene.ID()
         path = graphene.String()
         credential_id = graphene.ID()
-        service_id = graphene.String()
-        service_name = graphene.String()
+        resource_id = graphene.String()
+        resource_name = graphene.String()
+        resource_type = graphene.Argument(RenderResourceType)
+        secret_file_name = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
@@ -764,8 +767,10 @@ class CreateRenderSync(graphene.Mutation):
         env_id,
         path,
         credential_id,
-        service_id,
-        service_name,
+        resource_id,
+        resource_name,
+        resource_type,
+        secret_file_name,
     ):
         service_type = "render"
         service_config = ServiceConfig.get_service_config(service_type)
@@ -779,8 +784,10 @@ class CreateRenderSync(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         sync_options = {
-            "service_id": service_id,
-            "service_name": service_name,
+            "resource_id": resource_id,
+            "resource_name": resource_name,
+            "resource_type": resource_type.value,
+            "secret_file_name": secret_file_name,
         }
 
         existing_syncs = EnvironmentSync.objects.filter(
@@ -801,4 +808,4 @@ class CreateRenderSync(graphene.Mutation):
 
         trigger_sync_tasks(sync)
 
-        return
+        return CreateRenderSync(sync=sync)

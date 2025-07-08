@@ -1,24 +1,24 @@
-import GetRenderServices from '@/graphql/queries/syncing/render/getServices.gql'
+import GetRenderResources from '@/graphql/queries/syncing/render/getResources.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import CreateNewRenderServiceSync from '@/graphql/mutations/syncing/render/createRenderServiceSync.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
 import {
   EnvironmentType,
   ProviderCredentialsType,
-  RailwayEnvironmentType,
   RailwayProjectType,
-  RailwayServiceType,
+  RenderEnvGroupType,
+  RenderResourceType,
   RenderServiceType,
 } from '@/apollo/graphql'
 import { SiRender } from 'react-icons/si'
 import { toast } from 'react-toastify'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { Input } from '@/components/common/Input'
-import { RadioGroup, Combobox, Transition } from '@headlessui/react'
+import { RadioGroup, Combobox, Transition, Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { FaDotCircle, FaAngleDoubleDown } from 'react-icons/fa'
 import { FaCircle, FaChevronDown } from 'react-icons/fa6'
@@ -33,6 +33,20 @@ export const CreateRenderSync = ({
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const tabs = useMemo(
+    () => [
+      {
+        name: 'Services',
+        id: RenderResourceType.Service,
+      },
+      {
+        name: 'Environment Groups',
+        id: RenderResourceType.EnvironmentGroup,
+      },
+    ],
+    []
+  )
+
   const { data: credentialsData } = useQuery(GetSavedCredentials, {
     variables: { orgId: organisation!.id },
   })
@@ -43,7 +57,7 @@ export const CreateRenderSync = ({
     },
   })
 
-  const [getRenderServices, { loading }] = useLazyQuery(GetRenderServices)
+  const [getRenderResources, { loading }] = useLazyQuery(GetRenderResources)
 
   const [createRenderSync] = useMutation(CreateNewRenderServiceSync)
 
@@ -54,9 +68,17 @@ export const CreateRenderSync = ({
   const [renderService, setRenderService] = useState<RenderServiceType | null>(null)
   const [serviceQuery, setServiceQuery] = useState('')
 
+  const [renderEnvgroups, setRenderEnvgroups] = useState<RenderEnvGroupType[]>([])
+  const [renderEnvgroup, setRenderEnvgroup] = useState<RenderEnvGroupType | null>(null)
+  const [secretFileName, setSecretFileName] = useState('')
+  const [envgroupQuery, setEnvgroupQuery] = useState('')
+
+  const [tabIndex, setTabIndex] = useState(0)
+
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
 
+  // Preselect the first available credential option
   useEffect(() => {
     if (credentialsData && credentialsData.savedCredentials.length > 0) {
       setCredential(credentialsData.savedCredentials[0])
@@ -71,6 +93,18 @@ export const CreateRenderSync = ({
     }
   }, [appEnvsData])
 
+  useEffect(() => {
+    tabs[tabIndex].id === RenderResourceType.Service
+      ? setRenderEnvgroup(null)
+      : setRenderService(null)
+  }, [tabIndex, tabs])
+
+  useEffect(() => {
+    if (phaseEnv) {
+      setSecretFileName(`${phaseEnv.app.name.replace(/ /g, '-')}.${phaseEnv.name}`.toLowerCase())
+    }
+  }, [phaseEnv])
+
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
@@ -78,27 +112,39 @@ export const CreateRenderSync = ({
       toast.error('Please select credential to use for this sync')
       return false
     } else if (!credentialsValid) {
-      const { data: servicesData } = await getRenderServices({
+      const { data: renderData } = await getRenderResources({
         variables: {
           credentialId: credential.id,
         },
         fetchPolicy: 'network-only',
       })
-      if (servicesData?.renderServices) {
-        setRenderServices(servicesData?.renderServices)
+      if (renderData?.renderServices) {
+        setRenderServices(renderData?.renderServices)
+        setRenderEnvgroups(renderData?.renderEnvgroups)
         setCredentialsValid(true)
       }
-    } else if (!renderService) {
-      toast.error('Please select a Render Service')
+    } else if (!renderService && !renderEnvgroup) {
+      toast.error('Please select a Render Service or Environment Group')
       return false
     } else {
-      const { id, name } = renderService
+      let resourceId, resourceName, resourceType
+      if (renderService) {
+        resourceId = renderService.id
+        resourceName = renderService.name
+        resourceType = RenderResourceType.Service
+      } else if (renderEnvgroup) {
+        resourceId = renderEnvgroup.id
+        resourceName = renderEnvgroup.name
+        resourceType = RenderResourceType.EnvironmentGroup
+      }
       await createRenderSync({
         variables: {
           envId: phaseEnv?.id,
           path,
-          serviceId: id,
-          serviceName: name,
+          resourceId,
+          resourceName,
+          resourceType,
+          secretFileName,
           credentialId: credential.id,
         },
         refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
@@ -114,6 +160,13 @@ export const CreateRenderSync = ({
       ? renderServices
       : renderServices.filter((service) =>
           service.name?.toLowerCase().includes(serviceQuery.toLowerCase())
+        )
+
+  const filteredEnvGroups =
+    envgroupQuery === ''
+      ? renderEnvgroups
+      : renderEnvgroups.filter((envgroup) =>
+          envgroup.name?.toLowerCase().includes(envgroupQuery.toLowerCase())
         )
 
   return (
@@ -185,70 +238,171 @@ export const CreateRenderSync = ({
               <div className="border-b border-neutral-500/40 w-full"></div>
             </div>
 
-            <div className="grid grid-cols-2 gap-8">
-              <div className="relative col-span-2">
-                <Combobox as="div" value={renderService} onChange={setRenderService}>
-                  {({ open }) => (
-                    <>
-                      <div className="space-y-2">
-                        <Combobox.Label as={Fragment}>
-                          <label className="block text-neutral-500 text-sm" htmlFor="name">
-                            Render Service <span className="text-red-500">*</span>
-                          </label>
-                        </Combobox.Label>
-                        <div className="w-full relative flex items-center">
-                          <Combobox.Input
-                            className="w-full"
-                            onChange={(event) => setServiceQuery(event.target.value)}
-                            required
-                            displayValue={(project: RailwayProjectType) => project?.name!}
-                          />
-                          <div className="absolute inset-y-0 right-2 flex items-center">
-                            <Combobox.Button>
-                              <FaChevronDown
-                                className={clsx(
-                                  'text-neutral-500 transform transition ease cursor-pointer',
-                                  open ? 'rotate-180' : 'rotate-0'
-                                )}
-                              />
-                            </Combobox.Button>
-                          </div>
+            <div>
+              <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
+                <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 mb-2">
+                  {tabs.map((tab) => (
+                    <Tab as={Fragment} key={tab.name}>
+                      {({ selected }) => (
+                        <div
+                          className={clsx(
+                            'p-3 font-medium border-b focus:outline-none -mb-px',
+                            selected
+                              ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                              : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                          )}
+                        >
+                          {tab.name}
                         </div>
-                      </div>
-                      <Transition
-                        enter="transition duration-100 ease-out"
-                        enterFrom="transform scale-95 opacity-0"
-                        enterTo="transform scale-100 opacity-100"
-                        leave="transition duration-75 ease-out"
-                        leaveFrom="transform scale-100 opacity-100"
-                        leaveTo="transform scale-95 opacity-0"
-                      >
-                        <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
-                            {filteredServices.map((service: RenderServiceType) => (
-                              <Combobox.Option as="div" key={service.id} value={service}>
-                                {({ active, selected }) => (
-                                  <div
-                                    className={clsx(
-                                      'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
-                                      active && 'bg-zinc-400 dark:bg-zinc-700'
-                                    )}
-                                  >
-                                    <div className="font-semibold text-black dark:text-white">
-                                      {service.name}
-                                    </div>
-                                    <div className="text-neutral-500 text-2xs">{service.id}</div>
-                                  </div>
-                                )}
-                              </Combobox.Option>
-                            ))}
-                          </div>
-                        </Combobox.Options>
-                      </Transition>
-                    </>
-                  )}
-                </Combobox>
-              </div>
+                      )}
+                    </Tab>
+                  ))}
+                </Tab.List>
+                <Tab.Panels>
+                  <Tab.Panel>
+                    <div className="relative">
+                      <Combobox as="div" value={renderService} onChange={setRenderService}>
+                        {({ open }) => (
+                          <>
+                            <div className="space-y-2">
+                              <Combobox.Label as={Fragment}>
+                                <label className="block text-neutral-500 text-sm" htmlFor="name">
+                                  Render Service <span className="text-red-500">*</span>
+                                </label>
+                              </Combobox.Label>
+                              <div className="w-full relative flex items-center">
+                                <Combobox.Input
+                                  className="w-full"
+                                  onChange={(event) => setServiceQuery(event.target.value)}
+                                  required
+                                  displayValue={(service: RenderServiceType) => service?.name!}
+                                />
+                                <div className="absolute inset-y-0 right-2 flex items-center">
+                                  <Combobox.Button>
+                                    <FaChevronDown
+                                      className={clsx(
+                                        'text-neutral-500 transform transition ease cursor-pointer',
+                                        open ? 'rotate-180' : 'rotate-0'
+                                      )}
+                                    />
+                                  </Combobox.Button>
+                                </div>
+                              </div>
+                            </div>
+                            <Transition
+                              enter="transition duration-100 ease-out"
+                              enterFrom="transform scale-95 opacity-0"
+                              enterTo="transform scale-100 opacity-100"
+                              leave="transition duration-75 ease-out"
+                              leaveFrom="transform scale-100 opacity-100"
+                              leaveTo="transform scale-95 opacity-0"
+                            >
+                              <Combobox.Options as={Fragment}>
+                                <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
+                                  {filteredServices.map((service: RenderServiceType) => (
+                                    <Combobox.Option as="div" key={service.id} value={service}>
+                                      {({ active, selected }) => (
+                                        <div
+                                          className={clsx(
+                                            'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
+                                            active && 'bg-zinc-400 dark:bg-zinc-700'
+                                          )}
+                                        >
+                                          <div className="font-semibold text-black dark:text-white">
+                                            {service.name}
+                                          </div>
+                                          <div className="text-neutral-500 text-2xs">
+                                            {service.id}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Combobox.Option>
+                                  ))}
+                                </div>
+                              </Combobox.Options>
+                            </Transition>
+                          </>
+                        )}
+                      </Combobox>
+                    </div>
+                  </Tab.Panel>
+                  <Tab.Panel>
+                    <div className="relative">
+                      <Combobox as="div" value={renderEnvgroup} onChange={setRenderEnvgroup}>
+                        {({ open }) => (
+                          <>
+                            <div className="space-y-2">
+                              <Combobox.Label as={Fragment}>
+                                <label className="block text-neutral-500 text-sm" htmlFor="name">
+                                  Render Environment Group <span className="text-red-500">*</span>
+                                </label>
+                              </Combobox.Label>
+                              <div className="w-full relative flex items-center">
+                                <Combobox.Input
+                                  className="w-full"
+                                  onChange={(event) => setEnvgroupQuery(event.target.value)}
+                                  required
+                                  displayValue={(envgroup: RenderEnvGroupType) => envgroup?.name!}
+                                />
+                                <div className="absolute inset-y-0 right-2 flex items-center">
+                                  <Combobox.Button>
+                                    <FaChevronDown
+                                      className={clsx(
+                                        'text-neutral-500 transform transition ease cursor-pointer',
+                                        open ? 'rotate-180' : 'rotate-0'
+                                      )}
+                                    />
+                                  </Combobox.Button>
+                                </div>
+                              </div>
+                            </div>
+                            <Transition
+                              enter="transition duration-100 ease-out"
+                              enterFrom="transform scale-95 opacity-0"
+                              enterTo="transform scale-100 opacity-100"
+                              leave="transition duration-75 ease-out"
+                              leaveFrom="transform scale-100 opacity-100"
+                              leaveTo="transform scale-95 opacity-0"
+                            >
+                              <Combobox.Options as={Fragment}>
+                                <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
+                                  {filteredEnvGroups.map((envgroup: RenderEnvGroupType) => (
+                                    <Combobox.Option as="div" key={envgroup.id} value={envgroup}>
+                                      {({ active, selected }) => (
+                                        <div
+                                          className={clsx(
+                                            'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
+                                            active && 'bg-zinc-400 dark:bg-zinc-700'
+                                          )}
+                                        >
+                                          <div className="font-semibold text-black dark:text-white">
+                                            {envgroup.name}
+                                          </div>
+                                          <div className="text-neutral-500 text-2xs">
+                                            {envgroup.id}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Combobox.Option>
+                                  ))}
+                                </div>
+                              </Combobox.Options>
+                            </Transition>
+                          </>
+                        )}
+                      </Combobox>
+                    </div>
+
+                    <div>
+                      <Input
+                        value={secretFileName}
+                        setValue={setSecretFileName}
+                        label="Secret file name"
+                      />
+                    </div>
+                  </Tab.Panel>
+                </Tab.Panels>
+              </Tab.Group>
             </div>
           </div>
         )}

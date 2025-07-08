@@ -29,6 +29,10 @@ from api.utils.syncing.railway.main import (
 )
 from api.utils.syncing.vercel.main import test_vercel_creds, list_vercel_projects
 from api.utils.syncing.cloudflare.workers import list_cloudflare_workers
+from api.utils.syncing.render.main import (
+    list_render_services,
+    list_render_environment_groups,
+)
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -230,12 +234,21 @@ def resolve_railway_projects(root, info, credential_id):
 def resolve_render_services(root, info, credential_id):
     """Resolver for listing Render services."""
     try:
-        from api.utils.syncing.render.main import list_render_services
 
         services = list_render_services(credential_id)
         return services
     except Exception as ex:
         raise GraphQLError(f"Error listing Render services: {str(ex)}")
+
+
+def resolve_render_envgroups(root, info, credential_id):
+    """Resolver for listing Render Environment Groups."""
+    try:
+
+        envgroups = list_render_environment_groups(credential_id)
+        return envgroups
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Render Environment Groups: {str(ex)}")
 
 
 def resolve_vercel_projects(root, info, credential_id):

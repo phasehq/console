@@ -44,6 +44,7 @@ type Query {
   railwayProjects(credentialId: ID): [RailwayProjectType]
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
   renderServices(credentialId: ID): [RenderServiceType]
+  renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
   testVercelCreds(credentialId: ID): Boolean
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
@@ -712,6 +713,11 @@ type RenderServiceType {
   updatedAt: String
 }
 
+type RenderEnvGroupType {
+  id: ID!
+  name: String!
+}
+
 type AWSValidationResultType {
   valid: Boolean!
   message: String!
@@ -816,7 +822,7 @@ type Mutation {
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
-  createRenderSync(credentialId: ID, envId: ID, path: String, serviceId: String, serviceName: String): CreateRenderSync
+  createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -1117,6 +1123,11 @@ type CreateVercelSync {
 
 type CreateRenderSync {
   sync: EnvironmentSyncType
+}
+
+enum RenderResourceType {
+  ENVIRONMENT_GROUP
+  SERVICE
 }
 
 type CreateUserTokenMutation {

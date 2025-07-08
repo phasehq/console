@@ -2,15 +2,19 @@ mutation CreateNewRenderServiceSync(
   $envId: ID!
   $path: String!
   $credentialId: ID!
-  $serviceId: String!
-  $serviceName: String!
+  $resourceId: String!
+  $resourceName: String!
+  $resourceType: RenderResourceType!
+  $secretFileName: String
 ) {
   createRenderSync(
     envId: $envId
     path: $path
     credentialId: $credentialId
-    serviceId: $serviceId
-    serviceName: $serviceName
+    resourceId: $resourceId
+    resourceName: $resourceName
+    resourceType: $resourceType
+    secretFileName: $secretFileName
   ) {
     sync {
       id

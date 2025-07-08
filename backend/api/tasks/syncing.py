@@ -14,7 +14,11 @@ from api.utils.syncing.nomad.main import sync_nomad_secrets
 from api.utils.syncing.gitlab.main import sync_gitlab_secrets
 from api.utils.syncing.railway.main import sync_railway_secrets
 from api.utils.syncing.vercel.main import sync_vercel_secrets
-from api.utils.syncing.render.main import sync_render_service_env_vars
+from api.utils.syncing.render.main import (
+    RenderResourceType,
+    sync_render_env_group_secret_file,
+    sync_render_service_env_vars,
+)
 from ..utils.syncing.cloudflare.pages import (
     get_cf_pages_credentials,
     sync_cloudflare_secrets,
@@ -393,11 +397,24 @@ def perform_cloudflare_workers_sync(environment_sync):
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_render_service_sync(environment_sync):
     render_service_options = environment_sync.options
-    render_service_id = render_service_options.get("service_id")
+    render_resource_id = render_service_options.get("resource_id")
+    render_resource_type = render_service_options.get("resource_type")
 
-    handle_sync_event(
-        environment_sync,
-        sync_render_service_env_vars,
-        environment_sync.authentication.id,
-        render_service_id,
-    )
+    if render_resource_type == RenderResourceType.ENVIRONMENT_GROUP.value:
+        secret_file_name = render_service_options.get("secret_file_name")
+
+        handle_sync_event(
+            environment_sync,
+            sync_render_env_group_secret_file,
+            environment_sync.authentication.id,
+            render_resource_id,
+            secret_file_name,
+        )
+
+    else:
+        handle_sync_event(
+            environment_sync,
+            sync_render_service_env_vars,
+            environment_sync.authentication.id,
+            render_resource_id,
+        )

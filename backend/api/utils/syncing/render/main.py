@@ -1,8 +1,18 @@
 import requests
 from api.utils.syncing.auth import get_credentials
-from graphene import ObjectType, String, ID, List, Field
+from graphene import ObjectType, String, ID, Enum
 
 RENDER_API_BASE_URL = "https://api.render.com/v1"
+
+
+class RenderResourceType(Enum):
+    ENVIRONMENT_GROUP = "envgroup"
+    SERVICE = "service"
+
+
+class RenderEnvGroupType(ObjectType):
+    id = ID(required=True)
+    name = String(required=True)
 
 
 class RenderServiceType(ObjectType):
@@ -38,7 +48,7 @@ def list_render_services(credential_id):
     """
     url = f"{RENDER_API_BASE_URL}/services"
     headers = get_render_headers(credential_id)
-    params = {}
+    params = {"limit": 100}
     all_services = []
     cursor = None
 
@@ -68,6 +78,78 @@ def list_render_services(credential_id):
             print("Error listing services:", response.text)
             raise Exception(response.text)
     return all_services
+
+
+def list_render_environment_groups(credential_id):
+    """
+    List all Render Environment Groups available under the account associated with the API key.
+    Handles pagination using the 'cursor' field.
+    API DOCS: https://api-docs.render.com/reference/get-environment-groups
+    """
+    url = f"{RENDER_API_BASE_URL}/env-groups"
+    headers = get_render_headers(credential_id)
+    params = {"limit": 100}
+    all_envgroups = []
+    cursor = None
+
+    while True:
+        if cursor:
+            params["cursor"] = cursor
+        else:
+            params.pop("cursor", None)
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list):
+                for item in data:
+                    env_group = item.get("envGroup")
+                    if env_group:
+                        all_envgroups.append(env_group)
+                # Get cursor from the last item, if present
+                last_cursor = data[-1].get("cursor") if data else None
+                if last_cursor:
+                    cursor = last_cursor
+                else:
+                    break
+            else:
+                print("Unexpected response format:", data)
+                break
+        else:
+            print("Error listing environment groups:", response.text)
+            raise Exception(response.text)
+    return all_envgroups
+
+
+def sync_render_env_group_secret_file(
+    secrets, credential_id, env_group_id, secret_file_name="secrets.env"
+):
+    """
+    Sync secrets to a Render Environment Group as a secret file.
+    This will create or update a secret file in the specified env group.
+    API DOCS: https://api.render.com/docs/api#operation/createOrUpdateSecretFile
+    """
+    try:
+        url = f"{RENDER_API_BASE_URL}/env-groups/{env_group_id}/secret-files/{secret_file_name}"
+        headers = get_render_headers(credential_id)
+
+        # Prepare the secret file content in dotenv format
+        # secrets is expected to be a list of (key, value, ...) tuples
+        content = "\n".join(f"{key}={value}" for key, value, *_ in secrets)
+
+        payload = {"content": content}
+
+        response = requests.put(url, headers=headers, json=payload)
+        if response.status_code in [200, 201]:
+            print("Successfully synced secret file to environment group.")
+            return True, {
+                "response_code": response.status_code,
+                "message": "Successfully synced secret file.",
+            }
+        else:
+            print(f"Error syncing secret file: {response.text}")
+            raise Exception(response.text)
+    except Exception as e:
+        return False, {"message": f"Error syncing secret file: {str(e)}"}
 
 
 def sync_render_service_env_vars(secrets, credential_id, service_id):
