@@ -13,6 +13,7 @@ import clsx from 'clsx'
 import { LogoMark } from '../common/LogoMark'
 import CommandPalette from '../common/CommandPalette'
 import { userHasPermission } from '@/utils/access/permissions'
+import { startCase } from 'lodash'
 
 export const NavBar = (props: { team: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -41,12 +42,26 @@ export const NavBar = (props: { team: string }) => {
 
   const activeApp = orgContext === 'apps' ? apps?.find((app) => app.id === appId) : undefined
 
+  const activeEnv = activeApp ? envs.find((env) => env.id === envId) : undefined
+
   useEffect(() => {
     if (activeApp) getAppEnvs({ variables: { appId: activeApp.id } })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeApp])
 
-  const activeEnv = activeApp ? envs.find((env) => env.id === envId) : undefined
+  useEffect(() => {
+    let title = 'Phase'
+    if (activeEnv && activeApp) {
+      title = `${startCase(activeEnv.name)} – ${startCase(activeApp.name)} – ${startCase(props.team)} | Phase`
+    } else if (activeApp) {
+      title = `${startCase(activeApp.name)} – ${startCase(props.team)} | Phase`
+    } else if (orgContext) {
+      title = `${startCase(orgContext)} – ${startCase(props.team)} | Phase`
+    } else if (props.team) {
+      title = `${startCase(props.team)} | Phase`
+    }
+    document.title = title
+  }, [activeEnv, activeApp, orgContext, props.team])
 
   return (
     <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-sm bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
