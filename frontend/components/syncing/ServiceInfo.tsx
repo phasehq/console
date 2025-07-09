@@ -14,11 +14,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
       </div>
     )
   } else if (sync.serviceInfo?.id?.includes('cloudflare_workers')) {
-    return (
-      <div className="flex gap-2">
-        {JSON.parse(sync.options)['worker_name']}
-      </div>
-    )
+    return <div className="flex gap-2">{JSON.parse(sync.options)['worker_name']}</div>
   } else if (sync.serviceInfo?.id?.includes('aws')) {
     const secretName = JSON.parse(sync.options)['secret_name']
 
@@ -85,5 +81,8 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
         {secretType === 'sensitive' && <FaEyeSlash title="Sensitive" />}
       </div>
     )
+  } else if (sync.serviceInfo?.id?.includes('render')) {
+    const resourceName: string = JSON.parse(sync.options)['resource_name']
+    return <div className="flex gap-2 text-xs text-neutral-500">{resourceName}</div>
   } else return <>{sync.serviceInfo?.id}</>
 }

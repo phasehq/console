@@ -1,6 +1,5 @@
 import { FaCube } from 'react-icons/fa'
 import {
-  SiAmazonaws,
   SiCloudflarepages,
   SiCloudflareworkers,
   SiGithub,
@@ -10,7 +9,9 @@ import {
   SiVault,
   SiVercel,
   SiCloudflare,
+  SiRender,
 } from 'react-icons/si'
+import { LiaAws } from 'react-icons/lia'
 
 export const ProviderIcon = (props: { providerId: string }) => {
   const { providerId } = props
@@ -24,7 +25,7 @@ export const ProviderIcon = (props: { providerId: string }) => {
 
   if (id === 'cloudflare') return <SiCloudflare className="shrink-0 text-[#F38020]" />
 
-  if (id.includes('aws')) return <SiAmazonaws className="shrink-0 text-[#FF9900]" />
+  if (id.includes('aws')) return <LiaAws className="shrink-0 text-[#FF9900]" />
 
   if (id.includes('github')) return <SiGithub className="shrink-0 text-black dark:text-white" />
 
@@ -38,5 +39,7 @@ export const ProviderIcon = (props: { providerId: string }) => {
     return <SiRailway className="shrink-0 text-[#0B0D0E] dark:text-white" />
 
   if (id.includes('vercel')) return <SiVercel className="shrink-0 text-[#000000] dark:text-white" />
+
+  if (id.includes('render')) return <SiRender className="shrink-0 text-[#000000] dark:text-white" />
   else return <FaCube />
 }
