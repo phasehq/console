@@ -61,12 +61,12 @@ default_roles = {
     },
     "Manager": {
         "meta": {
-            "version": 1,
+            "version": 2,
             "description": "Management users with broad access to environments, secrets, and service accounts at the organisation level. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
             "Organisation": ["read"],
-            "Billing": [],
+            "Billing": ["create", "read", "update", "delete"],
             "Apps": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
