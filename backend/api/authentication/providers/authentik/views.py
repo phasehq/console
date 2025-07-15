@@ -10,8 +10,8 @@ from api.authentication.adapters.generic.views import GenericOpenIDConnectAdapte
 
 AUTHENTIK_URL = os.getenv("AUTHENTIK_URL")
 
-# Optional: Your Authentik slug if you have one
-AUTHENTIK_APP_SLUG = os.getenv("AUTHENTIK_APP_SLUG", "default")
+
+AUTHENTIK_APP_SLUG = os.getenv("AUTHENTIK_APP_SLUG")
 
 # Build the discovery URL
 OIDC_DISCOVERY_URL = urljoin(
