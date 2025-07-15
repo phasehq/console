@@ -11,11 +11,16 @@ import { getSecret } from '@/utils/secretConfig'
 import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvider'
 import { EntraIDProvider } from '@/ee/authentication/sso/oidc/util/entraidProvider'
 import GitHubEnterpriseProvider from '@/ee/authentication/sso/oidc/util/githubEnterpriseProvider'
+import { custom } from 'openid-client'
 
 type AccessTokenResponse = {
   access_token: string
   refresh_token: string
 }
+
+custom.setHttpOptionsDefaults({
+  timeout: 10000, // ms
+})
 
 type NextAuthOptionsCallback = (req: NextApiRequest, res: NextApiResponse) => NextAuthOptions
 
