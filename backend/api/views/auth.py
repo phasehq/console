@@ -24,7 +24,6 @@ from django.http import JsonResponse
 from api.authentication.adapters.gitlab import CustomGitLabOAuth2Adapter
 from api.authentication.adapters.google import CustomGoogleOAuth2Adapter
 from api.authentication.adapters.github import CustomGitHubOAuth2Adapter
-from api.authentication.adapters.authentik import AuthentikOAuth2Adapter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
