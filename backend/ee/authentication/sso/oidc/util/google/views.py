@@ -3,8 +3,8 @@ from allauth.socialaccount.providers.oauth2.views import (
     OAuth2CallbackView,
 )
 from allauth.socialaccount import providers
-from ..generic.views import GenericOpenIDConnectAdapter
-from ..generic.provider import GenericOpenIDConnectProvider
+from api.authentication.adapters.generic.provider import GenericOpenIDConnectProvider
+from api.authentication.adapters.generic.views import GenericOpenIDConnectAdapter
 
 
 class GoogleOpenIDConnectProvider(GenericOpenIDConnectProvider):

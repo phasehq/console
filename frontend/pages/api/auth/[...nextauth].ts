@@ -3,6 +3,7 @@ import type { NextAuthOptions } from 'next-auth'
 import GitHubProvider from 'next-auth/providers/github'
 import GoogleProvider from 'next-auth/providers/google'
 import GitlabProvider from 'next-auth/providers/gitlab'
+import AuthentikProvider from 'next-auth/providers/authentik'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
 import { NextApiRequest, NextApiResponse } from 'next'
@@ -162,6 +163,19 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     }
   }
 
+  if (process.env.AUTHENTIK_CLIENT_ID) {
+    const clientSecret = getSecret('AUTHENTIK_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        AuthentikProvider({
+          clientId: process.env.AUTHENTIK_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: `${process.env.AUTHENTIK_URL}/application/o/${process.env.AUTHENTIK_APP_SLUG}`,
+        })
+      )
+    }
+  }
+
   return {
     secret: process.env.NEXTAUTH_SECRET,
     session: {
@@ -213,7 +227,8 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
             } else if (
               account.provider === 'google-oidc' ||
               account.provider === 'jumpcloud-oidc' ||
-              account.provider === 'entra-id-oidc'
+              account.provider === 'entra-id-oidc' ||
+              account.provider === 'authentik'
             ) {
               const { access_token, id_token } = account
               if (!id_token) {
