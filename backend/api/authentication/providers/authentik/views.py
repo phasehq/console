@@ -8,7 +8,7 @@ from allauth.socialaccount import providers
 from api.authentication.adapters.generic.provider import GenericOpenIDConnectProvider
 from api.authentication.adapters.generic.views import GenericOpenIDConnectAdapter
 
-AUTHENTIK_URL = os.getenv("AUTHENTIK_URL")
+AUTHENTIK_URL = os.getenv("AUTHENTIK_URL", "")
 
 
 AUTHENTIK_APP_SLUG = os.getenv("AUTHENTIK_APP_SLUG")
