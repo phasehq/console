@@ -46,6 +46,8 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const [isLoading, setIsLoading] = useState(false)
+
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
@@ -163,6 +165,8 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       return false
     }
 
+    setIsLoading(true)
+
     const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
     const envKeyInputs: {
@@ -228,6 +232,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
     })
 
     toast.success('Added accounts to App', { autoClose: 2000 })
+    setIsLoading(false)
     handleClose()
   }
 
@@ -523,7 +528,12 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
               <Button variant="secondary" type="button" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button variant="primary" type="submit" disabled={!selectedAccounts.length}>
+              <Button
+                variant="primary"
+                type="submit"
+                disabled={!selectedAccounts.length}
+                isLoading={isLoading}
+              >
                 <FaPlus />
                 Add{' '}
                 {selectedAccounts.length > 0
