@@ -401,6 +401,22 @@ class EnvironmentKey(models.Model):
         self.deleted_at = timezone.now()
         self.save()
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["environment", "user"],
+                name="unique_envkey_user",
+                condition=models.Q(user__isnull=False, deleted_at__isnull=True),
+            ),
+            models.UniqueConstraint(
+                fields=["environment", "service_account"],
+                name="unique_envkey_service_account",
+                condition=models.Q(
+                    service_account__isnull=False, deleted_at__isnull=True
+                ),
+            ),
+        ]
+
 
 class ServerEnvironmentKey(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
