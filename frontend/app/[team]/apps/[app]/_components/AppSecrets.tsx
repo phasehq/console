@@ -451,9 +451,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 value: secret.value,
                 comment: secret.comment,
               } as SecretType
-            } else {
-              // Environment does not exist → add it
-              existing.envs.push({ env, secret })
             }
           })
         } else {
