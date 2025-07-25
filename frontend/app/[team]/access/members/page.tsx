@@ -2,23 +2,13 @@
 
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
-import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
-import { useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useState } from 'react'
+import { useQuery } from '@apollo/client'
+import { useContext, useState } from 'react'
 import { OrganisationMemberInviteType, OrganisationMemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { inviteIsExpired, relativeTimeFromDates } from '@/utils/time'
-import { Dialog, Transition } from '@headlessui/react'
-import {
-  FaBan,
-  FaTimes,
-  FaTrashAlt,
-  FaChevronRight,
-  FaSearch,
-  FaTimesCircle,
-  FaCopy,
-} from 'react-icons/fa'
+import { FaBan, FaChevronRight, FaSearch, FaTimesCircle, FaCopy } from 'react-icons/fa'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { Avatar } from '@/components/common/Avatar'
@@ -30,6 +20,7 @@ import Spinner from '@/components/common/Spinner'
 import { InviteDialog } from './_components/InviteDialog'
 import { MdSearchOff } from 'react-icons/md'
 import CopyButton from '@/components/common/CopyButton'
+import { DeleteInviteDialog } from './_components/DeleteInviteDialog'
 
 export default function Members({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -60,108 +51,6 @@ export default function Members({ params }: { params: { team: string } }) {
     pollInterval: 5000,
     skip: !organisation,
   })
-
-  const [deleteInvite] = useMutation(DeleteOrgInvite)
-
-  //const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
-
-  const DeleteInviteConfirmDialog = (props: { inviteId: string }) => {
-    const { inviteId } = props
-
-    const [isOpen, setIsOpen] = useState<boolean>(false)
-
-    const closeModal = () => {
-      setIsOpen(false)
-    }
-
-    const openModal = () => {
-      setIsOpen(true)
-    }
-
-    const handleDeleteInvite = async (inviteId: string) => {
-      await deleteInvite({
-        variables: {
-          inviteId,
-        },
-        refetchQueries: [
-          {
-            query: GetInvites,
-            variables: {
-              orgId: organisation?.id,
-            },
-          },
-        ],
-      })
-    }
-
-    return (
-      <>
-        <div className="flex items-center justify-center">
-          <Button variant="danger" onClick={openModal} title="Delete invite">
-            <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-              <FaTrashAlt />
-            </div>
-          </Button>
-        </div>
-
-        <Transition appear show={isOpen} as={Fragment}>
-          <Dialog as="div" className="relative z-10" onClose={closeModal}>
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0"
-              enterTo="opacity-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100"
-              leaveTo="opacity-0"
-            >
-              <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-            </Transition.Child>
-
-            <div className="fixed inset-0 overflow-y-auto">
-              <div className="flex min-h-full items-center justify-center p-4 text-center">
-                <Transition.Child
-                  as={Fragment}
-                  enter="ease-out duration-300"
-                  enterFrom="opacity-0 scale-95"
-                  enterTo="opacity-100 scale-100"
-                  leave="ease-in duration-200"
-                  leaveFrom="opacity-100 scale-100"
-                  leaveTo="opacity-0 scale-95"
-                >
-                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                    <Dialog.Title as="div" className="flex w-full justify-between">
-                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                        Delete Invite
-                      </h3>
-
-                      <Button variant="text" onClick={closeModal}>
-                        <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                      </Button>
-                    </Dialog.Title>
-
-                    <div className="space-y-6 p-4">
-                      <p className="text-neutral-500">
-                        Are you sure you want to delete this invite?
-                      </p>
-                      <div className="flex items-center gap-4">
-                        <Button variant="secondary" type="button" onClick={closeModal}>
-                          Cancel
-                        </Button>
-                        <Button variant="danger" onClick={() => handleDeleteInvite(inviteId)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </Dialog.Panel>
-                </Transition.Child>
-              </div>
-            </div>
-          </Dialog>
-        </Transition>
-      </>
-    )
-  }
 
   const filteredMembers = membersData?.organisationMembers
     ? searchQuery !== ''
@@ -314,7 +203,8 @@ export default function Members({ params }: { params: { team: string } }) {
                           </div>
                         </CopyButton>
                       )}
-                      <DeleteInviteConfirmDialog inviteId={invite.id} />
+
+                      <DeleteInviteDialog invite={invite} />
                     </td>
                   </tr>
                 ))}
