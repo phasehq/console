@@ -2,6 +2,7 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { forwardRef, type ReactNode } from 'react'
 import Spinner from './Spinner'
+import { IconType } from 'react-icons'
 
 export type ButtonVariant =
   | 'primary'
@@ -17,8 +18,9 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant: ButtonVariant
   classString?: string
   children: ReactNode
-  arrow?: 'left' | 'right'
+  iconPosition?: 'left' | 'right'
   isLoading?: boolean
+  icon?: IconType
 }
 
 function ArrowIcon(props: { className: string }) {
@@ -53,7 +55,7 @@ const variantStyles: Record<string, string> = {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant, classString, children, arrow, isLoading, ...rest },
+  { variant, classString, children, isLoading, icon, iconPosition = 'left', ...rest },
   ref
 ) {
   const computedClassName = clsx(
@@ -63,16 +65,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     (rest.disabled || isLoading) && 'opacity-60 pointer-events-none'
   )
 
-  const arrowIcon = (
-    <ArrowIcon
-      className={clsx(
-        'mt-0.5 h-5 w-5',
-        variant === 'text' && 'relative top-px',
-        arrow === 'left' && '-ml-1 rotate-180',
-        arrow === 'right' && '-mr-1'
-      )}
-    />
-  )
+  const Icon = icon
 
   const spinnerColor = () => {
     switch (variant) {
@@ -92,10 +85,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
   return (
     <button ref={ref} className={computedClassName} disabled={rest.disabled || isLoading} {...rest}>
-      {!isLoading && arrow === 'left' && arrowIcon}
+      {!isLoading && Icon && iconPosition === 'left' && <Icon className="size-4" />}
+
       {isLoading && <Spinner size="sm" color={spinnerColor()} />}
       {children}
-      {!isLoading && arrow === 'right' && arrowIcon}
+      {!isLoading && Icon && iconPosition === 'right' && <Icon className="size-4" />}
     </button>
   )
 })
