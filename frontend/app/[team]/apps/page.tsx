@@ -83,7 +83,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                     <FaPlus />
                     Create an App{' '}
                   </Button>
-                ) : (
+                ) : userCanCreateApps ? (
                   <UpsellDialog
                     buttonLabel={
                       <>
@@ -99,6 +99,8 @@ export default function AppsHome({ params }: { params: { team: string } }) {
                       </>
                     }
                   />
+                ) : (
+                  <></>
                 )}
               </div>
             </div>

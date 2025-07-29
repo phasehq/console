@@ -3,15 +3,9 @@ import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import CreateNewAWSSecretsSync from '@/graphql/mutations/syncing/aws/CreateAwsSecretsSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { encryptAsymmetric } from '@/utils/crypto'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import {
-  AwsSecretType,
-  CloudFlarePagesType,
-  EnvironmentType,
-  ProviderCredentialsType,
-} from '@/apollo/graphql'
+import { AwsSecretType, EnvironmentType, ProviderCredentialsType } from '@/apollo/graphql'
 import { Disclosure, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
@@ -20,13 +14,10 @@ import {
   FaChevronRight,
   FaCircle,
   FaDotCircle,
-  FaEye,
-  FaEyeSlash,
   FaPlus,
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
-import { SiAmazonaws, SiCloudflarepages } from 'react-icons/si'
-import { AwsRegion, awsRegions } from '@/utils/syncing/aws'
+import { LiaAws } from 'react-icons/lia'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Input } from '@/components/common/Input'
@@ -126,7 +117,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
     <div className="p-4 space-y-6">
       <div>
         <div className="text-2xl font-semibold flex items-center gap-2">
-          <SiAmazonaws />
+          <LiaAws />
           AWS Secrets Manager
         </div>
         <div className="text-neutral-500">Sync an environment with AWS Secrets Manager.</div>

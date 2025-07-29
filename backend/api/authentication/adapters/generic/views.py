@@ -1,14 +1,10 @@
 import requests
-from api.models import ActivatedPhaseLicense
-from ee.licensing.verifier import check_license
 import jwt
 import logging
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter, OAuth2Error
 from allauth.socialaccount.models import SocialAccount
 from django.contrib.auth import get_user_model
-from api.emails import send_login_email
-from django.conf import settings
-from django.utils import timezone
+
 
 logger = logging.getLogger(__name__)
 
@@ -109,20 +105,6 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
             social_account.save()
 
     def complete_login(self, request, app, token, **kwargs):
-        if settings.APP_HOST == "cloud":
-            error = "OIDC is not available in cloud mode"
-            logger.error(f"OIDC login failed: {str(error)}")
-            raise OAuth2Error(str(error))
-
-        # Check for a valid license
-        activated_license_exists = ActivatedPhaseLicense.objects.filter(
-            expires_at__gte=timezone.now()
-        ).exists()
-
-        if not activated_license_exists and not settings.PHASE_LICENSE:
-            error = "You need a license to login via OIDC."
-            logger.error(f"OIDC login failed: {str(error)}")
-            raise OAuth2Error(str(error))
 
         try:
             id_token = getattr(token, "id_token", None)

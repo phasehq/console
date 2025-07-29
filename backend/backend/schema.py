@@ -4,6 +4,7 @@ from api.utils.syncing.aws.secrets_manager import AWSSecretType
 from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
+from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
@@ -17,7 +18,7 @@ from api.utils.syncing.vercel.main import VercelTeamProjectsType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
 )
-from .graphene.mutations.syncing import CreateVercelSync
+from .graphene.mutations.syncing import CreateRenderSync, CreateVercelSync
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
     CreateNetworkAccessPolicyMutation,
@@ -60,6 +61,8 @@ from .graphene.queries.syncing import (
     resolve_test_vault_creds,
     resolve_test_nomad_creds,
     resolve_railway_projects,
+    resolve_render_services,
+    resolve_render_envgroups,
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
@@ -359,6 +362,9 @@ class Query(graphene.ObjectType):
 
     vercel_projects = graphene.List(VercelTeamProjectsType, credential_id=graphene.ID())
 
+    render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
+    render_envgroups = graphene.List(RenderEnvGroupType, credential_id=graphene.ID())
+
     test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -371,7 +377,7 @@ class Query(graphene.ObjectType):
         AWSValidationResultType,
         role_arn=graphene.String(required=True),
         region=graphene.String(),
-        external_id=graphene.String()
+        external_id=graphene.String(),
     )
 
     stripe_checkout_details = graphene.Field(
@@ -412,7 +418,11 @@ class Query(graphene.ObjectType):
     resolve_gitlab_groups = resolve_gitlab_groups
 
     resolve_railway_projects = resolve_railway_projects
+
     resolve_vercel_projects = resolve_vercel_projects
+
+    resolve_render_services = resolve_render_services
+    resolve_render_envgroups = resolve_render_envgroups
 
     resolve_test_vault_creds = resolve_test_vault_creds
 
@@ -420,7 +430,9 @@ class Query(graphene.ObjectType):
 
     resolve_validate_aws_assume_role_auth = resolve_validate_aws_assume_role_auth
 
-    resolve_validate_aws_assume_role_credentials = resolve_validate_aws_assume_role_credentials
+    resolve_validate_aws_assume_role_credentials = (
+        resolve_validate_aws_assume_role_credentials
+    )
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -440,7 +452,9 @@ class Query(graphene.ObjectType):
     resolve_license = resolve_license
     resolve_organisation_license = resolve_organisation_license
 
-    def resolve_organisation_members(root, info, organisation_id, role = None, member_id=None):
+    def resolve_organisation_members(
+        root, info, organisation_id, role=None, member_id=None
+    ):
         if not user_is_org_member(info.context.user.userId, organisation_id):
             raise GraphQLError("You don't have access to this organisation")
 
@@ -448,7 +462,7 @@ class Query(graphene.ObjectType):
 
         if member_id is not None:
             filter["id"] = member_id
-        
+
         if role is not None:
             roles = [user_role.lower() for user_role in role]
             filter["roles__in"] = roles
@@ -958,6 +972,9 @@ class Mutation(graphene.ObjectType):
 
     # Vercel
     create_vercel_sync = CreateVercelSync.Field()
+
+    # Render
+    create_render_sync = CreateRenderSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

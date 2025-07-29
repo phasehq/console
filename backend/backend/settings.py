@@ -172,6 +172,14 @@ SOCIALACCOUNT_PROVIDERS = {
             }
         ]
     },
+    "authentik": {
+        "APP": {
+            "client_id": os.getenv("AUTHENTIK_CLIENT_ID"),
+            "secret": get_secret("AUTHENTIK_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "email", "profile"],
+    },
 }
 
 

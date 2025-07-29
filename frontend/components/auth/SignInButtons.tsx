@@ -10,6 +10,7 @@ import { LogoWordMark } from '../common/LogoWordMark'
 import { JumpCloudLogo } from '../common/logos/JumpCloudLogo'
 import { EntraIDLogo } from '../common/logos/EntraIDLogo'
 import { toast } from 'react-toastify'
+import { SiAuthentik } from 'react-icons/si'
 
 type ProviderButton = { id: string; name: string; icon: ReactNode; style: string }
 
@@ -64,6 +65,13 @@ const providerButtons: ProviderButton[] = [
     icon: <FaGithub />,
     style:
       'bg-zinc-200/10 hover:bg-zinc-200/20 ring-zinc-200/40 hover:ring-zinc-100/80 text-zinc-100/80 hover:text-zinc-100',
+  },
+  {
+    id: 'authentik',
+    name: 'Authentik',
+    icon: <SiAuthentik />,
+    style:
+      'bg-[#FD4B2D]/10 hover:bg-[#FD4B2D]/20 hover:ring-[#FD4B2D] text-[#FD4B2D]/90 hover:text-[#FD4B2D] ring-[#FD4B2D]/60', ///#FD4B2D
   },
 ]
 
