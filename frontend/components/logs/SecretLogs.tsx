@@ -464,7 +464,7 @@ export default function SecretLogs(props: { app: string }) {
 
                     <LogField label="Timestamp">{verboseTimeStamp()}</LogField>
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-end md:col-span-3">
                       <Button variant="outline">
                         <Link
                           className="flex items-center gap-2"
