@@ -284,6 +284,13 @@ class ServiceAccount(models.Model):
     deleted_at = models.DateTimeField(null=True, blank=True)
     objects = ServiceAccountManager()
 
+    def delete(self, *args, **kwargs):
+        """
+        Soft delete the object by setting the 'deleted_at' field.
+        """
+        self.deleted_at = timezone.now()
+        self.save()
+
 
 class ServiceAccountHandler(models.Model):
     id = models.TextField(default=uuid4, primary_key=True)
@@ -550,6 +557,13 @@ class ServiceAccountToken(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
+
+    def delete(self, *args, **kwargs):
+        """
+        Soft delete the object by setting the 'deleted_at' field.
+        """
+        self.deleted_at = timezone.now()
+        self.save()
 
 
 class UserToken(models.Model):
