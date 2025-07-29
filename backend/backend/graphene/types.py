@@ -498,8 +498,7 @@ class SecretType(DjangoObjectType):
 class EnvironmentType(DjangoObjectType):
     folders = graphene.NonNull(graphene.List(SecretFolderType))
     secrets = graphene.NonNull(
-        graphene.List(SecretType),
-        path=graphene.String(required=False)
+        graphene.List(SecretType), path=graphene.String(required=False)
     )
     folder_count = graphene.Int()
     secret_count = graphene.Int()
@@ -542,7 +541,6 @@ class EnvironmentType(DjangoObjectType):
             filter["path"] = path
 
         return Secret.objects.filter(**filter).order_by("-created_at")
-
 
     def resolve_folders(self, info, path=None):
         if not user_can_access_environment(info.context.user.userId, self.id):
@@ -659,6 +657,7 @@ class AppType(DjangoObjectType):
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)
 
+
 class AppMembershipType(DjangoObjectType):
     environments = graphene.NonNull(graphene.List(EnvironmentType))
 
@@ -673,7 +672,6 @@ class AppMembershipType(DjangoObjectType):
     def resolve_environments(self, info):
         # Only return filtered environments if set
         return getattr(self, "filtered_environments", [])
-
 
 
 class ServiceAccountType(DjangoObjectType):
@@ -693,6 +691,7 @@ class ServiceAccountType(DjangoObjectType):
             "identity_key",
             "created_at",
             "updated_at",
+            "deleted_at",
         )
 
     def resolve_third_party_auth_enabled(self, info):
@@ -705,7 +704,7 @@ class ServiceAccountType(DjangoObjectType):
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
-        return ServiceAccountToken.objects.filter(service_account=self)
+        return ServiceAccountToken.objects.filter(service_account=self, deleted_at=None)
 
     def resolve_app_memberships(self, info):
         # Fetch all apps that this service account is related to
