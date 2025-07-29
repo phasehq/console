@@ -133,10 +133,22 @@ export const HistoryDialog = ({
       )
     else if (log.serviceAccount)
       return (
-        <div className="flex items-center gap-1 text-sm">
+        <div
+          className={clsx(
+            'flex items-center gap-1 text-sm',
+            log.serviceAccount.deletedAt && 'grayscale'
+          )}
+        >
           <Avatar serviceAccount={log.serviceAccount} size="sm" />
-          {log.serviceAccount.name}
-          {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
+          <span className={clsx(log.serviceAccount.deletedAt ? 'line-through' : '')}>
+            {log.serviceAccount.name}
+          </span>{' '}
+          {log.serviceAccount.deletedAt && (
+            <span className="text-neutral-500 font-normal">(Deleted)</span>
+          )}
+          {log.serviceAccountToken &&
+            !log.serviceAccount.deletedAt &&
+            ` (${log.serviceAccountToken.name})`}
         </div>
       )
   }

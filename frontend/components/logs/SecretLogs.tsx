@@ -299,12 +299,25 @@ export default function SecretLogs(props: { app: string }) {
         )
       else if (log.serviceAccount)
         return (
-          <div className={clsx('flex items-center gap-1', textStyle)}>
-            <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-6">
-              <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
-            </div>{' '}
-            {log.serviceAccount.name}
-            {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
+          <div
+            className={clsx(
+              'flex items-center gap-1',
+              textStyle,
+              log.serviceAccount.deletedAt && 'grayscale'
+            )}
+          >
+            <Avatar serviceAccount={log.serviceAccount} size="sm" />
+            <span className={clsx(log.serviceAccount.deletedAt ? 'line-through' : '')}>
+              {log.serviceAccount.name}
+            </span>
+            {log.serviceAccount.deletedAt && (
+              <span className="text-neutral-500 font-normal">(Deleted)</span>
+            )}
+            {/* {log.serviceAccountToken && !log.serviceAccount.deletedAt && (
+              <span className={clsx(log.serviceAccountToken.deletedAt ? 'line-through' : '')}>
+                ({log.serviceAccountToken.name})
+              </span>
+            )} */}
           </div>
         )
     }
@@ -413,6 +426,32 @@ export default function SecretLogs(props: { app: string }) {
                         )}
                       </div>
                     </LogField>
+
+                    {log.serviceAccountToken && (
+                      <LogField label="Token">
+                        <div className="flex items-center gap-2">
+                          <FaKey className="text-neutral-500" />
+                          <div
+                            className={clsx(
+                              log.serviceAccountToken.deletedAt ? 'line-through' : ''
+                            )}
+                          >
+                            ({log.serviceAccountToken.name}){' '}
+                            {log.serviceAccountToken.deletedAt && (
+                              <span className="text-neutral-500 font-normal">(Deleted)</span>
+                            )}
+                          </div>
+                          <Link
+                            href={`/${organisation!.name}/access/service-accounts/${log.serviceAccount?.id}`}
+                            className="font-sans"
+                          >
+                            <Button variant="outline">
+                              Manage tokens <FaArrowRight />
+                            </Button>
+                          </Link>
+                        </div>
+                      </LogField>
+                    )}
 
                     <LogField label="IP address"> {log.ipAddress}</LogField>
 
