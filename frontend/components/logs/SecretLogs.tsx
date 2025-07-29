@@ -414,7 +414,7 @@ export default function SecretLogs(props: { app: string }) {
                     <LogField label="Created by">
                       <div className="flex items-center gap-2">
                         {logCreatedBy(log)}{' '}
-                        {log.serviceAccount && (
+                        {log.serviceAccount && !log.serviceAccount.deletedAt && (
                           <Link
                             href={`/${organisation!.name}/access/service-accounts/${log.serviceAccount.id}`}
                             className="font-sans"
@@ -431,24 +431,27 @@ export default function SecretLogs(props: { app: string }) {
                       <LogField label="Token">
                         <div className="flex items-center gap-2">
                           <FaKey className="text-neutral-500" />
-                          <div
+                          <span
                             className={clsx(
                               log.serviceAccountToken.deletedAt ? 'line-through' : ''
                             )}
                           >
                             ({log.serviceAccountToken.name}){' '}
-                            {log.serviceAccountToken.deletedAt && (
-                              <span className="text-neutral-500 font-normal">(Deleted)</span>
-                            )}
-                          </div>
-                          <Link
-                            href={`/${organisation!.name}/access/service-accounts/${log.serviceAccount?.id}`}
-                            className="font-sans"
-                          >
-                            <Button variant="outline">
-                              Manage tokens <FaArrowRight />
-                            </Button>
-                          </Link>
+                          </span>
+                          {log.serviceAccountToken.deletedAt && (
+                            <span className="text-neutral-500 font-normal">(Deleted)</span>
+                          )}
+
+                          {!log.serviceAccountToken.deletedAt && (
+                            <Link
+                              href={`/${organisation!.name}/access/service-accounts/${log.serviceAccount?.id}`}
+                              className="font-sans"
+                            >
+                              <Button variant="outline">
+                                Manage tokens <FaArrowRight />
+                              </Button>
+                            </Link>
+                          )}
                         </div>
                       </LogField>
                     )}
