@@ -291,6 +291,9 @@ class ServiceAccount(models.Model):
         self.deleted_at = timezone.now()
         self.save()
 
+        # Soft-delete related tokens
+        self.serviceaccounttoken_set.update(deleted_at=timezone.now())
+
 
 class ServiceAccountHandler(models.Model):
     id = models.TextField(default=uuid4, primary_key=True)
