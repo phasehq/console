@@ -698,16 +698,20 @@ export default function SecretLogs(props: { app: string }) {
                                                 )}
                                               >
                                                 <div className="flex items-center gap-1">
-                                                  {'name' in item ? (
-                                                    <div className="size-5 flex items-center justify-center ring-1 ring-inset ring-neutral-500/40  bg-neutral-400/10 rounded-full">
-                                                      <FaRobot className="text-neutral-500" />
-                                                    </div>
-                                                  ) : (
-                                                    <Avatar
-                                                      member={item as OrganisationMemberType}
-                                                      size="sm"
-                                                    />
-                                                  )}
+                                                  <Avatar
+                                                    member={
+                                                      item.__typename === 'OrganisationMemberType'
+                                                        ? (item as OrganisationMemberType)
+                                                        : undefined
+                                                    }
+                                                    serviceAccount={
+                                                      item.__typename === 'ServiceAccountType'
+                                                        ? (item as ServiceAccountType)
+                                                        : undefined
+                                                    }
+                                                    size="sm"
+                                                  />
+
                                                   <span>
                                                     {'name' in item
                                                       ? item.name
