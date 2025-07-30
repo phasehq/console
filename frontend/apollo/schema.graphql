@@ -278,6 +278,7 @@ type ServiceAccountType {
   identityKey: String
   createdAt: DateTime
   updatedAt: DateTime!
+  deletedAt: DateTime
   thirdPartyAuthEnabled: Boolean
   handlers: [ServiceAccountHandlerType]
   tokens: [ServiceAccountTokenType]
