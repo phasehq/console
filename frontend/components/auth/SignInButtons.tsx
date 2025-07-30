@@ -3,82 +3,73 @@
 import clsx from 'clsx'
 import { signIn, useSession } from 'next-auth/react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ReactNode, useCallback, useEffect, useState } from 'react'
-import { FaGithub, FaGitlab, FaGoogle } from 'react-icons/fa'
+import { useCallback, useEffect, useState } from 'react'
 import Spinner from '../common/Spinner'
-import { LogoWordMark } from '../common/LogoWordMark'
-import { JumpCloudLogo } from '../common/logos/JumpCloudLogo'
-import { EntraIDLogo } from '../common/logos/EntraIDLogo'
+import {
+  GoogleLogo,
+  GitHubLogo,
+  GitLabLogo,
+  JumpCloudLogo,
+  EntraIDLogo,
+  AuthentikLogo,
+} from '../common/logos'
 import { toast } from 'react-toastify'
-import { SiAuthentik } from 'react-icons/si'
+import { Button } from '../common/Button'
+import { LogoProps } from '../common/logos/types'
+import { LogoWordMark } from '../common/LogoWordMark'
+import Link from 'next/link'
+import { isCloudHosted } from '@/utils/appConfig'
 
-type ProviderButton = { id: string; name: string; icon: ReactNode; style: string }
-
-const providers = process.env.NEXT_PUBLIC_NEXTAUTH_PROVIDERS?.split(',') ?? []
+type ProviderButton = {
+  id: string
+  name: string
+  icon: ({ className }: LogoProps) => JSX.Element
+}
 
 const providerButtons: ProviderButton[] = [
   {
     id: 'google',
     name: 'Google',
-    icon: <FaGoogle />,
-    style:
-      'bg-[#4285F4]/10 hover:bg-[#4285F4]/30 hover:ring-[#4285F4] text-[#4285F4]/70 hover:text-[#4285F4] ring-[#4285F4]/60',
+    icon: GoogleLogo,
   },
   {
     id: 'github',
     name: 'GitHub',
-    icon: <FaGithub />,
-    style:
-      'bg-zinc-200/10 hover:bg-zinc-200/20 ring-zinc-200/40 hover:ring-zinc-100/80 text-zinc-100/80 hover:text-zinc-100',
+    icon: GitHubLogo,
   },
   {
     id: 'gitlab',
     name: 'GitLab',
-    icon: <FaGitlab />,
-    style:
-      'bg-[#7759C2]/10 hover:bg-[#7759C2]/20 hover:ring-[#7759C2] text-[#7759C2]/90 hover:text-[#7759C2] ring-[#7759C2]/60',
+    icon: GitLabLogo,
   },
   {
     id: 'google-oidc',
     name: 'Google OIDC',
-    icon: <FaGoogle />,
-    style:
-      'bg-[#4285F4]/10 hover:bg-[#4285F4]/30 hover:ring-[#4285F4] text-[#4285F4]/70 hover:text-[#4285F4] ring-[#4285F4]/60',
+    icon: GoogleLogo,
   },
   {
     id: 'jumpcloud-oidc',
     name: 'JumpCloud OIDC',
-    icon: <JumpCloudLogo />,
-    style:
-      'bg-[#1a3158]/10 hover:bg-[#1a3158]/20 hover:ring-[#1ca7a1] text-[#1ca7a1]/90 hover:text-[#1ca7a1] ring-[#1ca7a1]/60',
+    icon: JumpCloudLogo,
   },
   {
     id: 'entra-id-oidc',
     name: 'Entra ID OIDC',
-    icon: <EntraIDLogo />,
-    style:
-      'bg-[#0078d4]/10 hover:bg-[#0078d4]/20 hover:ring-[#0078d4] text-[#0078d4]/90 hover:text-[#0078d4] ring-[#0078d4]/60',
+    icon: EntraIDLogo,
   },
   {
     id: 'github-enterprise',
     name: 'GitHub Enterprise',
-    icon: <FaGithub />,
-    style:
-      'bg-zinc-200/10 hover:bg-zinc-200/20 ring-zinc-200/40 hover:ring-zinc-100/80 text-zinc-100/80 hover:text-zinc-100',
+    icon: GitHubLogo,
   },
   {
     id: 'authentik',
     name: 'Authentik',
-    icon: <SiAuthentik />,
-    style:
-      'bg-[#FD4B2D]/10 hover:bg-[#FD4B2D]/20 hover:ring-[#FD4B2D] text-[#FD4B2D]/90 hover:text-[#FD4B2D] ring-[#FD4B2D]/60', ///#FD4B2D
+    icon: AuthentikLogo,
   },
 ]
 
-const BUTTON_BASE_STYLE =
-  'p-2 px-4 md:py-2 md:px-20 mx-auto rounded-full shadow-2xl flex items-center gap-x-5 text-lg ring-1 ring-inset transition-colors ease-in-out'
-
-export default function SignInButtons() {
+export default function SignInButtons({ providers }: { providers: string[] }) {
   const [loading, setLoading] = useState<boolean>(false)
   const { status } = useSession()
   const router = useRouter()
@@ -108,17 +99,14 @@ export default function SignInButtons() {
     }
 
     if (providerId) {
-      console.log(providerId)
-      handleProviderButtonClick(providerId)
+      requestIdleCallback(() => {
+        handleProviderButtonClick(providerId)
+      })
     }
   }, [handleProviderButtonClick, searchParams])
 
-  const titleText = () => (loading ? 'Logging in' : 'CONSOLE')
-
-  useEffect(() => {
-    const isDarkMode = document.documentElement.classList.contains('dark')
-    if (!isDarkMode) document.documentElement.classList.toggle('dark')
-  }, [])
+  const titleText = () =>
+    loading ? 'Logging in...' : `Log in to Phase ${isCloudHosted() ? 'Cloud' : ''}`
 
   useEffect(() => {
     if (status === 'authenticated') router.push('/')
@@ -126,32 +114,52 @@ export default function SignInButtons() {
 
   return (
     <>
-      <div className="gap-y-8 flex flex-col items-center p-5 md:p-16 border border-neutral-500/20 shadow-2xl rounded-lg bg-neutral-800/80 text-white">
-        <div className={clsx(status === 'loading' && 'animate-pulse')}>
-          <LogoWordMark className="w-60 fill-white" />
+      <div className="gap-y-4 flex flex-col items-center justify-center text-zinc-900 dark:text-zinc-100">
+        <div className="flex flex-col items-center justify-center">
+          <div className={clsx(status === 'loading' && 'animate-pulse')}>
+            <LogoWordMark className="w-32 fill-neutral-500" />
+          </div>
+          <div className="text-lg font-medium pb-4 text-center flex items-center gap-4">
+            {loading && <Spinner size="sm" />}
+            {status === 'unauthenticated' && titleText()}
+          </div>
         </div>
-        {status === 'unauthenticated' && (
-          <div className="space-y-4">
-            <div className="text-2xl font-semibold pb-4 text-center">{titleText()}</div>
-
-            <div className="space-y-6">
-              {!loading &&
-                providerButtons
-                  .filter((p) => providers.includes(p.id))
-                  .map((provider) => (
-                    <button
-                      key={provider.id}
-                      onClick={() => handleProviderButtonClick(provider.id)}
-                      className={clsx(BUTTON_BASE_STYLE, provider.style)}
-                    >
-                      <span className="text-xl">{provider.icon}</span>
-                      {`Login with ${provider.name}`}
-                    </button>
-                  ))}
+        {status === 'unauthenticated' && !loading && (
+          <div>
+            <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg">
+              {providerButtons
+                .filter((p) => providers.includes(p.id))
+                .map((provider) => (
+                  <Button
+                    key={provider.id}
+                    variant="outline"
+                    size="lg"
+                    onClick={() => handleProviderButtonClick(provider.id)}
+                    icon={provider.icon}
+                  >
+                    {`Continue with ${provider.name}`}
+                  </Button>
+                ))}
             </div>
+            <p className="text-neutral-500 text-xs py-4 max-w-sm">
+              By continuing you are agreeing to our{' '}
+              <Link
+                className="text-emerald-400 hover:text-emerald-500 transition ease"
+                href="https://phase.dev/legal/terms/"
+              >
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link
+                className="text-emerald-400 hover:text-emerald-500 transition ease"
+                href="https://phase.dev/legal/privacy/"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </div>
         )}
-        {status === 'loading' || (loading && <Spinner size="xl" />)}
       </div>
     </>
   )
