@@ -13,7 +13,7 @@ def resolve_service_accounts(root, info, org_id, service_account_id=None):
     org = Organisation.objects.get(id=org_id)
     if user_has_permission(info.context.user.userId, "read", "ServiceAccounts", org):
 
-        filter = {"organisation": org}
+        filter = {"organisation": org, "deleted_at": None}
 
         if service_account_id is not None:
             filter["id"] = service_account_id
