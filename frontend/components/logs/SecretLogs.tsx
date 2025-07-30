@@ -436,7 +436,7 @@ export default function SecretLogs(props: { app: string }) {
                               log.serviceAccountToken.deletedAt ? 'line-through' : ''
                             )}
                           >
-                            ({log.serviceAccountToken.name}){' '}
+                            {log.serviceAccountToken.name}{' '}
                           </span>
                           {log.serviceAccountToken.deletedAt && (
                             <span className="text-neutral-500 font-normal">(Deleted)</span>
