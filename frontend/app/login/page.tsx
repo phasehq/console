@@ -7,14 +7,10 @@ import { formatTitle } from '@/utils/meta'
 import { Metadata } from 'next'
 import { FaSun, FaMoon } from 'react-icons/fa6'
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { team: string; app: string }
-}): Promise<Metadata> {
+export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: formatTitle(`Login`),
-    description: `Login to Phase`,
+    title: formatTitle(`Log in`),
+    description: `Log in to Phase`,
   }
 }
 
@@ -23,10 +19,7 @@ export default async function Login() {
 
   return (
     <>
-      <div
-        className="h-screen w-full md:p-16 text-zinc-900 dark:text-zinc-100 flex items-center justify-center px-4"
-        //style={{ backgroundImage: `url('/assets/images/aurora-bg.png')` }}
-      >
+      <div className="h-screen w-full md:p-16 text-zinc-900 dark:text-zinc-100 flex items-center justify-center px-4">
         <div className="absolute top-4 px-4 md:px-8 md:top-8 w-full flex justify-end gap-6">
           {isCloudHosted() && <StatusIndicator />}
           <div className="flex items-center justify-between px-2  text-neutral-500">
