@@ -116,7 +116,7 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
     <>
       <div className="gap-y-4 flex flex-col items-center justify-center text-zinc-900 dark:text-zinc-100">
         <div className="flex flex-col items-center justify-center">
-          <div className={clsx(status === 'loading' && 'animate-pulse')}>
+          <div className={clsx(status === 'loading' && 'animate-pulse', 'mb-4')}>
             <LogoWordMark className="w-32 fill-neutral-500" />
           </div>
           <div className="text-lg font-medium pb-4 text-center flex items-center gap-4">
