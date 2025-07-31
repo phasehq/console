@@ -122,6 +122,11 @@ def health_check(request):
     return JsonResponse({"status": "alive", "version": settings.VERSION})
 
 
+@permission_classes([AllowAny])
+def root_endpoint(request):
+    return JsonResponse({"message": "🆙", "status": "ok"}, json_dumps_params={'ensure_ascii': False})
+
+
 def user_token_kms(request):
     auth_token = request.headers["authorization"]
 
