@@ -1,10 +1,10 @@
 'use client'
 
-import { OrganisationMemberType } from '@/apollo/graphql'
+import { OrganisationMemberInviteType, OrganisationMemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
-import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
-import RemoveMember from '@/graphql/mutations/organisation/deleteOrgMember.gql'
+import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
+import DeleteOrgInvite from '@/graphql/mutations/organisation/deleteInvite.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation } from '@apollo/client'
 import { useContext, useRef } from 'react'
@@ -13,15 +13,10 @@ import { toast } from 'react-toastify'
 import { useRouter } from 'next/navigation'
 import GenericDialog from '@/components/common/GenericDialog'
 
-export const DeleteMemberConfirmDialog = (props: {
-  member: OrganisationMemberType
-  organisationId: string
-}) => {
-  const { member, organisationId } = props
-
+export const DeleteInviteDialog = ({ invite }: { invite: OrganisationMemberInviteType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [removeMember, { loading }] = useMutation(RemoveMember)
+  const [deleteInvite, { loading: deletePending }] = useMutation(DeleteOrgInvite)
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
@@ -29,40 +24,34 @@ export const DeleteMemberConfirmDialog = (props: {
 
   const closeModal = () => dialogRef.current?.closeModal()
 
-  const handleRemoveMember = async () => {
-    await removeMember({
-      variables: { memberId: member.id },
+  const handleDeleteInvite = async () => {
+    await deleteInvite({
+      variables: {
+        inviteId: invite.id,
+      },
       refetchQueries: [
         {
-          query: GetOrganisationMembers,
-          variables: { organisationId: organisationId, role: null },
+          query: GetInvites,
+          variables: {
+            orgId: organisation?.id,
+          },
         },
       ],
-      onCompleted: () => {
-        toast.success('Member removed successfully')
-        closeModal()
-        router.push(`/${organisation?.name}/access/members`)
-      },
-      onError: (error) => {
-        toast.error(`Failed to remove member: ${error.message}`)
-      },
     })
+    toast.success('Deleted invite successfully')
   }
 
   const activeUserCanDeleteUsers = organisation?.role?.permissions
     ? userHasPermission(organisation?.role?.permissions, 'Members', 'delete', false)
     : false
 
-  const allowDelete =
-    !member.self! && activeUserCanDeleteUsers && member.role!.name!.toLowerCase() !== 'owner'
-
-  if (!allowDelete) return <></>
+  if (!activeUserCanDeleteUsers) return <></>
 
   return (
     <>
       <GenericDialog
         ref={dialogRef}
-        title="Remove member"
+        title="Delete Invite"
         buttonContent={
           <>
             <FaTrashAlt /> Delete
@@ -72,11 +61,8 @@ export const DeleteMemberConfirmDialog = (props: {
       >
         <div className="space-y-6 p-4">
           <p className="text-neutral-500">
-            Are you sure you want to remove{' '}
-            <span className="text-zinc-900 dark:text-zinc-100">
-              {member.fullName || member.email}
-            </span>{' '}
-            from this organisation? This action cannot be undone.
+            Are you sure you want to delete the invite for{' '}
+            <span className="text-zinc-900 dark:text-zinc-100">{invite.inviteeEmail}</span>?
           </p>
           <div className="flex items-center justify-between gap-4">
             <Button variant="secondary" type="button" onClick={closeModal}>
@@ -84,11 +70,11 @@ export const DeleteMemberConfirmDialog = (props: {
             </Button>
             <Button
               variant="danger"
-              onClick={handleRemoveMember}
-              isLoading={loading}
+              onClick={handleDeleteInvite}
+              isLoading={deletePending}
               icon={FaTrashAlt}
             >
-              Remove Member
+              Delete Invite
             </Button>
           </div>
         </div>

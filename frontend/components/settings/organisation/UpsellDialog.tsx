@@ -1,12 +1,14 @@
 import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
-import { UpgradeRequestForm } from '@/components/forms/UpgradeRequestForm'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { isCloudHosted } from '@/utils/appConfig'
 import { useQuery } from '@apollo/client'
 import { ReactNode, useContext, useRef } from 'react'
 import dynamic from 'next/dynamic'
+import { userHasPermission } from '@/utils/access/permissions'
+import { EmptyState } from '@/components/common/EmptyState'
+import { FaBan } from 'react-icons/fa6'
 
 export const UpsellDialog = ({
   title,
@@ -18,6 +20,10 @@ export const UpsellDialog = ({
   buttonVariant?: 'primary' | 'secondary' | 'outline' | 'danger'
 }) => {
   const { activeOrganisation } = useContext(organisationContext)
+
+  const userCanUpdateBilling = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'update')
+    : false
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
@@ -56,11 +62,23 @@ export const UpsellDialog = ({
             : 'Enterprise'}
         </div>
         {isCloudHosted() ? (
-          UpgradeDialog && (
+          UpgradeDialog && userCanUpdateBilling ? (
             <UpgradeDialog
               userCount={data.organisationPlan?.seatsUsed?.total}
               onSuccess={closeModal}
             />
+          ) : (
+            <EmptyState
+              title="Access restricted"
+              subtitle="You don't have the permissions required to update billing information in this organisation. Please contact an administrator to upgrade your organisation plan."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaBan />
+                </div>
+              }
+            >
+              <></>
+            </EmptyState>
           )
         ) : (
           <div className="text-zinc-900 dark:text-zinc-100">
