@@ -148,27 +148,29 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
                 </div>
               )}
             </div>
-            <p className="text-neutral-500 text-xs py-4 max-w-sm">
-              By continuing, you are agreeing to our{' '}
-              <Link
-                className="text-emerald-400 hover:text-emerald-500 transition ease"
-                href="https://phase.dev/legal/terms"
-                target="_blank"
-                rel="noopener"
-              >
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link
-                className="text-emerald-400 hover:text-emerald-500 transition ease"
-                href="https://phase.dev/legal/privacy"
-                target="_blank"
-                rel="noopener"
-              >
-                Privacy Policy
-              </Link>
-              .
-            </p>
+            {isCloudHosted() && (
+              <p className="text-neutral-500 text-xs py-4 max-w-sm">
+                By continuing, you are agreeing to our{' '}
+                <Link
+                  className="text-emerald-400 hover:text-emerald-500 transition ease"
+                  href="https://phase.dev/legal/terms"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link
+                  className="text-emerald-400 hover:text-emerald-500 transition ease"
+                  href="https://phase.dev/legal/privacy"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            )}
           </div>
         )}
       </div>
