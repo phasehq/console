@@ -33,7 +33,6 @@ export const InstanceInfo = () => {
           <div className="font-medium text-sm leading-tight text-zinc-900 dark:text-zinc-100">
             {getHostname()}
           </div>
-          <div className="text-neutral-500 text-xs leading-tight font-mono ">{getApiHost()}</div>
         </div>
       </div>
     </div>
