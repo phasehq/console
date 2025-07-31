@@ -19,6 +19,8 @@ import { LogoProps } from '../common/logos/types'
 import { LogoWordMark } from '../common/LogoWordMark'
 import Link from 'next/link'
 import { isCloudHosted } from '@/utils/appConfig'
+import { Alert } from '../common/Alert'
+import { FaExternalLinkAlt } from 'react-icons/fa'
 
 type ProviderButton = {
   id: string
@@ -126,9 +128,9 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
         </div>
         {status === 'unauthenticated' && !loading && (
           <div>
-            <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg">
-              {providers.length > 0 ? (
-                providerButtons
+            {providers.length > 0 ? (
+              <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg">
+                {providerButtons
                   .filter((p) => providers.includes(p.id))
                   .map((provider) => (
                     <Button
@@ -140,14 +142,29 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
                     >
                       {`Continue with ${provider.name}`}
                     </Button>
-                  ))
-              ) : (
-                <div className="text-center text-neutral-500">
-                  <p className="text-sm">No authentication providers configured.</p>
-                  <p className="text-xs mt-2">Please contact your administrator.</p>
+                  ))}
+              </div>
+            ) : (
+              <Alert variant="danger">
+                <div className="text-center space-y-1">
+                  <h2 className="font-semibold text-base">
+                    No authentication providers configured
+                  </h2>
+                  <p className="max-w-sm text-sm">
+                    Please contact your administrator, or refer to the{' '}
+                    <Link
+                      className="underline font-medium inline-flex items-center gap-1"
+                      href="https://docs.phase.dev/self-hosting/configuration/envars#single-sign-on-sso"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      documentation <FaExternalLinkAlt />
+                    </Link>{' '}
+                    to correctly configure SSO providers.
+                  </p>
                 </div>
-              )}
-            </div>
+              </Alert>
+            )}
             {isCloudHosted() && (
               <p className="text-neutral-500 text-xs py-4 max-w-sm">
                 By continuing, you are agreeing to our{' '}
