@@ -183,8 +183,8 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={account!.id}
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800  transition ease  ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
-                variant === 'compact' && 'group-hover:bg-zinc-50 group-hover:dark:bg-zinc-700',
+                'rounded-full transition ease',
+                variant === 'compact' && 'group-hover:saturate-50',
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
                 index === 2 && 'z-[2]',
@@ -192,7 +192,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
                 index === 4 && 'z-[4]'
               )}
             >
-              {account?.name.slice(0, 1)}
+              <Avatar serviceAccount={account} size="md" />
             </div>
           ))}
           {surplusServiceAccountsCount > 0 && (
