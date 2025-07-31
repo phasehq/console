@@ -122,6 +122,16 @@ def health_check(request):
     return JsonResponse({"status": "alive", "version": settings.VERSION})
 
 
+@permission_classes([AllowAny])
+def root_endpoint(request):
+    return JsonResponse(
+        {
+            "message": "API is alive. Please see https://docs.phase.dev/public-api for documentation on available endpoints.",
+            "status": "ok",
+        },
+    )
+
+
 def user_token_kms(request):
     auth_token = request.headers["authorization"]
 
