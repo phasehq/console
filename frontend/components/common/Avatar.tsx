@@ -32,13 +32,13 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
 
   const getBgColor = (name: string) => {
     const colors = [
-      'bg-red-500',
-      'bg-blue-500',
+      'bg-teal-600',
+      'bg-sky-600',
       'bg-amber-500',
-      'bg-emerald-500',
-      'bg-purple-500',
-      'bg-pink-500',
-      'bg-indigo-500',
+      'bg-orange-600',
+      'bg-rose-600',
+      'bg-green-600',
+      'bg-slate-500',
     ]
     const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), name.length || 0)
     return colors[hash % colors.length]
