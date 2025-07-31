@@ -152,7 +152,7 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
               By continuing, you are agreeing to our{' '}
               <Link
                 className="text-emerald-400 hover:text-emerald-500 transition ease"
-                href="https://phase.dev/legal/terms/"
+                href="https://phase.dev/legal/terms"
                 target="_blank"
                 rel="noopener"
               >
@@ -161,7 +161,7 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
               and{' '}
               <Link
                 className="text-emerald-400 hover:text-emerald-500 transition ease"
-                href="https://phase.dev/legal/privacy/"
+                href="https://phase.dev/legal/privacy"
                 target="_blank"
                 rel="noopener"
               >
