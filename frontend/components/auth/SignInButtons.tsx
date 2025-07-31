@@ -19,6 +19,8 @@ import { LogoProps } from '../common/logos/types'
 import { LogoWordMark } from '../common/LogoWordMark'
 import Link from 'next/link'
 import { isCloudHosted } from '@/utils/appConfig'
+import { Alert } from '../common/Alert'
+import { FaExternalLinkAlt } from 'react-icons/fa'
 
 type ProviderButton = {
   id: string
@@ -116,7 +118,7 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
     <>
       <div className="gap-y-4 flex flex-col items-center justify-center text-zinc-900 dark:text-zinc-100">
         <div className="flex flex-col items-center justify-center">
-          <div className={clsx(status === 'loading' && 'animate-pulse')}>
+          <div className={clsx(status === 'loading' && 'animate-pulse', 'mb-4')}>
             <LogoWordMark className="w-32 fill-neutral-500" />
           </div>
           <div className="text-lg font-medium pb-4 text-center flex items-center gap-4">
@@ -126,42 +128,66 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
         </div>
         {status === 'unauthenticated' && !loading && (
           <div>
-            <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg">
-              {providerButtons
-                .filter((p) => providers.includes(p.id))
-                .map((provider) => (
-                  <Button
-                    key={provider.id}
-                    variant="outline"
-                    size="lg"
-                    onClick={() => handleProviderButtonClick(provider.id)}
-                    icon={provider.icon}
-                  >
-                    {`Continue with ${provider.name}`}
-                  </Button>
-                ))}
-            </div>
-            <p className="text-neutral-500 text-xs py-4 max-w-sm">
-              By continuing you are agreeing to our{' '}
-              <Link
-                className="text-emerald-400 hover:text-emerald-500 transition ease"
-                href="https://phase.dev/legal/terms/"
-                target="_blank"
-                rel="noopener"
-              >
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link
-                className="text-emerald-400 hover:text-emerald-500 transition ease"
-                href="https://phase.dev/legal/privacy/"
-                target="_blank"
-                rel="noopener"
-              >
-                Privacy Policy
-              </Link>
-              .
-            </p>
+            {providers.length > 0 ? (
+              <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg">
+                {providerButtons
+                  .filter((p) => providers.includes(p.id))
+                  .map((provider) => (
+                    <Button
+                      key={provider.id}
+                      variant="outline"
+                      size="lg"
+                      onClick={() => handleProviderButtonClick(provider.id)}
+                      icon={provider.icon}
+                    >
+                      {`Continue with ${provider.name}`}
+                    </Button>
+                  ))}
+              </div>
+            ) : (
+              <Alert variant="danger">
+                <div className="text-center space-y-1">
+                  <h2 className="font-semibold text-base">
+                    No authentication providers configured
+                  </h2>
+                  <p className="max-w-sm text-sm">
+                    Please contact your administrator, or refer to the{' '}
+                    <Link
+                      className="underline font-medium inline-flex items-center gap-1"
+                      href="https://docs.phase.dev/self-hosting/configuration/envars#single-sign-on-sso"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      documentation <FaExternalLinkAlt />
+                    </Link>{' '}
+                    to correctly configure SSO providers.
+                  </p>
+                </div>
+              </Alert>
+            )}
+            {isCloudHosted() && (
+              <p className="text-neutral-500 text-xs py-4 max-w-sm">
+                By continuing, you are agreeing to our{' '}
+                <Link
+                  className="text-emerald-400 hover:text-emerald-500 transition ease"
+                  href="https://phase.dev/legal/terms"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link
+                  className="text-emerald-400 hover:text-emerald-500 transition ease"
+                  href="https://phase.dev/legal/privacy"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            )}
           </div>
         )}
       </div>
