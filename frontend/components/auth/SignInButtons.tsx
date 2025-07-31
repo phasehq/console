@@ -127,19 +127,26 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
         {status === 'unauthenticated' && !loading && (
           <div>
             <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg">
-              {providerButtons
-                .filter((p) => providers.includes(p.id))
-                .map((provider) => (
-                  <Button
-                    key={provider.id}
-                    variant="outline"
-                    size="lg"
-                    onClick={() => handleProviderButtonClick(provider.id)}
-                    icon={provider.icon}
-                  >
-                    {`Continue with ${provider.name}`}
-                  </Button>
-                ))}
+              {providers.length > 0 ? (
+                providerButtons
+                  .filter((p) => providers.includes(p.id))
+                  .map((provider) => (
+                    <Button
+                      key={provider.id}
+                      variant="outline"
+                      size="lg"
+                      onClick={() => handleProviderButtonClick(provider.id)}
+                      icon={provider.icon}
+                    >
+                      {`Continue with ${provider.name}`}
+                    </Button>
+                  ))
+              ) : (
+                <div className="text-center text-neutral-500">
+                  <p className="text-sm">No authentication providers configured.</p>
+                  <p className="text-xs mt-2">Please contact your administrator.</p>
+                </div>
+              )}
             </div>
             <p className="text-neutral-500 text-xs py-4 max-w-sm">
               By continuing you are agreeing to our{' '}
