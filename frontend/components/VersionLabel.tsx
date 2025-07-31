@@ -11,7 +11,7 @@ export const VersionLabel = async () => {
       rel="noreferrer"
       className="font-mono text-neutral-500 hover:text-neutral-400 transition ease text-sm"
     >
-      Version {healthData.version}
+      {healthData.version}
     </Link>
   )
 }
