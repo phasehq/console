@@ -149,7 +149,7 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
               )}
             </div>
             <p className="text-neutral-500 text-xs py-4 max-w-sm">
-              By continuing you are agreeing to our{' '}
+              By continuing, you are agreeing to our{' '}
               <Link
                 className="text-emerald-400 hover:text-emerald-500 transition ease"
                 href="https://phase.dev/legal/terms/"
