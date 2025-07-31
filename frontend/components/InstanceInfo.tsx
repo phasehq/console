@@ -58,7 +58,7 @@ export const InstanceInfo = () => {
           <Menu.Items className="absolute z-20 left-2 top-8 mt-2 w-80 origin-bottom-left divide-y divide-neutral-500/20 rounded-md  shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
             <Menu.Item>
               <div className="p-px">
-                <div className="font-semibold text-base flex items-center gap-2 p-2">
+                <div className="font-semibold text-base flex items-center gap-2 p-2 bg-neutral-300 dark:bg-neutral-900">
                   <LogoWordMark className="fill-zinc-900 dark:fill-zinc-500 w-16" />{' '}
                   <span className="font-mono uppercase text-xs text-emerald-500">
                     {isCloudHosted() ? 'Cloud' : 'Self-hosted'}
