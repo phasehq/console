@@ -6,6 +6,7 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { formatTitle } from '@/utils/meta'
 import { Metadata } from 'next'
 import { FaSun, FaMoon } from 'react-icons/fa6'
+import EU from 'country-flag-icons/react/3x2/EU'
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
@@ -20,13 +21,24 @@ export default async function Login() {
   return (
     <>
       <div className="h-screen w-full md:p-16 text-zinc-900 dark:text-zinc-100 flex items-center justify-center px-4">
-        <div className="absolute top-4 px-4 md:px-8 md:top-8 w-full flex justify-end gap-6">
-          {isCloudHosted() && <StatusIndicator />}
-          <div className="flex items-center justify-between px-2  text-neutral-500">
+        <div className="absolute top-4 px-4 md:px-8 md:top-8 w-full flex justify-between gap-6">
+          {isCloudHosted() && (
             <div className="flex items-center gap-2">
-              <FaSun />
-              <ModeToggle />
-              <FaMoon />
+              <span className="text-neutral-500 text-sm font-medium">Region</span>
+              <EU 
+                title="Frankfurt - eu-central-1" 
+                className="w-6 h-4 grayscale hover:grayscale-0 transition-all duration-200"
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-6">
+            {isCloudHosted() && <StatusIndicator />}
+            <div className="flex items-center justify-between px-2  text-neutral-500">
+              <div className="flex items-center gap-2">
+                <FaSun />
+                <ModeToggle />
+                <FaMoon />
+              </div>
             </div>
           </div>
         </div>
