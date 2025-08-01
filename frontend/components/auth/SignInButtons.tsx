@@ -93,6 +93,7 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
   useEffect(() => {
     const providerId = searchParams?.get('provider')
     const error = searchParams?.get('error')
+
     if (error) {
       toast.error(
         'Something went wrong. Please contact your server admin or check the server logs for more information.',
@@ -101,7 +102,12 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
     }
 
     if (providerId) {
-      requestIdleCallback(() => {
+      const schedule =
+        typeof window !== 'undefined' && 'requestIdleCallback' in window
+          ? window.requestIdleCallback
+          : (cb: () => void) => setTimeout(cb, 100)
+
+      schedule(() => {
         handleProviderButtonClick(providerId)
       })
     }
