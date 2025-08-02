@@ -196,6 +196,7 @@ from api.models import (
     ServiceAccount,
     ServiceToken,
     UserToken,
+    UserFavoriteEnvironment,
 )
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
 from datetime import datetime, timedelta
@@ -387,6 +388,8 @@ class Query(graphene.ObjectType):
     stripe_subscription_details = graphene.Field(
         StripeSubscriptionDetails, organisation_id=graphene.ID()
     )
+
+    favorited_environments = graphene.List(EnvironmentType, org_id=graphene.ID(required=True))
 
     # --------------------------------------------------------------------
 
@@ -887,6 +890,71 @@ class Query(graphene.ObjectType):
     resolve_stripe_checkout_details = resolve_stripe_checkout_details
     resolve_stripe_subscription_details = resolve_stripe_subscription_details
 
+    def resolve_favorited_environments(root, info, org_id):
+        request_user = info.context.user
+        if not request_user or not request_user.is_authenticated:
+            raise GraphQLError("Authentication required.")
+
+        try:
+            org_member = OrganisationMember.objects.get(
+                user=request_user,
+                organisation_id=org_id,
+                deleted_at=None
+            )
+        except OrganisationMember.DoesNotExist:
+            raise GraphQLError("Organisation member not found or access denied.")
+
+        favorite_env_ids = UserFavoriteEnvironment.objects.filter(
+            organisation_member=org_member
+        ).values_list('environment_id', flat=True)
+
+        accessible_environments = []
+        potential_envs = Environment.objects.filter(id__in=favorite_env_ids, app__organisation_id=org_id, is_deleted=False).order_by('app__name', 'name')
+
+        for env in potential_envs:
+            if user_can_access_environment(org_member.user.userId, env.id):
+                 accessible_environments.append(env)
+        
+        return accessible_environments
+
+class ToggleFavoriteEnvironment(graphene.Mutation):
+    class Arguments:
+        environment_id = graphene.ID(required=True)
+
+    environment = graphene.Field(EnvironmentType)
+    success = graphene.Boolean()
+
+    @staticmethod
+    def mutate(root, info, environment_id):
+        request_user = info.context.user
+        if not request_user or not request_user.is_authenticated:
+            raise GraphQLError("Authentication required.")
+
+        try:
+            environment_to_toggle = Environment.objects.get(id=environment_id, is_deleted=False)
+            org_member = OrganisationMember.objects.get(
+                user=request_user,
+                organisation=environment_to_toggle.app.organisation,
+                deleted_at=None
+            )
+        except Environment.DoesNotExist:
+            raise GraphQLError("Environment not found.")
+        except OrganisationMember.DoesNotExist:
+            raise GraphQLError("Organisation member not found or access denied for this environment's organisation.")
+
+        if not user_can_access_environment(org_member.user.userId, environment_id):
+            raise GraphQLError("You don't have access to this environment.")
+
+        fav, created = UserFavoriteEnvironment.objects.get_or_create(
+            organisation_member=org_member,
+            environment=environment_to_toggle
+        )
+
+        if not created:
+            fav.delete()
+            return ToggleFavoriteEnvironment(environment=environment_to_toggle, success=True)
+        
+        return ToggleFavoriteEnvironment(environment=environment_to_toggle, success=True)
 
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
@@ -911,6 +979,7 @@ class Mutation(graphene.ObjectType):
     delete_environment = DeleteEnvironmentMutation.Field()
     rename_environment = RenameEnvironmentMutation.Field()
     swap_environment_order = SwapEnvironmentOrderMutation.Field()
+    toggle_favorite_environment = ToggleFavoriteEnvironment.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
 
