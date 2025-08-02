@@ -701,6 +701,21 @@ class PersonalSecret(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
 
 
+class UserFavoriteEnvironment(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation_member = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE, related_name="favorite_environments")
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE, related_name="favorited_by")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('organisation_member', 'environment')
+        verbose_name = "User Favorite Environment"
+        verbose_name_plural = "User Favorite Environments"
+
+    def __str__(self):
+        return f"{self.organisation_member.user.username} favorites {self.environment.name} in {self.environment.app.name}"
+
+
 class Lockbox(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     data = models.JSONField()
