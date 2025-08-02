@@ -52,6 +52,7 @@ type Query {
   validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
+  favoritedEnvironments(orgId: ID!): [EnvironmentType]
 }
 
 type OrganisationType {
@@ -179,6 +180,7 @@ type EnvironmentType {
   secretCount: Int
   members: [OrganisationMemberType]!
   syncs: [EnvironmentSyncType]!
+  isFavorited: Boolean
 }
 
 enum ApiEnvironmentEnvTypeChoices {
@@ -841,6 +843,7 @@ type Mutation {
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation
+  toggleFavoriteEnvironment(environmentId: ID!): ToggleFavoriteEnvironment
   createSubscriptionCheckoutSession(billingPeriod: BillingPeriodEnum, organisationId: ID!, planType: PlanTypeEnum): CreateSubscriptionCheckoutSession
   deletePaymentMethod(organisationId: ID, paymentMethodId: String): DeletePaymentMethodMutation
   cancelSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
@@ -1230,6 +1233,11 @@ input LockboxInput {
   data: JSONString
   allowedViews: Int
   expiry: BigInt
+}
+
+type ToggleFavoriteEnvironment {
+  environment: EnvironmentType
+  success: Boolean
 }
 
 type CreateSubscriptionCheckoutSession {
