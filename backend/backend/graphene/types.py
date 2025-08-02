@@ -36,6 +36,7 @@ from api.models import (
     ServiceAccountToken,
     ServiceToken,
     UserToken,
+    UserFavoriteEnvironment,
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
@@ -506,6 +507,7 @@ class EnvironmentType(DjangoObjectType):
     syncs = graphene.NonNull(graphene.List(EnvironmentSyncType))
     wrapped_seed = graphene.String(required=False)
     wrapped_salt = graphene.String(required=False)
+    is_favorited = graphene.Boolean()
 
     class Meta:
         model = Environment
@@ -595,6 +597,26 @@ class EnvironmentType(DjangoObjectType):
 
     def resolve_syncs(self, info):
         return EnvironmentSync.objects.filter(environment=self)
+
+    def resolve_is_favorited(self, info):
+        request_user = info.context.user
+        if not request_user or not request_user.is_authenticated:
+            return False
+
+        try:
+            org_member = OrganisationMember.objects.get(
+                user=request_user,
+                organisation=self.app.organisation,
+                deleted_at=None
+            )
+            return UserFavoriteEnvironment.objects.filter(
+                organisation_member=org_member,
+                environment=self
+            ).exists()
+        except OrganisationMember.DoesNotExist:
+            return False
+        except Exception:
+            return False
 
 
 class AppType(DjangoObjectType):
