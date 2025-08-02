@@ -2,7 +2,8 @@
 
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { SwapEnvOrder } from '@/graphql/mutations/environments/swapEnvironmentOrder.gql'
-import { EnvironmentType, ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { ToggleFavoriteEnvironment } from '@/graphql/mutations/ToggleFavoriteEnvironment.gql'
+import { EnvironmentType, ApiOrganisationPlanChoices, GetAppEnvironmentsQuery } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
@@ -12,14 +13,17 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useContext } from 'react'
+import { useContext, useState } from 'react'
 import { BsListColumnsReverse } from 'react-icons/bs'
-import { FaArrowRight, FaBan, FaExchangeAlt, FaFolder, FaKey } from 'react-icons/fa'
+import { FaArrowRight, FaBan, FaExchangeAlt, FaFolder, FaKey, FaStar, FaRegStar } from 'react-icons/fa'
 import { EmptyState } from '@/components/common/EmptyState'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
+import Spinner from '@/components/common/Spinner'
+import { GetFavoritedEnvironments } from '@/graphql/queries/GetFavoritedEnvironments.gql'
 
 export const AppEnvironments = ({ appId }: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const [togglingFavoriteId, setTogglingFavoriteId] = useState<string | null>(null)
 
   // Permissions
   const userCanReadEnvironments = userHasPermission(
@@ -54,13 +58,59 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
 
   const pathname = usePathname()
 
-  const [swapEnvs, { loading }] = useMutation(SwapEnvOrder)
+  const [swapEnvs, { loading: swapLoading }] = useMutation(SwapEnvOrder)
+  
+  const [toggleFavorite] = useMutation(ToggleFavoriteEnvironment, {
+    refetchQueries: [
+      { query: GetFavoritedEnvironments, variables: { orgId: organisation?.id! } }
+    ]
+  })
 
   const handleSwapEnvironments = async (env1: EnvironmentType, env2: EnvironmentType) => {
     await swapEnvs({
       variables: { environment1Id: env1.id, environment2Id: env2?.id },
       refetchQueries: [{ query: GetAppEnvironments, variables: { appId } }],
     })
+  }
+
+  const handleToggleFavorite = async (environmentId: string, currentIsFavorited: boolean) => {
+    setTogglingFavoriteId(environmentId)
+
+    await toggleFavorite({
+      variables: { environmentId },
+      optimisticResponse: {
+        toggleFavoriteEnvironment: {
+          __typename: 'ToggleFavoriteEnvironment',
+          success: true,
+          environment: {
+            __typename: 'EnvironmentType',
+            id: environmentId,
+            isFavorited: !currentIsFavorited,
+          },
+        },
+      },
+      update: (cache) => {
+        const data = cache.readQuery<GetAppEnvironmentsQuery>({
+          query: GetAppEnvironments,
+          variables: { appId },
+        })
+
+        if (data?.appEnvironments) {
+          const updatedEnvironments = data.appEnvironments.map((env) => {
+            if (env?.id === environmentId) {
+              return { ...env, isFavorited: !currentIsFavorited }
+            }
+            return env
+          })
+          cache.writeQuery({
+            query: GetAppEnvironments,
+            variables: { appId },
+            data: { ...data, appEnvironments: updatedEnvironments },
+          })
+        }
+      },
+    })
+    setTogglingFavoriteId(null)
   }
 
   return (
@@ -100,12 +150,10 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                     <Link href={`${pathname}/environments/${env.id}`} className="group min-w-0">
                       <div className="font-semibold text-base xl:text-lg truncate">{env.name}</div>
                       <div className="text-neutral-500 text-xs xl:text-sm">
-                        {/* Text-based secrets and folder count on wider screens */}
                         <div className="hidden lg:block">
                           {env.secretCount} secrets{' '}
                           {env.folderCount! > 0 ? `across ${env.folderCount} folders` : ''}
                         </div>
-                        {/* Icon-based secrets and folder count on narrower screens */}
                         <div className="flex items-center gap-3 lg:hidden">
                           <div
                             className="flex items-center gap-1.5"
@@ -124,7 +172,26 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                         </div>
                       </div>
                     </Link>
+                    <div className="flex items-center space-x-1">
+                      {userCanUpdateEnvironments && (
+                        <Button
+                          variant="ghost"
+                          onClick={() => handleToggleFavorite(env.id, env.isFavorited || false)}
+                          disabled={!!togglingFavoriteId}
+                          title={env.isFavorited ? 'Unfavorite' : 'Favorite'}
+                          className="text-neutral-500 hover:text-amber-500 p-1.5 rounded-full"
+                        >
+                          {togglingFavoriteId === env.id ? (
+                            <Spinner size="xs" color="amber" />
+                          ) : env.isFavorited ? (
+                            <FaStar className="text-amber-500" />
+                          ) : (
+                            <FaRegStar />
+                          )}
+                        </Button>
+                      )}
                     <ManageEnvironmentDialog environment={env} />
+                    </div>
                   </div>
 
                   <div className="flex items-center">
@@ -144,7 +211,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                     {index !== 0 && (
                       <Button
                         variant="secondary"
-                        disabled={loading}
+                        disabled={swapLoading}
                         title={`Swap with ${appEnvironments[index - 1].name}`}
                         onClick={() => handleSwapEnvironments(env, appEnvironments[index - 1])}
                       >
@@ -156,7 +223,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                     {index !== appEnvironments.length - 1 && (
                       <Button
                         variant="secondary"
-                        disabled={loading}
+                        disabled={swapLoading}
                         title={`Swap with ${appEnvironments[index + 1].name}`}
                         onClick={() => handleSwapEnvironments(env, appEnvironments[index + 1])}
                       >
