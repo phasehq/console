@@ -1,0 +1,14 @@
+query GetFavoritedEnvironments($orgId: ID!) {
+  favoritedEnvironments(orgId: $orgId) {
+    id
+    name
+    envType
+    isFavorited
+    secretCount
+    folderCount
+    app {
+      id
+      name
+    }
+  }
+} 

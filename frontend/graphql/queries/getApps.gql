@@ -20,6 +20,7 @@ query GetApps($organisationId: ID!, $appId: ID) {
       id
       name
       envType
+      isFavorited
       syncs {
         id
         serviceInfo {

@@ -1,0 +1,9 @@
+mutation ToggleFavoriteEnvironment($environmentId: ID!) {
+  toggleFavoriteEnvironment(environmentId: $environmentId) {
+    success
+    environment {
+      id
+      isFavorited
+    }
+  }
+} 
