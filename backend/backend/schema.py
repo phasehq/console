@@ -33,6 +33,7 @@ from ee.billing.graphene.queries.stripe import (
     StripeSubscriptionDetails,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
+    resolve_stripe_customer_portal_url
 )
 from ee.billing.graphene.mutations.stripe import (
     CancelSubscriptionMutation,
@@ -387,6 +388,8 @@ class Query(graphene.ObjectType):
     stripe_subscription_details = graphene.Field(
         StripeSubscriptionDetails, organisation_id=graphene.ID()
     )
+
+    stripe_customer_portal_url = graphene.String(organisation_id=graphene.ID(required=True))
 
     # --------------------------------------------------------------------
 
@@ -886,6 +889,7 @@ class Query(graphene.ObjectType):
 
     resolve_stripe_checkout_details = resolve_stripe_checkout_details
     resolve_stripe_subscription_details = resolve_stripe_subscription_details
+    resolve_stripe_customer_portal_url = resolve_stripe_customer_portal_url
 
 
 class Mutation(graphene.ObjectType):
