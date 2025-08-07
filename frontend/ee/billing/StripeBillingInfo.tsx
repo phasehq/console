@@ -503,7 +503,7 @@ export const StripeBillingInfo = () => {
               <div className="flex items-center gap-2">
                 {/* {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr && <UpsellDialog />} */}
                 {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
-                  <div className="flex items-center justify-end">
+                  <div className="flex items-center justify-end gap-4">
                     {!subscriptionData.cancelAtPeriodEnd && <ModifySubscriptionDialog />}
                     {!subscriptionData.cancelAtPeriodEnd ? (
                       <CancelSubscriptionDialog
