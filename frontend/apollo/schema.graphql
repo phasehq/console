@@ -52,6 +52,7 @@ type Query {
   validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
+  stripeCustomerPortalUrl(organisationId: ID!): String
 }
 
 type OrganisationType {
