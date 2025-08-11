@@ -608,6 +608,14 @@ class SecretFolder(models.Model):
             ),
         ]
 
+    def delete(self, *args, **kwargs):
+      env = self.environment
+      super().delete(*args, **kwargs)
+      # Update the 'updated_at' timestamp of the associated Environment
+      if env:
+          env.updated_at = timezone.now()
+          env.save()
+
 
 class SecretTag(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
