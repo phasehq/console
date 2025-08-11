@@ -644,6 +644,16 @@ class Secret(models.Model):
             self.environment.save()
 
 
+    def delete(self, *args, **kwargs):
+      env = self.environment
+      super().delete(*args, **kwargs)
+      # Update the 'updated_at' timestamp of the associated Environment
+      if env:
+          env.updated_at = timezone.now()
+          env.save()
+
+
+
 class SecretEvent(models.Model):
     CREATE = "C"
     READ = "R"
