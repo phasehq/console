@@ -27,10 +27,8 @@ import {
   FaUndo,
   FaEye,
   FaEyeSlash,
-  FaMagic,
   FaCloudUploadAlt,
   FaBan,
-  FaFileImport,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -217,10 +215,10 @@ export default function EnvironmentPath({
 
   /**
    * Bulk adds secrets to client state from an import
-   * 
+   *
    * If a secret key being imported already exists, we update the value and comment.
    * Otherwise, we process the import as normal, adding it as a new secret
-   * 
+   *
    * @param {SecretType[]} secrets - Secrets being imported into client state
    */
   const bulkAddSecrets = (secrets: SecretType[]) => {
