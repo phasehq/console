@@ -38,13 +38,15 @@ export const CommentDialog = (props: {
     <>
       <GenericDialog
         ref={dialogRef}
-        title={`Update ${secretName} comment`}
+        title={comment || `Update ${secretName} comment`}
         buttonVariant="outline"
         buttonContent={
-          <>
-            <FaHashtag className={clsx(comment && 'text-emerald-500')} />{' '}
-            <span className="hidden 2xl:block text-xs">{comment || 'Comment'}</span>
-          </>
+          <div className="py-1 2xl:py-0 flex items-center gap-1">
+            <FaHashtag className={clsx(comment && 'text-emerald-500 ')} />{' '}
+            <span className="hidden 2xl:block text-xs max-w-[32ch] truncate">
+              {comment || 'Comment'}
+            </span>
+          </div>
         }
       >
         <div className="py-4 ph-no-capture">
