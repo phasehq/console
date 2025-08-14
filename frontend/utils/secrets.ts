@@ -107,40 +107,77 @@ export const processEnvFile = (
   const lines = envFileString.split('\n')
   const newSecrets: SecretType[] = []
   let lastComment = ''
+  let i = 0
 
-  lines.forEach((line) => {
-    let trimmed = line.trim()
-    if (!trimmed) return // Skip empty lines
+  while (i < lines.length) {
+    let line = lines[i].trim()
 
-    if (trimmed.startsWith('#')) {
-      lastComment = trimmed.slice(1).trim()
-      return
+    // Skip empty lines
+    if (!line) {
+      i++
+      continue
     }
 
-    const [key, ...valueParts] = trimmed.split('=')
-    if (!key) return // Skip malformed lines
+    // Capture comment lines
+    if (line.startsWith('#')) {
+      lastComment = line.slice(1).trim()
+      i++
+      continue
+    }
 
-    let valueWithComment = valueParts.join('=')
-    let [parsedValue, inlineComment] = valueWithComment.split('#').map((part) => part.trim())
+    const [key, ...valueParts] = line.split('=')
+    if (!key) {
+      i++
+      continue
+    }
 
-    let value = withValues ? parsedValue.replace(/^['"]|['"]$/g, '') : ''
+    let rawValue = valueParts.join('=').trim()
+
+    // Handle multi-line quoted values
+    if (
+      (rawValue.startsWith('"') && !rawValue.endsWith('"')) ||
+      (rawValue.startsWith("'") && !rawValue.endsWith("'"))
+    ) {
+      const quoteChar = rawValue[0]
+      let multiLineValue = [rawValue.slice(1)] // remove first quote
+      i++
+      while (i < lines.length && !lines[i].trim().endsWith(quoteChar)) {
+        multiLineValue.push(lines[i])
+        i++
+      }
+      if (i < lines.length) {
+        // Add last line without trailing quote
+        const lastLine = lines[i].trim()
+        multiLineValue.push(lastLine.slice(0, -1))
+      }
+      rawValue = multiLineValue.join('\n')
+    } else {
+      // Strip surrounding quotes for single-line
+      rawValue = rawValue.replace(/^['"]|['"]$/g, '')
+    }
+
+    // Separate inline comment if present
+    const [parsedValue, inlineComment] = rawValue.split('#').map((p) => p.trim())
 
     newSecrets.push({
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
       version: 1,
       key: key.trim().toUpperCase(),
-      value,
+      value: withValues ? parsedValue : '',
       tags: [],
       comment: withComments ? lastComment || inlineComment || '' : '',
       path,
       environment,
     })
-    lastComment = '' // Reset lastComment after assigning it
-  })
+
+    lastComment = ''
+    i++
+  }
 
   return newSecrets
 }
+
 
 export const duplicateKeysExist = (secrets: SecretType[] | AppSecret[]) => {
   const keySet = new Set<string>()
