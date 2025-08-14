@@ -1,6 +1,13 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
 import { useContext, useEffect, useRef, useState } from 'react'
-import { FaEyeSlash, FaEye, FaUndo, FaTrashAlt } from 'react-icons/fa'
+import {
+  FaEyeSlash,
+  FaEye,
+  FaUndo,
+  FaTrashAlt,
+  FaCompressArrowsAlt,
+  FaExpandArrowsAlt,
+} from 'react-icons/fa'
 import { Button } from '../../common/Button'
 
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
@@ -17,6 +24,7 @@ import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import { Switch } from '@headlessui/react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
+import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 
 export default function SecretRow(props: {
   orgId: string
@@ -55,6 +63,7 @@ export default function SecretRow(props: {
   const booleanValue = secret.value.toLowerCase() === 'true'
 
   const [isRevealed, setIsRevealed] = useState<boolean>(cannonicalSecret === undefined)
+  const [expanded, setExpanded] = useState(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
 
@@ -64,6 +73,10 @@ export default function SecretRow(props: {
     setIsRevealed(true)
     if (cannonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
   }
+
+  const toggleExpanded = () => setExpanded((currentExpanded) => !currentExpanded)
+
+  const isMultiLine = secret.value.includes('\n')
 
   const handleHideSecret = () => setIsRevealed(false)
 
@@ -129,6 +142,12 @@ export default function SecretRow(props: {
     else return 'text-zinc-900 dark:text-zinc-100'
   }
 
+  const handleValueChange = (value: string) => {
+    handlePropertyChange(secret.id, 'value', value)
+
+    if (value.includes('\n') && !expanded) setExpanded(true)
+  }
+
   return (
     <div className={clsx('flex flex-row w-full gap-2 group relative z-0', rowBgColor())}>
       <div className="w-1/3 relative">
@@ -150,7 +169,7 @@ export default function SecretRow(props: {
             handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
           }
         />
-        <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
+        <div className="absolute inset-y-0 right-2 flex gap-1 items-start pt-1">
           <div
             className={clsx(
               secret.tags.length === 0 &&
@@ -166,6 +185,21 @@ export default function SecretRow(props: {
               disabled={!userCanUpdateSecrets}
             />
           </div>
+          {!stagedForDelete && (
+            <div
+              className={clsx(
+                secret.comment.length === 0 &&
+                  'opacity-0 group-hover:opacity-100 transition-opacity ease'
+              )}
+            >
+              <CommentDialog
+                secretName={secret.key}
+                secretId={secret.id}
+                comment={secret.comment}
+                handlePropertyChange={handlePropertyChange}
+              />
+            </div>
+          )}
         </div>
       </div>
       <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-transparent transition ease p-px">
@@ -191,15 +225,28 @@ export default function SecretRow(props: {
             </Switch>
           </div>
         )}
-        <input
+
+        <MaskedTextarea
           className={clsx(INPUT_BASE_STYLE, inputTextColor(), 'w-full focus:outline-none p-2')}
           value={secret.value}
+          onChange={(v) => handleValueChange(v)}
+          isRevealed={isRevealed}
+          expanded={expanded}
+          onFocus={() => setExpanded(true)}
           disabled={stagedForDelete || !userCanUpdateSecrets}
-          type={isRevealed ? 'text' : 'password'}
-          onChange={(e) => handlePropertyChange(secret.id, 'value', e.target.value)}
         />
 
-        <div className="flex gap-1 items-center group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10">
+        <div className="flex gap-1 items-start pt-1 group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10 absolute right-2">
+          {isMultiLine && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
+              <Button variant="ghost" onClick={() => toggleExpanded()}>
+                <div className="py-1">
+                  {expanded ? <FaCompressArrowsAlt /> : <FaExpandArrowsAlt />}
+                </div>
+              </Button>
+            </div>
+          )}
+
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
             {!isBoolean && (
               <Button
@@ -217,22 +264,6 @@ export default function SecretRow(props: {
           {!stagedForDelete && (
             <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
               <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
-            </div>
-          )}
-
-          {!stagedForDelete && (
-            <div
-              className={clsx(
-                secret.comment.length === 0 &&
-                  'opacity-0 group-hover:opacity-100 transition-opacity ease'
-              )}
-            >
-              <CommentDialog
-                secretName={secret.key}
-                secretId={secret.id}
-                comment={secret.comment}
-                handlePropertyChange={handlePropertyChange}
-              />
             </div>
           )}
 
@@ -259,7 +290,7 @@ export default function SecretRow(props: {
           )}
         </div>
       </div>
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-center">
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-start py-1">
         {userCanDeleteSecrets && (
           <Button
             variant="danger"
