@@ -1,0 +1,17 @@
+// .vscode/tasks.json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Dev Containers",
+      "type": "shell",
+      "command": "phase run docker compose -f dev-docker-compose.yml up",
+      "problemMatcher": [],
+      "isBackground": false,
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}
