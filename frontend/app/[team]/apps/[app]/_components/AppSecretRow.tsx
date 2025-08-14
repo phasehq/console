@@ -25,9 +25,10 @@ import { usePathname } from 'next/navigation'
 import { arraysEqual } from '@/utils/crypto'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
+import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 
 const INPUT_BASE_STYLE =
-  'w-full flex-1  font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
+  'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
 
 const EnvSecret = ({
   appSecretId,
@@ -174,7 +175,7 @@ const EnvSecret = ({
           <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
             <FaPlus />
             Add value
-          </Button>{' '}
+          </Button>
         </div>
       ) : (
         <div className="flex justify-between items-center w-full">
@@ -204,23 +205,20 @@ const EnvSecret = ({
                   </Switch>
                 </div>
               )}
-              <input
+              <MaskedTextarea
                 className={clsx(
                   INPUT_BASE_STYLE,
                   inputTextColor(),
-                  'rounded-sm font-mono text-sm font-medium'
+                  'rounded-sm focus:outline-none py-1'
                 )}
-                type={showValue ? 'text' : 'password'}
-                disabled={stagedForDelete}
                 value={clientEnvSecret.secret.value}
-                placeholder="VALUE"
-                onChange={(e) =>
-                  updateEnvValue(appSecretId, clientEnvSecret.env.id!, e.target.value)
-                }
+                onChange={(v) => updateEnvValue(appSecretId, clientEnvSecret.env.id!, v)}
+                isRevealed={showValue}
+                expanded={true}
               />
             </div>
             {clientEnvSecret.secret !== null && (
-              <div className="flex items-center gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
+              <div className="flex items-start pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
                 <Button variant="outline" onClick={toggleShowValue}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
