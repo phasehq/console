@@ -239,7 +239,11 @@ export default function SecretRow(props: {
         <div className="flex gap-1 items-start pt-1 group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10 absolute right-2">
           {isMultiLine && (
             <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-              <Button variant="ghost" onClick={() => toggleExpanded()}>
+              <Button
+                variant="ghost"
+                onClick={() => toggleExpanded()}
+                title={expanded ? 'Collapse' : 'Expand'}
+              >
                 <div className="py-1">
                   {expanded ? <FaCompressArrowsAlt /> : <FaExpandArrowsAlt />}
                 </div>
