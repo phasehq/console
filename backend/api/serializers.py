@@ -15,6 +15,7 @@ from .models import (
     Organisation,
     Secret,
     ServiceToken,
+    ServiceAccountToken,
     UserToken,
     PersonalSecret,
 )
@@ -248,7 +249,7 @@ class ServiceAccountTokenSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = UserToken
+        model = ServiceAccountToken
         fields = [
             "wrapped_key_share",
             "account_id",
