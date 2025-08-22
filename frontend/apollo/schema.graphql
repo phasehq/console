@@ -305,6 +305,7 @@ type ServiceAccountTokenType {
   token: String!
   wrappedKeyShare: String!
   createdBy: OrganisationMemberType
+  createdByServiceAccount: ServiceAccountType
   createdAt: DateTime
   updatedAt: DateTime!
   deletedAt: DateTime
