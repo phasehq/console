@@ -17,6 +17,18 @@ from django.apps import apps
 logger = logging.getLogger(__name__)
 
 
+class ServiceAccountUser:
+    """Mock ServiceAccount user"""
+    
+    def __init__(self, service_account):
+        self.userId = service_account.id
+        self.id = service_account.id
+        self.is_authenticated = True
+        self.is_active = True
+        self.username = service_account.name
+        self.service_account = service_account
+
+
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
 
@@ -97,8 +109,14 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
             try:
                 service_token = get_service_token(auth_token)
-                service_account = get_service_account_from_token(auth_token)
-                user = service_token.created_by.user
+                service_account = get_service_account_from_token(auth_token)          
+                
+                creator = getattr(service_token, "created_by", None)
+                if creator:
+                    user = creator.user
+                else:
+                    user = ServiceAccountUser(service_account)
+                    
                 auth["service_account"] = service_account
                 auth["service_account_token"] = service_token
 
