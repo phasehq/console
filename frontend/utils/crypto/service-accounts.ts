@@ -125,3 +125,61 @@ export const updateServiceAccountHandlers = async (orgId: string, userKeyring: O
   })
   
 }
+
+/**
+ * Wraps service account keyring and recovery for server-side encryption.
+ * 
+ * @param {string} keyringString - The service account keyring as JSON string
+ * @param {string} recoveryString - The service account recovery/mnemonic string
+ * @param {string} serverPublicKey - The server's public key for encryption
+ * @returns {Promise<{ serverWrappedKeyring: string; serverWrappedRecovery: string }>}
+ */
+export const wrapServiceAccountSecretsForServer = async (
+  keyringString: string,
+  recoveryString: string,
+  serverPublicKey: string
+) => {
+  const serverWrappedKeyring = await encryptAsymmetric(keyringString, serverPublicKey)
+  const serverWrappedRecovery = await encryptAsymmetric(recoveryString, serverPublicKey)
+
+  return {
+    serverWrappedKeyring,
+    serverWrappedRecovery,
+  }
+}
+
+/**
+ * Unwraps service account keyring and recovery for the current user.
+ * 
+ * @param {string} wrappedKeyring - The user-wrapped keyring
+ * @param {string} wrappedRecovery - The user-wrapped recovery
+ * @param {OrganisationKeyring} userKeyring - The current user's keyring
+ * @returns {Promise<{ keyringString: string; recoveryString: string }>}
+ */
+export const unwrapServiceAccountSecretsForUser = async (
+  wrappedKeyring: string,
+  wrappedRecovery: string,
+  userKeyring: OrganisationKeyring
+) => {
+  const userKxKeys = {
+    publicKey: await getUserKxPublicKey(userKeyring.publicKey),
+    privateKey: await getUserKxPrivateKey(userKeyring.privateKey),
+  }
+
+  const keyringString = await decryptAsymmetric(
+    wrappedKeyring,
+    userKxKeys.privateKey,
+    userKxKeys.publicKey
+  )
+
+  const recoveryString = await decryptAsymmetric(
+    wrappedRecovery,
+    userKxKeys.privateKey,
+    userKxKeys.publicKey
+  )
+
+  return {
+    keyringString,
+    recoveryString,
+  }
+}

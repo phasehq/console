@@ -676,7 +676,7 @@ class AppMembershipType(DjangoObjectType):
 
 class ServiceAccountType(DjangoObjectType):
 
-    third_party_auth_enabled = graphene.Boolean()
+    server_side_key_management_enabled = graphene.Boolean()
     handlers = graphene.List(ServiceAccountHandlerType)
     tokens = graphene.List(ServiceAccountTokenType)
     app_memberships = graphene.List(graphene.NonNull(AppMembershipType))
@@ -694,7 +694,7 @@ class ServiceAccountType(DjangoObjectType):
             "deleted_at",
         )
 
-    def resolve_third_party_auth_enabled(self, info):
+    def resolve_server_side_key_management_enabled(self, info):
         return (
             self.server_wrapped_keyring is not None
             and self.server_wrapped_recovery is not None

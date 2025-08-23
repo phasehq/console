@@ -556,10 +556,34 @@ class ServiceAccountToken(models.Model):
     created_by = models.ForeignKey(
         OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
     )
+    created_by_service_account = models.ForeignKey(
+        ServiceAccount,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="created_tokens",
+    )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
+
+    def clean(self):
+        # Ensure only one of created_by or created_by_service_account is set
+        # Service accounts can create tokens for themselves and others
+        if not (self.created_by or self.created_by_service_account):
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                "Must set either created_by (organisation member) or created_by_service_account"
+            )
+        if self.created_by and self.created_by_service_account:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                "Only one of created_by or created_by_service_account may be set"
+            )
+
+    def get_creator_account(self):
+        return self.created_by or self.created_by_service_account
 
     def delete(self, *args, **kwargs):
         """
