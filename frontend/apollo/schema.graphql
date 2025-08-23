@@ -280,7 +280,7 @@ type ServiceAccountType {
   createdAt: DateTime
   updatedAt: DateTime!
   deletedAt: DateTime
-  thirdPartyAuthEnabled: Boolean
+  serverSideKeyManagementEnabled: Boolean
   handlers: [ServiceAccountHandlerType]
   tokens: [ServiceAccountTokenType]
   appMemberships: [AppMembershipType!]
