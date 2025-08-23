@@ -61,6 +61,7 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
 
   const handleSave = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
+    setIsOpen(false)
 
     if (selectedMode === 'server' && !serviceAccount.serverSideKeyManagementEnabled) {
       // Enable server-side encryption
@@ -69,8 +70,6 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
       // Disable server-side encryption (switch to client-side)
       await handleDisableSSE()
     } else {
-      // No change needed
-      closeModal()
     }
   }
 
@@ -126,9 +125,6 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
           error: 'Failed to enable server-side key management',
         }
       )
-      // Ensure local state reflects new server-side mode
-      setSelectedMode('server')
-      closeModal()
     } catch (error) {
       console.error('Error enabling SSE:', error)
       toast.error('Failed to enable server-side key management')
@@ -155,9 +151,6 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
           error: 'Failed to switch to client-side key management',
         }
       )
-      // Ensure local state reflects new client-side mode
-      setSelectedMode('client')
-      closeModal()
     } catch (error) {
       console.error('Error disabling SSE:', error)
       toast.error('Failed to switch to client-side key management')
