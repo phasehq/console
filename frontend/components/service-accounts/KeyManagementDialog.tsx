@@ -44,28 +44,28 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [selectedMode, setSelectedMode] = useState<'client' | 'server'>(
-    serviceAccount.thirdPartyAuthEnabled ? 'server' : 'client'
+    serviceAccount.serverSideKeyManagementEnabled ? 'server' : 'client'
   )
 
   const closeModal = () => {
     setIsOpen(false)
     // Reset to current state when closing
-    setSelectedMode(serviceAccount.thirdPartyAuthEnabled ? 'server' : 'client')
+    setSelectedMode(serviceAccount.serverSideKeyManagementEnabled ? 'server' : 'client')
   }
 
   const openModal = () => {
     // Always sync mode with latest account state on open
-    setSelectedMode(serviceAccount.thirdPartyAuthEnabled ? 'server' : 'client')
+    setSelectedMode(serviceAccount.serverSideKeyManagementEnabled ? 'server' : 'client')
     setIsOpen(true)
   }
 
   const handleSave = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
-    if (selectedMode === 'server' && !serviceAccount.thirdPartyAuthEnabled) {
+    if (selectedMode === 'server' && !serviceAccount.serverSideKeyManagementEnabled) {
       // Enable server-side encryption
       await handleEnableSSE()
-    } else if (selectedMode === 'client' && serviceAccount.thirdPartyAuthEnabled) {
+    } else if (selectedMode === 'client' && serviceAccount.serverSideKeyManagementEnabled) {
       // Disable server-side encryption (switch to client-side)
       await handleDisableSSE()
     } else {
@@ -164,7 +164,7 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
     }
   }
 
-  const currentMode = serviceAccount.thirdPartyAuthEnabled ? 'server' : 'client'
+  const currentMode = serviceAccount.serverSideKeyManagementEnabled ? 'server' : 'client'
   const hasChanges = selectedMode !== currentMode
 
   return (
@@ -347,7 +347,7 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
 
                       {hasChanges &&
                         selectedMode === 'server' &&
-                        !serviceAccount.thirdPartyAuthEnabled && (
+                        !serviceAccount.serverSideKeyManagementEnabled && (
                           <Alert variant="info" icon={true}>
                             Enabling server-side key management will allow the server to securely
                             access keys and generate tokens on behalf of the Service Account.
@@ -356,7 +356,7 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
 
                       {hasChanges &&
                         selectedMode === 'client' &&
-                        serviceAccount.thirdPartyAuthEnabled && (
+                        serviceAccount.serverSideKeyManagementEnabled && (
                           <Alert variant="warning" icon={true}>
                             Switching to client-side key management will remove server access to
                             this account&apos;s keys. All previously generated access tokens will
