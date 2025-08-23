@@ -802,7 +802,8 @@ type Mutation {
   deleteNetworkAccessPolicy(id: ID!): DeleteNetworkAccessPolicyMutation
   updateAccountNetworkAccessPolicies(accountInputs: [AccountPolicyInput], organisationId: ID!): UpdateAccountNetworkAccessPolicies
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
-  enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
+  enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
+  enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   updateServiceAccount(name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
@@ -1027,7 +1028,11 @@ input ServiceAccountHandlerInput {
   wrappedRecovery: String!
 }
 
-type EnableServiceAccountThirdPartyAuthMutation {
+type EnableServiceAccountServerSideKeyManagementMutation {
+  serviceAccount: ServiceAccountType
+}
+
+type EnableServiceAccountClientSideKeyManagementMutation {
   serviceAccount: ServiceAccountType
 }
 
