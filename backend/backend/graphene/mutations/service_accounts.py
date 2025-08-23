@@ -82,7 +82,7 @@ class CreateServiceAccountMutation(graphene.Mutation):
         return CreateServiceAccountMutation(service_account=service_account)
 
 
-class EnableServiceAccountThirdPartyAuthMutation(graphene.Mutation):
+class EnableServiceAccountServerSideKeyManagementMutation(graphene.Mutation):
     class Arguments:
         service_account_id = graphene.ID()
         server_wrapped_keyring = graphene.String()
@@ -113,7 +113,35 @@ class EnableServiceAccountThirdPartyAuthMutation(graphene.Mutation):
         service_account.server_wrapped_recovery = server_wrapped_recovery
         service_account.save()
 
-        return EnableServiceAccountThirdPartyAuthMutation(
+        return EnableServiceAccountServerSideKeyManagementMutation(
+            service_account=service_account
+        )
+
+
+class EnableServiceAccountClientSideKeyManagementMutation(graphene.Mutation):
+    class Arguments:
+        service_account_id = graphene.ID()
+
+    service_account = graphene.Field(ServiceAccountType)
+
+    @classmethod
+    def mutate(cls, root, info, service_account_id):
+        user = info.context.user
+        service_account = ServiceAccount.objects.get(id=service_account_id)
+
+        if not user_has_permission(
+            user, "update", "ServiceAccounts", service_account.organisation
+        ):
+            raise GraphQLError(
+                "You don't have the permissions required to update Service Accounts in this organisation"
+            )
+
+        # Delete server-wrapped keys to disable server-side key management
+        service_account.server_wrapped_keyring = None
+        service_account.server_wrapped_recovery = None
+        service_account.save()
+
+        return EnableServiceAccountClientSideKeyManagementMutation(
             service_account=service_account
         )
 
