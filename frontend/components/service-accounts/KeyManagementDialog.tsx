@@ -339,15 +339,6 @@ export const KeyManagementDialog = (props: KeyManagementDialogProps) => {
                       </div>
 
                       {hasChanges &&
-                        selectedMode === 'server' &&
-                        !serviceAccount.serverSideKeyManagementEnabled && (
-                          <Alert variant="info" icon={true}>
-                            Enabling server-side key management will allow the server to securely
-                            access keys and generate tokens on behalf of the Service Account.
-                          </Alert>
-                        )}
-
-                      {hasChanges &&
                         selectedMode === 'client' &&
                         serviceAccount.serverSideKeyManagementEnabled && (
                           <Alert variant="warning" icon={true}>
