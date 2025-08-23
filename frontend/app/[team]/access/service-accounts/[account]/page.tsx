@@ -9,6 +9,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext, useEffect, useState } from 'react'
 import { FaBan, FaBoxOpen, FaChevronLeft, FaCog, FaEdit, FaNetworkWired } from 'react-icons/fa'
+import { FaServer, FaArrowDownUpLock } from 'react-icons/fa6'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
 import { ServiceAccountType } from '@/apollo/graphql'
@@ -22,6 +23,7 @@ import { SseLabel } from '@/components/apps/EncryptionModeIndicator'
 import { IPChip } from '../../network/_components/IPChip'
 import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 import { ServiceAccountTokens } from './_components/ServiceAccountTokens'
+import { KeyManagementDialog } from '@/components/service-accounts/KeyManagementDialog'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -166,6 +168,29 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
               )}
             </h3>
             <span className="text-neutral-500 text-sm font-mono pl-2">{account.id}</span>
+            <div className="flex items-center gap-2 text-sm text-neutral-500 mt-1">
+              {account.serverSideKeyManagementEnabled ? (
+                <FaServer className="text-neutral-500" />
+              ) : (
+                <FaArrowDownUpLock className="text-neutral-500" />
+              )}
+              <span className="whitespace-nowrap">KMS Mode:</span>
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                {account.serverSideKeyManagementEnabled ? 'Server-side' : 'Client-side'} key
+                management
+              </span>
+              {userCanUpdateSA && (
+                <KeyManagementDialog
+                  serviceAccount={account}
+                  trigger={
+                    <Button variant="secondary" className="flex items-center gap-2">
+                      <FaCog className="h-4 w-4" />
+                      <span>Manage</span>
+                    </Button>
+                  }
+                />
+              )}
+            </div>
           </div>
         </div>
 
