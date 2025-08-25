@@ -6,7 +6,9 @@ from api.models import (
     ServiceAccount,
 )
 from api.utils.access.permissions import user_has_permission
-from backend.graphene.types import NetworkAccessPolicyType, RoleType
+from backend.graphene.types import NetworkAccessPolicyType, RoleType, IdentityType
+from api.models import Identity
+from django.utils import timezone
 import graphene
 from graphql import GraphQLError
 
@@ -219,6 +221,171 @@ class DeleteNetworkAccessPolicyMutation(graphene.Mutation):
         policy.delete()
 
         return DeleteNetworkAccessPolicyMutation(ok=True)
+
+
+class CreateIdentityMutation(graphene.Mutation):
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+        provider = graphene.String(required=True)
+        name = graphene.String(required=True)
+        description = graphene.String(required=False)
+        trusted_principals = graphene.String(required=True)
+        signature_ttl_seconds = graphene.Int(required=False)
+        sts_endpoint = graphene.String(required=False)
+        token_name_pattern = graphene.String(required=False)
+        default_ttl_seconds = graphene.Int(required=True)
+        max_ttl_seconds = graphene.Int(required=True)
+
+    identity = graphene.Field(IdentityType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        organisation_id,
+        provider,
+        name,
+        trusted_principals,
+        default_ttl_seconds,
+        max_ttl_seconds,
+        description=None,
+        signature_ttl_seconds=60,
+        sts_endpoint="https://sts.amazonaws.com",
+        token_name_pattern=None,
+    ):
+        user = info.context.user
+        org = Organisation.objects.get(id=organisation_id)
+
+        if not user_has_permission(user, "create", "Identities", org):
+            raise GraphQLError(
+                "You don't have the permissions required to create identities in this organisation"
+            )
+
+        if default_ttl_seconds is not None and max_ttl_seconds is not None:
+            if int(default_ttl_seconds) > int(max_ttl_seconds):
+                raise GraphQLError(
+                    "Default token expiry must be less than or equal to Maximum token expiry"
+                )
+
+        # Store provider-specific configuration in a generic config field
+        # Convert comma-separated trusted_principals to list for consistency
+        trusted_list = [p.strip() for p in trusted_principals.split(",") if p.strip()]
+        config = {
+            "trustedPrincipals": trusted_list,
+            "signatureTtlSeconds": signature_ttl_seconds,
+            "stsEndpoint": sts_endpoint,
+        }
+
+        identity = Identity.objects.create(
+            organisation=org,
+            provider=provider,
+            name=name,
+            description=description,
+            config=config,
+            token_name_pattern=token_name_pattern,
+            default_ttl_seconds=default_ttl_seconds,
+            max_ttl_seconds=max_ttl_seconds,
+        )
+
+        return CreateIdentityMutation(identity=identity)
+
+
+class UpdateIdentityMutation(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+        name = graphene.String(required=False)
+        description = graphene.String(required=False)
+        trusted_principals = graphene.String(required=False)
+        signature_ttl_seconds = graphene.Int(required=False)
+        sts_endpoint = graphene.String(required=False)
+        token_name_pattern = graphene.String(required=False)
+        default_ttl_seconds = graphene.Int(required=False)
+        max_ttl_seconds = graphene.Int(required=False)
+
+    identity = graphene.Field(IdentityType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        id,
+        name=None,
+        description=None,
+        trusted_principals=None,
+        signature_ttl_seconds=None,
+        sts_endpoint=None,
+        token_name_pattern=None,
+        default_ttl_seconds=None,
+        max_ttl_seconds=None,
+    ):
+        user = info.context.user
+        identity = Identity.objects.get(id=id, deleted_at=None)
+
+        org = identity.organisation
+        if not user_has_permission(user, "update", "Identities", org):
+            raise GraphQLError(
+                "You don't have the permissions required to update identities in this organisation"
+            )
+
+        # Update basic fields using dictionary unpacking
+        basic_updates = {
+            k: v for k, v in {
+                'name': name,
+                'description': description,
+                'token_name_pattern': token_name_pattern,
+                'default_ttl_seconds': default_ttl_seconds,
+                'max_ttl_seconds': max_ttl_seconds,
+            }.items() if v is not None
+        }
+        for field, value in basic_updates.items():
+            setattr(identity, field, value)
+
+        # Update provider-specific config atomically
+        config_updates = {}
+        if trusted_principals is not None:
+            config_updates["trustedPrincipals"] = [p.strip() for p in trusted_principals.split(",") if p.strip()]
+        if signature_ttl_seconds is not None:
+            config_updates["signatureTtlSeconds"] = signature_ttl_seconds
+        if sts_endpoint is not None:
+            config_updates["stsEndpoint"] = sts_endpoint
+        
+        if config_updates:
+            identity.config = {**(identity.config or {}), **config_updates}
+
+        if identity.default_ttl_seconds is not None and identity.max_ttl_seconds is not None:
+            if int(identity.default_ttl_seconds) > int(identity.max_ttl_seconds):
+                raise GraphQLError(
+                    "Default token expiry must be less than or equal to Maximum token expiry"
+                )
+
+        identity.save()
+
+        return UpdateIdentityMutation(identity=identity)
+
+
+class DeleteIdentityMutation(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        user = info.context.user
+        identity = Identity.objects.get(id=id, deleted_at=None)
+
+        org = identity.organisation
+        if not user_has_permission(user, "delete", "Identities", org):
+            raise GraphQLError(
+                "You don't have the permissions required to delete identities in this organisation"
+            )
+
+        identity.deleted_at = timezone.now()
+        identity.save()
+
+        return DeleteIdentityMutation(ok=True)
 
 
 class AccountTypeEnum(graphene.Enum):
