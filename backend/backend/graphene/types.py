@@ -11,7 +11,6 @@ from graphene import ObjectType, relay, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
-    CustomUser,
     Environment,
     EnvironmentKey,
     EnvironmentSync,
@@ -30,12 +29,12 @@ from api.models import (
     SecretEvent,
     SecretFolder,
     SecretTag,
-    ServerEnvironmentKey,
     ServiceAccount,
     ServiceAccountHandler,
     ServiceAccountToken,
     ServiceToken,
     UserToken,
+    Identity,
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
@@ -325,6 +324,14 @@ class ProviderType(graphene.ObjectType):
         graphene.NonNull(graphene.String), required=True
     )
     auth_scheme = graphene.String()
+
+
+class IdentityProviderType(graphene.ObjectType):
+    id = graphene.String(required=True)
+    name = graphene.String(required=True)
+    description = graphene.String(required=True)
+    icon_id = graphene.String(required=True)
+    supported = graphene.Boolean(required=True)
 
 
 class ServiceType(ObjectType):
@@ -681,6 +688,7 @@ class ServiceAccountType(DjangoObjectType):
     tokens = graphene.List(ServiceAccountTokenType)
     app_memberships = graphene.List(graphene.NonNull(AppMembershipType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
+    identities = graphene.List(graphene.NonNull(lambda: IdentityType))
 
     class Meta:
         model = ServiceAccount
@@ -739,6 +747,9 @@ class ServiceAccountType(DjangoObjectType):
         account_policies = self.network_policies.all()
 
         return list(chain(account_policies, global_policies))
+
+    def resolve_identities(self, info):
+        return self.identities.filter(deleted_at=None)
 
 
 class EnvironmentKeyType(DjangoObjectType):
@@ -994,3 +1005,40 @@ class AWSValidationResultType(graphene.ObjectType):
     method = graphene.String()
     error = graphene.String()
     assumed_role_arn = graphene.String()
+
+
+class AwsIamConfigType(graphene.ObjectType):
+    trusted_principals = graphene.List(graphene.String)
+    signature_ttl_seconds = graphene.Int()
+    sts_endpoint = graphene.String()
+
+
+class IdentityConfigUnion(graphene.Union):
+    class Meta:
+        types = (AwsIamConfigType,)
+
+
+class IdentityType(DjangoObjectType):
+    config = graphene.Field(IdentityConfigUnion)
+
+    class Meta:
+        model = Identity
+        fields = "__all__"
+
+    def resolve_config(self, info):
+        """Map provider-specific config into typed objects"""
+        provider = (self.provider or '').lower()
+        cfg = self.config or {}
+        
+        if provider == 'aws_iam':
+            try:
+                ttl = int(cfg.get('signatureTtlSeconds', 60))
+            except Exception:
+                ttl = 60
+            return AwsIamConfigType(
+                trusted_principals=self.get_trusted_list(),
+                signature_ttl_seconds=ttl,
+                sts_endpoint=cfg.get('stsEndpoint'),
+            )
+        
+        return None
