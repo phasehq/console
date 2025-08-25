@@ -24,6 +24,7 @@ import { IPChip } from '../../network/_components/IPChip'
 import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 import { ServiceAccountTokens } from './_components/ServiceAccountTokens'
 import { KeyManagementDialog } from '@/components/service-accounts/KeyManagementDialog'
+import { ServiceAccountIdentities } from './_components/ServiceAccountIdentities'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -167,7 +168,13 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                 </div>
               )}
             </h3>
-            <span className="text-neutral-500 text-sm font-mono pl-2">{account.id}</span>
+            <CopyButton
+              value={account.id}
+              buttonVariant="ghost"
+              title="Copy Service Account ID to clipboard"
+            >
+              <span className="text-neutral-500 text-sm font-mono pl-2">{account.id}</span>
+            </CopyButton>
             <div className="flex items-center gap-2 text-sm text-neutral-500 mt-1">
               {account.serverSideKeyManagementEnabled ? (
                 <FaServer className="text-neutral-500" />
@@ -319,6 +326,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             </div>
           )}
         </div>
+
+        <ServiceAccountIdentities account={account} />
 
         {userCanViewNetworkAccess && (
           <div className="py-4">
