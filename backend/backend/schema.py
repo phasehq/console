@@ -25,6 +25,9 @@ from .graphene.mutations.access import (
     CreateNetworkAccessPolicyMutation,
     DeleteCustomRoleMutation,
     DeleteNetworkAccessPolicyMutation,
+    CreateIdentityMutation,
+    UpdateIdentityMutation,
+    DeleteIdentityMutation,
     UpdateAccountNetworkAccessPolicies,
     UpdateCustomRoleMutation,
     UpdateNetworkAccessPolicyMutation,
@@ -68,11 +71,13 @@ from .graphene.queries.syncing import (
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
+from .graphene.queries.identity import resolve_aws_sts_endpoints, resolve_identity_providers
 from .graphene.queries.access import (
     resolve_roles,
     resolve_organisation_global_access_users,
     resolve_network_access_policies,
     resolve_client_ip,
+    resolve_identities,
 )
 from .graphene.queries.service_accounts import (
     resolve_service_accounts,
@@ -166,6 +171,7 @@ from .graphene.types import (
     PhaseLicenseType,
     ProviderCredentialsType,
     ProviderType,
+    IdentityProviderType,
     RoleType,
     SecretEventType,
     SecretFolderType,
@@ -179,6 +185,7 @@ from .graphene.types import (
     TimeRange,
     UserTokenType,
     AWSValidationResultType,
+    IdentityType,
 )
 import graphene
 from graphql import GraphQLError
@@ -218,6 +225,7 @@ class Query(graphene.ObjectType):
     network_access_policies = graphene.List(
         NetworkAccessPolicyType, organisation_id=graphene.ID()
     )
+    identities = graphene.List(IdentityType, organisation_id=graphene.ID())
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
@@ -325,6 +333,8 @@ class Query(graphene.ObjectType):
     providers = graphene.List(ProviderType)
 
     services = graphene.List(ServiceType)
+    aws_sts_endpoints = graphene.List(graphene.JSONString)
+    identity_providers = graphene.List(IdentityProviderType)
 
     saved_credentials = graphene.List(ProviderCredentialsType, org_id=graphene.ID())
 
@@ -448,6 +458,12 @@ class Query(graphene.ObjectType):
     resolve_roles = resolve_roles
     resolve_network_access_policies = resolve_network_access_policies
 
+    # Identities
+    resolve_identities = resolve_identities
+    resolve_aws_sts_endpoints = resolve_aws_sts_endpoints
+    resolve_identity_providers = resolve_identity_providers
+
+    
     resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_name_available(root, info, name):
@@ -929,6 +945,11 @@ class Mutation(graphene.ObjectType):
     update_network_access_policy = UpdateNetworkAccessPolicyMutation.Field()
     delete_network_access_policy = DeleteNetworkAccessPolicyMutation.Field()
     update_account_network_access_policies = UpdateAccountNetworkAccessPolicies.Field()
+
+    # Identities
+    create_identity = CreateIdentityMutation.Field()
+    update_identity = UpdateIdentityMutation.Field()
+    delete_identity = DeleteIdentityMutation.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
