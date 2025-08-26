@@ -177,7 +177,7 @@ export default function IdentityPage() {
       ) : (
         <div className="space-y-2">
           <div className="space-y-1">
-            <div className="text-xl font-semibold">Third-party identities</div>
+            <div className="text-xl font-semibold">External identities</div>
             <div className="text-neutral-500">Manage identities used for external auth</div>
           </div>
           <div className="space-y-4">
