@@ -16,6 +16,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
 import clsx from 'clsx'
+import { CreateRenderSync } from './Render/CreateRenderSync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -69,6 +70,8 @@ export const CreateSyncDialog = (props: {
         return <CreateVercelSync appId={props.appId} closeModal={closeModal} />
       case 'cloudflare_workers':
         return <CreateCloudflareWorkersSync appId={props.appId} closeModal={closeModal} />
+      case 'render':
+        return <CreateRenderSync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null

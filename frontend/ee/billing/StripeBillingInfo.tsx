@@ -25,7 +25,6 @@ import {
   SiMastercard,
   SiVisa,
 } from 'react-icons/si'
-
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
 import { Alert } from '@/components/common/Alert'
@@ -34,7 +33,7 @@ import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import { AddPaymentMethodDialog, AddPaymentMethodForm } from './AddPaymentMethodForm'
 import { ModifySubscriptionDialog } from './ModifySubscriptionDialog'
-import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { StripeCustomerPortalLink } from './StripeCustomerPortalLink'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
@@ -504,7 +503,8 @@ export const StripeBillingInfo = () => {
               <div className="flex items-center gap-2">
                 {/* {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr && <UpsellDialog />} */}
                 {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
-                  <div>
+                  <div className="flex items-center justify-end gap-4">
+                    {!subscriptionData.cancelAtPeriodEnd && <ModifySubscriptionDialog />}
                     {!subscriptionData.cancelAtPeriodEnd ? (
                       <CancelSubscriptionDialog
                         subscriptionId={subscriptionData?.subscriptionId!}
@@ -516,9 +516,7 @@ export const StripeBillingInfo = () => {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr &&
-                  !subscriptionData.cancelAtPeriodEnd && <ModifySubscriptionDialog />}
-                <ManagePaymentMethodsDialog />
+                <StripeCustomerPortalLink />
               </div>
             </div>
           )}

@@ -78,6 +78,14 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    RENDER = {
+        "id": "render",
+        "name": "Render",
+        "expected_credentials": ["api_key"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
@@ -155,6 +163,13 @@ class ServiceConfig:
         "name": "Vercel",
         "provider": Providers.VERCEL,
         "resource_type": "environment",
+    }
+
+    RENDER = {
+        "id": "render",
+        "name": "Render",
+        "provider": Providers.RENDER,
+        "resource_type": "service",
     }
 
     @classmethod

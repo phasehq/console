@@ -131,7 +131,7 @@ class SecretSerializer(serializers.ModelSerializer):
 class EnvironmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Environment
-        fields = ["id", "name", "env_type"]
+        fields = ["id", "name", "env_type", "index", "created_at", "updated_at"]
 
 
 class EnvironmentKeySerializer(serializers.ModelSerializer):

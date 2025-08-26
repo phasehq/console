@@ -1,0 +1,40 @@
+query GetOrganisationMemberDetail($organisationId: ID!, $id: ID) {
+  organisationMembers(organisationId: $organisationId, memberId: $id) {
+    id
+    role {
+      id
+      name
+      description
+      permissions
+      color
+    }
+    identityKey
+    email
+    fullName
+    avatarUrl
+    createdAt
+    lastLogin
+    self
+    appMemberships {
+      id
+      name
+      sseEnabled
+      environments {
+        id
+        name
+      }
+    }
+    tokens {
+      id
+      name
+      createdAt
+      expiresAt
+    }
+    networkPolicies {
+      id
+      name
+      allowedIps
+      isGlobal
+    }
+  }
+}

@@ -33,16 +33,22 @@ import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { MdSearchOff } from 'react-icons/md'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { useSearchParams } from 'next/navigation'
 
 type MemberWithEnvScope = OrganisationMemberType & {
   scope: Partial<EnvironmentType>[]
 }
 
 export const AddMemberDialog = ({ appId }: { appId: string }) => {
+  const searchParams = useSearchParams()
+  const preselectedAccountId = searchParams?.get('new') ?? null
+
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
   const userCanReadAppMembers = organisation
@@ -114,12 +120,41 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
   const reset = () => {
     setSelectedMembers([])
   }
+  const openModal = () => dialogRef.current?.openModal()
   const closeModal = () => dialogRef.current?.closeModal()
 
   const handleClose = () => {
     closeModal()
     reset()
   }
+
+  useEffect(() => {
+    if (preselectedAccountId && orgMembersData?.organisationMembers) {
+      // Check if user account is already added to the app
+      const isAlreadyAdded = data?.appUsers?.some(
+        (member: OrganisationMemberType) => member.id === preselectedAccountId
+      )
+
+      if (isAlreadyAdded) {
+        // Don't open dialog if already added
+        return
+      }
+
+      const preselectedMember: OrganisationMemberType = orgMembersData?.organisationMembers.find(
+        (member: OrganisationMemberType) => member.id === preselectedAccountId
+      )
+
+      if (preselectedMember) {
+        setSelectedMembers([
+          {
+            ...preselectedMember,
+            scope: [],
+          },
+        ])
+        openModal()
+      }
+    }
+  }, [preselectedAccountId, orgMembersData?.organisationMembers, data?.appUsers])
 
   const handleAddMembers = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -128,6 +163,8 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
       toast.error('Please select an Environment scope for all members')
       return false
     }
+
+    setIsLoading(true)
 
     const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
 
@@ -194,6 +231,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
     })
 
     toast.success('Added accounts to App', { autoClose: 2000 })
+    setIsLoading(false)
     handleClose()
   }
 
@@ -492,7 +530,12 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
               <Button variant="secondary" type="button" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button variant="primary" type="submit" disabled={!selectedMembers.length}>
+              <Button
+                variant="primary"
+                type="submit"
+                disabled={!selectedMembers.length}
+                isLoading={isLoading}
+              >
                 <FaPlus /> Add{' '}
                 {selectedMembers.length > 0
                   ? ` ${selectedMembers.length} ${selectedMembers.length === 1 ? 'member' : 'members'} `

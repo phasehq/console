@@ -10,6 +10,7 @@ from api.views.auth import (
     health_check,
     github_integration_callback,
     secrets_tokens,
+    root_endpoint,
 )
 from api.views.kms import kms
 
@@ -17,6 +18,7 @@ from api.views.kms import kms
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 urlpatterns = [
+    path("public/", root_endpoint),
     path("accounts/", include("allauth.urls")),
     path("auth/", include("dj_rest_auth.urls")),
     path("social/login/", include("api.urls")),

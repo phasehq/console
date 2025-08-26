@@ -153,3 +153,27 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
         )
     except stripe.error.StripeError as e:
         raise GraphQLError(f"Stripe error: {e}")
+
+def resolve_stripe_customer_portal_url(self, info, organisation_id):
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    try:
+        org = Organisation.objects.get(id=organisation_id)
+
+        if not user_has_permission(info.context.user, "update", "Billing", org):
+            raise GraphQLError("You don't have permission to view billing information.")
+
+        return_url=f"{settings.OAUTH_REDIRECT_URI}/{org.name}/settings"
+
+        # Create the portal session only on demand
+        session = stripe.billing_portal.Session.create(
+            customer=org.stripe_customer_id,
+            return_url=return_url
+        )
+
+        return session.url
+
+    except Organisation.DoesNotExist:
+        raise GraphQLError("Organisation not found.")
+    except stripe.error.StripeError as e:
+        raise GraphQLError(f"Stripe error: {str(e)}")

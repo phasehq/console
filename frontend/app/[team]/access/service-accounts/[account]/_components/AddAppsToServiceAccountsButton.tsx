@@ -8,18 +8,22 @@ import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import Spinner from '@/components/common/Spinner'
-import { AppType, Query } from '@/apollo/graphql'
+import { AppMembershipType, AppType, Query } from '@/apollo/graphql'
 import clsx from 'clsx'
 import { EmptyState } from '@/components/common/EmptyState'
 import { MdSearchOff } from 'react-icons/md'
 
 interface AddAppButtonProps {
-  teamSlug: string
   serviceAccountId: string
+  appMemberships: AppMembershipType[]
   align?: 'left' | 'right'
 }
 
-export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButtonProps) => {
+export const AddAppButton = ({
+  serviceAccountId,
+  appMemberships,
+  align = 'left',
+}: AddAppButtonProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -34,7 +38,10 @@ export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButton
 
   const alignMenuRight = align === 'right'
 
-  const apps = data?.apps?.filter((app): app is AppType => app !== null) || []
+  const apps: AppType[] =
+    data?.apps?.filter(
+      (app): app is AppType => !!app && !appMemberships.some((a) => a!.id === app.id)
+    ) ?? []
 
   const filteredApps =
     searchQuery === ''
@@ -58,7 +65,10 @@ export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButton
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className="absolute z-10 right-0 origin-bottom-right mt-2"
+            className={clsx(
+              'absolute z-10 mt-2',
+              alignMenuRight ? 'origin-bottom-left left-0' : 'origin-bottom-right right-0'
+            )}
           >
             <Menu.Items as={Fragment}>
               <div className="flex flex-col w-min divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
@@ -89,7 +99,7 @@ export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButton
                     <Menu.Item key={app.id} as={Fragment}>
                       {({ active }) => (
                         <Link
-                          href={`/${teamSlug}/apps/${app.id}/access/service-accounts?new=${serviceAccountId}`}
+                          href={`/${organisation?.name}/apps/${app.id}/access/service-accounts?new=${serviceAccountId}`}
                           className={clsx(
                             ' px-4 py-2 flex items-center justify-between gap-4 transition ease',
                             active
@@ -105,19 +115,24 @@ export const AddAppButton = ({ teamSlug, serviceAccountId, align }: AddAppButton
                       )}
                     </Menu.Item>
                   ))}
-                  {filteredApps.length === 0 && searchQuery && (
-                    <EmptyState
-                      title={`No results for "${searchQuery}"`}
-                      subtitle="Try adjusting your search term"
-                      graphic={
-                        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                          <MdSearchOff />
-                        </div>
-                      }
-                    >
-                      <></>
-                    </EmptyState>
-                  )}
+                  {filteredApps.length === 0 &&
+                    (searchQuery ? (
+                      <EmptyState
+                        title={`No results for "${searchQuery}"`}
+                        subtitle="Try adjusting your search term"
+                        graphic={
+                          <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                            <MdSearchOff />
+                          </div>
+                        }
+                      >
+                        <></>
+                      </EmptyState>
+                    ) : (
+                      <div className="p-4 text-center text-neutral-500 text-sm w-64">
+                        Account already has access to all available apps.
+                      </div>
+                    ))}
                 </div>
               </div>
             </Menu.Items>

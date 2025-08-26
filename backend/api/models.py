@@ -284,6 +284,16 @@ class ServiceAccount(models.Model):
     deleted_at = models.DateTimeField(null=True, blank=True)
     objects = ServiceAccountManager()
 
+    def delete(self, *args, **kwargs):
+        """
+        Soft delete the object by setting the 'deleted_at' field.
+        """
+        self.deleted_at = timezone.now()
+        self.save()
+
+        # Soft-delete related tokens
+        self.serviceaccounttoken_set.update(deleted_at=timezone.now())
+
 
 class ServiceAccountHandler(models.Model):
     id = models.TextField(default=uuid4, primary_key=True)
@@ -400,6 +410,22 @@ class EnvironmentKey(models.Model):
     def delete(self, *args, **kwargs):
         self.deleted_at = timezone.now()
         self.save()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["environment", "user"],
+                name="unique_envkey_user",
+                condition=models.Q(user__isnull=False, deleted_at__isnull=True),
+            ),
+            models.UniqueConstraint(
+                fields=["environment", "service_account"],
+                name="unique_envkey_service_account",
+                condition=models.Q(
+                    service_account__isnull=False, deleted_at__isnull=True
+                ),
+            ),
+        ]
 
 
 class ServerEnvironmentKey(models.Model):
@@ -535,6 +561,13 @@ class ServiceAccountToken(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
 
+    def delete(self, *args, **kwargs):
+        """
+        Soft delete the object by setting the 'deleted_at' field.
+        """
+        self.deleted_at = timezone.now()
+        self.save()
+
 
 class UserToken(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
@@ -575,6 +608,14 @@ class SecretFolder(models.Model):
             ),
         ]
 
+    def delete(self, *args, **kwargs):
+      env = self.environment
+      super().delete(*args, **kwargs)
+      # Update the 'updated_at' timestamp of the associated Environment
+      if env:
+          env.updated_at = timezone.now()
+          env.save()
+
 
 class SecretTag(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
@@ -609,6 +650,16 @@ class Secret(models.Model):
         if self.environment:
             self.environment.updated_at = timezone.now()
             self.environment.save()
+
+
+    def delete(self, *args, **kwargs):
+      env = self.environment
+      super().delete(*args, **kwargs)
+      # Update the 'updated_at' timestamp of the associated Environment
+      if env:
+          env.updated_at = timezone.now()
+          env.save()
+
 
 
 class SecretEvent(models.Model):
