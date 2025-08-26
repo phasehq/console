@@ -32,7 +32,7 @@ export default function AccessLayout({
         link: 'roles',
       },
       {
-        name: 'Third-party Identities',
+        name: 'External Identities',
         link: 'identities',
       },
       {
