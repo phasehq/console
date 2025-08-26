@@ -98,7 +98,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
           <div className="text-xl font-semibold">Identities</div>
           <div className="flex items-center justify-between">
             <div className="text-neutral-500">
-              Manage which third-party identities are trusted for this account
+              Manage which external identities are trusted for this account
             </div>
             {(account as any).identities && (account as any).identities.length > 0 && (
               <Button variant="primary" onClick={() => setIsOpen(true)}>
