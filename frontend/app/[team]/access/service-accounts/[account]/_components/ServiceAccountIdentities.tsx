@@ -16,7 +16,7 @@ import { toast } from 'react-toastify'
 import { KeyManagementDialog } from '@/components/service-accounts/KeyManagementDialog'
 import UpdateServiceAccount from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
 import { TbLockShare } from 'react-icons/tb'
-import { FaPlus, FaSearch, FaTimesCircle, FaServer } from 'react-icons/fa'
+import { FaSearch, FaTimesCircle, FaServer } from 'react-icons/fa'
 import clsx from 'clsx'
 
 export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountType }) => {
@@ -76,9 +76,14 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
   if (!account.serverSideKeyManagementEnabled) {
     return (
       <div className="py-8">
+        {/* Server-side key management is required state */}
+        <div className="text-xl font-semibold mb-2">External Identities</div>
+        <div className="text-neutral-500 mb-4">
+          Manage which external identities are trusted for this account
+        </div>
         <EmptyState
           title="Enable server-side key management"
-          subtitle="Identities require server-side key management to be enabled to mint tokens automatically."
+          subtitle="External identities require server-side key management to manage access tokens for Service Accounts."
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
               <FaServer />
@@ -95,7 +100,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
     <div className="py-4">
       <div className="space-y-2">
         <div className="space-y-1">
-          <div className="text-xl font-semibold">Identities</div>
+          <div className="text-xl font-semibold">External Identities</div>
           <div className="flex items-center justify-between">
             <div className="text-neutral-500">
               Manage which external identities are trusted for this account
