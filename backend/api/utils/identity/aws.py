@@ -30,14 +30,4 @@ def list_sts_endpoints():
                 }
             )
 
-    # Add global legacy first
-    # results.insert(
-    #     0,
-    #     {
-    #         "regionCode": None,
-    #         "regionName": "Global (Legacy)",
-    #         "endpoint": "https://sts.amazonaws.com",
-    #     },
-    # )
-
     return results
