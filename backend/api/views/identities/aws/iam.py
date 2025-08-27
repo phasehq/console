@@ -1,9 +1,10 @@
 import base64
 import json
-import re
+from io import StringIO
 from urllib.parse import urlparse
 
 import requests
+from defusedxml.ElementTree import parse
 from django.http import JsonResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -111,14 +112,20 @@ def aws_iam_auth(request):
     if resp.status_code != 200:
         return JsonResponse({"error": "AWS STS validation failed", "status": resp.status_code}, status=401)
 
-    # Parse minimal identity info from XML
     arn = None
     try:
-        m = re.search(r"<Arn>([^<]+)</Arn>", resp.text)
-        if m:
-            arn = m.group(1)
+        xml_root = parse(StringIO(resp.text))
+        
+        # AWS STS namespace
+        ns = {"aws": "https://sts.amazonaws.com/doc/2011-06-15/"}
+        
+        # Find the ARN element in the GetCallerIdentityResult
+        arn_element = xml_root.find(".//aws:GetCallerIdentityResult/aws:Arn", ns)
+        if arn_element is not None and arn_element.text:
+            arn = arn_element.text.strip()
     except Exception:
         pass
+
     if arn is None:
         return JsonResponse({"error": "Unable to parse AWS identity"}, status=500)
 
