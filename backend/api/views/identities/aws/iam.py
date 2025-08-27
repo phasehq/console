@@ -104,7 +104,7 @@ def aws_iam_auth(request):
 
     # Forward the signed request to AWS STS
     try:
-        resp = requests.request(method, url, headers=headers, data=body)
+        resp = requests.request(method, configured, headers=headers, data=body)
     except Exception:
         return JsonResponse({"error": "Failed to contact AWS STS"}, status=502)
 
