@@ -1,4 +1,4 @@
-mutation UpdateIdentity(
+mutation UpdateExtIdentity(
   $id: ID!
   $name: String
   $description: String

@@ -1,4 +1,4 @@
-mutation CreateIdentity(
+mutation CreateExtIdentity(
   $organisationId: ID!
   $provider: String!
   $name: String!

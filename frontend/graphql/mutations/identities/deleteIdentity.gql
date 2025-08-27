@@ -1,4 +1,4 @@
-mutation DeleteIdentity($id: ID!) {
+mutation DeleteExtIdentity($id: ID!) {
   deleteIdentity(id: $id) {
     ok
   }
