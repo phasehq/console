@@ -279,6 +279,9 @@ class ServiceAccount(models.Model):
     network_policies = models.ManyToManyField(
         NetworkAccessPolicy, blank=True, related_name="service_accounts"
     )
+    identities = models.ManyToManyField(
+        "Identity", blank=True, related_name="service_accounts"
+    )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -731,6 +734,46 @@ class SecretEvent(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
 
+
+class Identity(models.Model):
+    """
+    Third-party identity configuration.
+
+    Scope: Organisation level; can be attached to multiple ServiceAccounts.
+    """
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
+    provider = models.CharField(max_length=64)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+
+    # Provider-specific configuration
+    # Example for aws_iam:
+    # {
+    #   "trustedPrincipals": "arn:..., arn:...",
+    #   "signatureTtlSeconds": 60,
+    #   "stsEndpoint": "https://sts.amazonaws.com"
+    # }
+    config = models.JSONField(default=dict)
+
+    # Token configuration
+    token_name_pattern = models.CharField(max_length=128, blank=True, null=True)
+    default_ttl_seconds = models.IntegerField(default=3600)
+    max_ttl_seconds = models.IntegerField(default=86400)
+
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def get_trusted_list(self):
+        try:
+            principals = self.config.get("trustedPrincipals", [])
+            if isinstance(principals, list):
+                return [p.strip() for p in principals if isinstance(p, str) and p.strip()]
+            # Fallback for legacy comma-separated string format
+            return [p.strip() for p in str(principals).split(",") if p.strip()]
+        except Exception:
+            return []
 
 class PersonalSecret(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
