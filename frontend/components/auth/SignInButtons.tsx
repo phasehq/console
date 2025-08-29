@@ -127,15 +127,7 @@ export default function SignInButtons({
   }, [router, status])
 
   const maxBannerLength = 512
-  const isBannerTooLong = !!loginMessage && loginMessage.length > maxBannerLength
-
-  useEffect(() => {
-    if (isBannerTooLong) {
-      console.error(
-        `LOGIN_BANNER_TEXT too long (${loginMessage!.length} > ${maxBannerLength}). Banner will not be shown.`
-      )
-    }
-  }, [isBannerTooLong, loginMessage])
+  const truncatedMessage = loginMessage?.slice(0, maxBannerLength)
 
   return (
     <>
@@ -151,10 +143,12 @@ export default function SignInButtons({
         </div>
         {status === 'unauthenticated' && !loading && (
           <div>
-            {loginMessage && !isBannerTooLong && (
+            {loginMessage && (
               <div className="mb-6 max-w-lg">
                 <Alert variant="info">
-                  <div className="text-sm whitespace-pre-wrap">{loginMessage}</div>
+                  <div className="text-sm whitespace-pre-wrap" title={loginMessage}>
+                    {truncatedMessage}
+                  </div>
                 </Alert>
               </div>
             )}
