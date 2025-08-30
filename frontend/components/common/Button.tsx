@@ -64,6 +64,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         return 'amber'
       case 'secondary':
       case 'outline':
+      case 'ghost':
         return 'neutral'
       default:
         return 'emerald'
