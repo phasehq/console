@@ -3,8 +3,8 @@
 import { useLazyQuery, useQuery } from '@apollo/client'
 import { useContext, useEffect } from 'react'
 import Link from 'next/link'
-import clsx from 'clsx'
 import { startCase } from 'lodash'
+import { useSearchParams } from 'next/navigation'
 
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
@@ -24,6 +24,8 @@ import { isUUID } from '@/utils/copy'
 export const NavBar = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { team, context, appId, envId, page, subPage } = useParsedRoute()
+  const searchParams = useSearchParams()
+  const tab = searchParams?.get('tab')
 
   const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
 
@@ -138,7 +140,7 @@ export const NavBar = () => {
     }
 
     document.title = title
-  }, [activeApp, activeEnv, team, context, page, subPage])
+  }, [activeApp, activeEnv, team, context, page, subPage, tab])
 
   return (
     <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-sm bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
