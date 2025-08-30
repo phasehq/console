@@ -53,6 +53,8 @@ type Query {
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   stripeCustomerPortalUrl(organisationId: ID!): String
+  dynamicSecretProviders: [DynamicSecretProviderType]
+  dynamicSecrets(secretId: ID, appId: ID, envId: ID, orgId: ID): [DynamicSecretType]
 }
 
 type OrganisationType {
@@ -771,6 +773,107 @@ enum PlanTypeEnum {
   ENTERPRISE
 }
 
+type DynamicSecretProviderType {
+  id: String!
+  name: String!
+  credentials: GenericScalar!
+  configMap: GenericScalar!
+}
+
+"""
+The `GenericScalar` scalar type represents a generic
+GraphQL scalar value that could be:
+String, Boolean, Int, Float, List or Object.
+"""
+scalar GenericScalar
+
+type DynamicSecretType {
+  id: String!
+  name: String!
+  description: String!
+  environment: EnvironmentType!
+  folder: SecretFolderType
+  path: String!
+  authentication: ProviderCredentialsType
+
+  """Which provider this secret is associated with."""
+  provider: ApiDynamicSecretProviderChoices!
+  config: DynamicSecretConfigUnion
+  keyMap: [KeyMap]
+  createdAt: DateTime
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  leases: [DynamicSecretLeaseType!]!
+  defaultTtlSeconds: Int
+  maxTtlSeconds: Int
+}
+
+enum ApiDynamicSecretProviderChoices {
+  """AWS"""
+  AWS
+}
+
+union DynamicSecretConfigUnion = AWSConfigType
+
+type AWSConfigType {
+  usernameTemplate: String!
+  iamPath: String
+  permissionBoundaryArn: String
+  groups: [String]
+  policyArns: [String]
+  policyDocument: GenericScalar
+}
+
+type KeyMap {
+  id: String
+  keyName: String
+}
+
+type DynamicSecretLeaseType {
+  id: String!
+  name: String!
+  description: String!
+  secret: DynamicSecretType!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ttl: Float!
+
+  """Current status of the lease"""
+  status: ApiDynamicSecretLeaseStatusChoices!
+  credentials: LeaseCredentialsUnion
+  createdAt: DateTime
+  renewedAt: DateTime
+  expiresAt: DateTime
+  revokedAt: DateTime
+  deletedAt: DateTime
+  cleanupJobId: String!
+}
+
+enum ApiDynamicSecretLeaseStatusChoices {
+  """Created"""
+  CREATED
+
+  """Active"""
+  ACTIVE
+
+  """Renewed"""
+  RENEWED
+
+  """Revoked"""
+  REVOKED
+
+  """Expired"""
+  EXPIRED
+}
+
+union LeaseCredentialsUnion = AwsCredentialsType
+
+type AwsCredentialsType {
+  accessKeyId: String
+  secretAccessKey: String
+  username: String
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
@@ -854,6 +957,12 @@ type Mutation {
     """Payment Method ID to set as default"""
     paymentMethodId: String!
   ): SetDefaultPaymentMethodMutation
+  createAwsDynamicSecret(authenticationId: ID, config: AWSConfigInput!, defaultTtl: Int, description: String, environmentId: ID!, keyMap: [KeyMapInput]!, maxTtl: Int, name: String!, organisationId: ID!, path: String): CreateAWSDynamicSecretMutation
+  updateAwsDynamicSecret(authenticationId: ID, config: AWSConfigInput!, defaultTtl: Int, description: String, dynamicSecretId: ID!, keyMap: [KeyMapInput]!, maxTtl: Int, name: String!, organisationId: ID!, path: String): UpdateAWSDynamicSecretMutation
+  deleteDynamicSecret(secretId: ID!): DeleteDynamicSecretMutation
+  createDynamicSecretLease(name: String, secretId: ID!, ttl: Int): LeaseDynamicSecret
+  renewDynamicSecretLease(leaseId: ID!, ttl: Int): RenewLeaseMutation
+  revokeDynamicSecretLease(leaseId: ID!): RevokeLeaseMutation
 }
 
 type CreateOrganisationMutation {
@@ -1254,4 +1363,42 @@ type CreateSetupIntentMutation {
 
 type SetDefaultPaymentMethodMutation {
   ok: Boolean
+}
+
+type CreateAWSDynamicSecretMutation {
+  dynamicSecret: DynamicSecretType
+}
+
+input AWSConfigInput {
+  usernameTemplate: String!
+  iamPath: String = "/"
+  permissionBoundaryArn: String
+  groups: [String]
+  policyArns: [String]
+  policyDocument: GenericScalar
+}
+
+input KeyMapInput {
+  id: String!
+  keyName: String!
+}
+
+type UpdateAWSDynamicSecretMutation {
+  dynamicSecret: DynamicSecretType
+}
+
+type DeleteDynamicSecretMutation {
+  ok: Boolean
+}
+
+type LeaseDynamicSecret {
+  lease: DynamicSecretLeaseType
+}
+
+type RenewLeaseMutation {
+  lease: DynamicSecretLeaseType
+}
+
+type RevokeLeaseMutation {
+  lease: DynamicSecretLeaseType
 }
