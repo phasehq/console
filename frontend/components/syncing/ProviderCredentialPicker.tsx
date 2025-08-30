@@ -46,11 +46,11 @@ export const ProviderCredentialPicker = (props: {
     : credentials
 
   const credentialMatchesFilter =
-    credential && providerFilter ? 
-      (providerFilter === 'aws' ? 
-        (credential.provider?.id === 'aws' || credential.provider?.id === 'aws_assume_role') :
-        credential.provider?.id === providerFilter
-      ) : true
+    credential && providerFilter
+      ? providerFilter === 'aws'
+        ? credential.provider?.id === 'aws' || credential.provider?.id === 'aws_assume_role'
+        : credential.provider?.id === providerFilter
+      : true
 
   useEffect(() => {
     if (setDefault && filteredCredentials.length > 0 && !credentialMatchesFilter)
@@ -81,7 +81,7 @@ export const ProviderCredentialPicker = (props: {
     <Listbox value={credential} onChange={setCredential}>
       {({ open }) => (
         <>
-          <label className="block text-gray-700 text-sm font-bold mb-2">Service credentials</label>
+          <label className="block text-neutral-500 text-sm mb-2">Service credentials</label>
           <Listbox.Button as={Fragment} aria-required aria-disabled={disabled}>
             <div
               className={clsx(
