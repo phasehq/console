@@ -6,8 +6,8 @@ import GetApps from '@/graphql/queries/getApps.gql'
 import { Menu, Transition } from '@headlessui/react'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { Fragment, useState } from 'react'
-import { FaPlus, FaChevronDown, FaSearch, FaTimesCircle, FaArrowRight } from 'react-icons/fa'
+import { Fragment, useRef, useState } from 'react'
+import { FaPlus, FaSearch, FaTimesCircle, FaArrowRight } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'
 import clsx from 'clsx'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -20,6 +20,7 @@ export const AddAppToMemberButton = (props: {
 }) => {
   const { member, organisationId, teamSlug } = props
   const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch all apps the active user has access to
   const { data: allAppsData, loading: loadingApps } = useQuery<Query>(GetApps, {
@@ -47,7 +48,7 @@ export const AddAppToMemberButton = (props: {
   return (
     <Menu as="div" className="relative inline-block text-left group">
       <Menu.Button as={Fragment}>
-        <Button variant="primary" disabled={loadingApps}>
+        <Button variant="primary" title="Add Member to App" disabled={loadingApps}>
           {loadingApps ? (
             <Spinner size="sm" />
           ) : (
@@ -65,6 +66,8 @@ export const AddAppToMemberButton = (props: {
         leave="transition duration-75 ease-out"
         leaveFrom="transform scale-100 opacity-100"
         leaveTo="transform scale-95 opacity-0"
+        afterEnter={() => searchInputRef.current?.focus()}
+        afterLeave={() => setSearchQuery('')}
       >
         <Menu.Items className="absolute z-10 right-0 origin-top-right mt-2 flex flex-col w-min divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
           <div>
@@ -78,6 +81,7 @@ export const AddAppToMemberButton = (props: {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
+                ref={searchInputRef}
               />
               <FaTimesCircle
                 className={clsx(
