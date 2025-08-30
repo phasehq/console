@@ -8,7 +8,7 @@ import {
 } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { FaTimes } from 'react-icons/fa'
-import { Button, ButtonVariant } from './Button'
+import { Button, ButtonProps, ButtonVariant } from './Button'
 import clsx from 'clsx'
 
 interface GenericDialogProps {
@@ -21,6 +21,7 @@ interface GenericDialogProps {
   size?: 'lg' | 'md' | 'sm'
   initialFocus?: MutableRefObject<null>
   isStatic?: boolean
+  buttonProps?: ButtonProps
 }
 
 const GenericDialog = forwardRef(
@@ -35,6 +36,7 @@ const GenericDialog = forwardRef(
       size,
       initialFocus,
       isStatic = false,
+      buttonProps,
     }: GenericDialogProps,
     ref
   ) => {
@@ -67,7 +69,13 @@ const GenericDialog = forwardRef(
       <>
         {buttonContent && (
           <div className="flex items-center justify-center">
-            <Button variant={buttonVariant} onClick={openModal} title={title} type="button">
+            <Button
+              variant={buttonVariant}
+              onClick={openModal}
+              title={title}
+              type="button"
+              {...buttonProps}
+            >
               {buttonContent}
             </Button>
           </div>

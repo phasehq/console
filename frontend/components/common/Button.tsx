@@ -16,11 +16,11 @@ export type ButtonVariant =
 
 export type ButtonSize = 'md' | 'lg'
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant: ButtonVariant
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant
   size?: ButtonSize
   classString?: string
-  children: ReactNode
+  children?: ReactNode
   iconPosition?: 'left' | 'right'
   isLoading?: boolean
   icon?: IconType | (({ className }: LogoProps) => JSX.Element)
@@ -50,7 +50,16 @@ const sizeStyles: Record<ButtonSize, { text: string; icon: string; gap: string }
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant, size = 'md', classString, children, isLoading, icon, iconPosition = 'left', ...rest },
+  {
+    variant = 'primary',
+    size = 'md',
+    classString,
+    children,
+    isLoading,
+    icon,
+    iconPosition = 'left',
+    ...rest
+  },
   ref
 ) {
   const Icon = icon

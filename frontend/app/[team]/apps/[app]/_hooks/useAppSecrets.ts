@@ -86,7 +86,7 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
   // Watch for changes in the data and process the secrets
   useEffect(() => {
     if (keyring && appSecretsData?.appEnvironments) {
-      const appEnvironments = appSecretsData.appEnvironments
+      const appEnvironments: EnvironmentType[] = appSecretsData.appEnvironments
 
       // Process the secrets and environments once the data is available
       const secretsData = appEnvironments.reduce((acc: any, env: EnvironmentType) => {
@@ -103,7 +103,7 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
   }, [appSecretsData, keyring, processAppSecrets])
 
   return {
-    appEnvironments: appSecretsData?.appEnvironments,
+    appEnvironments: appSecretsData?.appEnvironments as EnvironmentType[],
     appSecrets,
     appFolders,
     fetching,
