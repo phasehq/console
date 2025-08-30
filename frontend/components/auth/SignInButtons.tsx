@@ -71,7 +71,13 @@ const providerButtons: ProviderButton[] = [
   },
 ]
 
-export default function SignInButtons({ providers }: { providers: string[] }) {
+export default function SignInButtons({
+  providers,
+  loginMessage,
+}: {
+  providers: string[]
+  loginMessage?: string | undefined | null
+}) {
   const [loading, setLoading] = useState<boolean>(false)
   const { status } = useSession()
   const router = useRouter()
@@ -120,6 +126,9 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
     if (status === 'authenticated') router.push('/')
   }, [router, status])
 
+  const maxBannerLength = 512
+  const truncatedMessage = loginMessage?.slice(0, maxBannerLength)
+
   return (
     <>
       <div className="gap-y-4 flex flex-col items-center justify-center text-zinc-900 dark:text-zinc-100">
@@ -134,6 +143,15 @@ export default function SignInButtons({ providers }: { providers: string[] }) {
         </div>
         {status === 'unauthenticated' && !loading && (
           <div>
+            {loginMessage && (
+              <div className="mb-6 max-w-lg">
+                <Alert variant="info">
+                  <div className="text-sm whitespace-pre-wrap" title={loginMessage}>
+                    {truncatedMessage}
+                  </div>
+                </Alert>
+              </div>
+            )}
             {providers.length > 0 ? (
               <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg">
                 {providerButtons
