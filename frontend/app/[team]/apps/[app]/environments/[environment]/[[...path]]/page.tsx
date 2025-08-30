@@ -1,6 +1,12 @@
 'use client'
 
-import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
+import {
+  DynamicSecretType,
+  EnvironmentType,
+  SecretFolderType,
+  SecretInput,
+  SecretType,
+} from '@/apollo/graphql'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { GetFolders } from '@/graphql/queries/secrets/getFolders.gql'
@@ -64,6 +70,9 @@ import Spinner from '@/components/common/Spinner'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
+import { FaBolt } from 'react-icons/fa6'
+import { CreateDynamicSecretDialog } from '@/app/[team]/integrations/dynamic-secrets/_components/CreateDynamicSecretDialog'
+import { DynamicSecretRow } from '@/components/environments/secrets/dynamic/DynamicSecretRow'
 
 export default function EnvironmentPath({
   params,
@@ -87,6 +96,7 @@ export default function EnvironmentPath({
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const [sort, setSort] = useState<SortOption>('-created')
 
@@ -187,6 +197,7 @@ export default function EnvironmentPath({
   }
 
   const environment = data?.appEnvironments[0] as EnvironmentType
+  const dynamicSecrets: DynamicSecretType[] = data?.dynamicSecrets ?? []
 
   const envLinks =
     appEnvsData?.appEnvironments
@@ -217,10 +228,10 @@ export default function EnvironmentPath({
 
   /**
    * Bulk adds secrets to client state from an import
-   * 
+   *
    * If a secret key being imported already exists, we update the value and comment.
    * Otherwise, we process the import as normal, adding it as a new secret
-   * 
+   *
    * @param {SecretType[]} secrets - Secrets being imported into client state
    */
   const bulkAddSecrets = (secrets: SecretType[]) => {
@@ -502,7 +513,7 @@ export default function EnvironmentPath({
       return false
     }
 
-    if (duplicateKeysExist(clientSecrets)) {
+    if (duplicateKeysExist(clientSecrets, dynamicSecrets)) {
       toast.error('Secret keys cannot be repeated!')
       setIsloading(false)
       return false
@@ -793,6 +804,10 @@ export default function EnvironmentPath({
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
+            <Button variant="secondary" onClick={() => dynamicSecretDialogRef.current?.openModal()}>
+              <FaBolt /> Dynamic Secret
+            </Button>
+
             <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
               <div className="flex items-center gap-2">
                 <FaFolderPlus /> New Folder
@@ -1022,6 +1037,13 @@ export default function EnvironmentPath({
 
           <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
             <NewFolderMenu />
+            <CreateDynamicSecretDialog
+              environment={environment}
+              path={'/'}
+              ref={dynamicSecretDialogRef}
+              staticSecrets={serverSecrets}
+              dynamicSecrets={dynamicSecrets}
+            />
 
             {organisation &&
               filteredFolders.map((folder: SecretFolderType) => (
@@ -1031,6 +1053,10 @@ export default function EnvironmentPath({
                   handleDelete={handleDeleteFolder}
                 />
               ))}
+
+            {dynamicSecrets.map((secret) => (
+              <DynamicSecretRow key={secret.id} secret={secret} />
+            ))}
 
             {organisation &&
               filteredAndSortedSecrets.map((secret, index: number) => (

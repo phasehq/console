@@ -32,7 +32,7 @@ export const AWSRegionPicker = (props: { onChange: (region: string) => void; val
             <>
               <div className="space-y-2">
                 <Combobox.Label as={Fragment}>
-                  <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
+                  <label className="block text-sm text-neutral-500" htmlFor="name">
                     AWS Region
                   </label>
                 </Combobox.Label>
