@@ -87,8 +87,12 @@ export default function EnvironmentPath({
   const highlightedRef = useRef<HTMLDivElement>(null)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
+
   const [serverSecrets, setServerSecrets] = useState<SecretType[]>([])
   const [clientSecrets, setClientSecrets] = useState<SecretType[]>([])
+
+  const [dynamicSecrets, setDynamicSecrets] = useState<DynamicSecretType[]>([])
+
   const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isLoading, setIsloading] = useState(false)
@@ -197,7 +201,7 @@ export default function EnvironmentPath({
   }
 
   const environment = data?.appEnvironments[0] as EnvironmentType
-  const dynamicSecrets: DynamicSecretType[] = data?.dynamicSecrets ?? []
+  //const dynamicSecrets: DynamicSecretType[] = data?.dynamicSecrets ?? []
 
   const envLinks =
     appEnvsData?.appEnvironments
@@ -392,7 +396,7 @@ export default function EnvironmentPath({
   useEffect(() => {
     if (data && envKeys) {
       const decryptSecrets = async () => {
-        const decryptedSecrets = await Promise.all(
+        const decryptedStaticSecrets = await Promise.all(
           data.secrets.map(async (secret: SecretType) => {
             const decryptedSecret = structuredClone(secret)
 
@@ -460,12 +464,36 @@ export default function EnvironmentPath({
             return decryptedSecret
           })
         )
-        return decryptedSecrets
+
+        //Decrypt dynamic secrets keyMap.keyName
+        const decryptedDynamicSecrets = await Promise.all(
+          (data.dynamicSecrets ?? []).map(async (secret: DynamicSecretType) => {
+            const decryptedSecret = structuredClone(secret)
+            if (decryptedSecret.keyMap && Array.isArray(decryptedSecret.keyMap)) {
+              decryptedSecret.keyMap = await Promise.all(
+                decryptedSecret.keyMap.map(async (keyMapItem) => ({
+                  ...keyMapItem,
+                  keyName: keyMapItem?.keyName
+                    ? await decryptAsymmetric(
+                        keyMapItem.keyName,
+                        envKeys.privateKey,
+                        envKeys.publicKey
+                      )
+                    : keyMapItem?.keyName,
+                }))
+              )
+            }
+            return decryptedSecret
+          })
+        )
+
+        return { decryptedStaticSecrets, decryptedDynamicSecrets }
       }
 
       decryptSecrets().then((decryptedSecrets) => {
-        setServerSecrets(decryptedSecrets)
-        setClientSecrets(decryptedSecrets)
+        setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
+        setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
+        setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
       })
     }
   }, [envKeys, data])
@@ -1054,9 +1082,10 @@ export default function EnvironmentPath({
                 />
               ))}
 
-            {dynamicSecrets.map((secret) => (
-              <DynamicSecretRow key={secret.id} secret={secret} />
-            ))}
+            {environment &&
+              dynamicSecrets.map((secret) => (
+                <DynamicSecretRow key={secret.id} secret={secret} environment={environment} />
+              ))}
 
             {organisation &&
               filteredAndSortedSecrets.map((secret, index: number) => (
