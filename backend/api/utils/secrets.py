@@ -144,7 +144,8 @@ def normalize_path_string(path):
 
 def check_for_duplicates_blind(secrets, environment):
     """
-    Checks if a list of secrets contains any duplicates internally or in the target env + path by checking each secret's key_digest
+    Checks if a list of secrets contains any duplicates internally or in the target env + path by checking each secret's key_digest.
+    Also checks key_map key_digest for DynamicSecret objects at the environment and path.
 
     Args:
         secrets (List[Dict]): The list of encrypted secrets to check for duplicates.
@@ -154,9 +155,11 @@ def check_for_duplicates_blind(secrets, environment):
         bool: True if a duplicate is found, False otherwise.
     """
     Secret = apps.get_model("api", "Secret")
+    DynamicSecret = apps.get_model("api", "DynamicSecret")
 
     processed_secrets = set()  # Set to store processed secrets
 
+    # --- Check static secrets ---
     for secret in secrets:
         if "keyDigest" in secret:
             try:
@@ -184,6 +187,41 @@ def check_for_duplicates_blind(secrets, environment):
 
             # Add the processed secret to the set
             processed_secrets.add((path, secret["keyDigest"]))
+
+    # --- Check dynamic secrets key_map ---
+    for secret in secrets:
+        try:
+            path = normalize_path_string(secret.get("path", "/"))
+        except:
+            path = "/"
+
+        # Query all DynamicSecret objects at this environment and path
+        dynamic_secrets = DynamicSecret.objects.filter(
+            environment=environment,
+            path=path,
+            deleted_at=None,
+        )
+
+        for dyn_secret in dynamic_secrets:
+            key_map = dyn_secret.key_map or []
+            for entry in key_map:
+                key_digest = entry.get("key_digest")
+
+                if key_digest and (path, key_digest) in processed_secrets:
+                    return True  # Found a duplicate in dynamic secret key_map
+
+                # Also check for duplicates within the database
+                if key_digest:
+                    # Check if any other DynamicSecret at this env/path has this key_digest
+                    other_dyn_secrets = dynamic_secrets.exclude(id=dyn_secret.id)
+                    for other_dyn in other_dyn_secrets:
+                        other_key_map = other_dyn.key_map or []
+                        for other_entry in other_key_map:
+                            if other_entry.get("key_digest") == key_digest:
+                                return True
+
+                if key_digest:
+                    processed_secrets.add((path, key_digest))
 
     return False  # No duplicates found
 
