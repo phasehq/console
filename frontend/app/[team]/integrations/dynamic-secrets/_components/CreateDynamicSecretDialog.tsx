@@ -31,6 +31,7 @@ import { duplicateKeysExist } from '@/utils/secrets'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import { MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
 import { Textarea } from '@/components/common/TextArea'
+import { encryptAsymmetric } from '@/utils/crypto'
 
 type CreateDynamicSecretDialogRef = {
   openModal: () => void
@@ -153,17 +154,17 @@ export const CreateDynamicSecretDialog = forwardRef<
       }
 
       // Check for duplicate secret names
-      if (
-        duplicateKeysExist(staticSecrets, [
-          ...dynamicSecrets,
-          { id: 'new-dynamic-secret', keyMap: formData.keyMap } as DynamicSecretType,
-        ])
-      ) {
-        toast.error(
-          'One or more secret keys already exist at this path. Please select a unique key name for each credential.'
-        )
-        return false
-      }
+      // if (
+      //   duplicateKeysExist(staticSecrets, [
+      //     ...dynamicSecrets,
+      //     { id: 'new-dynamic-secret', keyMap: formData.keyMap } as DynamicSecretType,
+      //   ])
+      // ) {
+      //   toast.error(
+      //     'One or more secret keys already exist at this path. Please select a unique key name for each credential.'
+      //   )
+      //   return false
+      // }
 
       if (parseInt(formData.defaultTTL, 10) > parseInt(formData.maxTTL, 10)) {
         toast.error('Default TTL must be less than or equal to Max TTL')
@@ -172,6 +173,16 @@ export const CreateDynamicSecretDialog = forwardRef<
       if (parseInt(formData.maxTTL, 10) <= MINIMUM_LEASE_TTL) {
         toast.error(`Max TTL must be greater than ${MINIMUM_LEASE_TTL} seconds`)
       }
+
+      // Encrypt each keyName in keyMap
+      const encryptedKeyMap = await Promise.all(
+        formData.keyMap.map(async (key) => ({
+          ...key,
+          keyName: key.keyName
+            ? await encryptAsymmetric(key.keyName, environment.identityKey)
+            : key.keyName,
+        }))
+      )
 
       await createDynamicSecret({
         variables: {
@@ -184,7 +195,7 @@ export const CreateDynamicSecretDialog = forwardRef<
           maxTtl: parseInt(formData.maxTTL, 10),
           authenticationId: formData.credential?.id ?? null,
           config: formData.config,
-          keyMap: formData.keyMap,
+          keyMap: encryptedKeyMap,
         },
       })
 
