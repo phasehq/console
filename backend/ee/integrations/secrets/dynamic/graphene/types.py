@@ -1,4 +1,5 @@
-from api.models import DynamicSecret, DynamicSecretLease
+from api.models import DynamicSecret, DynamicSecretLease, OrganisationMember
+from api.utils.access.permissions import user_has_permission
 import graphene
 from graphene_django import DjangoObjectType
 from graphene.types.generic import GenericScalar
@@ -75,7 +76,18 @@ class DynamicSecretType(DjangoObjectType):
         return int(self.max_ttl.total_seconds()) if self.max_ttl else None
 
     def resolve_leases(self, info):
-        return self.leases.order_by("-created_at")
+        filter = {}
+        if not user_has_permission(
+            info.context.user,
+            "read",
+            "DynamicSecretLeases",
+            self.environment.app.organisation,
+            True,
+        ):
+            filter["organisation_member"] = OrganisationMember.objects.get(
+                organisation=self.environment.app.organisation, user=info.context.user
+            )
+        return self.leases.filter(**filter).order_by("-created_at")
 
 
 class DynamicSecretLeaseType(DjangoObjectType):

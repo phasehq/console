@@ -140,44 +140,15 @@ class RenewLeaseMutation(graphene.Mutation):
         if not user_is_org_member(user.userId, org.id):
             raise GraphQLError("You don't have access to this organisation")
 
-        if not user_has_permission(user, "create", "Secrets", org, True):
-            raise GraphQLError("You don't have permission to create Dynamic Secrets")
+        if lease.organisation_member.id != org_member.id and not user_has_permission(
+            info.context.user, "update", "DynamicSecretLeases", org, True
+        ):
+            raise GraphQLError(
+                "You cannot renew this lease as it wasn't created by you"
+            )
 
         if not user_can_access_environment(user.userId, lease.secret.environment.id):
             raise GraphQLError("You don't have access to this environment")
-
-        # if timedelta(seconds=ttl) > lease.secret.max_ttl:
-        #     raise GraphQLError(
-        #         "The specified TTL exceeds the maximum TTL for this dynamic secret."
-        #     )
-
-        # if lease.expires_at <= timezone.now():
-        #     raise GraphQLError("This lease has expired and cannot be renewed")
-
-        # else:
-        #     lease.expires_at = timezone.now() + timedelta(seconds=ttl)
-        #     lease.updated_at = timezone.now()
-
-        # # --- reschedule cleanup job ---
-        # scheduler = django_rq.get_scheduler("scheduled-jobs")
-
-        # # cancel the old job if it exists
-        # if lease.cleanup_job_id:
-        #     try:
-        #         old_job = Job.fetch(lease.cleanup_job_id, connection=scheduler.connection)
-        #         old_job.cancel()
-        #     except Exception:
-        #         # job might already have run or been deleted
-        #         pass
-
-        # # enqueue a new revocation job
-        # job = scheduler.enqueue_at(
-        #     lease.expires_at,
-        #     revoke_aws_dynamic_secret_lease,
-        #     lease.id,
-        # )
-        # lease.cleanup_job_id = job.id
-        # lease.save()
 
         lease = renew_dynamic_secret_lease(lease, ttl)
 
@@ -208,8 +179,12 @@ class RevokeLeaseMutation(graphene.Mutation):
         if not user_is_org_member(user.userId, org.id):
             raise GraphQLError("You don't have access to this organisation")
 
-        if not user_has_permission(user, "create", "Secrets", org, True):
-            raise GraphQLError("You don't have permission to create Dynamic Secrets")
+        if lease.organisation_member.id != org_member.id and not user_has_permission(
+            info.context.user, "delete", "DynamicSecretLeases", org, True
+        ):
+            raise GraphQLError(
+                "You cannot revoke this lease as it wasn't created by you"
+            )
 
         if not user_can_access_environment(user.userId, lease.secret.environment.id):
             raise GraphQLError("You don't have access to this environment")
