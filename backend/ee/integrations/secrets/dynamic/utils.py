@@ -1,14 +1,150 @@
 from datetime import timedelta
-from ee.integrations.secrets.dynamic.aws.utils import (
-    revoke_aws_dynamic_secret_lease,
+
+from api.utils.secrets import (
+    check_for_duplicates_blind,
+    compute_key_digest,
+    create_environment_folder_structure,
+    get_environment_keys,
 )
+from api.utils.crypto import decrypt_asymmetric
+from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
+from uuid import uuid4
+from django.core.exceptions import ValidationError
 from graphql import GraphQLError
 from django.utils import timezone
 import django_rq
 from rq.job import Job
 import logging
+from django.apps import apps
 
 logger = logging.getLogger(__name__)
+
+DynamicSecret = apps.get_model("api", "DynamicSecret")
+
+
+def validate_key_map(key_map, provider, environment, path):
+    provider_def = None
+    for prov in DynamicSecretProviders.__dict__.values():
+        if isinstance(prov, dict) and prov.get("id") == provider:
+            provider_def = prov
+            break
+    if not provider_def:
+        raise ValidationError(f"Unsupported provider: {provider}")
+
+    valid_creds = {c["id"]: c for c in provider_def.get("credentials", [])}
+    validated_key_map = []
+
+    env_pubkey, env_privkey = get_environment_keys(environment.id)
+
+    for entry in key_map:
+        decrypted_key_name = decrypt_asymmetric(
+            entry["key_name"], env_privkey, env_pubkey
+        )
+        entry["path"] = path
+        digest = compute_key_digest(decrypted_key_name, environment.id)
+        entry["keyDigest"] = digest
+
+    if check_for_duplicates_blind(key_map, environment):
+        raise ValidationError("One or more secrets keys already exist ")
+
+    for entry in key_map:
+        if not isinstance(entry, dict):
+            raise ValidationError(f"Invalid key_map entry (must be dict): {entry}")
+
+        key_id = entry.get("id")
+        key_name = entry.get("key_name")
+        key_digest = entry.get("keyDigest")
+
+        if key_id not in valid_creds:
+            raise ValidationError(
+                f"Invalid key id '{key_id}' for provider '{provider}'"
+            )
+
+        # fallback to provider default_key_name
+        if not key_name:
+            key_name = valid_creds[key_id].get("default_key_name")
+
+        if not key_name:
+            raise ValidationError(
+                f"No key name provided for key id '{key_id}', and no default defined"
+            )
+
+        validated_key_map.append(
+            {"id": key_id, "key_name": key_name, "key_digest": key_digest}
+        )
+
+    return validated_key_map
+
+
+def create_dynamic_secret(
+    *,
+    environment,
+    path,
+    name: str,
+    description="",
+    default_ttl,
+    max_ttl,
+    authentication=None,
+    provider: str,
+    config: dict,
+    key_map: list,
+) -> DynamicSecret:
+    """
+    Create a DynamicSecret with validated provider config.
+    Used by both GraphQL resolvers and REST API.
+    """
+
+    # --- validate provider ---
+    provider_def = None
+    for prov in DynamicSecretProviders.__dict__.values():
+        if isinstance(prov, dict) and prov.get("id") == provider:
+            provider_def = prov
+            break
+    if not provider_def:
+        raise ValidationError(f"Unsupported provider: {provider}")
+
+    folder = None
+    if path and path != "/":
+        folder = create_environment_folder_structure(path, environment.id)
+
+    # --- validate required config fields ---
+    validated_config = {}
+    for field in provider_def.get("config_map", []):
+        fid = field["id"]
+        required = field.get("required", False)
+        default = field.get("default")
+
+        if fid in config:
+            validated_config[fid] = config[fid]
+        elif required and default is None:
+            raise ValidationError(f"Missing required config field: {fid}")
+        elif default is not None:
+            validated_config[fid] = default
+
+    # --- validate key_map ---
+    validated_key_map = validate_key_map(key_map, provider, environment, path)
+
+    # --- construct DynamicSecret ---
+    dynamic_secret = DynamicSecret.objects.create(
+        id=uuid4(),
+        environment=environment,
+        folder=folder,
+        path=path,
+        name=name,
+        description=description,
+        default_ttl=default_ttl,
+        max_ttl=max_ttl,
+        authentication=authentication,
+        provider=provider,
+        config=validated_config,
+        key_map=validated_key_map,
+    )
+
+    # Update environment timestamp
+    environment.updated_at = timezone.now()
+    environment.save(update_fields=["updated_at"])
+
+    return dynamic_secret
 
 
 def renew_dynamic_secret_lease(lease, ttl):
@@ -36,13 +172,43 @@ def renew_dynamic_secret_lease(lease, ttl):
             logger.info(f"Failed to delete job: {e}")
             pass
 
-    # enqueue a new revocation job
-    job = scheduler.enqueue_at(
-        lease.expires_at,
-        revoke_aws_dynamic_secret_lease,
-        lease.id,
-    )
-    lease.cleanup_job_id = job.id
     lease.save()
 
+    # enqueue a new revocation job
+    schedule_lease_revocation(lease)
+
     return lease
+
+
+def schedule_lease_revocation(lease, immediate=False):
+    """
+    Schedule a job to revoke the lease at its expiry time.
+    """
+
+    # --- Schedule revocation ---
+
+    if lease.revoked_at is not None:
+        logger.info(f"Lease {lease.id} already revoked at {lease.revoked_at}")
+        return
+
+    scheduled_revoke_time = lease.expires_at
+    if immediate:
+        scheduled_revoke_time = timezone.now()
+
+    scheduler = django_rq.get_scheduler("scheduled-jobs")
+
+    if lease.secret.provider == "aws":
+        from ee.integrations.secrets.dynamic.aws.utils import (
+            revoke_aws_dynamic_secret_lease,
+        )
+
+        revoke_job = revoke_aws_dynamic_secret_lease
+
+    job = scheduler.enqueue_at(
+        scheduled_revoke_time,
+        revoke_job,
+        lease.id,
+    )
+
+    lease.cleanup_job_id = job.id
+    lease.save()

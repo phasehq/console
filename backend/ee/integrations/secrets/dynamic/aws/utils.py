@@ -1,10 +1,11 @@
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from uuid import uuid4
+
 from api.models import DynamicSecret
 from api.utils.crypto import decrypt_asymmetric, encrypt_asymmetric, get_server_keypair
 from api.utils.syncing.aws.auth import get_aws_sts_session
 from api.utils.secrets import get_environment_keys
+from ee.integrations.secrets.dynamic.utils import schedule_lease_revocation
 from backend.utils.secrets import get_secret
 from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
 import logging
@@ -138,97 +139,6 @@ def build_dynamic_secret_config(provider: str, user_config: dict) -> dict:
 
     merged_config["key_map"] = merged_key_map
     return merged_config
-
-
-def create_dynamic_secret(
-    *,
-    environment,
-    folder,
-    name: str,
-    description="",
-    default_ttl,
-    max_ttl,
-    authentication=None,
-    provider: str,
-    config: dict,
-    key_map: list,
-) -> DynamicSecret:
-    """
-    Create a DynamicSecret with validated provider config.
-    Used by both GraphQL resolvers and REST API.
-    """
-
-    # --- validate provider ---
-    provider_def = None
-    for prov in DynamicSecretProviders.__dict__.values():
-        if isinstance(prov, dict) and prov.get("id") == provider:
-            provider_def = prov
-            break
-    if not provider_def:
-        raise ValidationError(f"Unsupported provider: {provider}")
-
-    # --- validate required config fields ---
-    validated_config = {}
-    for field in provider_def.get("config_map", []):
-        fid = field["id"]
-        required = field.get("required", False)
-        default = field.get("default")
-
-        if fid in config:
-            validated_config[fid] = config[fid]
-        elif required and default is None:
-            raise ValidationError(f"Missing required config field: {fid}")
-        elif default is not None:
-            validated_config[fid] = default
-
-    # --- validate key_map ---
-    valid_creds = {c["id"]: c for c in provider_def.get("credentials", [])}
-    validated_key_map = []
-
-    for entry in key_map:
-        if not isinstance(entry, dict):
-            raise ValidationError(f"Invalid key_map entry (must be dict): {entry}")
-
-        key_id = entry.get("id")
-        key_name = entry.get("key_name")
-
-        if key_id not in valid_creds:
-            raise ValidationError(
-                f"Invalid key id '{key_id}' for provider '{provider}'"
-            )
-
-        # fallback to provider default_key_name
-        if not key_name:
-            key_name = valid_creds[key_id].get("default_key_name")
-
-        if not key_name:
-            raise ValidationError(
-                f"No key name provided for key id '{key_id}', and no default defined"
-            )
-
-        validated_key_map.append({"id": key_id, "key_name": key_name})
-
-    # --- construct DynamicSecret ---
-    dynamic_secret = DynamicSecret.objects.create(
-        id=uuid4(),
-        environment=environment,
-        folder=folder,
-        path="/",
-        name=name,
-        description=description,
-        default_ttl=default_ttl,
-        max_ttl=max_ttl,
-        authentication=authentication,
-        provider=provider,
-        config=validated_config,
-        key_map=validated_key_map,
-    )
-
-    # Update environment timestamp
-    environment.updated_at = timezone.now()
-    environment.save(update_fields=["updated_at"])
-
-    return dynamic_secret
 
 
 def create_temporary_user(user_config, iam_client):
@@ -508,15 +418,7 @@ def create_aws_dynamic_secret_lease(
     )
 
     # --- Schedule revocation ---
-    scheduler = django_rq.get_scheduler("scheduled-jobs")
-    job = scheduler.enqueue_at(
-        lease.expires_at,
-        revoke_aws_dynamic_secret_lease,
-        lease.id,
-    )
-
-    lease.cleanup_job_id = job.id
-    lease.save()
+    schedule_lease_revocation(lease)
 
     return lease, lease_data
 
