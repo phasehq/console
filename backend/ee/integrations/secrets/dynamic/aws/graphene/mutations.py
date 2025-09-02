@@ -4,18 +4,16 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.secrets import create_environment_folder_structure
-from ee.integrations.secrets.dynamic.aws.graphene.types import (
-    AwsCredentialsType,
+from ee.integrations.secrets.dynamic.utils import (
+    create_dynamic_secret,
+    validate_key_map,
 )
+
 from ee.integrations.secrets.dynamic.graphene.types import (
-    DynamicSecretLeaseType,
     DynamicSecretType,
     KeyMapInput,
 )
-from ee.integrations.secrets.dynamic.aws.utils import (
-    create_dynamic_secret,
-    create_aws_dynamic_secret_lease,
-)
+
 from datetime import timedelta
 import graphene
 from graphql import GraphQLError
@@ -89,10 +87,6 @@ class CreateAWSDynamicSecretMutation(graphene.Mutation):
         if not env.app.sse_enabled:
             raise GraphQLError("SSE is not enabled!")
 
-        folder = None
-        if path and path != "/":
-            folder = create_environment_folder_structure(path, environment_id)
-
         authentication = None
         if authentication_id:
             try:
@@ -102,12 +96,18 @@ class CreateAWSDynamicSecretMutation(graphene.Mutation):
             except ProviderCredentials.DoesNotExist:
                 raise GraphQLError("Invalid authentication credentials")
 
-        # --- create secret ---
+        try:
+            validated_key_map = validate_key_map(key_map, "aws", env, path)
+            key_map = validated_key_map
+        except ValidationError as e:
+            message = f"Error updating secret: {e.messages[0]}"
+            raise GraphQLError(message)
 
+        # --- create secret ---
         try:
             dynamic_secret = create_dynamic_secret(
                 environment=Environment.objects.get(id=environment_id),
-                folder=folder,
+                path=path,
                 name=name,
                 description=description,
                 default_ttl=timedelta(seconds=default_ttl),
@@ -201,12 +201,16 @@ class UpdateAWSDynamicSecretMutation(graphene.Mutation):
         dynamic_secret.max_ttl = timedelta(seconds=max_ttl) if max_ttl else None
         dynamic_secret.authentication = authentication
         dynamic_secret.config = config
-        dynamic_secret.key_map = key_map
 
         try:
-            # dynamic_secret.full_clean()
-            dynamic_secret.save()
+            validated_key_map = validate_key_map(
+                key_map, dynamic_secret.provider, dynamic_secret.environment, path
+            )
+            dynamic_secret.key_map = validated_key_map
         except ValidationError as e:
-            raise GraphQLError(f"Validation error:{e}")
+            message = f"Error updating secret: {e.messages[0]}"
+            raise GraphQLError(message)
+
+        dynamic_secret.save()
 
         return UpdateAWSDynamicSecretMutation(dynamic_secret=dynamic_secret)

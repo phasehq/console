@@ -51,9 +51,7 @@ class DeleteDynamicSecretMutation(graphene.Mutation):
                 "You don't have permission to delete secrets in this organisation"
             )
 
-        secret.updated_at = timezone.now()
-        secret.deleted_at = timezone.now()
-        secret.save()
+        secret.delete()
 
         return DeleteDynamicSecretMutation(ok=True)
 
