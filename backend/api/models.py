@@ -685,7 +685,7 @@ class DynamicSecret(models.Model):
     config = models.JSONField()
     key_map = models.JSONField(
         help_text="Provider-agnostic mapping of keys: "
-        "[{'id': '<key_id>', 'name': '<key_name>'}, ...]",
+        "[{'id': '<key_id>', 'key_name': '<encrypted_key_name>', 'key_digest': '<key_digest>'}, ...]",
         default=list,
     )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
@@ -702,9 +702,19 @@ class DynamicSecret(models.Model):
             self.environment.save()
 
     def delete(self, *args, **kwargs):
-        env = self.environment
-        super().delete(*args, **kwargs)
+        # Soft delete the object by setting the 'deleted_at' field.
+        self.updated_at = timezone.now()
+        self.deleted_at = timezone.now()
+        self.save()
+
+        # Revoke all active leases
+        from ee.integrations.secrets.dynamic.utils import schedule_lease_revocation
+
+        for lease in self.leases.filter(status=DynamicSecretLease.ACTIVE):
+            schedule_lease_revocation(lease, True)
+
         # Update the 'updated_at' timestamp of the associated Environment
+        env = self.environment
         if env:
             env.updated_at = timezone.now()
             env.save()
