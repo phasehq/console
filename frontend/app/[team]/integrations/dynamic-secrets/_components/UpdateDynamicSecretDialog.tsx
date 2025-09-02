@@ -26,6 +26,7 @@ import { toast } from 'react-toastify'
 import { duplicateKeysExist } from '@/utils/secrets'
 import { FaCog, FaCogs } from 'react-icons/fa'
 import { Textarea } from '@/components/common/TextArea'
+import { encryptAsymmetric } from '@/utils/crypto'
 
 type UpdateDynamicSecretDialogRef = {
   openModal: () => void
@@ -33,15 +34,14 @@ type UpdateDynamicSecretDialogRef = {
 }
 
 interface UpdateDynamicSecretDialogProps {
-  staticSecrets: SecretType[]
-  dynamicSecrets: DynamicSecretType[]
+  environment: EnvironmentType
   secret: DynamicSecretType // The secret to update
 }
 
 export const UpdateDynamicSecretDialog = forwardRef<
   UpdateDynamicSecretDialogRef,
   UpdateDynamicSecretDialogProps
->(({ staticSecrets, dynamicSecrets, secret }, ref) => {
+>(({ secret, environment }, ref) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const [updateDynamicSecret] = useMutation(UpdateDynamicSecret)
   const dialogRef = useRef<{ closeModal: () => void; openModal: () => void }>(null)
@@ -129,18 +129,15 @@ export const UpdateDynamicSecretDialog = forwardRef<
         return false
       }
 
-      // Check for duplicate secret names
-      if (
-        duplicateKeysExist(staticSecrets, [
-          ...dynamicSecrets.filter((ds) => ds.id !== secret.id),
-          { ...secret, keyMap: formData.keyMap },
-        ])
-      ) {
-        toast.error(
-          'One or more secret keys already exist at this path. Please select a unique key name for each credential.'
-        )
-        return false
-      }
+      // Encrypt each keyName in keyMap
+      const encryptedKeyMap = await Promise.all(
+        formData.keyMap.map(async (key) => ({
+          ...key,
+          keyName: key.keyName
+            ? await encryptAsymmetric(key.keyName, environment.identityKey)
+            : key.keyName,
+        }))
+      )
 
       await updateDynamicSecret({
         variables: {
@@ -153,7 +150,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
           maxTtl: parseInt(formData.maxTTL, 10),
           authenticationId: formData.credential?.id ?? null,
           config: formData.config,
-          keyMap: formData.keyMap,
+          keyMap: encryptedKeyMap,
         },
       })
 
