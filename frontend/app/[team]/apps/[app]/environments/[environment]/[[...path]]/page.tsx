@@ -1069,8 +1069,6 @@ export default function EnvironmentPath({
               environment={environment}
               path={'/'}
               ref={dynamicSecretDialogRef}
-              staticSecrets={serverSecrets}
-              dynamicSecrets={dynamicSecrets}
             />
 
             {organisation &&

@@ -7,7 +7,6 @@ import {
   EnvironmentType,
   ProviderCredentialsType,
   KeyMapInput,
-  SecretType,
   DynamicSecretType,
 } from '@/apollo/graphql'
 import { GetDynamicSecretProviders } from '@/graphql/queries/secrets/dynamic/getProviders.gql'
@@ -27,7 +26,6 @@ import { FaArrowRightLong } from 'react-icons/fa6'
 import { MdOutlinePassword } from 'react-icons/md'
 import { camelCase } from 'lodash'
 import { toast } from 'react-toastify'
-import { duplicateKeysExist } from '@/utils/secrets'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import { MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
 import { Textarea } from '@/components/common/TextArea'
@@ -41,14 +39,12 @@ type CreateDynamicSecretDialogRef = {
 interface CreateDynamicSecretDialogProps {
   environment: EnvironmentType
   path: string
-  staticSecrets: SecretType[]
-  dynamicSecrets: DynamicSecretType[]
 }
 
 export const CreateDynamicSecretDialog = forwardRef<
   CreateDynamicSecretDialogRef,
   CreateDynamicSecretDialogProps
->(({ environment, path, staticSecrets, dynamicSecrets }, ref) => {
+>(({ environment, path }, ref) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { data } = useQuery(GetDynamicSecretProviders)
@@ -80,6 +76,27 @@ export const CreateDynamicSecretDialog = forwardRef<
     defaultTTL: '3600',
     maxTTL: '86400',
   })
+
+  const reset = () => {
+    setProvider(null)
+    setActiveStep(0)
+    setFormData({
+      name: 'AWS IAM credentials',
+      description: '',
+      credential: null as ProviderCredentialsType | null,
+      config: {
+        usernameTemplate: '{{random}}',
+        iamPath: `/phase/`,
+        permissionBoundaryArn: undefined,
+        groups: [],
+        policyArns: [],
+        policyDocument: undefined,
+      } as AwsConfigInput,
+      keyMap: [] as KeyMapInput[],
+      defaultTTL: '3600',
+      maxTTL: '86400',
+    })
+  }
 
   useEffect(() => {
     if (!provider) return
@@ -153,19 +170,6 @@ export const CreateDynamicSecretDialog = forwardRef<
         return false
       }
 
-      // Check for duplicate secret names
-      // if (
-      //   duplicateKeysExist(staticSecrets, [
-      //     ...dynamicSecrets,
-      //     { id: 'new-dynamic-secret', keyMap: formData.keyMap } as DynamicSecretType,
-      //   ])
-      // ) {
-      //   toast.error(
-      //     'One or more secret keys already exist at this path. Please select a unique key name for each credential.'
-      //   )
-      //   return false
-      // }
-
       if (parseInt(formData.defaultTTL, 10) > parseInt(formData.maxTTL, 10)) {
         toast.error('Default TTL must be less than or equal to Max TTL')
       }
@@ -200,6 +204,7 @@ export const CreateDynamicSecretDialog = forwardRef<
       })
 
       toast.success('Created new dynamic secret')
+      reset()
       dialogRef.current?.closeModal()
     }
   }
