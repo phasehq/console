@@ -1,18 +1,19 @@
-import { DynamicSecretType, KeyMap } from '@/apollo/graphql'
-import { Button } from '@/components/common/Button'
+import { DynamicSecretType, EnvironmentType, KeyMap } from '@/apollo/graphql'
 import clsx from 'clsx'
-import { FaCog } from 'react-icons/fa'
 import { FaBolt } from 'react-icons/fa6'
 
-import { useMutation } from '@apollo/client'
 import { CreateLeaseDialog } from './CreateLeaseDialog'
 import { ManageDynamicSecretDialog } from './ManageDynamicSecretDialog'
 import { DeleteDynamicSecretDialog } from './DeleteDynamicSecretDialog'
-import { Input } from '@/components/common/Input'
-import { useMemo } from 'react'
 import { UpdateDynamicSecretDialog } from '@/app/[team]/integrations/dynamic-secrets/_components/UpdateDynamicSecretDialog'
 
-export const DynamicSecretRow = ({ secret }: { secret: DynamicSecretType }) => {
+export const DynamicSecretRow = ({
+  secret,
+  environment,
+}: {
+  secret: DynamicSecretType
+  environment: EnvironmentType
+}) => {
   const keyMap: KeyMap[] = (secret.keyMap as KeyMap[]) ?? []
 
   const KEY_BASE_STYLE = 'w-full font-mono custom bg-transparent transition ease p-1 ph-no-capture'
@@ -57,7 +58,7 @@ export const DynamicSecretRow = ({ secret }: { secret: DynamicSecretType }) => {
         <div className="flex h-full items-center gap-4  opacity-0 group-hover:opacity-100 transition ease">
           <CreateLeaseDialog secret={secret} />
           <ManageDynamicSecretDialog secret={secret} />
-          <UpdateDynamicSecretDialog secret={secret} staticSecrets={[]} dynamicSecrets={[]} />
+          <UpdateDynamicSecretDialog secret={secret} environment={environment} />
         </div>
       </div>
       <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center">
