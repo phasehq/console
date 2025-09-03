@@ -204,7 +204,11 @@ class UpdateAWSDynamicSecretMutation(graphene.Mutation):
 
         try:
             validated_key_map = validate_key_map(
-                key_map, dynamic_secret.provider, dynamic_secret.environment, path
+                key_map,
+                dynamic_secret.provider,
+                dynamic_secret.environment,
+                path,
+                dynamic_secret.id,
             )
             dynamic_secret.key_map = validated_key_map
         except ValidationError as e:

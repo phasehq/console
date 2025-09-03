@@ -196,7 +196,7 @@ def check_for_duplicates_blind(secrets, environment):
             environment=environment,
             path=path,
             deleted_at=None,
-        )
+        ).exclude(id=secret["dynamic_secret_id"])
         for dyn_secret in dynamic_secrets:
             key_map = dyn_secret.key_map or []
             for entry in key_map:

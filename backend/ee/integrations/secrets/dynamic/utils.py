@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 DynamicSecret = apps.get_model("api", "DynamicSecret")
 
 
-def validate_key_map(key_map, provider, environment, path):
+def validate_key_map(key_map, provider, environment, path, dynamic_secret_id=None):
     provider_def = None
     for prov in DynamicSecretProviders.__dict__.values():
         if isinstance(prov, dict) and prov.get("id") == provider:
@@ -40,6 +40,7 @@ def validate_key_map(key_map, provider, environment, path):
         decrypted_key_name = decrypt_asymmetric(
             entry["key_name"], env_privkey, env_pubkey
         )
+        entry["dynamic_secret_id"] = dynamic_secret_id
         entry["path"] = path
         digest = compute_key_digest(decrypted_key_name, environment.id)
         entry["keyDigest"] = digest
