@@ -10,20 +10,20 @@ export const leaseTtlButtons = [
       seconds: '3600',
     },
     {
-      label: '3h',
-      seconds: '10800',
-    },
-    {
-      label: '6h',
-      seconds: '21600',
-    },
-    {
       label: '12h',
       seconds: '43200',
     },
     {
       label: '24h',
       seconds: '86400',
+    },
+    {
+      label: '30d',
+      seconds: '2592000',
+    },
+    {
+      label: '90d',
+      seconds: '7776000',
     },
   ]
 

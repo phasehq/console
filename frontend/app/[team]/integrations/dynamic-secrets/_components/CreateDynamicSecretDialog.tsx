@@ -27,7 +27,7 @@ import { MdOutlinePassword } from 'react-icons/md'
 import { camelCase } from 'lodash'
 import { toast } from 'react-toastify'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
-import { MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
+import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
 import { Textarea } from '@/components/common/TextArea'
 import { encryptAsymmetric } from '@/utils/crypto'
 
@@ -209,6 +209,8 @@ export const CreateDynamicSecretDialog = forwardRef<
     }
   }
 
+  const ttlButtons = leaseTtlButtons
+
   const ProviderMenu = () => (
     <div className="grid">
       {data?.dynamicSecretProviders?.map((provider: DynamicSecretProviderType) => (
@@ -326,22 +328,56 @@ export const CreateDynamicSecretDialog = forwardRef<
                         Configure the default and max TTLs for generated secrets
                       </div>
                     </div>
-                    <Input
-                      type="number"
-                      label="Default TTL (seconds)"
-                      required
-                      min={1}
-                      value={formData.defaultTTL}
-                      setValue={(val) => setFormData({ ...formData, defaultTTL: val })}
-                    />
-                    <Input
-                      type="number"
-                      label="Max TTL (seconds)"
-                      required
-                      min={1}
-                      value={formData.maxTTL}
-                      setValue={(val) => setFormData({ ...formData, maxTTL: val })}
-                    />
+
+                    <div className="flex items-end gap-4 justify-between">
+                      <Input
+                        value={formData.maxTTL}
+                        setValue={(val) => setFormData({ ...formData, maxTTL: val })}
+                        type="number"
+                        min={60}
+                        label="Max TTL (seconds)"
+                        max={formData.maxTTL!}
+                        required
+                      />
+
+                      <div className="flex items-center gap-2 py-1">
+                        {ttlButtons.map((button) => (
+                          <Button
+                            type="button"
+                            variant={formData.maxTTL === button.seconds ? 'secondary' : 'ghost'}
+                            key={button.label}
+                            onClick={() => setFormData({ ...formData, maxTTL: button.seconds })}
+                          >
+                            {button.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-end gap-4 justify-between">
+                      <Input
+                        value={formData.defaultTTL}
+                        setValue={(val) => setFormData({ ...formData, defaultTTL: val })}
+                        type="number"
+                        min={60}
+                        label="Default TTL (seconds)"
+                        max={formData.maxTTL!}
+                        required
+                      />
+
+                      <div className="flex items-center gap-2 py-1">
+                        {ttlButtons.map((button) => (
+                          <Button
+                            type="button"
+                            variant={formData.defaultTTL === button.seconds ? 'secondary' : 'ghost'}
+                            key={button.label}
+                            onClick={() => setFormData({ ...formData, defaultTTL: button.seconds })}
+                          >
+                            {button.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-4 pt-6">

@@ -89,24 +89,27 @@ export const RenewLeaseDialog = ({
 
               <p>Select a TTL to renew this lease.</p>
             </div>
-            <Input
-              value={ttl}
-              setValue={setTtl}
-              type="number"
-              label="TTL (seconds)"
-              max={secret.maxTtlSeconds!}
-              required
-            />
-            <div className="flex items-center gap-4">
-              {ttlButtons.map((button) => (
-                <Button
-                  variant={ttl === button.seconds ? 'secondary' : 'ghost'}
-                  key={button.label}
-                  onClick={() => setTtl(button.seconds)}
-                >
-                  {button.label}
-                </Button>
-              ))}
+            <div className="flex items-end gap-4 justify-between">
+              <Input
+                value={ttl}
+                setValue={setTtl}
+                type="number"
+                label="TTL (seconds)"
+                max={secret.maxTtlSeconds!}
+                required
+              />
+
+              <div className="flex items-center gap-2 py-1">
+                {ttlButtons.map((button) => (
+                  <Button
+                    variant={ttl === button.seconds ? 'secondary' : 'ghost'}
+                    key={button.label}
+                    onClick={() => setTtl(button.seconds)}
+                  >
+                    {button.label}
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
         )}
