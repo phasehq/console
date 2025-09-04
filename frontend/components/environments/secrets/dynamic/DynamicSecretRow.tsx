@@ -19,7 +19,7 @@ export const DynamicSecretRow = ({
   const KEY_BASE_STYLE = 'w-full font-mono custom bg-transparent transition ease p-1 ph-no-capture'
 
   return (
-    <div className="p-2 ring-1 ring-inset ring-emerald-400/20 flex w-full rounded-lg group">
+    <div className="p-2 ring-1 ring-inset ring-neutral-400/20 flex w-full rounded-lg group">
       <div className="w-1/3">
         <div className="text-2xs text-emerald-500 flex items-center gap-1 bg-emerald-400/10 rounded-full w-min whitespace-nowrap px-1">
           <FaBolt /> {secret.name}
