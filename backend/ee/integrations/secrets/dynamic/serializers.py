@@ -40,7 +40,7 @@ class DynamicSecretLeaseSerializer(serializers.ModelSerializer):
                         key_name_encrypted, env_privkey, env_pubkey
                     )
                     value = decrypt_asymmetric(cred_encrypted, env_privkey, env_pubkey)
-                    result.append({"key_name": key_name, "value": value})
+                    result.append({"key": key_name, "value": value})
         else:
             for entry in key_map:
                 key_id = entry.get("id")
