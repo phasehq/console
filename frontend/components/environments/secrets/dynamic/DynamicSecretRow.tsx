@@ -1,11 +1,11 @@
 import { DynamicSecretType, EnvironmentType, KeyMap } from '@/apollo/graphql'
 import clsx from 'clsx'
 import { FaBolt } from 'react-icons/fa6'
-
 import { CreateLeaseDialog } from './CreateLeaseDialog'
 import { ManageLeasesDialog } from './ManageLeasesDialog'
 import { DeleteDynamicSecretDialog } from './DeleteDynamicSecretDialog'
 import { UpdateDynamicSecretDialog } from '@/app/[team]/integrations/dynamic-secrets/_components/UpdateDynamicSecretDialog'
+import { randomString } from '@/utils/copy'
 
 export const DynamicSecretRow = ({
   secret,
@@ -17,16 +17,6 @@ export const DynamicSecretRow = ({
   const keyMap: KeyMap[] = (secret.keyMap as KeyMap[]) ?? []
 
   const KEY_BASE_STYLE = 'w-full font-mono custom bg-transparent transition ease p-1 ph-no-capture'
-
-  function randomString(min = 6, max = 18) {
-    const length = Math.floor(Math.random() * (max - min + 1)) + min
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    let result = ''
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    return result
-  }
 
   return (
     <div className="p-2 ring-1 ring-inset ring-emerald-400/20 flex w-full rounded-lg group">
