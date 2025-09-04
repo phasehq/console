@@ -132,7 +132,10 @@ class RenewLeaseMutation(graphene.Mutation):
         if not user_is_org_member(user.userId, org.id):
             raise GraphQLError("You don't have access to this organisation")
 
-        if lease.organisation_member.id != org_member.id and not user_has_permission(
+        if (
+            lease.organisation_member is None
+            or lease.organisation_member.id != org_member.id
+        ) and not user_has_permission(
             info.context.user, "update", "DynamicSecretLeases", org, True
         ):
             raise GraphQLError(
@@ -171,7 +174,10 @@ class RevokeLeaseMutation(graphene.Mutation):
         if not user_is_org_member(user.userId, org.id):
             raise GraphQLError("You don't have access to this organisation")
 
-        if lease.organisation_member.id != org_member.id and not user_has_permission(
+        if (
+            lease.organisation_member is None
+            or lease.organisation_member.id != org_member.id
+        ) and not user_has_permission(
             info.context.user, "delete", "DynamicSecretLeases", org, True
         ):
             raise GraphQLError(
@@ -180,11 +186,6 @@ class RevokeLeaseMutation(graphene.Mutation):
 
         if not user_can_access_environment(user.userId, lease.secret.environment.id):
             raise GraphQLError("You don't have access to this environment")
-
-        if lease.organisation_member.id != org_member.id:
-            raise GraphQLError(
-                "You cannot revoke this lease as it wasn't created by you"
-            )
 
         else:
             if lease.secret.provider == "aws":
