@@ -60,8 +60,8 @@ export const LeaseCard = ({
         <div className="font-mono text-2xs text-neutral-500">{lease.id}</div>
       </div>
 
-      <div className="space-y-1 col-span-2">
-        <div className="text-neutral-500 flex items-center gap-2 text-xs">
+      <div className="space-y-1 col-span-2 text-xs">
+        <div className="text-neutral-500 flex items-center gap-1">
           Created {relativeTimeFromDates(new Date(lease.createdAt))}
           {(lease.organisationMember || lease.serviceAccount) && (
             <div className="flex items-center gap-1">
@@ -80,7 +80,7 @@ export const LeaseCard = ({
           )}
         </div>
         {isRevoked ? (
-          <div className="text-red-400 text-xs">
+          <div className="text-red-400">
             {`${lease.status == ApiDynamicSecretLeaseStatusChoices.Expired ? 'Expire' : 'Revoke'}${isRevoked ? 'd' : 's'}`}{' '}
             {relativeTimeFromDates(new Date(lease.revokedAt))}
           </div>
