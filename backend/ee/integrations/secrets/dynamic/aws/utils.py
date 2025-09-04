@@ -5,7 +5,7 @@ from api.models import DynamicSecret
 from api.utils.crypto import decrypt_asymmetric, encrypt_asymmetric, get_server_keypair
 from api.utils.syncing.aws.auth import get_aws_sts_session
 from api.utils.secrets import get_environment_keys
-from ee.integrations.secrets.dynamic.utils import schedule_lease_revocation
+
 from backend.utils.secrets import get_secret
 from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
 import logging
@@ -418,6 +418,8 @@ def create_aws_dynamic_secret_lease(
     )
 
     # --- Schedule revocation ---
+    from ee.integrations.secrets.dynamic.utils import schedule_lease_revocation
+
     schedule_lease_revocation(lease)
 
     return lease, lease_data

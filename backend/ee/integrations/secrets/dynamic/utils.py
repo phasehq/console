@@ -7,6 +7,9 @@ from api.utils.secrets import (
     get_environment_keys,
 )
 from api.utils.crypto import decrypt_asymmetric
+from ee.integrations.secrets.dynamic.aws.utils import (
+    create_aws_dynamic_secret_lease,
+)
 from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
 from uuid import uuid4
 from django.core.exceptions import ValidationError
@@ -146,6 +149,28 @@ def create_dynamic_secret(
     environment.save(update_fields=["updated_at"])
 
     return dynamic_secret
+
+
+def create_dynamic_secret_lease(
+    secret, lease_name=None, ttl=None, organisation_member=None, service_account=None
+):
+    try:
+        lease_name = lease_name or secret.name
+        ttl = ttl or int(secret.default_ttl.total_seconds())
+        if secret.provider == "aws":
+            lease, lease_data = create_aws_dynamic_secret_lease(
+                secret=secret,
+                lease_name=lease_name,
+                organisation_member=organisation_member,
+                service_account=service_account,
+                ttl_seconds=ttl,
+            )
+
+            return lease, lease_data
+
+    except ValidationError as e:
+        logger.error(f"Error creating dynamic secret lease: {e}")
+        raise GraphQLError(e.message)
 
 
 def renew_dynamic_secret_lease(lease, ttl):

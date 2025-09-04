@@ -4,7 +4,10 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
-from ee.integrations.secrets.dynamic.utils import renew_dynamic_secret_lease
+from ee.integrations.secrets.dynamic.utils import (
+    create_dynamic_secret_lease,
+    renew_dynamic_secret_lease,
+)
 from ee.integrations.secrets.dynamic.aws.graphene.types import (
     AwsCredentialsType,
 )
@@ -92,25 +95,14 @@ class LeaseDynamicSecret(graphene.Mutation):
 
         # create lease
         lease_name = secret.name if name is None else name
-        try:
-            if secret.provider == "aws":
-                lease, lease_data = create_aws_dynamic_secret_lease(
-                    secret=secret,
-                    lease_name=lease_name,
-                    organisation_member=org_member,
-                    ttl_seconds=ttl,
-                )
-
-                lease._credentials = AwsCredentialsType(
-                    access_key_id=lease_data["access_key_id"],
-                    secret_access_key=lease_data["secret_access_key"],
-                    username=lease_data["username"],
-                )
-
-        except ValidationError as e:
-            logger.error(f"Error creating dynamic secret lease: {e}")
-            raise GraphQLError(e.message)
-
+        lease, lease_data = create_dynamic_secret_lease(
+            secret, lease_name, ttl, org_member
+        )
+        lease._credentials = AwsCredentialsType(
+            access_key_id=lease_data["access_key_id"],
+            secret_access_key=lease_data["secret_access_key"],
+            username=lease_data["username"],
+        )
         return LeaseDynamicSecret(lease=lease)
 
 
