@@ -418,6 +418,7 @@ class Query(graphene.ObjectType):
         secret_id=graphene.ID(required=False),
         app_id=graphene.ID(required=False),
         env_id=graphene.ID(required=False),
+        path=graphene.String(required=False),
         org_id=graphene.ID(),
     )
 

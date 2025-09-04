@@ -54,7 +54,7 @@ type Query {
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   stripeCustomerPortalUrl(organisationId: ID!): String
   dynamicSecretProviders: [DynamicSecretProviderType]
-  dynamicSecrets(secretId: ID, appId: ID, envId: ID, orgId: ID): [DynamicSecretType]
+  dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]
 }
 
 type OrganisationType {
