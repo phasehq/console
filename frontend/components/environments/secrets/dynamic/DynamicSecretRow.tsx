@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { FaBolt } from 'react-icons/fa6'
 
 import { CreateLeaseDialog } from './CreateLeaseDialog'
-import { ManageDynamicSecretDialog } from './ManageDynamicSecretDialog'
+import { ManageLeasesDialog } from './ManageLeasesDialog'
 import { DeleteDynamicSecretDialog } from './DeleteDynamicSecretDialog'
 import { UpdateDynamicSecretDialog } from '@/app/[team]/integrations/dynamic-secrets/_components/UpdateDynamicSecretDialog'
 
@@ -57,7 +57,7 @@ export const DynamicSecretRow = ({
 
         <div className="flex h-full items-center gap-4  opacity-0 group-hover:opacity-100 transition ease">
           <CreateLeaseDialog secret={secret} />
-          <ManageDynamicSecretDialog secret={secret} />
+          <ManageLeasesDialog secret={secret} />
           <UpdateDynamicSecretDialog secret={secret} environment={environment} />
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { DynamicSecretType } from '@/apollo/graphql'
 import { DeleteDynamicSecretDialog } from '@/components/environments/secrets/dynamic/DeleteDynamicSecretDialog'
-import { ManageDynamicSecretDialog } from '@/components/environments/secrets/dynamic/ManageDynamicSecretDialog'
+import { ManageLeasesDialog } from '@/components/environments/secrets/dynamic/ManageLeasesDialog'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -23,7 +23,7 @@ export const DynamicSecret = ({ secret }: { secret: DynamicSecretType }) => {
       <div className="relative group flex items-center justify-between w-full">
         <div className="flex h-full items-center justify-start gap-4 opacity-0 group-hover:opacity-100 transition ease">
           {/* <CreateLeaseDialog secret={secret} /> */}
-          <ManageDynamicSecretDialog secret={secret} />
+          <ManageLeasesDialog secret={secret} />
         </div>
         <div className="flex h-full items-center justify-end gap-4 opacity-0 group-hover:opacity-100 transition ease">
           {/* <DeleteDynamicSecretDialog secret={secret} /> */}

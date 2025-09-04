@@ -587,6 +587,11 @@ export default function EnvironmentPath({
 
   const filteredAndSortedSecrets = sortSecrets(filteredSecrets, sort)
 
+  const noSecrets =
+    filteredAndSortedSecrets.length === 0 &&
+    filteredFolders.length === 0 &&
+    dynamicSecrets.length === 0
+
   const downloadEnvFile = () => {
     const envContent = serverSecrets
       .map((secret) => {
@@ -1067,7 +1072,7 @@ export default function EnvironmentPath({
             <NewFolderMenu />
             <CreateDynamicSecretDialog
               environment={environment}
-              path={'/'}
+              path={secretPath}
               ref={dynamicSecretDialogRef}
             />
 
@@ -1111,7 +1116,7 @@ export default function EnvironmentPath({
                 </div>
               ))}
 
-            {filteredAndSortedSecrets.length === 0 && filteredFolders.length === 0 && (
+            {noSecrets && (
               <EmptyState
                 title={searchQuery ? `No results for "${searchQuery}"` : 'No secrets here'}
                 subtitle="Add secrets or folders here to get started"

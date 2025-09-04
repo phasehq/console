@@ -3,8 +3,8 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetDynamicSecretLeases } from '@/graphql/queries/secrets/dynamic/getSecretLeases.gql'
-import { useQuery } from '@apollo/client'
-import { useContext, useRef, useState } from 'react'
+import { useLazyQuery, useQuery } from '@apollo/client'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { FaAngleDoubleDown, FaAngleDoubleUp, FaCog } from 'react-icons/fa'
 import { LeaseCard } from './LeaseCard'
 import { FiRefreshCw } from 'react-icons/fi'
@@ -12,18 +12,31 @@ import { FaListCheck } from 'react-icons/fa6'
 import { CreateLeaseDialog } from './CreateLeaseDialog'
 import { EmptyState } from '@/components/common/EmptyState'
 
-export const ManageDynamicSecretDialog = ({ secret }: { secret: DynamicSecretType }) => {
+export const ManageLeasesDialog = ({ secret }: { secret: DynamicSecretType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const dialogRef = useRef<{ closeModal: () => void; isOpen: boolean }>(null)
 
-  const { data, refetch, loading } = useQuery(GetDynamicSecretLeases, {
-    variables: { secretId: secret.id, orgId: organisation?.id },
-    skip: !organisation,
+  const [isOpen, setIsOpen] = useState(false)
+
+  // Listen for dialog open/close
+  const handleOpen = () => setIsOpen(true)
+  const handleClose = () => setIsOpen(false)
+
+  const [fetchLeases, { data, refetch, loading }] = useLazyQuery(GetDynamicSecretLeases, {
+    //variables: { secretId: secret.id, orgId: organisation?.id },
     notifyOnNetworkStatusChange: true,
   })
 
-  const handleRefetch = async () => await refetch()
+  // Fetch leases when dialog is opened
+  useEffect(() => {
+    if (isOpen && organisation) {
+      fetchLeases({ variables: { secretId: secret.id, orgId: organisation?.id } })
+    }
+  }, [isOpen, organisation, fetchLeases, secret.id])
+
+  const handleRefetch = async () =>
+    await refetch({ variables: { secretId: secret.id, orgId: organisation?.id } })
 
   const [viewLimit, setViewLimit] = useState(10)
 
@@ -43,6 +56,8 @@ export const ManageDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
         </>
       }
       title="View and manage leases"
+      onOpen={handleOpen}
+      onClose={handleClose}
     >
       <div className="space-y-6">
         <div className="text-neutral-500 ">
