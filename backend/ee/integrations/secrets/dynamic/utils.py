@@ -98,6 +98,17 @@ def create_dynamic_secret(
     Used by both GraphQL resolvers and REST API.
     """
 
+    # --- ensure name is unique in this environment and path ---
+    if DynamicSecret.objects.filter(
+        environment=environment,
+        path=path,
+        name=name,
+        deleted_at=None,
+    ).exists():
+        raise ValidationError(
+            f"A dynamic secret with name '{name}' already exists at this path."
+        )
+
     # --- validate provider ---
     provider_def = None
     for prov in DynamicSecretProviders.__dict__.values():

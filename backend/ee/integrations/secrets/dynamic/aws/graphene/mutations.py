@@ -100,7 +100,7 @@ class CreateAWSDynamicSecretMutation(graphene.Mutation):
             validated_key_map = validate_key_map(key_map, "aws", env, path)
             key_map = validated_key_map
         except ValidationError as e:
-            message = f"Error updating secret: {e.messages[0]}"
+            message = f"Error creating secret: {e.messages[0]}"
             raise GraphQLError(message)
 
         # --- create secret ---
@@ -189,6 +189,17 @@ class UpdateAWSDynamicSecretMutation(graphene.Mutation):
                 )
             except ProviderCredentials.DoesNotExist:
                 raise GraphQLError("Invalid authentication credentials")
+
+        # --- ensure name is unique in this environment and path ---
+        if DynamicSecret.objects.filter(
+            environment=dynamic_secret.environment,
+            path=path,
+            name=name,
+            deleted_at=None,
+        ).exists():
+            raise GraphQLError(
+                f"A dynamic secret with name '{name}' already exists at this path."
+            )
 
         # --- update secret fields ---
         dynamic_secret.name = name
