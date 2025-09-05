@@ -587,10 +587,18 @@ export default function EnvironmentPath({
 
   const filteredAndSortedSecrets = sortSecrets(filteredSecrets, sort)
 
+  const filteredDynamicSecrets =
+    searchQuery === ''
+      ? dynamicSecrets
+      : dynamicSecrets.filter((secret) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(`${secret.name}${secret.keyMap?.map((k) => k!.keyName).join('')}`)
+        })
+
   const noSecrets =
     filteredAndSortedSecrets.length === 0 &&
     filteredFolders.length === 0 &&
-    dynamicSecrets.length === 0
+    filteredDynamicSecrets.length === 0
 
   const downloadEnvFile = () => {
     const envContent = serverSecrets
@@ -1038,7 +1046,7 @@ export default function EnvironmentPath({
               ref={importDialogRef}
             />
 
-            {(clientSecrets.length > 0 || folders.length > 0) && (
+            {!noSecrets && (
               <div className="flex items-center w-full">
                 <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
@@ -1086,7 +1094,7 @@ export default function EnvironmentPath({
               ))}
 
             {environment &&
-              dynamicSecrets.map((secret) => (
+              filteredDynamicSecrets.map((secret) => (
                 <DynamicSecretRow key={secret.id} secret={secret} environment={environment} />
               ))}
 
