@@ -186,12 +186,12 @@ def create_dynamic_secret_lease(
 
 def renew_dynamic_secret_lease(lease, ttl):
     if timedelta(seconds=ttl) > lease.secret.max_ttl:
-        raise GraphQLError(
+        raise Exception(
             "The specified TTL exceeds the maximum TTL for this dynamic secret."
         )
 
     if lease.expires_at <= timezone.now():
-        raise GraphQLError("This lease has expired and cannot be renewed")
+        raise Exception("This lease has expired and cannot be renewed")
 
     else:
         lease.expires_at = timezone.now() + timedelta(seconds=ttl)

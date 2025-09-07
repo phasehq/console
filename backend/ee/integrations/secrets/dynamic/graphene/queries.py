@@ -24,7 +24,7 @@ def resolve_dynamic_secret_providers(self, info):
 
 
 def resolve_dynamic_secrets(
-    root, info, secret_id=None, app_id=None, env_id=None, path="/", org_id=None
+    root, info, secret_id=None, app_id=None, env_id=None, path=None, org_id=None
 ):
     user = info.context.user
     filters = {"deleted_at": None}
@@ -32,7 +32,7 @@ def resolve_dynamic_secrets(
     if secret_id:
         filters["id"] = secret_id
 
-    else:
+    elif path is not None:
         filters["path"] = path
     org = None
 

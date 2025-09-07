@@ -14,10 +14,13 @@ export const DynamicSecret = ({ secret }: { secret: DynamicSecretType }) => {
   return (
     <div className="p-2 ring-1 ring-inset ring-neutral-400/20 flex flex-col gap-4 w-full rounded-lg group justify-between bg-zinc-100 dark:bg-zinc-800">
       <div>
-        <div className="text-base text-zinc-900 dark:text-zinc-100 flex items-center gap-1 px-1">
-          <ProviderIcon providerId={secret.provider} /> {secret.name}
+        <div className="font-mono text-neutral-500 text-xs">{secret.path}</div>
+        <div>
+          <div className="text-base text-zinc-900 dark:text-zinc-100 flex items-center gap-1 px-1">
+            <ProviderIcon providerId={secret.provider} /> {secret.name}
+          </div>
+          <div className="text-sm text-neutral-500 px-1">{secret.description}</div>
         </div>
-        <div className="text-sm text-neutral-500 px-1">{secret.description}</div>
       </div>
 
       <div className="relative group flex items-center justify-between w-full">
