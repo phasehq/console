@@ -247,8 +247,11 @@ class DynamicSecretLeaseView(APIView):
         try:
             lease = renew_dynamic_secret_lease(lease, ttl)
         except Exception as e:
-            return Response({"error": str(e)}, status=400)
-
+            logger.exception("Failed to renew dynamic secret lease (lease_id=%s)", lease_id)
+            return Response(
+                {"error": "An internal error occurred while renewing the lease."},
+                status=400,
+            )
         return Response(status=status.HTTP_200_OK)
 
     # Revoke
