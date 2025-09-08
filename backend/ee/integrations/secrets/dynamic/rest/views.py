@@ -35,6 +35,9 @@ from djangorestframework_camel_case.render import (
     CamelCaseJSONRenderer,
 )
 from rest_framework.exceptions import PermissionDenied, NotFound
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DynamicSecretsView(APIView):
@@ -247,7 +250,9 @@ class DynamicSecretLeaseView(APIView):
         try:
             lease = renew_dynamic_secret_lease(lease, ttl)
         except Exception as e:
-            logger.exception("Failed to renew dynamic secret lease (lease_id=%s)", lease_id)
+            logger.exception(
+                "Failed to renew dynamic secret lease (lease_id=%s)", lease_id
+            )
             return Response(
                 {"error": "An internal error occurred while renewing the lease."},
                 status=400,
