@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  ApiOrganisationPlanChoices,
   DynamicSecretType,
   EnvironmentType,
   SecretFolderType,
@@ -71,8 +72,10 @@ import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDro
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { FaBolt } from 'react-icons/fa6'
-import { CreateDynamicSecretDialog } from '@/app/[team]/integrations/dynamic-secrets/_components/CreateDynamicSecretDialog'
-import { DynamicSecretRow } from '@/components/environments/secrets/dynamic/DynamicSecretRow'
+import { CreateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
+import { DynamicSecretRow } from '@/ee/components/secrets/dynamic/DynamicSecretRow'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 
 export default function EnvironmentPath({
   params,
@@ -101,6 +104,7 @@ export default function EnvironmentPath({
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const [sort, setSort] = useState<SortOption>('-created')
 
@@ -838,6 +842,8 @@ export default function EnvironmentPath({
       true
     )
 
+    const allowDynamicSecrets = organisation?.plan === ApiOrganisationPlanChoices.En
+
     if (!userCanCreateSecrets) return <></>
     return (
       <SplitButton
@@ -845,8 +851,16 @@ export default function EnvironmentPath({
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
-            <Button variant="secondary" onClick={() => dynamicSecretDialogRef.current?.openModal()}>
-              <FaBolt /> Dynamic Secret
+            <Button
+              variant="secondary"
+              onClick={() =>
+                allowDynamicSecrets
+                  ? dynamicSecretDialogRef.current?.openModal()
+                  : upsellDialogRef.current?.openModal()
+              }
+            >
+              <FaBolt /> Dynamic Secret{' '}
+              {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
             </Button>
 
             <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
@@ -1083,6 +1097,7 @@ export default function EnvironmentPath({
               path={secretPath}
               ref={dynamicSecretDialogRef}
             />
+            <UpsellDialog ref={upsellDialogRef} title="Upgrade to Enterprise" />
 
             {organisation &&
               filteredFolders.map((folder: SecretFolderType) => (

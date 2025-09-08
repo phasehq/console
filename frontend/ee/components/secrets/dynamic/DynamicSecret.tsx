@@ -1,6 +1,6 @@
 import { DynamicSecretType } from '@/apollo/graphql'
-import { DeleteDynamicSecretDialog } from '@/components/environments/secrets/dynamic/DeleteDynamicSecretDialog'
-import { ManageLeasesDialog } from '@/components/environments/secrets/dynamic/ManageLeasesDialog'
+import { DeleteDynamicSecretDialog } from '@/ee/components/secrets/dynamic/DeleteDynamicSecretDialog'
+import { ManageLeasesDialog } from '@/ee/components/secrets/dynamic/ManageLeasesDialog'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'

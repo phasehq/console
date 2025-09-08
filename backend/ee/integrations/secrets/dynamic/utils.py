@@ -98,6 +98,12 @@ def create_dynamic_secret(
     Used by both GraphQL resolvers and REST API.
     """
 
+    Organisation = apps.get_model("api", "Organisation")
+
+    org = environment.app.organisation
+    if not org.plan == Organisation.ENTERPRISE_PLAN:
+        raise Exception("Dynamic secrets are only available on the Enterprise plan.")
+
     # --- ensure name is unique in this environment and path ---
     if DynamicSecret.objects.filter(
         environment=environment,

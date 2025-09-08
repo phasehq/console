@@ -4,7 +4,7 @@ import { FaBolt } from 'react-icons/fa6'
 import { CreateLeaseDialog } from './CreateLeaseDialog'
 import { ManageLeasesDialog } from './ManageLeasesDialog'
 import { DeleteDynamicSecretDialog } from './DeleteDynamicSecretDialog'
-import { UpdateDynamicSecretDialog } from '@/app/[team]/integrations/dynamic-secrets/_components/UpdateDynamicSecretDialog'
+import { UpdateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/UpdateDynamicSecretDialog'
 import { randomString } from '@/utils/copy'
 
 export const DynamicSecretRow = ({

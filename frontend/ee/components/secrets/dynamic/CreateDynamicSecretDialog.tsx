@@ -8,6 +8,7 @@ import {
   ProviderCredentialsType,
   KeyMapInput,
   DynamicSecretType,
+  ApiOrganisationPlanChoices,
 } from '@/apollo/graphql'
 import { GetDynamicSecretProviders } from '@/graphql/queries/secrets/dynamic/getProviders.gql'
 import { CreateNewAWSDynamicSecret } from '@/graphql/mutations/environments/secrets/dynamic/createDynamicSecret.gql'
@@ -22,7 +23,7 @@ import { toUpper } from 'lodash'
 import { useMutation, useQuery } from '@apollo/client'
 import { Card } from '@/components/common/Card'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
-import { FaArrowRightLong } from 'react-icons/fa6'
+import { FaArrowRightLong, FaPlus } from 'react-icons/fa6'
 import { MdOutlinePassword } from 'react-icons/md'
 import { camelCase } from 'lodash'
 import { toast } from 'react-toastify'
@@ -30,6 +31,9 @@ import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
 import { Textarea } from '@/components/common/TextArea'
 import { encryptAsymmetric } from '@/utils/crypto'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { isCloudHosted } from '@/utils/appConfig'
 
 type CreateDynamicSecretDialogRef = {
   openModal: () => void

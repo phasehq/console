@@ -8,7 +8,7 @@ import { FaBan } from 'react-icons/fa6'
 import { GetDynamicSecrets } from '@/graphql/queries/secrets/dynamic/getDynamicSecrets.gql'
 import { useQuery } from '@apollo/client'
 import { DynamicSecretType } from '@/apollo/graphql'
-import { DynamicSecret } from './_components/DynamicSecret'
+import { DynamicSecret } from '../../../../ee/components/secrets/dynamic/DynamicSecret'
 
 export default function DynamicSecrets({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
