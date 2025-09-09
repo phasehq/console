@@ -149,7 +149,7 @@ export default function SecretRow(props: {
   }
 
   const KeyActionMenu = () => (
-    <div className="flex gap-1 items-start pt-1 rounded-t-lg group-hover:bg-zinc-200 group-hover:dark:bg-zinc-700 z-10 absolute right-0 -top-9 px-1 translate-y-9 group-hover:translate-y-0 transition ease">
+    <div className="flex gap-1 items-start pt-1 rounded-t-lg group-hover:bg-zinc-200 dark:bg-zinc-800 backdrop-blur-lg group-hover:dark:bg-zinc-700 z-10 group-hover:z-10 absolute right-0 -top-9 px-1 translate-y-9 group-hover:translate-y-0 transition ease">
       <div
         className={clsx(
           secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
@@ -248,7 +248,7 @@ export default function SecretRow(props: {
   )
 
   return (
-    <div className={clsx('flex flex-row w-full gap-2  relative z-10', rowBgColor())}>
+    <div className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10', rowBgColor())}>
       <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}

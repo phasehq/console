@@ -119,7 +119,7 @@ const GenericDialog = forwardRef(
                     )}
                   >
                     <Dialog.Title as="div" className="flex w-full justify-between">
-                      <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200">
+                      <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-all">
                         {title}
                       </h3>
                       <Button variant="text" onClick={closeModal}>
