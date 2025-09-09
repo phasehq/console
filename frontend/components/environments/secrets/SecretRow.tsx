@@ -25,6 +25,7 @@ import { Switch } from '@headlessui/react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
+import { FaCircle, FaHashtag } from 'react-icons/fa6'
 
 export default function SecretRow(props: {
   orgId: string
@@ -149,41 +150,64 @@ export default function SecretRow(props: {
   }
 
   const KeyActionMenu = () => (
-    <div className="flex gap-1 items-start pt-1 rounded-t-lg group-hover:bg-zinc-200 bg-zinc-100 dark:bg-zinc-800 backdrop-blur-lg group-hover:dark:bg-zinc-700 z-10 group-hover:z-10 absolute right-0 -top-9 px-1 translate-y-9 group-hover:translate-y-0 transition ease">
+    <>
+      <div className="flex items-center gap-1 absolute right-1 top-3 opacity-100 group-hover:opacity-0 text-2xs">
+        <div className="flex items-center gap-0.5">
+          {secret.tags.map((tag) => (
+            <FaCircle key={`tag-indicator-${tag.id}`} color={tag.color} />
+          ))}
+        </div>
+        <div>{secret.comment.length > 0 && <FaHashtag className="text-emerald-500" />}</div>
+      </div>
       <div
         className={clsx(
-          secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
+          'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
+          'bg-zinc-200 group-hover:dark:bg-zinc-700',
+          'z-10 group-hover:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 opacity-0 group-hover:opacity-100',
+          'transition ease'
         )}
       >
-        <TagsDialog
-          orgId={orgId}
-          secretName={secret.key}
-          secretId={secret.id}
-          tags={secret.tags}
-          handlePropertyChange={handlePropertyChange}
-          disabled={!userCanUpdateSecrets}
-        />
-      </div>
-      {!stagedForDelete && (
         <div
           className={clsx(
-            secret.comment.length === 0 &&
-              'opacity-0 group-hover:opacity-100 transition-opacity ease'
+            secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
           )}
         >
-          <CommentDialog
+          <TagsDialog
+            orgId={orgId}
             secretName={secret.key}
             secretId={secret.id}
-            comment={secret.comment}
+            tags={secret.tags}
             handlePropertyChange={handlePropertyChange}
+            disabled={!userCanUpdateSecrets}
           />
         </div>
-      )}
-    </div>
+        {!stagedForDelete && (
+          <div
+            className={clsx(
+              secret.comment.length === 0 &&
+                'opacity-0 group-hover:opacity-100 transition-opacity ease'
+            )}
+          >
+            <CommentDialog
+              secretName={secret.key}
+              secretId={secret.id}
+              comment={secret.comment}
+              handlePropertyChange={handlePropertyChange}
+            />
+          </div>
+        )}
+      </div>
+    </>
   )
 
   const ValueActionMenu = () => (
-    <div className="flex gap-1 items-start pt-1 rounded-t-lg bg-zinc-200 dark:bg-zinc-700 z-10 absolute right-px -top-9 px-1 opacity-0 group-hover:opacity-100 translate-y-9 group-hover:translate-y-0 transition ease">
+    <div
+      className={clsx(
+        'flex gap-1 items-start pt-1 rounded-t-lg right-px px-1 transition ease',
+        'bg-zinc-200 dark:bg-zinc-700',
+        'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 translate-y-9 group-hover:translate-y-0'
+      )}
+    >
       {isMultiLine && (
         <div className="">
           <Button
