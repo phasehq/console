@@ -226,7 +226,9 @@ export const CreateDynamicSecretDialog = forwardRef<
                   <ProviderIcon providerId={provider.id} />
                 </div>
                 <div>
-                  <div className="text-xl font-semibold">{provider.name}</div>
+                  <div className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+                    {provider.name}
+                  </div>
                   <div className="text-neutral-500">
                     Set up a dynamic secret for {provider.name}
                   </div>
