@@ -43,7 +43,7 @@ export const CommentDialog = (props: {
         buttonContent={
           <div className="py-1 2xl:py-0 flex items-center gap-1">
             <FaHashtag className={clsx(comment && 'text-emerald-500 ')} />{' '}
-            <span className="hidden 2xl:block text-xs max-w-[20ch] truncate">
+            <span className="hidden 2xl:block text-xs max-w-[24ch] truncate">
               {comment || 'Comment'}
             </span>
           </div>

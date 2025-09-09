@@ -112,7 +112,7 @@ export default function SecretRow(props: {
   }
 
   const INPUT_BASE_STYLE =
-    'w-full font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture'
+    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -148,15 +148,115 @@ export default function SecretRow(props: {
     if (value.includes('\n') && !expanded) setExpanded(true)
   }
 
+  const KeyActionMenu = () => (
+    <div className="flex gap-1 items-start pt-1 rounded-t-lg group-hover:bg-zinc-200 group-hover:dark:bg-zinc-700 z-10 absolute right-0 -top-9 px-1 translate-y-9 group-hover:translate-y-0 transition ease">
+      <div
+        className={clsx(
+          secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
+        )}
+      >
+        <TagsDialog
+          orgId={orgId}
+          secretName={secret.key}
+          secretId={secret.id}
+          tags={secret.tags}
+          handlePropertyChange={handlePropertyChange}
+          disabled={!userCanUpdateSecrets}
+        />
+      </div>
+      {!stagedForDelete && (
+        <div
+          className={clsx(
+            secret.comment.length === 0 &&
+              'opacity-0 group-hover:opacity-100 transition-opacity ease'
+          )}
+        >
+          <CommentDialog
+            secretName={secret.key}
+            secretId={secret.id}
+            comment={secret.comment}
+            handlePropertyChange={handlePropertyChange}
+          />
+        </div>
+      )}
+    </div>
+  )
+
+  const ValueActionMenu = () => (
+    <div className="flex gap-1 items-start pt-1 rounded-t-lg bg-zinc-200 dark:bg-zinc-700 z-10 absolute right-px -top-9 px-1 opacity-0 group-hover:opacity-100 translate-y-9 group-hover:translate-y-0 transition ease">
+      {isMultiLine && (
+        <div className="">
+          <Button
+            variant="ghost"
+            onClick={() => toggleExpanded()}
+            title={expanded ? 'Collapse' : 'Expand'}
+          >
+            <div className="py-1">{expanded ? <FaCompressArrowsAlt /> : <FaExpandArrowsAlt />}</div>
+          </Button>
+        </div>
+      )}
+
+      <div className="">
+        {!isBoolean && (
+          <Button
+            variant="outline"
+            tabIndex={-1}
+            onClick={toggleReveal}
+            title={isRevealed ? 'Mask value' : 'Reveal value'}
+          >
+            <span className="2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+            <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
+          </Button>
+        )}
+      </div>
+
+      {!stagedForDelete && (
+        <div className="">
+          <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
+        </div>
+      )}
+
+      {cannonicalSecret && !stagedForDelete && (
+        <div className={clsx((!secret.override || !secret.override.isActive) && '')}>
+          <OverrideDialog
+            secretName={secret.key}
+            secretId={secret.id}
+            environment={props.environment}
+            override={secret.override!}
+          />
+        </div>
+      )}
+
+      {cannonicalSecret && (
+        <div className="">
+          <ShareSecretDialog secret={secret} />
+        </div>
+      )}
+
+      {userCanDeleteSecrets && (
+        <Button
+          variant="danger"
+          onClick={() => handleDelete(secret.id)}
+          title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
+        >
+          <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
+            {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+          </div>
+        </Button>
+      )}
+    </div>
+  )
+
   return (
-    <div className={clsx('flex flex-row w-full gap-2 group relative z-0', rowBgColor())}>
-      <div className="w-1/3 relative">
+    <div className={clsx('flex flex-row w-full gap-2  relative z-10', rowBgColor())}>
+      <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}
           disabled={stagedForDelete || !userCanUpdateSecrets}
           className={clsx(
             INPUT_BASE_STYLE,
-            'rounded-sm',
+            'rounded-lg group-hover:rounded-tr-none',
+            '',
             keyIsBlank
               ? 'ring-1 ring-inset ring-red-500'
               : keyIsDuplicate
@@ -169,40 +269,9 @@ export default function SecretRow(props: {
             handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
           }
         />
-        <div className="absolute inset-y-0 right-2 flex gap-1 items-start pt-1">
-          <div
-            className={clsx(
-              secret.tags.length === 0 &&
-                'opacity-0 group-hover:opacity-100 transition-opacity ease'
-            )}
-          >
-            <TagsDialog
-              orgId={orgId}
-              secretName={secret.key}
-              secretId={secret.id}
-              tags={secret.tags}
-              handlePropertyChange={handlePropertyChange}
-              disabled={!userCanUpdateSecrets}
-            />
-          </div>
-          {!stagedForDelete && (
-            <div
-              className={clsx(
-                secret.comment.length === 0 &&
-                  'opacity-0 group-hover:opacity-100 transition-opacity ease'
-              )}
-            >
-              <CommentDialog
-                secretName={secret.key}
-                secretId={secret.id}
-                comment={secret.comment}
-                handlePropertyChange={handlePropertyChange}
-              />
-            </div>
-          )}
-        </div>
+        <KeyActionMenu />
       </div>
-      <div className="w-2/3 relative flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-sm bg-transparent transition ease p-px">
+      <div className="w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease p-px">
         {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
@@ -227,7 +296,11 @@ export default function SecretRow(props: {
         )}
 
         <MaskedTextarea
-          className={clsx(INPUT_BASE_STYLE, inputTextColor(), 'w-full focus:outline-none p-2')}
+          className={clsx(
+            INPUT_BASE_STYLE,
+            inputTextColor(),
+            'w-full p-2 group-hover:rounded-tr-none'
+          )}
           value={secret.value}
           onChange={(v) => handleValueChange(v)}
           isRevealed={isRevealed}
@@ -236,76 +309,7 @@ export default function SecretRow(props: {
           disabled={stagedForDelete || !userCanUpdateSecrets}
         />
 
-        <div className="flex gap-1 items-start pt-1 group-hover:bg-zinc-100/30 group-hover:dark:bg-zinc-800/30 z-10 absolute right-2">
-          {isMultiLine && (
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-              <Button
-                variant="ghost"
-                onClick={() => toggleExpanded()}
-                title={expanded ? 'Collapse' : 'Expand'}
-              >
-                <div className="py-1">
-                  {expanded ? <FaCompressArrowsAlt /> : <FaExpandArrowsAlt />}
-                </div>
-              </Button>
-            </div>
-          )}
-
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-            {!isBoolean && (
-              <Button
-                variant="outline"
-                tabIndex={-1}
-                onClick={toggleReveal}
-                title={isRevealed ? 'Mask value' : 'Reveal value'}
-              >
-                <span className="2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
-                <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
-              </Button>
-            )}
-          </div>
-
-          {!stagedForDelete && (
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-              <HistoryDialog secret={secret} handlePropertyChange={handlePropertyChange} />
-            </div>
-          )}
-
-          {cannonicalSecret && !stagedForDelete && (
-            <div
-              className={clsx(
-                (!secret.override || !secret.override.isActive) &&
-                  'opacity-0 group-hover:opacity-100 transition-opacity ease'
-              )}
-            >
-              <OverrideDialog
-                secretName={secret.key}
-                secretId={secret.id}
-                environment={props.environment}
-                override={secret.override!}
-              />
-            </div>
-          )}
-
-          {cannonicalSecret && (
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
-              <ShareSecretDialog secret={secret} />
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-start py-1">
-        {userCanDeleteSecrets && (
-          <Button
-            variant="danger"
-            onClick={() => handleDelete(secret.id)}
-            title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
-          >
-            <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-              {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
-            </div>
-          </Button>
-        )}
+        <ValueActionMenu />
       </div>
     </div>
   )

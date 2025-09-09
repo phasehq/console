@@ -90,8 +90,8 @@ export const MaskedTextarea: React.FC<MaskedTextareaProps> = ({
     <div className="relative w-full flex items-start">
       <textarea
         ref={textAreaRef}
-        className={`resize-none ${className || ''} ${
-          rows === 1 ? 'whitespace-nowrap overflow-x-none' : ''
+        className={`resize-none overflow-hidden focus:outline-none ${className || ''} ${
+          rows === 1 ? 'whitespace-nowrap' : ''
         }`}
         value={maskedValue()}
         onChange={handleChange}
