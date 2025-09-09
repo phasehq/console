@@ -1,3 +1,5 @@
+const { textSecurityUtilities } = require('./utils/typography.js')
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
@@ -66,5 +68,8 @@ module.exports = {
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [
+    require('@tailwindcss/typography'),
+    textSecurityUtilities,
+  ],
 }
