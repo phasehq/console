@@ -18,7 +18,7 @@ class DynamicSecretProviders:
         "config_map": [
             {
                 "id": "username_template",
-                "label": "Username template",
+                "label": "IAM Username template",
                 "input_type": "string",
                 "required": True,
                 "default": "{{ random }}",
