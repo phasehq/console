@@ -271,7 +271,7 @@ export const CreateDynamicSecretDialog = forwardRef<
               {/* Step 2: Config */}
               {activeStep === 0 && (
                 <div className="space-y-4 divide-y divide-neutral-500/40 text-sm">
-                  <div>
+                  <div className="mt-2">
                     <ProviderCredentialPicker
                       credential={formData.credential}
                       setCredential={(cred) => setFormData({ ...formData, credential: cred })}
