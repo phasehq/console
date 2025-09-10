@@ -1,0 +1,39 @@
+mutation UpdateExtIdentity(
+  $id: ID!
+  $name: String
+  $description: String
+  $trustedPrincipals: String
+  $signatureTtlSeconds: Int
+  $stsEndpoint: String
+  $tokenNamePattern: String
+  $defaultTtlSeconds: Int
+  $maxTtlSeconds: Int
+) {
+  updateIdentity(
+    id: $id
+    name: $name
+    description: $description
+    trustedPrincipals: $trustedPrincipals
+    signatureTtlSeconds: $signatureTtlSeconds
+    stsEndpoint: $stsEndpoint
+    tokenNamePattern: $tokenNamePattern
+    defaultTtlSeconds: $defaultTtlSeconds
+    maxTtlSeconds: $maxTtlSeconds
+  ) {
+    identity {
+      id
+      name
+      description
+      config {
+        ... on AwsIamConfigType {
+          trustedPrincipals
+          signatureTtlSeconds
+          stsEndpoint
+        }
+      }
+      tokenNamePattern
+      defaultTtlSeconds
+      maxTtlSeconds
+    }
+  }
+}

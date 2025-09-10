@@ -12,6 +12,7 @@ from api.views.auth import (
     secrets_tokens,
     root_endpoint,
 )
+from api.views.identities.aws.iam import aws_iam_auth
 from api.views.kms import kms
 
 
@@ -30,6 +31,7 @@ urlpatterns = [
     path("secrets/", E2EESecretsView.as_view()),
     path("public/v1/secrets/", PublicSecretsView.as_view()),
     path("secrets/tokens/", secrets_tokens),
+    path("identity/v1/aws/iam/auth", aws_iam_auth),
     path("oauth/github/callback", github_integration_callback),
     path("lockbox/<box_id>", LockboxView.as_view()),
 ]
