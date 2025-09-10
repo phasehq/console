@@ -59,15 +59,9 @@ export const ManageLeasesDialog = ({ secret }: { secret: DynamicSecretType }) =>
       onOpen={handleOpen}
       onClose={handleClose}
     >
-      <div className="space-y-6">
-        <div className="text-neutral-500 ">
-          Manage leases and configuration for this dynamic secret
-        </div>
-        <div className="flex items-center justify-between border-b border-neutral-500/40">
-          <div>
-            <div className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Leases</div>
-            <div className="text-neutral-500 text-sm">Manage leases for this dynamic secret</div>
-          </div>
+      <div className="space-y-2">
+        <div className="text-neutral-500 text-sm">Manage leases for this dynamic secret</div>
+        <div className="flex items-center justify-end border-b border-neutral-500/40 pb-1">
           <Button variant="ghost" onClick={handleRefetch} icon={FiRefreshCw} isLoading={loading}>
             Refresh
           </Button>
