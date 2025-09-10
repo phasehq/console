@@ -27,10 +27,8 @@ import {
   FaUndo,
   FaEye,
   FaEyeSlash,
-  FaMagic,
   FaCloudUploadAlt,
   FaBan,
-  FaFileImport,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -217,10 +215,10 @@ export default function EnvironmentPath({
 
   /**
    * Bulk adds secrets to client state from an import
-   * 
+   *
    * If a secret key being imported already exists, we update the value and comment.
    * Otherwise, we process the import as normal, adding it as a new secret
-   * 
+   *
    * @param {SecretType[]} secrets - Secrets being imported into client state
    */
   const bulkAddSecrets = (secrets: SecretType[]) => {
@@ -1037,13 +1035,15 @@ export default function EnvironmentPath({
                 <div
                   ref={secretToHighlight === secret.id ? highlightedRef : null}
                   className={clsx(
-                    'flex items-center gap-2 py-1 px-3 rounded-md',
+                    'flex items-start gap-2 py-1 px-3 rounded-md',
                     secretToHighlight === secret.id &&
                       'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
                   )}
                   key={secret.id}
                 >
-                  <span className="text-neutral-500 font-mono w-5">{index + 1}</span>
+                  <div className="text-neutral-500 font-mono w-5 h-10 flex items-center">
+                    {index + 1}
+                  </div>
                   <SecretRow
                     orgId={organisation.id}
                     secret={secret as SecretType}

@@ -1,3 +1,5 @@
+const { textSecurityUtilities } = require('./utils/typography.js')
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
@@ -66,5 +68,19 @@ module.exports = {
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [
+    require('@tailwindcss/typography'),
+    textSecurityUtilities,
+    function ({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-hide': {
+          '-ms-overflow-style': 'none', // IE/Edge
+          'scrollbar-width': 'none', // Firefox
+        },
+        '.scrollbar-hide::-webkit-scrollbar': {
+          display: 'none', // Chrome/Safari
+        },
+      })
+    },
+  ],
 }
