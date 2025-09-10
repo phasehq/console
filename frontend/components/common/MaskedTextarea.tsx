@@ -43,7 +43,7 @@ export const MaskedTextarea: React.FC<MaskedTextareaProps> = ({
       onChange={handleChange}
       rows={rows}
       className={clsx(
-        `resize-none overflow-hidden focus:outline-none ${className || ''} ${
+        `resize-none overflow-auto scrollbar-hide focus:outline-none ${className || ''} ${
           rows === 1 ? 'whitespace-nowrap' : ''
         }`,
 
