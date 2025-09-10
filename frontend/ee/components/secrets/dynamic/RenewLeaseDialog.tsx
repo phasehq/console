@@ -3,7 +3,7 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { leaseTtlButtons } from '@/utils/dynamicSecrets'
 import { relativeTimeFromDates } from '@/utils/time'
-import { useContext, useState } from 'react'
+import { useContext, useRef, useState } from 'react'
 import { FiRefreshCw } from 'react-icons/fi'
 import { RenewDynamicSecretLeaseOP } from '@/graphql/mutations/environments/secrets/dynamic/renewLease.gql'
 import { GetDynamicSecretLeases } from '@/graphql/queries/secrets/dynamic/getSecretLeases.gql'
@@ -28,7 +28,16 @@ export const RenewLeaseDialog = ({
     secret.maxTtlSeconds ? parseInt(button.seconds) <= secret.maxTtlSeconds : button
   )
 
+  const dialogRef = useRef<{ closeModal: () => void }>(null)
+
+  const closeModal = () => dialogRef.current?.closeModal()
+
   const [renewLease, { loading: renewIsPending }] = useMutation(RenewDynamicSecretLeaseOP)
+
+  const reset = () => {
+    setTtl(secret.defaultTtlSeconds!.toString())
+    setRenewedLease(null)
+  }
 
   const handleRenewLease = async () => {
     if (parseInt(ttl) > secret.maxTtlSeconds!) {
@@ -59,6 +68,8 @@ export const RenewLeaseDialog = ({
 
   return (
     <GenericDialog
+      ref={dialogRef}
+      onClose={reset}
       title="Renew lease"
       buttonVariant="secondary"
       buttonContent={
@@ -115,15 +126,21 @@ export const RenewLeaseDialog = ({
         )}
 
         <div className="flex items-center justify-end">
-          <Button
-            variant="primary"
-            icon={FiRefreshCw}
-            onClick={handleRenewLease}
-            isLoading={renewIsPending}
-          >
-            {' '}
-            Renew Lease
-          </Button>
+          {renewedLease ? (
+            <Button variant="secondary" onClick={closeModal}>
+              Close
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              icon={FiRefreshCw}
+              onClick={handleRenewLease}
+              isLoading={renewIsPending}
+            >
+              {' '}
+              Renew Lease
+            </Button>
+          )}
         </div>
       </div>
     </GenericDialog>
