@@ -186,10 +186,11 @@ class E2EESecretsView(APIView):
                 leases_by_secret_id = {}
                 for ds in dynamic_secrets_qs:
                     try:
-                        lease, _job = create_dynamic_secret_lease(
+                        lease, _ = create_dynamic_secret_lease(
                             ds,
                             organisation_member=request.auth.get("org_member"),
                             service_account=service_account,
+                            request=request,
                         )
                         leases_by_secret_id[ds.id] = str(lease.id)
                     except Exception as e:
@@ -579,10 +580,11 @@ class PublicSecretsView(APIView):
                 leases_by_secret_id = {}
                 for ds in dynamic_secrets_qs:
                     try:
-                        lease, _job = create_dynamic_secret_lease(
+                        lease, _ = create_dynamic_secret_lease(
                             ds,
                             organisation_member=request.auth.get("org_member"),
                             service_account=service_account,
+                            request=request,
                         )
                         leases_by_secret_id[ds.id] = str(lease.id)
                     except Exception as e:

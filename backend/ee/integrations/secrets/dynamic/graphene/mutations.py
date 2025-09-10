@@ -96,7 +96,7 @@ class LeaseDynamicSecret(graphene.Mutation):
         # create lease
         lease_name = secret.name if name is None else name
         lease, lease_data = create_dynamic_secret_lease(
-            secret, lease_name, ttl, org_member
+            secret, lease_name, ttl, org_member, request=info.context
         )
         lease._credentials = AwsCredentialsType(
             access_key_id=lease_data["access_key_id"],
@@ -145,7 +145,9 @@ class RenewLeaseMutation(graphene.Mutation):
         if not user_can_access_environment(user.userId, lease.secret.environment.id):
             raise GraphQLError("You don't have access to this environment")
 
-        lease = renew_dynamic_secret_lease(lease, ttl)
+        lease = renew_dynamic_secret_lease(
+            lease, ttl, request=info.context, organisation_member=org_member
+        )
 
         return RenewLeaseMutation(lease=lease)
 
@@ -189,6 +191,11 @@ class RevokeLeaseMutation(graphene.Mutation):
 
         else:
             if lease.secret.provider == "aws":
-                revoke_aws_dynamic_secret_lease(lease.id, manual=True)
+                revoke_aws_dynamic_secret_lease(
+                    lease.id,
+                    organisation_member=org_member,
+                    manual=True,
+                    request=info.context,
+                )
 
         return RevokeLeaseMutation(lease=lease)

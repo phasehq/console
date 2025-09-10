@@ -7,6 +7,8 @@ from api.utils.secrets import (
     get_environment_keys,
 )
 from api.utils.crypto import decrypt_asymmetric
+from api.models import DynamicSecretLease, DynamicSecretLeaseEvent
+from api.utils.rest import get_resolver_request_meta
 from ee.integrations.secrets.dynamic.aws.utils import (
     create_aws_dynamic_secret_lease,
 )
@@ -169,7 +171,12 @@ def create_dynamic_secret(
 
 
 def create_dynamic_secret_lease(
-    secret, lease_name=None, ttl=None, organisation_member=None, service_account=None
+    secret,
+    lease_name=None,
+    ttl=None,
+    organisation_member=None,
+    service_account=None,
+    request=None,
 ):
     try:
         lease_name = lease_name or secret.name
@@ -183,6 +190,28 @@ def create_dynamic_secret_lease(
                 ttl_seconds=ttl,
             )
 
+            # Record creation event with request metadata (if available)
+            ip_address, user_agent = (None, None)
+            if request is not None:
+                try:
+                    ip_address, user_agent = get_resolver_request_meta(request)
+                except Exception:
+                    logger.debug(
+                        "Failed to read request meta for lease event", exc_info=True
+                    )
+
+            DynamicSecretLeaseEvent.objects.create(
+                lease=lease,
+                event_type=DynamicSecretLease.CREATED,
+                organisation_member=(
+                    organisation_member if organisation_member else None
+                ),
+                service_account=service_account if service_account else None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                metadata={"action": "create", "ttl": ttl},
+            )
+
             return lease, lease_data
 
     except ValidationError as e:
@@ -190,7 +219,13 @@ def create_dynamic_secret_lease(
         raise GraphQLError(e.message)
 
 
-def renew_dynamic_secret_lease(lease, ttl):
+def renew_dynamic_secret_lease(
+    lease,
+    ttl,
+    request=None,
+    organisation_member=None,
+    service_account=None,
+):
     if timedelta(seconds=ttl) > lease.secret.max_ttl:
         raise Exception(
             "The specified TTL exceeds the maximum TTL for this dynamic secret."
@@ -219,6 +254,29 @@ def renew_dynamic_secret_lease(lease, ttl):
 
     # enqueue a new revocation job
     schedule_lease_revocation(lease)
+
+    # record renewal event
+    ip_address, user_agent = (None, None)
+    if request is not None:
+        try:
+            ip_address, user_agent = get_resolver_request_meta(request)
+        except Exception:
+            logger.debug(
+                "Failed to read request meta for lease renewal event", exc_info=True
+            )
+
+    try:
+        DynamicSecretLeaseEvent.objects.create(
+            lease=lease,
+            event_type=DynamicSecretLease.RENEWED,
+            organisation_member=organisation_member,
+            service_account=service_account,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata={"action": "renew", "ttl": ttl},
+        )
+    except Exception as e:
+        logger.warning(f"Failed to create renewal event for lease {lease.id}: {e}")
 
     return lease
 

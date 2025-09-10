@@ -120,6 +120,7 @@ class DynamicSecretsView(APIView):
                 secret,
                 organisation_member=request.auth["org_member"],
                 service_account=service_account,
+                request=request,
             )[0]
             for secret in dynamic_secrets
         ]
@@ -247,8 +248,19 @@ class DynamicSecretLeaseView(APIView):
         lease = self._get_lease_or_404(lease_id)
         self._assert_can_act_on_lease(request, lease, action="update")
 
+        if request.auth["auth_type"] == "User":
+            org_member = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            service_account = request.auth["service_account"]
+
         try:
-            lease = renew_dynamic_secret_lease(lease, ttl)
+            lease = renew_dynamic_secret_lease(
+                lease,
+                ttl,
+                request=request,
+                organisation_member=org_member,
+                service_account=service_account,
+            )
         except Exception as e:
             logger.exception(
                 "Failed to renew dynamic secret lease (lease_id=%s)", lease_id
@@ -268,7 +280,18 @@ class DynamicSecretLeaseView(APIView):
         lease = self._get_lease_or_404(lease_id)
         self._assert_can_act_on_lease(request, lease, action="delete")
 
+        if request.auth["auth_type"] == "User":
+            org_member = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            service_account = request.auth["service_account"]
+
         if lease.secret.provider == "aws":
-            revoke_aws_dynamic_secret_lease(lease.id, manual=True)
+            revoke_aws_dynamic_secret_lease(
+                lease.id,
+                manual=True,
+                request=request,
+                organisation_member=org_member,
+                service_account=service_account,
+            )
 
         return Response(status=status.HTTP_200_OK)

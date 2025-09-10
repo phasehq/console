@@ -1,4 +1,9 @@
-from api.models import DynamicSecret, DynamicSecretLease, OrganisationMember
+from api.models import (
+    DynamicSecret,
+    DynamicSecretLease,
+    DynamicSecretLeaseEvent,
+    OrganisationMember,
+)
 from api.utils.access.permissions import user_has_permission
 import graphene
 from graphene_django import DjangoObjectType
@@ -90,9 +95,16 @@ class DynamicSecretType(DjangoObjectType):
         return self.leases.filter(**filter).order_by("-created_at")
 
 
+class DynamicSecretLeaseEventType(DjangoObjectType):
+    class Meta:
+        model = DynamicSecretLeaseEvent
+        fields = "__all__"
+
+
 class DynamicSecretLeaseType(DjangoObjectType):
 
     credentials = graphene.Field(LeaseCredentialsUnion)
+    events = graphene.List(DynamicSecretLeaseEventType)
 
     class Meta:
         model = DynamicSecretLease
@@ -100,3 +112,6 @@ class DynamicSecretLeaseType(DjangoObjectType):
 
     def resolve_credentials(self, info):
         return getattr(self, "_credentials", None)
+
+    def resolve_events(self, info):
+        return self.events.all().order_by("created_at")

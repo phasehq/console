@@ -1,11 +1,12 @@
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
-from api.models import DynamicSecret
+from api.models import DynamicSecret, DynamicSecretLeaseEvent
 from api.utils.crypto import decrypt_asymmetric, encrypt_asymmetric, get_server_keypair
 from api.utils.syncing.aws.auth import get_aws_sts_session
 from api.utils.secrets import get_environment_keys
 
+from api.utils.rest import get_resolver_request_meta
 from backend.utils.secrets import get_secret
 from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
 import logging
@@ -425,7 +426,13 @@ def create_aws_dynamic_secret_lease(
     return lease, lease_data
 
 
-def revoke_aws_dynamic_secret_lease(lease_id, manual=False):
+def revoke_aws_dynamic_secret_lease(
+    lease_id,
+    manual=False,
+    request=None,
+    organisation_member=None,
+    service_account=None,
+):
     """
     Delete IAM user and all associated credentials.
 
@@ -442,7 +449,19 @@ def revoke_aws_dynamic_secret_lease(lease_id, manual=False):
         logger.info(f"Lease {lease.id} already revoked at {lease.revoked_at}")
         return
 
+    logger.info(f"Revoking lease {lease.id} (manual={manual})")
+
     iam_client, _ = get_iam_client(lease.secret)
+
+    meta = {
+        "action": "revoke",
+        "provider": "aws",
+        "source": "manual" if manual else "scheduled",
+        "deleted_access_keys": [],
+        "detached_policies": [],
+        "deleted_inline_policies": [],
+        "removed_groups": [],
+    }
 
     try:
         # Decrypt username
@@ -456,7 +475,8 @@ def revoke_aws_dynamic_secret_lease(lease_id, manual=False):
             iam_client.delete_access_key(
                 UserName=username, AccessKeyId=key["AccessKeyId"]
             )
-            logger.info(f"Deleted access key {key['AccessKeyId']} for user {username}")
+            logger.info(f"Deleted access key for user")
+            meta["deleted_access_keys"].append(key["AccessKeyId"])
 
         # Detach all managed policies
         attached_policies = iam_client.list_attached_user_policies(UserName=username)
@@ -464,13 +484,15 @@ def revoke_aws_dynamic_secret_lease(lease_id, manual=False):
             iam_client.detach_user_policy(
                 UserName=username, PolicyArn=policy["PolicyArn"]
             )
-            logger.info(f"Detached policy {policy['PolicyArn']} from user {username}")
+            logger.info(f"Detached policy from user")
+            meta["detached_policies"].append(policy["PolicyArn"])
 
         # Delete all inline policies
         inline_policies = iam_client.list_user_policies(UserName=username)
         for policy_name in inline_policies["PolicyNames"]:
             iam_client.delete_user_policy(UserName=username, PolicyName=policy_name)
-            logger.info(f"Deleted inline policy {policy_name} from user {username}")
+            logger.info(f"Deleted inline policy from user")
+            meta["deleted_inline_policies"].append(policy_name)
 
         # Remove user from all groups
         groups_resp = iam_client.list_groups_for_user(UserName=username)
@@ -478,11 +500,12 @@ def revoke_aws_dynamic_secret_lease(lease_id, manual=False):
             iam_client.remove_user_from_group(
                 UserName=username, GroupName=group["GroupName"]
             )
-            logger.info(f"Removed user {username} from group {group['GroupName']}")
+            logger.info(f"Removed user from group")
+            meta["removed_groups"].append(group["GroupName"])
 
         # Finally, delete the user
         iam_client.delete_user(UserName=username)
-        logger.info(f"Successfully deleted IAM user: {username}")
+        logger.info(f"Successfully deleted IAM user")
 
         if manual:
             lease.status = DynamicSecretLease.REVOKED
@@ -492,14 +515,81 @@ def revoke_aws_dynamic_secret_lease(lease_id, manual=False):
         lease.revoked_at = timezone.now()
         lease.save()
 
+        # Add request metadata if available
+        ip_address = user_agent = None
+        if request is not None:
+            try:
+                ip_address, user_agent = get_resolver_request_meta(request)
+
+                logger.info(f"Created revoke event for lease {lease.id}")
+            except Exception:
+                logger.error(
+                    "Failed to read request meta for lease event", exc_info=True
+                )
+                pass
+
+        DynamicSecretLeaseEvent.objects.create(
+            lease=lease,
+            event_type=DynamicSecretLease.REVOKED,
+            organisation_member=organisation_member,
+            service_account=service_account,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata=meta,
+        )
+
         return True
 
     except iam_client.exceptions.NoSuchEntityException:
-        logger.warning(f"User {username} does not exist, treating as already revoked")
+        logger.warning(
+            f"User {meta.get('username', '<unknown>')} does not exist, treating as already revoked"
+        )
+        # Emit event to reflect attempted revoke on missing user
+        meta["outcome"] = "user_absent"
+        try:
+            DynamicSecretLeaseEvent.objects.create(
+                lease=lease,
+                event_type=DynamicSecretLease.REVOKED,
+                organisation_member=organisation_member,
+                service_account=service_account,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                metadata=meta,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create revoke event for lease {lease.id}: {e}")
         return True
     except ClientError as e:
         logger.error(f"AWS client error deleting user: {str(e)}")
+        meta["outcome"] = "error"
+        meta["error"] = str(e)
+        try:
+            DynamicSecretLeaseEvent.objects.create(
+                lease=lease,
+                event_type=DynamicSecretLease.REVOKED,
+                organisation_member=organisation_member,
+                service_account=service_account,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                metadata=meta,
+            )
+        except Exception:
+            pass
         raise ValidationError(f"AWS client error deleting user: {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error deleting user: {str(e)}")
+        meta["outcome"] = "error"
+        meta["error"] = str(e)
+        try:
+            DynamicSecretLeaseEvent.objects.create(
+                lease=lease,
+                event_type=DynamicSecretLease.REVOKED,
+                organisation_member=organisation_member,
+                service_account=service_account,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                metadata=meta,
+            )
+        except Exception:
+            pass
         raise Exception(f"Unexpected error deleting user: {str(e)}")
