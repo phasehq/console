@@ -6,6 +6,7 @@ import { ManageLeasesDialog } from './ManageLeasesDialog'
 import { DeleteDynamicSecretDialog } from './DeleteDynamicSecretDialog'
 import { UpdateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/UpdateDynamicSecretDialog'
 import { randomString } from '@/utils/copy'
+import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 
 export const DynamicSecretRow = ({
   secret,
@@ -19,7 +20,7 @@ export const DynamicSecretRow = ({
   const KEY_BASE_STYLE = 'w-full font-mono custom bg-transparent transition ease p-1 ph-no-capture'
 
   return (
-    <div className="p-2 ring-1 ring-inset ring-neutral-400/20 flex w-full rounded-lg group">
+    <div className="p-2 flex w-full rounded-lg group">
       <div className="w-1/3">
         <div className="text-2xs text-emerald-500 flex items-center gap-1 bg-emerald-400/10 rounded-full w-min whitespace-nowrap px-1">
           <FaBolt /> {secret.name}
@@ -33,14 +34,14 @@ export const DynamicSecretRow = ({
         </div>
       </div>
       <div className="w-2/3 px-6 relative group">
-        <div className="absolute flex flex-col gap-2 pointer-events-none group-hover:opacity-0 transition ease">
+        <div className="absolute flex flex-col gap-2 pointer-events-none group-hover:opacity-0 transition ease pl-4">
           {keyMap.map((k) => (
-            <input
-              className="custom outline-none font-mono bg-transparent"
+            <MaskedTextarea
+              className={clsx(KEY_BASE_STYLE)}
+              value={`value-${k.keyName}`}
+              expanded={false}
+              isRevealed={false}
               key={`value-${k.keyName}`}
-              readOnly
-              type="password"
-              value={randomString()}
             />
           ))}
         </div>
