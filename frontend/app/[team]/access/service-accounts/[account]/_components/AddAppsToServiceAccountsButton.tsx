@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react'
+import { useContext, useState, useRef } from 'react'
 import { useQuery } from '@apollo/client'
 import { Menu, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
@@ -27,6 +27,7 @@ export const AddAppButton = ({
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const { data, loading } = useQuery<Query>(GetApps, {
     variables: { organisationId: organisation?.id },
@@ -46,14 +47,14 @@ export const AddAppButton = ({
   const filteredApps =
     searchQuery === ''
       ? apps
-      : apps.filter((app: AppType) => app?.name?.toLowerCase().includes(searchQuery))
+      : apps.filter((app: AppType) => app?.name?.toLowerCase().includes(searchQuery.toLowerCase()))
 
   return (
     <Menu as="div" className="relative group">
       {({ open }) => (
         <>
           <Menu.Button as={Fragment}>
-            <Button variant="primary" title="Create a new sync">
+            <Button variant="primary" title="Add App to Service Account">
               <FaPlus /> Add App
             </Button>
           </Menu.Button>
@@ -69,6 +70,8 @@ export const AddAppButton = ({
               'absolute z-10 mt-2',
               alignMenuRight ? 'origin-bottom-left left-0' : 'origin-bottom-right right-0'
             )}
+            afterEnter={() => searchInputRef.current?.focus()}
+            afterLeave={() => setSearchQuery('')}
           >
             <Menu.Items as={Fragment}>
               <div className="flex flex-col w-min divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
@@ -82,6 +85,8 @@ export const AddAppButton = ({
                       className="custom bg-zinc-100 dark:bg-zinc-800"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
+                      ref={searchInputRef}
+                      autoFocus
                     />
                     <FaTimesCircle
                       className={clsx(

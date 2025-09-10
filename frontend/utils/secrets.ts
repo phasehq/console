@@ -107,40 +107,111 @@ export const processEnvFile = (
   const lines = envFileString.split('\n')
   const newSecrets: SecretType[] = []
   let lastComment = ''
+  let i = 0
 
-  lines.forEach((line) => {
-    let trimmed = line.trim()
-    if (!trimmed) return // Skip empty lines
+  const findClosingQuote = (str: string, quote: '"' | "'"): number => {
+    // first unescaped quote
+    for (let idx = 0; idx < str.length; idx++) {
+      if (str[idx] === quote && str[idx - 1] !== '\\') return idx
+    }
+    return -1
+  }
 
-    if (trimmed.startsWith('#')) {
-      lastComment = trimmed.slice(1).trim()
-      return
+  while (i < lines.length) {
+    const rawLine = lines[i]
+    const trimmed = rawLine.trim()
+
+    // skip blank
+    if (!trimmed) {
+      i++
+      continue
     }
 
-    const [key, ...valueParts] = trimmed.split('=')
-    if (!key) return // Skip malformed lines
+    // full-line comment
+    if (trimmed.startsWith('#')) {
+      lastComment = trimmed.slice(1).trim()
+      i++
+      continue
+    }
 
-    let valueWithComment = valueParts.join('=')
-    let [parsedValue, inlineComment] = valueWithComment.split('#').map((part) => part.trim())
+    const eqIdx = rawLine.indexOf('=')
+    if (eqIdx === -1) {
+      i++
+      continue
+    }
 
-    let value = withValues ? parsedValue.replace(/^['"]|['"]$/g, '') : ''
+    const key = rawLine.slice(0, eqIdx).trim()
+    if (!key) {
+      i++
+      continue
+    }
+
+    let rest = rawLine.slice(eqIdx + 1).trim()
+    let valueStr = ''
+    let inlineComment = ''
+
+    // Quoted value (single or double)
+    if ((rest.startsWith('"') || rest.startsWith("'")) && rest.length >= 1) {
+      const quote = rest[0] as '"' | "'"
+      let after = rest.slice(1)
+
+      // try same-line closing quote
+      let closeIdx = findClosingQuote(after, quote)
+      if (closeIdx >= 0) {
+        valueStr = after.slice(0, closeIdx)
+        // ignore anything after closing quote (whitespace / # comment)
+      } else {
+        // multi-line until closing quote is found
+        const parts: string[] = [after]
+        while (++i < lines.length) {
+          const seg = lines[i]
+          const segCloseIdx = findClosingQuote(seg, quote)
+          if (segCloseIdx >= 0) {
+            parts.push(seg.slice(0, segCloseIdx))
+            break
+          } else {
+            parts.push(seg)
+          }
+        }
+        valueStr = parts.join('\n')
+        // i now points at the line with the closing quote (or EOF)
+      }
+    } else {
+      // Unquoted: strip inline comment (first #) if present
+      const hashIdx = rest.indexOf('#')
+      if (hashIdx >= 0) {
+        inlineComment = rest.slice(hashIdx + 1).trim()
+        rest = rest.slice(0, hashIdx)
+      }
+      valueStr = rest.trim()
+      // If surrounded by quotes (single-line oddities), trim them
+      if (
+        (valueStr.startsWith('"') && valueStr.endsWith('"')) ||
+        (valueStr.startsWith("'") && valueStr.endsWith("'"))
+      ) {
+        valueStr = valueStr.slice(1, -1)
+      }
+    }
 
     newSecrets.push({
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
       version: 1,
-      key: key.trim().toUpperCase(),
-      value,
+      key: key.toUpperCase(),
+      value: withValues ? valueStr : '',
       tags: [],
-      comment: withComments ? lastComment || inlineComment || '' : '',
+      comment: withComments ? (lastComment || inlineComment || '') : '',
       path,
       environment,
     })
-    lastComment = '' // Reset lastComment after assigning it
-  })
+
+    lastComment = ''
+    i++ // advance to next line
+  }
 
   return newSecrets
 }
+
 
 export const duplicateKeysExist = (secrets: SecretType[] | AppSecret[]) => {
   const keySet = new Set<string>()
