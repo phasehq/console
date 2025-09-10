@@ -39,6 +39,7 @@ export const CommentDialog = (props: {
       <GenericDialog
         ref={dialogRef}
         title={comment || `Update ${secretName} comment`}
+        dialogTitle={`Update ${secretName} comment`}
         buttonVariant="outline"
         buttonContent={
           <div className="py-1 2xl:py-0 flex items-center gap-1">
