@@ -220,7 +220,7 @@ export const TagsDialog = (props: {
                   <Dialog.Title as="div" className="flex w-full justify-between">
                     <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
                       Update{' '}
-                      <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture">
+                      <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture break-all">
                         {secretName}
                       </span>{' '}
                       tags
