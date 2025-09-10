@@ -10,7 +10,8 @@ from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountTokenMutation,
     DeleteServiceAccountMutation,
     DeleteServiceAccountTokenMutation,
-    EnableServiceAccountThirdPartyAuthMutation,
+    EnableServiceAccountClientSideKeyManagementMutation,
+    EnableServiceAccountServerSideKeyManagementMutation,
     UpdateServiceAccountHandlersMutation,
     UpdateServiceAccountMutation,
 )
@@ -931,8 +932,11 @@ class Mutation(graphene.ObjectType):
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
-    enable_service_account_third_party_auth = (
-        EnableServiceAccountThirdPartyAuthMutation.Field()
+    enable_service_account_server_side_key_management = (
+        EnableServiceAccountServerSideKeyManagementMutation.Field()
+    )
+    enable_service_account_client_side_key_management = (
+        EnableServiceAccountClientSideKeyManagementMutation.Field()
     )
     update_service_account_handlers = UpdateServiceAccountHandlersMutation.Field()
     update_service_account = UpdateServiceAccountMutation.Field()
