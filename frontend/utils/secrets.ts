@@ -109,70 +109,104 @@ export const processEnvFile = (
   let lastComment = ''
   let i = 0
 
+  const findClosingQuote = (str: string, quote: '"' | "'"): number => {
+    // first unescaped quote
+    for (let idx = 0; idx < str.length; idx++) {
+      if (str[idx] === quote && str[idx - 1] !== '\\') return idx
+    }
+    return -1
+  }
+
   while (i < lines.length) {
-    let line = lines[i].trim()
+    const rawLine = lines[i]
+    const trimmed = rawLine.trim()
 
-    // Skip empty lines
-    if (!line) {
+    // skip blank
+    if (!trimmed) {
       i++
       continue
     }
 
-    // Capture comment lines
-    if (line.startsWith('#')) {
-      lastComment = line.slice(1).trim()
+    // full-line comment
+    if (trimmed.startsWith('#')) {
+      lastComment = trimmed.slice(1).trim()
       i++
       continue
     }
 
-    const [key, ...valueParts] = line.split('=')
+    const eqIdx = rawLine.indexOf('=')
+    if (eqIdx === -1) {
+      i++
+      continue
+    }
+
+    const key = rawLine.slice(0, eqIdx).trim()
     if (!key) {
       i++
       continue
     }
 
-    let rawValue = valueParts.join('=').trim()
+    let rest = rawLine.slice(eqIdx + 1).trim()
+    let valueStr = ''
+    let inlineComment = ''
 
-    // Handle multi-line quoted values
-    if (
-      (rawValue.startsWith('"') && !rawValue.endsWith('"')) ||
-      (rawValue.startsWith("'") && !rawValue.endsWith("'"))
-    ) {
-      const quoteChar = rawValue[0]
-      let multiLineValue = [rawValue.slice(1)] // remove first quote
-      i++
-      while (i < lines.length && !lines[i].trim().endsWith(quoteChar)) {
-        multiLineValue.push(lines[i])
-        i++
+    // Quoted value (single or double)
+    if ((rest.startsWith('"') || rest.startsWith("'")) && rest.length >= 1) {
+      const quote = rest[0] as '"' | "'"
+      let after = rest.slice(1)
+
+      // try same-line closing quote
+      let closeIdx = findClosingQuote(after, quote)
+      if (closeIdx >= 0) {
+        valueStr = after.slice(0, closeIdx)
+        // ignore anything after closing quote (whitespace / # comment)
+      } else {
+        // multi-line until closing quote is found
+        const parts: string[] = [after]
+        while (++i < lines.length) {
+          const seg = lines[i]
+          const segCloseIdx = findClosingQuote(seg, quote)
+          if (segCloseIdx >= 0) {
+            parts.push(seg.slice(0, segCloseIdx))
+            break
+          } else {
+            parts.push(seg)
+          }
+        }
+        valueStr = parts.join('\n')
+        // i now points at the line with the closing quote (or EOF)
       }
-      if (i < lines.length) {
-        // Add last line without trailing quote
-        const lastLine = lines[i].trim()
-        multiLineValue.push(lastLine.slice(0, -1))
-      }
-      rawValue = multiLineValue.join('\n')
     } else {
-      // Strip surrounding quotes for single-line
-      rawValue = rawValue.replace(/^['"]|['"]$/g, '')
+      // Unquoted: strip inline comment (first #) if present
+      const hashIdx = rest.indexOf('#')
+      if (hashIdx >= 0) {
+        inlineComment = rest.slice(hashIdx + 1).trim()
+        rest = rest.slice(0, hashIdx)
+      }
+      valueStr = rest.trim()
+      // If surrounded by quotes (single-line oddities), trim them
+      if (
+        (valueStr.startsWith('"') && valueStr.endsWith('"')) ||
+        (valueStr.startsWith("'") && valueStr.endsWith("'"))
+      ) {
+        valueStr = valueStr.slice(1, -1)
+      }
     }
-
-    // Separate inline comment if present
-    const [parsedValue, inlineComment] = rawValue.split('#').map((p) => p.trim())
 
     newSecrets.push({
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
       version: 1,
-      key: key.trim().toUpperCase(),
-      value: withValues ? parsedValue : '',
+      key: key.toUpperCase(),
+      value: withValues ? valueStr : '',
       tags: [],
-      comment: withComments ? lastComment || inlineComment || '' : '',
+      comment: withComments ? (lastComment || inlineComment || '') : '',
       path,
       environment,
     })
 
     lastComment = ''
-    i++
+    i++ // advance to next line
   }
 
   return newSecrets
