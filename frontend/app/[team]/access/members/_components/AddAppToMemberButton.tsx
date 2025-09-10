@@ -82,6 +82,7 @@ export const AddAppToMemberButton = (props: {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 ref={searchInputRef}
+                autoFocus
               />
               <FaTimesCircle
                 className={clsx(

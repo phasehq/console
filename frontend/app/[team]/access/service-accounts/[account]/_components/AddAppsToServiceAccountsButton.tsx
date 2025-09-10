@@ -54,11 +54,7 @@ export const AddAppButton = ({
       {({ open }) => (
         <>
           <Menu.Button as={Fragment}>
-            <Button
-              variant="primary"
-              title="Add App to Service Account"
-              onClick={() => setTimeout(() => searchInputRef.current?.focus(), 0)}
-            >
+            <Button variant="primary" title="Add App to Service Account">
               <FaPlus /> Add App
             </Button>
           </Menu.Button>
@@ -90,6 +86,7 @@ export const AddAppButton = ({
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       ref={searchInputRef}
+                      autoFocus
                     />
                     <FaTimesCircle
                       className={clsx(
