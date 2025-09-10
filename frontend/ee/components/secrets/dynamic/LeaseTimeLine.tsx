@@ -5,6 +5,7 @@ import {
   ServiceAccountType,
 } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
+import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
 import React from 'react'
@@ -79,7 +80,11 @@ const EventActor = ({
       </div>
     )
   }
-  return <span className="text-sm text-neutral-500">System</span>
+  return (
+    <div className="text-sm text-neutral-500">
+      <LogoWordMark className="h-6 fill-zinc-900 dark:fill-zinc-100" />
+    </div>
+  )
 }
 
 const MetaRow = ({ k, v }: { k: string; v: unknown }) => {
