@@ -35,6 +35,7 @@ export const MaskedTextarea: React.FC<MaskedTextareaProps> = ({
   return (
     <textarea
       ref={textareaRef}
+      spellCheck={false}
       value={value}
       placeholder={placeholder}
       disabled={disabled}
@@ -42,7 +43,7 @@ export const MaskedTextarea: React.FC<MaskedTextareaProps> = ({
       onChange={handleChange}
       rows={rows}
       className={clsx(
-        `resize-none overflow-y-hidden focus:outline-none ${className || ''} ${
+        `resize-none overflow-hidden focus:outline-none ${className || ''} ${
           rows === 1 ? 'whitespace-nowrap' : ''
         }`,
 
