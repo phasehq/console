@@ -4,16 +4,19 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useContext } from 'react'
-import { FaBan } from 'react-icons/fa6'
+import { FaBan, FaBolt } from 'react-icons/fa6'
 import { GetDynamicSecrets } from '@/graphql/queries/secrets/dynamic/getDynamicSecrets.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
 import { useQuery } from '@apollo/client'
-import { DynamicSecretType } from '@/apollo/graphql'
+import { AppType, DynamicSecretType } from '@/apollo/graphql'
 import { DynamicSecret } from '../../../../ee/components/secrets/dynamic/DynamicSecret'
+import { AppsView } from '@/components/apps/AppsView'
 
 export default function DynamicSecrets({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // permissions
+  const userCanViewApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
   const userCanReadDynamicSecrets = organisation
     ? userHasPermission(organisation.role?.permissions, 'Secrets', 'read', true)
     : false
@@ -22,6 +25,16 @@ export default function DynamicSecrets({ params }: { params: { team: string } })
     variables: { orgId: organisation?.id },
     skip: !organisation || !userCanReadDynamicSecrets,
   })
+
+  const { data: appsData, loading } = useQuery(GetApps, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation || !userCanViewApps,
+    fetchPolicy: 'cache-and-network',
+  })
+
+  const apps = (appsData?.apps as AppType[]) ?? []
 
   // Group secrets by appId, then environmentId
   const groupedSecrets: Record<
@@ -71,31 +84,53 @@ export default function DynamicSecrets({ params }: { params: { team: string } })
           </div>
 
           {/* Grouped display */}
-          <div className="space-y-8 divide-y divide-neutral-400/20">
-            {Object.entries(groupedSecrets).map(([appId, appGroup]) => (
-              <div key={appId} className="space-y-1 py-4">
-                <div className="font-semibold text-lg">{appGroup.appName}</div>
-                <div className="flex flex-row gap-8 flex-1">
-                  {Object.entries(appGroup.environments)
-                    .sort(
-                      ([, aEnv], [, bEnv]) =>
-                        (aEnv.secrets[0]?.environment.index ?? 0) -
-                        (bEnv.secrets[0]?.environment.index ?? 0)
-                    )
-                    .map(([envId, envGroup]) => (
-                      <div key={envId} className="flex flex-col gap-2 min-w-[160px]">
-                        <div className="font-medium text-base text-neutral-700 dark:text-neutral-300 mb-2">
-                          {envGroup.envName}
+          {Object.entries(groupedSecrets).length > 0 ? (
+            <div className="space-y-8 divide-y divide-neutral-400/20">
+              {Object.entries(groupedSecrets).map(([appId, appGroup]) => (
+                <div key={appId} className="space-y-1 py-4">
+                  <div className="font-semibold text-lg">{appGroup.appName}</div>
+                  <div className="flex flex-row gap-8 flex-1">
+                    {Object.entries(appGroup.environments)
+                      .sort(
+                        ([, aEnv], [, bEnv]) =>
+                          (aEnv.secrets[0]?.environment.index ?? 0) -
+                          (bEnv.secrets[0]?.environment.index ?? 0)
+                      )
+                      .map(([envId, envGroup]) => (
+                        <div key={envId} className="flex flex-col gap-2 min-w-[160px]">
+                          <div className="font-medium text-base text-neutral-700 dark:text-neutral-300 mb-2">
+                            {envGroup.envName}
+                          </div>
+                          {envGroup.secrets.map((secret) => (
+                            <DynamicSecret key={secret.id} secret={secret} />
+                          ))}
                         </div>
-                        {envGroup.secrets.map((secret) => (
-                          <DynamicSecret key={secret.id} secret={secret} />
-                        ))}
-                      </div>
-                    ))}
+                      ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <EmptyState
+                title="No Dynamic Secrets"
+                subtitle="There are no dynamic secrets in this organisation. Choose an App and Environment to create one."
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl">
+                    <FaBolt />
+                  </div>
+                }
+              >
+                <></>
+              </EmptyState>
+
+              {apps && (
+                <div>
+                  <AppsView apps={apps} loading={loading} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <EmptyState
