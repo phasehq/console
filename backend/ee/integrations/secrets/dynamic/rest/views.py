@@ -248,6 +248,7 @@ class DynamicSecretLeaseView(APIView):
         lease = self._get_lease_or_404(lease_id)
         self._assert_can_act_on_lease(request, lease, action="update")
 
+        org_member = service_account = None
         if request.auth["auth_type"] == "User":
             org_member = request.auth["org_member"].user
         elif request.auth["auth_type"] == "ServiceAccount":
@@ -258,8 +259,8 @@ class DynamicSecretLeaseView(APIView):
                 lease,
                 ttl,
                 request=request,
-                organisation_member=org_member,
-                service_account=service_account,
+                organisation_member=org_member or None,
+                service_account=service_account or None,
             )
         except Exception as e:
             logger.exception(
@@ -280,6 +281,7 @@ class DynamicSecretLeaseView(APIView):
         lease = self._get_lease_or_404(lease_id)
         self._assert_can_act_on_lease(request, lease, action="delete")
 
+        org_member = service_account = None
         if request.auth["auth_type"] == "User":
             org_member = request.auth["org_member"].user
         elif request.auth["auth_type"] == "ServiceAccount":

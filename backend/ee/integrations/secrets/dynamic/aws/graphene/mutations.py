@@ -191,12 +191,16 @@ class UpdateAWSDynamicSecretMutation(graphene.Mutation):
                 raise GraphQLError("Invalid authentication credentials")
 
         # --- ensure name is unique in this environment and path ---
-        if DynamicSecret.objects.filter(
-            environment=dynamic_secret.environment,
-            path=path,
-            name=name,
-            deleted_at=None,
-        ).exists():
+        if (
+            DynamicSecret.objects.filter(
+                environment=dynamic_secret.environment,
+                path=path,
+                name=name,
+                deleted_at=None,
+            )
+            .exclude(id=dynamic_secret_id)
+            .exists()
+        ):
             raise GraphQLError(
                 f"A dynamic secret with name '{name}' already exists at this path."
             )
