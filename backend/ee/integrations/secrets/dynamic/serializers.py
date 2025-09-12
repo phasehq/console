@@ -1,11 +1,16 @@
 from api.models import DynamicSecretLease, DynamicSecret
 from api.utils.crypto import decrypt_asymmetric
 from api.utils.secrets import get_environment_keys
+from api.serializers import (
+    OrganisationMemberSerializer,
+    ServiceAccountSerializer,
+)
 from rest_framework import serializers
 
 
 class DynamicSecretLeaseSerializer(serializers.ModelSerializer):
     credentials = serializers.SerializerMethodField()
+    owner = serializers.SerializerMethodField()
 
     class Meta:
         model = DynamicSecretLease
@@ -16,6 +21,7 @@ class DynamicSecretLeaseSerializer(serializers.ModelSerializer):
             "secret",
             "ttl",
             "status",
+            "owner",
             "credentials",
             "created_at",
             "renewed_at",
@@ -52,6 +58,34 @@ class DynamicSecretLeaseSerializer(serializers.ModelSerializer):
                 if key_name and value:
                     result.append({"key": key_name, "value": value})
         return result
+
+    def get_owner(self, obj):
+        """
+        Return the lease owner serialized as either an OrganisationMember or ServiceAccount.
+        Shape:
+        {
+          "type": "organisation_member" | "service_account",
+          "data": <serialized owner object>
+        }
+        """
+        # Prefer explicit organisation member if present
+        org_member = getattr(obj, "organisation_member", None)
+        if org_member:
+            return {
+                "type": "organisation_member",
+                "data": OrganisationMemberSerializer(
+                    org_member, context=self.context
+                ).data,
+            }
+        service_account = getattr(obj, "service_account", None)
+        if service_account:
+            return {
+                "type": "service_account",
+                "data": ServiceAccountSerializer(
+                    service_account, context=self.context
+                ).data,
+            }
+        return None
 
 
 class DynamicSecretSerializer(serializers.ModelSerializer):
