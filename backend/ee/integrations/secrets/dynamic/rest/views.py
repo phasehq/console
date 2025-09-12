@@ -12,6 +12,7 @@ from api.utils.access.permissions import (
 )
 from ee.integrations.secrets.dynamic.serializers import (
     DynamicSecretLeaseSerializer,
+    DynamicSecretSerializer,
 )
 from api.utils.rest import (
     METHOD_TO_ACTION,
@@ -112,33 +113,52 @@ class DynamicSecretsView(APIView):
 
         dynamic_secrets = DynamicSecret.objects.filter(**dynamic_secrets_filter)
 
+        # If lease header is present, generate a lease per secret
+        include_lease = (
+            "lease" in request.GET
+            and request.GET.get("lease", "false").lower() != "false"
+        )
+
         # 2. Create leases for each secret
         if request.auth["service_account_token"] is not None:
             service_account = request.auth["service_account_token"].service_account
-        dynamic_leases = [
-            create_dynamic_secret_lease(
-                secret,
-                organisation_member=request.auth["org_member"],
-                service_account=service_account,
-                request=request,
-            )[0]
-            for secret in dynamic_secrets
-        ]
+        if include_lease:
+            leases_by_secret_id = {}
+            for ds in dynamic_secrets:
+                try:
+                    lease, _ = create_dynamic_secret_lease(
+                        ds,
+                        organisation_member=request.auth.get("org_member"),
+                        service_account=service_account,
+                        request=request,
+                    )
+                    leases_by_secret_id[ds.id] = str(lease.id)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to create lease for dynamic secret {ds.id}: {e}"
+                    )
 
-        if len(dynamic_leases) > 0:
-            from ee.integrations.secrets.dynamic.serializers import (
-                DynamicSecretLeaseSerializer,
-            )
-
-            dynamic_serializer = DynamicSecretLeaseSerializer(
-                dynamic_leases, many=True, context={"sse": True}
-            )
+            # Serialize each secret with its lease_id in context
+            dynamic_secrets_data = [
+                DynamicSecretSerializer(
+                    ds,
+                    context={
+                        "sse": True,
+                        "with_credentials": True,
+                        "lease_id": leases_by_secret_id.get(ds.id),
+                    },
+                ).data
+                for ds in dynamic_secrets
+            ]
+        else:
+            # Serialize without lease
+            dynamic_secrets_data = DynamicSecretSerializer(
+                dynamic_secrets, many=True, context={"sse": True}
+            ).data
 
         return Response(
             {
-                "dynamicSecrets": (
-                    dynamic_serializer.data if len(dynamic_leases) > 0 else []
-                ),
+                "dynamicSecrets": dynamic_secrets_data,
             },
             status=status.HTTP_200_OK,
         )
