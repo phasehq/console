@@ -55,6 +55,7 @@ const GenericDialog = forwardRef(
     }
 
     useImperativeHandle(ref, () => ({
+      isOpen,
       openModal,
       closeModal,
     }))

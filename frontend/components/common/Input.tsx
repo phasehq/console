@@ -8,18 +8,22 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string
   placeholder?: string
   secret?: boolean
+  labelClassName?: string
 }
 
 // Use forwardRef to allow refs to be passed to the component
 export const Input = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
-  const { value, setValue, label, secret } = props
+  const { value, setValue, label, secret, labelClassName } = props
 
   const [showValue, setShowValue] = useState<boolean>(false)
 
   return (
     <div className="space-y-2 w-full">
       {label && (
-        <label className="block text-neutral-500 text-sm mb-2" htmlFor={props.id}>
+        <label
+          className={clsx('block text-neutral-500 text-sm mb-2', labelClassName)}
+          htmlFor={props.id}
+        >
           {label}
           {props.required && <span className="text-red-500 ml-1">*</span>}
         </label>
@@ -34,7 +38,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
           className={clsx(
             'custom w-full text-zinc-800 dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md',
             secret ? 'ph-no-capture' : '',
-            props.readOnly || props.disabled ? 'opacity-60 cursor-not-allowed' : ''
+            props.readOnly || props.disabled ? 'opacity-60 cursor-not-allowed' : '',
+            props.className
           )}
         />
         {secret && (

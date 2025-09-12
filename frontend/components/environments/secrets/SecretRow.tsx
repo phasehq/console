@@ -332,7 +332,6 @@ export default function SecretRow(props: {
           onFocus={() => setExpanded(true)}
           disabled={stagedForDelete || !userCanUpdateSecrets}
         />
-
         <ValueActionMenu />
       </div>
     </div>

@@ -32,5 +32,7 @@
   "[typescriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "cSpell.words": ["organisation"] // Don't run prettier for files listed in .gitignore
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  } // Don't run prettier for files listed in .gitignore
 }

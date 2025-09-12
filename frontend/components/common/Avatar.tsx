@@ -22,7 +22,7 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
   const [useFallBack, setUseFallBack] = useState(false)
 
   const sizes = {
-    sm: 'h-5 w-5 text-[8px]',
+    sm: 'h-5 w-5 text-[10px]',
     md: 'h-8 w-8 text-2xs',
     lg: 'h-12 w-12 text-base',
     xl: 'h-20 w-20 text-4xl',
