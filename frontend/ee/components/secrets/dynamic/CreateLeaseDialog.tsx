@@ -38,8 +38,8 @@ export const CreateLeaseDialog = ({ secret }: { secret: DynamicSecretType }) => 
       return
     }
 
-    if (parseInt(ttl) <= MINIMUM_LEASE_TTL) {
-      toast.error(`TTL must be greater than ${MINIMUM_LEASE_TTL} seconds`)
+    if (parseInt(ttl) < MINIMUM_LEASE_TTL) {
+      toast.error(`TTL must be at least ${MINIMUM_LEASE_TTL} seconds`)
       return
     }
 
