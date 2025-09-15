@@ -192,12 +192,15 @@ def check_for_duplicates_blind(secrets, environment):
             path = normalize_path_string(secret.get("path", "/"))
         except:
             path = "/"
-        dynamic_secrets = DynamicSecret.objects.filter(
+        dynamic_secrets_qs = DynamicSecret.objects.filter(
             environment=environment,
             path=path,
             deleted_at=None,
-        ).exclude(id=secret["dynamic_secret_id"])
-        for dyn_secret in dynamic_secrets:
+        )
+        exclude_id = secret.get("dynamic_secret_id")
+        if exclude_id:
+            dynamic_secrets_qs = dynamic_secrets_qs.exclude(id=exclude_id)
+        for dyn_secret in dynamic_secrets_qs:
             key_map = dyn_secret.key_map or []
             for entry in key_map:
                 key_digest = entry.get("key_digest")
