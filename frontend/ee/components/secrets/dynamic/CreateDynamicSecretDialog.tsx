@@ -411,7 +411,9 @@ export const CreateDynamicSecretDialog = forwardRef<
                               setFormData((prev) => ({
                                 ...prev,
                                 keyMap: prev.keyMap.map((k) =>
-                                  k.id === key.id ? { ...k, keyName: val } : k
+                                  k.id === key.id
+                                    ? { ...k, keyName: val.replace(/ /g, '_').toUpperCase() }
+                                    : k
                                 ),
                               }))
                             }

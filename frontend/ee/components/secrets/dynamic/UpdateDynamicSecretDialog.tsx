@@ -78,7 +78,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
     function sanitize(obj: any): any {
       if (Array.isArray(obj)) return obj.map(sanitize)
       if (obj && typeof obj === 'object') {
-        const { __typename, ...rest } = obj
+        const { __typename, masked, ...rest } = obj
         return Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, sanitize(v)]))
       }
       return obj
@@ -318,7 +318,9 @@ export const UpdateDynamicSecretDialog = forwardRef<
                         setFormData((prev) => ({
                           ...prev,
                           keyMap: prev.keyMap.map((k) =>
-                            k.id === key.id ? { ...k, keyName: val } : k
+                            k.id === key.id
+                              ? { ...k, keyName: val.replace(/ /g, '_').toUpperCase() }
+                              : k
                           ),
                         }))
                       }
