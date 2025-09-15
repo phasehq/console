@@ -91,12 +91,14 @@ class DynamicSecretLeaseSerializer(serializers.ModelSerializer):
 class DynamicSecretSerializer(serializers.ModelSerializer):
     lease = serializers.SerializerMethodField()
     key_map = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
 
     class Meta:
         model = DynamicSecret
         fields = [
             "id",
             "name",
+            "type",
             "description",
             "environment",
             "folder",
@@ -144,3 +146,6 @@ class DynamicSecretSerializer(serializers.ModelSerializer):
         except (obj.leases.model.DoesNotExist, AttributeError):
             return None
         return DynamicSecretLeaseSerializer(lease, context=self.context).data
+
+    def get_type(self, obj):
+        return "dynamic"

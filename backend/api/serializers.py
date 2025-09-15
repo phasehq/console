@@ -133,6 +133,7 @@ class SecretSerializer(serializers.ModelSerializer):
     comment = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
 
     class Meta:
         model = Secret
@@ -181,6 +182,9 @@ class SecretSerializer(serializers.ModelSerializer):
             except PersonalSecret.DoesNotExist:
                 return None
         return None
+
+    def get_type(self, obj):
+        return "static"
 
 
 class EnvironmentSerializer(serializers.ModelSerializer):

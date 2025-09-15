@@ -216,11 +216,10 @@ class E2EESecretsView(APIView):
                     dynamic_secrets_qs, many=True, context={"sse": False}
                 ).data
 
-        response_data = {
-            "secrets": serializer.data,
-        }
+        response_data = serializer.data
+
         if include_dynamic_secrets:
-            response_data["dynamicSecrets"] = dynamic_secrets_data
+            response_data.concat(dynamic_secrets_data)
 
         return Response(
             response_data,
@@ -610,11 +609,10 @@ class PublicSecretsView(APIView):
                     dynamic_secrets_qs, many=True, context={"sse": True}
                 ).data
 
-        response_data = {
-            "secrets": serializer.data,
-        }
+        response_data = serializer.data
+
         if include_dynamic_secrets:
-            response_data["dynamicSecrets"] = dynamic_secrets_data
+            response_data.append(dynamic_secrets_data)
 
         return Response(
             response_data,
