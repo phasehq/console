@@ -2,6 +2,7 @@ import { DynamicSecretType, KeyMap } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { organisationContext } from '@/contexts/organisationContext'
 import { DeleteDynamicSecretOP } from '@/graphql/mutations/environments/secrets/dynamic/deleteDynamicSecret.gql'
+import { GetDynamicSecrets } from '@/graphql/queries/secrets/dynamic/getDynamicSecrets.gql'
 import { useMutation } from '@apollo/client'
 import { useContext, useRef } from 'react'
 import { FaTrashAlt } from 'react-icons/fa'
@@ -21,7 +22,10 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
   const keyMap: KeyMap[] = secret.keyMap as KeyMap[]
 
   const handleDelete = async () => {
-    await deleteSecret({ variables: { secretId: secret.id } })
+    await deleteSecret({
+      variables: { secretId: secret.id },
+      refetchQueries: [{ query: GetDynamicSecrets, variables: { orgId: organisation?.id } }],
+    })
     toast.success('Deleted dynamic secret')
   }
 
