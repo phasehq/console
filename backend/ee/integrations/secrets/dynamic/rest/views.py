@@ -162,9 +162,7 @@ class DynamicSecretsView(APIView):
             ).data
 
         return Response(
-            {
-                "dynamicSecrets": dynamic_secrets_data,
-            },
+            dynamic_secrets_data,
             status=status.HTTP_200_OK,
         )
 
