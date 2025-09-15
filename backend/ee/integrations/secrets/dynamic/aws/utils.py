@@ -463,6 +463,17 @@ def revoke_aws_dynamic_secret_lease(
         "removed_groups": [],
     }
 
+    # Add request metadata if available
+    ip_address = user_agent = None
+    if request is not None:
+        try:
+            ip_address, user_agent = get_resolver_request_meta(request)
+
+            logger.info(f"Created revoke event for lease {lease.id}")
+        except Exception:
+            logger.error("Failed to read request meta for lease event", exc_info=True)
+            pass
+
     try:
         # Decrypt username
         env_pubkey, env_privkey = get_environment_keys(lease.secret.environment.id)
@@ -515,19 +526,6 @@ def revoke_aws_dynamic_secret_lease(
         lease.revoked_at = timezone.now()
         lease.save()
 
-        # Add request metadata if available
-        ip_address = user_agent = None
-        if request is not None:
-            try:
-                ip_address, user_agent = get_resolver_request_meta(request)
-
-                logger.info(f"Created revoke event for lease {lease.id}")
-            except Exception:
-                logger.error(
-                    "Failed to read request meta for lease event", exc_info=True
-                )
-                pass
-
         DynamicSecretLeaseEvent.objects.create(
             lease=lease,
             event_type=DynamicSecretLease.REVOKED,
@@ -546,6 +544,13 @@ def revoke_aws_dynamic_secret_lease(
         )
         # Emit event to reflect attempted revoke on missing user
         meta["outcome"] = "user_absent"
+        if manual:
+            lease.status = DynamicSecretLease.REVOKED
+        else:
+            lease.status = DynamicSecretLease.EXPIRED
+        lease.credentials = {}
+        lease.revoked_at = timezone.now()
+        lease.save()
         try:
             DynamicSecretLeaseEvent.objects.create(
                 lease=lease,
