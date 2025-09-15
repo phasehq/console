@@ -1,7 +1,7 @@
 import { DynamicSecretLeaseType, DynamicSecretType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
-import { leaseTtlButtons } from '@/utils/dynamicSecrets'
+import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useContext, useRef, useState } from 'react'
 import { FiRefreshCw } from 'react-icons/fi'
@@ -44,6 +44,12 @@ export const RenewLeaseDialog = ({
       toast.error(`The maximum allowed TTL for this secret is ${secret.maxTtlSeconds}`)
       return
     }
+
+    if (parseInt(ttl) <= MINIMUM_LEASE_TTL) {
+      toast.error(`TTL must be greater than ${MINIMUM_LEASE_TTL} seconds`)
+      return
+    }
+
     try {
       const result = await renewLease({
         variables: { leaseId: lease.id, ttl: parseInt(ttl) },
@@ -106,6 +112,7 @@ export const RenewLeaseDialog = ({
                 setValue={setTtl}
                 type="number"
                 label="TTL (seconds)"
+                min={MINIMUM_LEASE_TTL}
                 max={secret.maxTtlSeconds!}
                 required
               />

@@ -7,7 +7,7 @@ import { Input } from '@/components/common/Input'
 import { organisationContext } from '@/contexts/organisationContext'
 import { CreateDynamicSecretLease } from '@/graphql/mutations/environments/secrets/dynamic/createLease.gql'
 import { GetDynamicSecretLeases } from '@/graphql/queries/secrets/dynamic/getSecretLeases.gql'
-import { leaseTtlButtons } from '@/utils/dynamicSecrets'
+import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useMutation } from '@apollo/client'
 import { useContext, useState } from 'react'
@@ -37,6 +37,12 @@ export const CreateLeaseDialog = ({ secret }: { secret: DynamicSecretType }) => 
       toast.error(`The maximum allowed TTL for this secret is ${secret.maxTtlSeconds}`)
       return
     }
+
+    if (parseInt(ttl) <= MINIMUM_LEASE_TTL) {
+      toast.error(`TTL must be greater than ${MINIMUM_LEASE_TTL} seconds`)
+      return
+    }
+
     try {
       const result = await createLease({
         variables: { secretId: secret.id, ttl: parseInt(ttl), name },
@@ -117,6 +123,7 @@ export const CreateLeaseDialog = ({ secret }: { secret: DynamicSecretType }) => 
                 setValue={setTtl}
                 type="number"
                 label="TTL (seconds)"
+                min={MINIMUM_LEASE_TTL}
                 max={secret.maxTtlSeconds!}
                 required
               />
