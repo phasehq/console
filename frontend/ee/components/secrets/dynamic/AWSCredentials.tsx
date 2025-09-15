@@ -16,10 +16,15 @@ export const AWSCredentials = ({
   const credentialKeyName = (credentialId: string) =>
     keyMap.find((key) => key.id === credentialId)?.keyName ?? credentialId
 
+  const getInitialMaskedState = (credentialId: string) => {
+    const keyEntry = keyMap.find((key) => key.id === credentialId)
+    return keyEntry?.masked ?? true // default to masked if not specified
+  }
+
   const [reveal, setReveal] = useState({
-    accessKeyId: false,
-    secretAccessKey: false,
-    username: false,
+    accessKeyId: !getInitialMaskedState('access_key_id'),
+    secretAccessKey: !getInitialMaskedState('secret_access_key'),
+    username: !getInitialMaskedState('username'),
   })
 
   const toggle = (k: keyof typeof reveal) => setReveal((s) => ({ ...s, [k]: !s[k] }))
@@ -28,6 +33,26 @@ export const AWSCredentials = ({
 
   return (
     <>
+      <div className="relative">
+        <Input
+          value={lease.credentials.username || ''}
+          setValue={() => {}}
+          readOnly
+          label={credentialKeyName('username')}
+          labelClassName="font-mono"
+          className={clsx(
+            'cursor-text ph-no-capture font-mono',
+            reveal.username ? 'text-security-none' : 'text-security-disc'
+          )}
+        />
+        <div className="absolute right-2 top-9">
+          <Button variant="outline" onClick={() => toggle('username')}>
+            {reveal.username ? <FaRegEyeSlash /> : <FaRegEye />}
+            {reveal.username ? 'Hide' : 'Show'}
+          </Button>
+          <CopyButton value={lease.credentials.username || ''} />
+        </div>
+      </div>
       <div className="relative">
         <Input
           value={lease.credentials.accessKeyId || ''}
@@ -67,27 +92,6 @@ export const AWSCredentials = ({
             {reveal.secretAccessKey ? 'Hide' : 'Show'}
           </Button>
           <CopyButton value={lease.credentials.secretAccessKey || ''} />
-        </div>
-      </div>
-
-      <div className="relative">
-        <Input
-          value={lease.credentials.username || ''}
-          setValue={() => {}}
-          readOnly
-          label={credentialKeyName('username')}
-          labelClassName="font-mono"
-          className={clsx(
-            'cursor-text ph-no-capture font-mono',
-            reveal.username ? 'text-security-none' : 'text-security-disc'
-          )}
-        />
-        <div className="absolute right-2 top-9">
-          <Button variant="outline" onClick={() => toggle('username')}>
-            {reveal.username ? <FaRegEyeSlash /> : <FaRegEye />}
-            {reveal.username ? 'Hide' : 'Show'}
-          </Button>
-          <CopyButton value={lease.credentials.username || ''} />
         </div>
       </div>
     </>

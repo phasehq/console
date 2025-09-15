@@ -3,16 +3,23 @@ class DynamicSecretProviders:
         "id": "aws",
         "name": "AWS IAM",
         "credentials": [
-            {"id": "username", "type": "string", "default_key_name": "AWS_USERNAME"},
+            {
+                "id": "username",
+                "type": "string",
+                "default_key_name": "AWS_IAM_USERNAME",
+                "masked": False,
+            },
             {
                 "id": "access_key_id",
                 "type": "string",
                 "default_key_name": "AWS_ACCESS_KEY_ID",
+                "masked": False,
             },
             {
                 "id": "secret_access_key",
                 "type": "string",
                 "default_key_name": "AWS_SECRET_ACCESS_KEY",
+                "masked": True,
             },
         ],
         "config_map": [

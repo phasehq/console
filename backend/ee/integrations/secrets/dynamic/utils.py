@@ -75,8 +75,16 @@ def validate_key_map(key_map, provider, environment, path, dynamic_secret_id=Non
                 f"No key name provided for key id '{key_id}', and no default defined"
             )
 
+        # Get masked property from provider definition
+        masked = valid_creds[key_id].get("masked", True)  # default to masked
+
         validated_key_map.append(
-            {"id": key_id, "key_name": key_name, "key_digest": key_digest}
+            {
+                "id": key_id,
+                "key_name": key_name,
+                "key_digest": key_digest,
+                "masked": masked,
+            }
         )
 
     return validated_key_map

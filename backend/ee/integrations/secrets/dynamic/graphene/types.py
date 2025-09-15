@@ -17,6 +17,7 @@ from ee.integrations.secrets.dynamic.aws.graphene.types import (
 class KeyMap(graphene.ObjectType):
     id = graphene.String()
     key_name = graphene.String()
+    masked = graphene.Boolean()
 
 
 class KeyMapInput(graphene.InputObjectType):
