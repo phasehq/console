@@ -35,7 +35,7 @@ export const RevokeLeaseDialog = ({
         ],
       })
 
-      const revokedLeaseData = result.data?.revokeDynamicSecretLease?.lease.revokedAt
+      const revokedLeaseData = result.data?.revokeDynamicSecretLease?.lease
       if (revokedLeaseData) {
         toast.success('Revoked lease')
         dialogRef.current?.closeModal()
