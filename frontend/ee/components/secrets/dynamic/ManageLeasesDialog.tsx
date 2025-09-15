@@ -31,7 +31,10 @@ export const ManageLeasesDialog = ({ secret }: { secret: DynamicSecretType }) =>
   // Fetch leases when dialog is opened
   useEffect(() => {
     if (isOpen && organisation) {
-      fetchLeases({ variables: { secretId: secret.id, orgId: organisation?.id } })
+      fetchLeases({
+        variables: { secretId: secret.id, orgId: organisation?.id },
+        fetchPolicy: 'cache-and-network',
+      })
     }
   }, [isOpen, organisation, fetchLeases, secret.id])
 
