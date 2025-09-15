@@ -120,15 +120,20 @@ class DynamicSecretsView(APIView):
         )
 
         # 2. Create leases for each secret
-        if request.auth["service_account_token"] is not None:
-            service_account = request.auth["service_account_token"].service_account
+        service_account = org_member = None
+
+        if request.auth["auth_type"] == "User":
+            org_member = request.auth["org_member"]
+        elif request.auth["auth_type"] == "ServiceAccount":
+            service_account = request.auth["service_account"]
+
         if include_lease:
             leases_by_secret_id = {}
             for ds in dynamic_secrets:
                 try:
                     lease, _ = create_dynamic_secret_lease(
                         ds,
-                        organisation_member=request.auth.get("org_member"),
+                        organisation_member=org_member,
                         service_account=service_account,
                         request=request,
                     )
@@ -270,7 +275,7 @@ class DynamicSecretLeaseView(APIView):
 
         org_member = service_account = None
         if request.auth["auth_type"] == "User":
-            org_member = request.auth["org_member"].user
+            org_member = request.auth["org_member"]
         elif request.auth["auth_type"] == "ServiceAccount":
             service_account = request.auth["service_account"]
 
@@ -279,8 +284,8 @@ class DynamicSecretLeaseView(APIView):
                 lease,
                 ttl,
                 request=request,
-                organisation_member=org_member or None,
-                service_account=service_account or None,
+                organisation_member=org_member,
+                service_account=service_account,
             )
         except Exception as e:
             logger.exception(
