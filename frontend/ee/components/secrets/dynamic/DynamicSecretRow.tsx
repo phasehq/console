@@ -5,7 +5,6 @@ import { CreateLeaseDialog } from './CreateLeaseDialog'
 import { ManageLeasesDialog } from './ManageLeasesDialog'
 import { DeleteDynamicSecretDialog } from './DeleteDynamicSecretDialog'
 import { UpdateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/UpdateDynamicSecretDialog'
-import { randomString } from '@/utils/copy'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 
 export const DynamicSecretRow = ({

@@ -10,10 +10,9 @@ import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
 import React from 'react'
 
-type Props = {
+type LeaseTimelineProps = {
   lease: DynamicSecretLeaseType
   className?: string
-  maxHeight?: number | string // e.g., 480 or '32rem'
 }
 
 const toTitleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s)
@@ -104,7 +103,7 @@ const MetaRow = ({ k, v }: { k: string; v: unknown }) => {
   )
 }
 
-export const LeaseEventTimeline: React.FC<Props> = ({ lease, className }) => {
+export const LeaseEventTimeline: React.FC<LeaseTimelineProps> = ({ lease, className }) => {
   const events: DynamicSecretLeaseEventType[] =
     (lease.events as DynamicSecretLeaseEventType[]) || []
 

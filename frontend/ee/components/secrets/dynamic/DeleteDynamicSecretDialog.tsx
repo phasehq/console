@@ -17,8 +17,6 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
 import { relativeTimeFromDates } from '@/utils/time'
-import { Alert } from '@/components/common/Alert'
-import { Input } from '@/components/common/Input'
 
 const ActiveLeaseCard = ({ lease }: { lease: DynamicSecretLeaseType }) => {
   return (

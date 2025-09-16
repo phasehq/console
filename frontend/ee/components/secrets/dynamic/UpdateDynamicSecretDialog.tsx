@@ -5,7 +5,6 @@ import {
   EnvironmentType,
   ProviderCredentialsType,
   KeyMapInput,
-  SecretType,
   DynamicSecretType,
 } from '@/apollo/graphql'
 import { GetDynamicSecretProviders } from '@/graphql/queries/secrets/dynamic/getProviders.gql'
@@ -17,13 +16,10 @@ import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { ProviderCredentialPicker } from '@/components/syncing/ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useMutation, useQuery } from '@apollo/client'
-import { Card } from '@/components/common/Card'
-import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import { FaArrowRightLong } from 'react-icons/fa6'
 import { MdOutlinePassword } from 'react-icons/md'
 import { camelCase, toUpper } from 'lodash'
 import { toast } from 'react-toastify'
-import { duplicateKeysExist } from '@/utils/secrets'
 import { FaCog, FaCogs } from 'react-icons/fa'
 import { Textarea } from '@/components/common/TextArea'
 import { encryptAsymmetric } from '@/utils/crypto'
