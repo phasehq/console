@@ -186,6 +186,12 @@ def create_dynamic_secret_lease(
     service_account=None,
     request=None,
 ):
+
+    Organisation = apps.get_model("api", "Organisation")
+    org = secret.environment.app.organisation
+    if not org.plan == Organisation.ENTERPRISE_PLAN:
+        raise Exception("Dynamic secrets are only available on the Enterprise plan.")
+
     try:
         lease_name = lease_name or secret.name
         ttl = ttl or int(secret.default_ttl.total_seconds())
@@ -234,6 +240,12 @@ def renew_dynamic_secret_lease(
     organisation_member=None,
     service_account=None,
 ):
+
+    Organisation = apps.get_model("api", "Organisation")
+    org = lease.secret.environment.app.organisation
+    if not org.plan == Organisation.ENTERPRISE_PLAN:
+        raise Exception("Dynamic secrets are only available on the Enterprise plan.")
+
     if timedelta(seconds=ttl) > lease.secret.max_ttl:
         raise Exception(
             "The specified TTL exceeds the maximum TTL for this dynamic secret."

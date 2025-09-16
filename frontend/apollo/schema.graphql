@@ -178,6 +178,7 @@ type EnvironmentType {
   updatedAt: DateTime!
   folders: [SecretFolderType]!
   secrets(path: String): [SecretType]!
+  dynamicSecrets(path: String): [DynamicSecretType]!
   folderCount: Int
   secretCount: Int
   members: [OrganisationMemberType]!
@@ -339,18 +340,25 @@ type PersonalSecretType {
   updatedAt: DateTime!
 }
 
-type EnvironmentSyncType {
+type DynamicSecretType {
   id: String!
+  name: String!
+  description: String!
   environment: EnvironmentType!
+  folder: SecretFolderType
   path: String!
-  options: JSONString!
   authentication: ProviderCredentialsType
-  isActive: Boolean!
+
+  """Which provider this secret is associated with."""
+  provider: ApiDynamicSecretProviderChoices!
+  config: DynamicSecretConfigUnion
+  keyMap: [KeyMap]
   createdAt: DateTime
-  lastSync: DateTime
-  status: ApiEnvironmentSyncStatusChoices!
-  serviceInfo: ServiceType
-  history: [EnvironmentSyncEventType!]!
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  leases: [DynamicSecretLeaseType!]!
+  defaultTtlSeconds: Int
+  maxTtlSeconds: Int
 }
 
 type ProviderCredentialsType {
@@ -369,6 +377,124 @@ type ProviderType {
   expectedCredentials: [String!]!
   optionalCredentials: [String!]!
   authScheme: String
+}
+
+enum ApiDynamicSecretProviderChoices {
+  """AWS"""
+  AWS
+}
+
+union DynamicSecretConfigUnion = AWSConfigType
+
+type AWSConfigType {
+  usernameTemplate: String!
+  iamPath: String
+  permissionBoundaryArn: String
+  groups: String
+  policyArns: String
+  policyDocument: GenericScalar
+}
+
+"""
+The `GenericScalar` scalar type represents a generic
+GraphQL scalar value that could be:
+String, Boolean, Int, Float, List or Object.
+"""
+scalar GenericScalar
+
+type KeyMap {
+  id: String
+  keyName: String
+  masked: Boolean
+}
+
+type DynamicSecretLeaseType {
+  id: String!
+  name: String!
+  description: String!
+  secret: DynamicSecretType!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ttl: Float!
+
+  """Current status of the lease"""
+  status: ApiDynamicSecretLeaseStatusChoices!
+  credentials: LeaseCredentialsUnion
+  createdAt: DateTime
+  renewedAt: DateTime
+  expiresAt: DateTime
+  revokedAt: DateTime
+  deletedAt: DateTime
+  cleanupJobId: String!
+  events: [DynamicSecretLeaseEventType]
+}
+
+enum ApiDynamicSecretLeaseStatusChoices {
+  """Created"""
+  CREATED
+
+  """Active"""
+  ACTIVE
+
+  """Renewed"""
+  RENEWED
+
+  """Revoked"""
+  REVOKED
+
+  """Expired"""
+  EXPIRED
+}
+
+union LeaseCredentialsUnion = AwsCredentialsType
+
+type AwsCredentialsType {
+  accessKeyId: String
+  secretAccessKey: String
+  username: String
+}
+
+type DynamicSecretLeaseEventType {
+  id: ID!
+  lease: DynamicSecretLeaseType!
+  eventType: ApiDynamicSecretLeaseEventEventTypeChoices!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ipAddress: String
+  userAgent: String
+  metadata: JSONString!
+  createdAt: DateTime!
+}
+
+enum ApiDynamicSecretLeaseEventEventTypeChoices {
+  """Created"""
+  CREATED
+
+  """Active"""
+  ACTIVE
+
+  """Renewed"""
+  RENEWED
+
+  """Revoked"""
+  REVOKED
+
+  """Expired"""
+  EXPIRED
+}
+
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  options: JSONString!
+  authentication: ProviderCredentialsType
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
+  serviceInfo: ServiceType
+  history: [EnvironmentSyncEventType!]!
 }
 
 enum ApiEnvironmentSyncStatusChoices {
@@ -778,131 +904,6 @@ type DynamicSecretProviderType {
   name: String!
   credentials: GenericScalar!
   configMap: GenericScalar!
-}
-
-"""
-The `GenericScalar` scalar type represents a generic
-GraphQL scalar value that could be:
-String, Boolean, Int, Float, List or Object.
-"""
-scalar GenericScalar
-
-type DynamicSecretType {
-  id: String!
-  name: String!
-  description: String!
-  environment: EnvironmentType!
-  folder: SecretFolderType
-  path: String!
-  authentication: ProviderCredentialsType
-
-  """Which provider this secret is associated with."""
-  provider: ApiDynamicSecretProviderChoices!
-  config: DynamicSecretConfigUnion
-  keyMap: [KeyMap]
-  createdAt: DateTime
-  updatedAt: DateTime!
-  deletedAt: DateTime
-  leases: [DynamicSecretLeaseType!]!
-  defaultTtlSeconds: Int
-  maxTtlSeconds: Int
-}
-
-enum ApiDynamicSecretProviderChoices {
-  """AWS"""
-  AWS
-}
-
-union DynamicSecretConfigUnion = AWSConfigType
-
-type AWSConfigType {
-  usernameTemplate: String!
-  iamPath: String
-  permissionBoundaryArn: String
-  groups: String
-  policyArns: String
-  policyDocument: GenericScalar
-}
-
-type KeyMap {
-  id: String
-  keyName: String
-  masked: Boolean
-}
-
-type DynamicSecretLeaseType {
-  id: String!
-  name: String!
-  description: String!
-  secret: DynamicSecretType!
-  organisationMember: OrganisationMemberType
-  serviceAccount: ServiceAccountType
-  ttl: Float!
-
-  """Current status of the lease"""
-  status: ApiDynamicSecretLeaseStatusChoices!
-  credentials: LeaseCredentialsUnion
-  createdAt: DateTime
-  renewedAt: DateTime
-  expiresAt: DateTime
-  revokedAt: DateTime
-  deletedAt: DateTime
-  cleanupJobId: String!
-  events: [DynamicSecretLeaseEventType]
-}
-
-enum ApiDynamicSecretLeaseStatusChoices {
-  """Created"""
-  CREATED
-
-  """Active"""
-  ACTIVE
-
-  """Renewed"""
-  RENEWED
-
-  """Revoked"""
-  REVOKED
-
-  """Expired"""
-  EXPIRED
-}
-
-union LeaseCredentialsUnion = AwsCredentialsType
-
-type AwsCredentialsType {
-  accessKeyId: String
-  secretAccessKey: String
-  username: String
-}
-
-type DynamicSecretLeaseEventType {
-  id: ID!
-  lease: DynamicSecretLeaseType!
-  eventType: ApiDynamicSecretLeaseEventEventTypeChoices!
-  organisationMember: OrganisationMemberType
-  serviceAccount: ServiceAccountType
-  ipAddress: String
-  userAgent: String
-  metadata: JSONString!
-  createdAt: DateTime!
-}
-
-enum ApiDynamicSecretLeaseEventEventTypeChoices {
-  """Created"""
-  CREATED
-
-  """Active"""
-  ACTIVE
-
-  """Renewed"""
-  RENEWED
-
-  """Revoked"""
-  REVOKED
-
-  """Expired"""
-  EXPIRED
 }
 
 type Mutation {

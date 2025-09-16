@@ -1,6 +1,5 @@
 'use client'
 
-import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
@@ -10,7 +9,6 @@ import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/ap
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
-
 import {
   FaAngleDoubleDown,
   FaAngleDoubleUp,
@@ -41,9 +39,7 @@ import {
   getUserKxPublicKey,
   arraysEqual,
 } from '@/utils/crypto'
-
 import { EmptyState } from '@/components/common/EmptyState'
-
 import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
@@ -55,6 +51,7 @@ import MultiEnvImportDialog from '@/components/environments/secrets/import/Multi
 import { TbDownload } from 'react-icons/tb'
 import { duplicateKeysExist } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
+import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -107,7 +104,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const [expandedSecrets, setExpandedSecrets] = useState<string[]>([])
 
   const [searchQuery, setSearchQuery] = useState<string>('')
-  const [initAppEnvironments] = useMutation(InitAppEnvironments)
+
   const [bulkProcessSecrets, { loading: bulkUpdatePending }] = useMutation(BulkProcessSecrets)
 
   const [isLoading, setIsLoading] = useState(false)
@@ -128,7 +125,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     setExpandedSecrets(expandedSecrets.filter((id) => id !== secretId))
   }
 
-  const allRowsAreExpanded = clientAppSecrets.every((secret) => expandedSecrets.includes(secret.id))
   const allRowsAreCollapsed = expandedSecrets.length === 0
 
   const unsavedChanges =
@@ -155,10 +151,15 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   useWarnIfUnsavedChanges(unsavedChanges)
 
-  const { appEnvironments, appSecrets, appFolders, fetching, refetch } = useAppSecrets(
-    app,
-    userCanReadSecrets,
-    unsavedChanges ? 0 : 10000 // Poll every 10 seconds
+  const { appEnvironments, appSecrets, appFolders, appDynamicSecrets, fetching, refetch } =
+    useAppSecrets(
+      app,
+      userCanReadSecrets,
+      unsavedChanges ? 0 : 10000 // Poll every 10 seconds
+    )
+
+  const allRowsAreExpanded = [...clientAppSecrets, ...appDynamicSecrets].every((item) =>
+    expandedSecrets.includes(item.id)
   )
 
   useEffect(() => {
@@ -184,6 +185,14 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           return searchRegex.test(folder.name)
         })
 
+  const filteredDynamicSecrets =
+    searchQuery === ''
+      ? appDynamicSecrets
+      : appDynamicSecrets.filter((secret) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(secret.name)
+        })
+
   const { data: syncsData } = useQuery(GetAppSyncStatus, {
     variables: {
       appId: app,
@@ -194,7 +203,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   const toggleAllExpanded = (expand: boolean) => {
     expand
-      ? setExpandedSecrets(clientAppSecrets.map((appSecret) => appSecret.id))
+      ? setExpandedSecrets([
+          ...clientAppSecrets.map((appSecret) => appSecret.id),
+          ...appDynamicSecrets.map((appDynamicSecret) => appDynamicSecret.id),
+        ])
       : setExpandedSecrets([])
   }
 
@@ -855,7 +867,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         />
       )}
 
-      {filteredSecrets.length > 0 && (
+      {(filteredSecrets.length > 0 || filteredDynamicSecrets.length > 0) && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -926,6 +938,16 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 <tbody className="divide-y divide-neutral-500/20 rounded-md">
                   {filteredFolders.map((appFolder) => (
                     <AppFolderRow key={appFolder.name} appFolder={appFolder} />
+                  ))}
+
+                  {filteredDynamicSecrets.map((appDynamicSecret) => (
+                    <AppDynamicSecretRow
+                      key={appDynamicSecret.id}
+                      appDynamicSecret={appDynamicSecret}
+                      isExpanded={expandedSecrets.includes(appDynamicSecret.id)}
+                      expand={handleExpandRow}
+                      collapse={handleCollapseRow}
+                    />
                   ))}
 
                   {filteredSecrets.map((appSecret, index) => (
