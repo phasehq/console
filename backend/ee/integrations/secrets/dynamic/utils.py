@@ -190,7 +190,7 @@ def create_dynamic_secret_lease(
         lease_name = lease_name or secret.name
         ttl = ttl or int(secret.default_ttl.total_seconds())
         if secret.provider == "aws":
-            lease, lease_data = create_aws_dynamic_secret_lease(
+            lease, lease_data, meta = create_aws_dynamic_secret_lease(
                 secret=secret,
                 lease_name=lease_name,
                 organisation_member=organisation_member,
@@ -217,7 +217,7 @@ def create_dynamic_secret_lease(
                 service_account=service_account if service_account else None,
                 ip_address=ip_address,
                 user_agent=user_agent,
-                metadata={"action": "create", "ttl": ttl},
+                metadata=meta,
             )
 
             return lease, lease_data
