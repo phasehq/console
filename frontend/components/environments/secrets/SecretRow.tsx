@@ -263,9 +263,7 @@ export default function SecretRow(props: {
           onClick={() => handleDelete(secret.id)}
           title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
         >
-          <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-            {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
-          </div>
+          <div className="p-1">{stagedForDelete ? <FaUndo /> : <FaTrashAlt />}</div>
         </Button>
       )}
     </div>

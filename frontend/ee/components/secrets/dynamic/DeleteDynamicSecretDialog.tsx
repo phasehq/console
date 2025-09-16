@@ -116,7 +116,7 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
       title="Delete Dynamic Secret"
       buttonVariant="danger"
       buttonContent={
-        <div className="py-1">
+        <div className="p-1">
           <FaTrashAlt />
         </div>
       }
@@ -143,8 +143,8 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
           <div>
             <p className="text-red-400 py-4 text-base">
               Warning: This dynamic secret has{' '}
-              <span className="font-semibold">{activeLeases.length}</span> active leases which will
-              immediately be revoked:
+              <span className="font-semibold">{activeLeases.length}</span> active lease
+              {`${activeLeases.length !== 1 ? 's' : ''}`} which will immediately be revoked:
               <div className="divide-y divide-neutral-400/10 pt-2">
                 {activeLeases.slice(0, 5).map((lease) => (
                   <ActiveLeaseCard key={lease.id} lease={lease} />

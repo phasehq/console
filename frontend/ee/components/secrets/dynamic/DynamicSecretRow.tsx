@@ -46,10 +46,12 @@ export const DynamicSecretRow = ({
           ))}
         </div>
 
-        <div className="flex h-full items-center gap-4  opacity-0 group-hover:opacity-100 transition ease">
+        <div className="flex h-full items-center justify-between gap-4 opacity-0 group-hover:opacity-100 transition ease">
           <CreateLeaseDialog secret={secret} />
-          <ManageLeasesDialog secret={secret} />
-          <UpdateDynamicSecretDialog secret={secret} environment={environment} />
+          <div className="flex items-center gap-4">
+            <ManageLeasesDialog secret={secret} />
+            <UpdateDynamicSecretDialog secret={secret} environment={environment} />
+          </div>
         </div>
       </div>
       <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center">

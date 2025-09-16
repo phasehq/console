@@ -172,11 +172,11 @@ export const UpdateDynamicSecretDialog = forwardRef<
   return (
     <GenericDialog
       ref={dialogRef}
-      title={`Update Dynamic Secret`}
+      title={`Configure Dynamic Secret`}
       buttonVariant="secondary"
       buttonContent={
         <>
-          <FaCog /> Update
+          <FaCog /> Configure
         </>
       }
     >

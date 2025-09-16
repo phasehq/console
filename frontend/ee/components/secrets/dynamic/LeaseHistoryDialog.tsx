@@ -1,8 +1,7 @@
-import { DynamicSecretLeaseEventType, DynamicSecretLeaseType } from '@/apollo/graphql'
+import { DynamicSecretLeaseType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { LeaseEventTimeline } from './LeaseTimeLine'
-import { FaClockRotateLeft } from 'react-icons/fa6'
-import { BsThreeDotsVertical } from 'react-icons/bs'
+import { FaListCheck } from 'react-icons/fa6'
 
 export const LeaseHistoryDialog = ({ lease }: { lease: DynamicSecretLeaseType }) => {
   return (
@@ -11,7 +10,7 @@ export const LeaseHistoryDialog = ({ lease }: { lease: DynamicSecretLeaseType })
       buttonVariant="ghost"
       buttonContent={
         <div className="flex items-center gap-1 text-2xs">
-          <BsThreeDotsVertical /> History
+          <FaListCheck /> History
         </div>
       }
     >
