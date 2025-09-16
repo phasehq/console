@@ -230,15 +230,26 @@ def create_temporary_user(user_config, iam_client):
             # If groups is a string (legacy), split by comma
             if isinstance(groups, str):
                 groups = [g.strip() for g in groups.split(",") if g.strip()]
-            for group_name in groups:
+            for group_identifier in groups:
                 try:
+                    # Handle both group names and ARNs
+                    if group_identifier.startswith("arn:aws:iam::"):
+                        # Extract group name from ARN
+                        # ARN format: arn:aws:iam::account-id:group/group-name
+                        group_name = group_identifier.split("/")[-1]
+                    else:
+                        # Assume it's already a group name
+                        group_name = group_identifier
+
                     iam_client.add_user_to_group(
                         GroupName=group_name, UserName=username
                     )
-                    logger.info(f"Added user {username} to group {group_name}")
+                    logger.info(
+                        f"Added user {username} to group {group_name} (from: {group_identifier})"
+                    )
                 except ClientError as e:
                     logger.error(
-                        f"Failed to add user {username} to group {group_name}: {str(e)}"
+                        f"Failed to add user {username} to group {group_identifier}: {str(e)}"
                     )
                     raise
 
@@ -511,8 +522,9 @@ def revoke_aws_dynamic_secret_lease(
             iam_client.remove_user_from_group(
                 UserName=username, GroupName=group["GroupName"]
             )
-            logger.info(f"Removed user from group")
-            meta["removed_groups"].append(group["GroupName"])
+            logger.info(f"Removed user {username} from group {group['GroupName']}")
+            # Store the ARN in metadata for better audit trail
+            meta["removed_groups"].append(group.get("Arn", group["GroupName"]))
 
         # Finally, delete the user
         iam_client.delete_user(UserName=username)

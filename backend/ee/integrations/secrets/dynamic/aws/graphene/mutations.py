@@ -32,8 +32,8 @@ class AWSConfigInput(graphene.InputObjectType):
     username_template = graphene.String(required=True)
     iam_path = graphene.String(required=False, default_value="/")
     permission_boundary_arn = graphene.String(required=False)
-    groups = graphene.List(graphene.String)
-    policy_arns = graphene.List(graphene.String)
+    groups = graphene.String(required=False)  # comma-separated
+    policy_arns = graphene.String(required=False)  # comma-separated
     policy_document = GenericScalar(required=False)
 
 

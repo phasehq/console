@@ -819,8 +819,8 @@ type AWSConfigType {
   usernameTemplate: String!
   iamPath: String
   permissionBoundaryArn: String
-  groups: [String]
-  policyArns: [String]
+  groups: String
+  policyArns: String
   policyDocument: GenericScalar
 }
 
@@ -1404,8 +1404,8 @@ input AWSConfigInput {
   usernameTemplate: String!
   iamPath: String = "/"
   permissionBoundaryArn: String
-  groups: [String]
-  policyArns: [String]
+  groups: String
+  policyArns: String
   policyDocument: GenericScalar
 }
 
