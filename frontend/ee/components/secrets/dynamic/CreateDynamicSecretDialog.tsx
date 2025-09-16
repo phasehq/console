@@ -1,6 +1,14 @@
 'use client'
 
-import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react'
 import {
   AwsConfigInput,
   DynamicSecretProviderType,
@@ -77,6 +85,10 @@ export const CreateDynamicSecretDialog = forwardRef<
     maxTTL: '86400',
   })
 
+  const handleCredentialChange = useCallback((cred: ProviderCredentialsType) => {
+    setFormData((prev) => ({ ...prev, credential: cred }))
+  }, [])
+
   const reset = () => {
     setProvider(null)
     setActiveStep(0)
@@ -108,18 +120,14 @@ export const CreateDynamicSecretDialog = forwardRef<
       }
     })
 
-    setFormData({
-      name: 'AWS IAM credentials',
-      description: '',
-      credential: null,
+    setFormData((prev) => ({
+      ...prev,
       config: {
-        usernameTemplate: '{{random}}',
+        ...prev.config,
         iamPath: `/phase/${organisation?.name}/${environment.app.name}/${environment.name}${path}`,
       },
       keyMap: initialKeyMap,
-      defaultTTL: '3600',
-      maxTTL: '86400',
-    })
+    }))
   }, [environment.app.name, environment.name, organisation?.name, path, provider])
 
   const steps: Step[] = [
@@ -271,9 +279,10 @@ export const CreateDynamicSecretDialog = forwardRef<
                   <div className="mt-2">
                     <ProviderCredentialPicker
                       credential={formData.credential}
-                      setCredential={(cred) => setFormData({ ...formData, credential: cred })}
+                      setCredential={handleCredentialChange}
                       orgId={organisation!.id}
                       providerFilter={provider.id}
+                      setDefault
                     />
                   </div>
                   <div className="space-y-4 pt-2">
