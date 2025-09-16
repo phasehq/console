@@ -156,14 +156,24 @@ def create_temporary_user(user_config, iam_client):
             - ttl_seconds (int): Time to live in seconds
 
     Returns:
-        dict: User creation result with username and metadata
+        tuple: (user_result_dict, meta_dict) User creation result with username and metadata
     """
+    # Initialize metadata tracking
+    meta = {
+        "action": "create",
+        "provider": "aws",
+        "attached_policies": [],
+        "added_groups": [],
+        "tags_applied": [],
+    }
+
     try:
         # Generate unique username
         base_template = user_config.get(
             "username_template", "phase-dynamic-{{ random }}"
         )
         username = render_username_template(base_template)
+        meta["username"] = username
 
         # Prepare user creation parameters
         path = user_config.get("iam_user_path", "/") or "/"
@@ -180,15 +190,20 @@ def create_temporary_user(user_config, iam_client):
             "UserName": username,
             "Path": path,
         }
+        meta["iam_path"] = path
 
         # Add permission boundary if specified
         if user_config.get("permission_boundary_arn"):
             create_params["PermissionsBoundary"] = user_config[
                 "permission_boundary_arn"
             ]
+            meta["permission_boundary_arn"] = user_config["permission_boundary_arn"]
 
         # Create IAM user
         response = iam_client.create_user(**create_params)
+        logger.info(f"Created IAM user {username}")
+        meta["user_created"] = True
+        meta["user_arn"] = response["User"]["Arn"]
 
         # Add tags to track the user
         creation_time = datetime.utcnow()
@@ -196,15 +211,18 @@ def create_temporary_user(user_config, iam_client):
             seconds=user_config.get("ttl_seconds", 60)
         )
 
+        tags = [
+            {"Key": "CreatedBy", "Value": "phase-dynamic-secrets"},
+            {"Key": "CreationTime", "Value": creation_time.isoformat()},
+            {"Key": "ExpiryTime", "Value": expiry_time.isoformat()},
+            {"Key": "TTL", "Value": str(user_config.get("ttl_seconds", 60))},
+        ]
         iam_client.tag_user(
             UserName=username,
-            Tags=[
-                {"Key": "CreatedBy", "Value": "phase-dynamic-secrets"},
-                {"Key": "CreationTime", "Value": creation_time.isoformat()},
-                {"Key": "ExpiryTime", "Value": expiry_time.isoformat()},
-                {"Key": "TTL", "Value": str(user_config.get("ttl_seconds", 60))},
-            ],
+            Tags=tags,
         )
+        logger.info(f"Tagged IAM user {username}")
+        meta["tags_applied"] = [tag["Key"] for tag in tags]
 
         # Attach policies if specified
         policy_arns = user_config.get("policy_arns")
@@ -218,9 +236,16 @@ def create_temporary_user(user_config, iam_client):
                         UserName=username, PolicyArn=policy_arn
                     )
                     logger.info(f"Attached policy {policy_arn} to user {username}")
+                    meta["attached_policies"].append(policy_arn)
                 except ClientError as e:
                     logger.error(
                         f"Failed to attach policy {policy_arn} to user {username}: {str(e)}"
+                    )
+                    meta["failed_policy_attachments"] = meta.get(
+                        "failed_policy_attachments", []
+                    )
+                    meta["failed_policy_attachments"].append(
+                        {"policy_arn": policy_arn, "error": str(e)}
                     )
                     raise
 
@@ -247,26 +272,42 @@ def create_temporary_user(user_config, iam_client):
                     logger.info(
                         f"Added user {username} to group {group_name} (from: {group_identifier})"
                     )
+                    meta["added_groups"].append(
+                        {"group_name": group_name, "group_identifier": group_identifier}
+                    )
                 except ClientError as e:
                     logger.error(
                         f"Failed to add user {username} to group {group_identifier}: {str(e)}"
                     )
+                    meta["failed_group_additions"] = meta.get(
+                        "failed_group_additions", []
+                    )
+                    meta["failed_group_additions"].append(
+                        {"group_identifier": group_identifier, "error": str(e)}
+                    )
                     raise
 
         logger.info(f"Successfully created temporary IAM user: {username}")
+        meta["outcome"] = "success"
 
-        return {
+        user_result = {
             "username": username,
             "arn": response["User"]["Arn"],
             "creation_time": creation_time.isoformat(),
             "expiry_time": expiry_time.isoformat(),
         }
 
+        return user_result, meta
+
     except ClientError as e:
         logger.error(f"AWS client error creating user: {str(e)}")
+        meta["outcome"] = "error"
+        meta["error"] = str(e)
         raise
     except Exception as e:
         logger.error(f"Unexpected error creating user: {str(e)}")
+        meta["outcome"] = "error"
+        meta["error"] = str(e)
         raise
 
 
@@ -278,25 +319,38 @@ def create_access_key(username, iam_client):
         username (str): IAM username
 
     Returns:
-        dict: Access key details
+        tuple: (access_key_dict, meta_dict) Access key details and metadata
     """
+    meta = {
+        "action": "create_access_key",
+        "username": username,
+    }
+
     try:
         response = iam_client.create_access_key(UserName=username)
         access_key = response["AccessKey"]
 
         logger.info(f"Successfully created access key for user: {username}")
+        meta["access_key_id"] = access_key["AccessKeyId"]
+        meta["outcome"] = "success"
 
-        return {
+        access_key_result = {
             "access_key_id": access_key["AccessKeyId"],
             "secret_access_key": access_key["SecretAccessKey"],
             "status": access_key["Status"],
         }
 
+        return access_key_result, meta
+
     except ClientError as e:
         logger.error(f"AWS client error creating access key: {str(e)}")
+        meta["outcome"] = "error"
+        meta["error"] = str(e)
         raise
     except Exception as e:
         logger.error(f"Unexpected error creating access key: {str(e)}")
+        meta["outcome"] = "error"
+        meta["error"] = str(e)
         raise
 
 
@@ -369,6 +423,12 @@ def create_aws_dynamic_secret_lease(
     """
     Create a new lease for dynamic AWS credentials.
     """
+    # Initialize combined metadata
+    combined_meta = {
+        "action": "create_lease",
+        "provider": "aws",
+        "ttl_seconds": ttl_seconds,
+    }
 
     lease_config = secret.config
 
@@ -380,6 +440,7 @@ def create_aws_dynamic_secret_lease(
         )
 
     iam_client, _ = get_iam_client(secret)
+    created_username = None  # Track if we created a user for cleanup
 
     # Build config for user creation
     user_config = {
@@ -391,50 +452,340 @@ def create_aws_dynamic_secret_lease(
         "ttl_seconds": ttl_seconds,
     }
 
-    user_result = create_temporary_user(user_config, iam_client)
-    username = user_result["username"]
+    try:
+        user_result, user_meta = create_temporary_user(user_config, iam_client)
+        combined_meta["user_creation"] = user_meta
+        username = user_result["username"]
+        created_username = username  # Mark that we created a user
 
-    # Create access key for the user
-    access_key_result = create_access_key(username, iam_client)
+        # Create access key for the user
+        access_key_result, access_key_meta = create_access_key(username, iam_client)
+        combined_meta["access_key_creation"] = access_key_meta
 
-    lease_data = {
-        "username": username,
-        "user_arn": user_result["arn"],
-        "access_key_id": access_key_result["access_key_id"],
-        "secret_access_key": access_key_result["secret_access_key"],
-        "creation_time": user_result["creation_time"],
-        "expiry_time": user_result["expiry_time"],
-        "ttl_seconds": user_config.get("ttl_seconds", 60),
+        lease_data = {
+            "username": username,
+            "user_arn": user_result["arn"],
+            "access_key_id": access_key_result["access_key_id"],
+            "secret_access_key": access_key_result["secret_access_key"],
+            "creation_time": user_result["creation_time"],
+            "expiry_time": user_result["expiry_time"],
+            "ttl_seconds": user_config.get("ttl_seconds", 60),
+        }
+
+        env_pubkey, _ = get_environment_keys(secret.environment.id)
+
+        encrypted_credentials = {
+            "access_key_id": encrypt_asymmetric(
+                access_key_result["access_key_id"], env_pubkey
+            ),
+            "secret_access_key": encrypt_asymmetric(
+                access_key_result["secret_access_key"], env_pubkey
+            ),
+            "username": encrypt_asymmetric(username, env_pubkey),
+        }
+
+        lease = DynamicSecretLease.objects.create(
+            secret=secret,
+            name=lease_name,
+            organisation_member=organisation_member,
+            service_account=service_account,
+            ttl=timedelta(seconds=ttl_seconds),
+            expires_at=timezone.now() + timedelta(seconds=ttl_seconds),
+            credentials=encrypted_credentials,
+        )
+        combined_meta["lease_id"] = str(lease.id)
+        combined_meta["outcome"] = "success"
+
+        # --- Schedule revocation ---
+        from ee.integrations.secrets.dynamic.utils import schedule_lease_revocation
+
+        schedule_lease_revocation(lease)
+        combined_meta["revocation_scheduled"] = True
+
+        return lease, lease_data, combined_meta
+
+    except Exception as e:
+        # If we created a user but something failed later, clean it up
+        if created_username:
+            logger.warning(
+                f"Lease creation failed after user creation, cleaning up user {created_username}"
+            )
+            combined_meta["cleanup_attempted"] = True
+            try:
+                cleanup_failed_user_creation(created_username, iam_client)
+                combined_meta["cleanup_successful"] = True
+                logger.info(
+                    f"Successfully cleaned up user {created_username} after failed lease creation"
+                )
+            except Exception as cleanup_error:
+                combined_meta["cleanup_error"] = str(cleanup_error)
+                logger.error(
+                    f"Failed to cleanup user {created_username}: {cleanup_error}"
+                )
+                # Don't suppress the original error
+
+        # Re-raise the original exception
+        raise
+
+
+def cleanup_failed_user_creation(username: str, iam_client):
+    """
+    Clean up a partially created IAM user by removing all attached resources.
+    This is called when lease creation fails after user creation.
+    """
+    try:
+        # Delete all access keys
+        try:
+            access_keys = iam_client.list_access_keys(UserName=username)
+            for key in access_keys["AccessKeyMetadata"]:
+                iam_client.delete_access_key(
+                    UserName=username, AccessKeyId=key["AccessKeyId"]
+                )
+                logger.info(
+                    f"Cleaned up access key {key['AccessKeyId']} for user {username}"
+                )
+        except ClientError:
+            pass  # User might not have access keys yet
+
+        # Detach all managed policies
+        try:
+            attached_policies = iam_client.list_attached_user_policies(
+                UserName=username
+            )
+            for policy in attached_policies["AttachedPolicies"]:
+                iam_client.detach_user_policy(
+                    UserName=username, PolicyArn=policy["PolicyArn"]
+                )
+                logger.info(
+                    f"Cleaned up attached policy {policy['PolicyArn']} for user {username}"
+                )
+        except ClientError:
+            pass
+
+        # Delete all inline policies
+        try:
+            inline_policies = iam_client.list_user_policies(UserName=username)
+            for policy_name in inline_policies["PolicyNames"]:
+                iam_client.delete_user_policy(UserName=username, PolicyName=policy_name)
+                logger.info(
+                    f"Cleaned up inline policy {policy_name} for user {username}"
+                )
+        except ClientError:
+            pass
+
+        # Remove user from all groups
+        try:
+            groups_resp = iam_client.list_groups_for_user(UserName=username)
+            for group in groups_resp["Groups"]:
+                iam_client.remove_user_from_group(
+                    UserName=username, GroupName=group["GroupName"]
+                )
+                logger.info(
+                    f"Cleaned up group membership {group['GroupName']} for user {username}"
+                )
+        except ClientError:
+            pass
+
+        # Finally, delete the user
+        iam_client.delete_user(UserName=username)
+        logger.info(f"Cleaned up IAM user {username}")
+
+    except iam_client.exceptions.NoSuchEntityException:
+        logger.info(f"User {username} already deleted during cleanup")
+    except ClientError as e:
+        logger.error(f"Error during cleanup of user {username}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during cleanup of user {username}: {e}")
+        raise
+
+
+def create_aws_dynamic_secret_lease(
+    *,
+    secret: DynamicSecret,
+    lease_name,
+    organisation_member=None,
+    service_account=None,
+    ttl_seconds,
+) -> dict:
+    """
+    Create a new lease for dynamic AWS credentials.
+    """
+    # Initialize combined metadata
+    combined_meta = {
+        "action": "create_lease",
+        "provider": "aws",
+        "ttl_seconds": ttl_seconds,
     }
 
-    env_pubkey, _ = get_environment_keys(secret.environment.id)
+    lease_config = secret.config
 
-    encrypted_credentials = {
-        "access_key_id": encrypt_asymmetric(
-            access_key_result["access_key_id"], env_pubkey
-        ),
-        "secret_access_key": encrypt_asymmetric(
-            access_key_result["secret_access_key"], env_pubkey
-        ),
-        "username": encrypt_asymmetric(username, env_pubkey),
+    if not organisation_member and not service_account:
+        raise ValidationError("Must set either organisation_member or service_account")
+    if organisation_member and service_account:
+        raise ValidationError(
+            "Only one of organisation_member or service_account may be set"
+        )
+
+    iam_client, _ = get_iam_client(secret)
+    created_username = None  # Track if we created a user for cleanup
+
+    # Build config for user creation
+    user_config = {
+        "username_template": lease_config.get("username_template"),
+        "groups": lease_config.get("groups"),
+        "policy_arns": lease_config.get("policy_arns"),
+        "iam_user_path": lease_config.get("iam_path", "/"),
+        "permission_boundary_arn": lease_config.get("permission_boundary_arn"),
+        "ttl_seconds": ttl_seconds,
     }
 
-    lease = DynamicSecretLease.objects.create(
-        secret=secret,
-        name=lease_name,
-        organisation_member=organisation_member,
-        service_account=service_account,
-        ttl=timedelta(seconds=ttl_seconds),
-        expires_at=timezone.now() + timedelta(seconds=ttl_seconds),
-        credentials=encrypted_credentials,
-    )
+    try:
+        user_result, user_meta = create_temporary_user(user_config, iam_client)
+        combined_meta["user_creation"] = user_meta
+        username = user_result["username"]
+        created_username = username  # Mark that we created a user
 
-    # --- Schedule revocation ---
-    from ee.integrations.secrets.dynamic.utils import schedule_lease_revocation
+        # Create access key for the user
+        access_key_result, access_key_meta = create_access_key(username, iam_client)
+        combined_meta["access_key_creation"] = access_key_meta
 
-    schedule_lease_revocation(lease)
+        lease_data = {
+            "username": username,
+            "user_arn": user_result["arn"],
+            "access_key_id": access_key_result["access_key_id"],
+            "secret_access_key": access_key_result["secret_access_key"],
+            "creation_time": user_result["creation_time"],
+            "expiry_time": user_result["expiry_time"],
+            "ttl_seconds": user_config.get("ttl_seconds", 60),
+        }
 
-    return lease, lease_data
+        env_pubkey, _ = get_environment_keys(secret.environment.id)
+
+        encrypted_credentials = {
+            "access_key_id": encrypt_asymmetric(
+                access_key_result["access_key_id"], env_pubkey
+            ),
+            "secret_access_key": encrypt_asymmetric(
+                access_key_result["secret_access_key"], env_pubkey
+            ),
+            "username": encrypt_asymmetric(username, env_pubkey),
+        }
+
+        lease = DynamicSecretLease.objects.create(
+            secret=secret,
+            name=lease_name,
+            organisation_member=organisation_member,
+            service_account=service_account,
+            ttl=timedelta(seconds=ttl_seconds),
+            expires_at=timezone.now() + timedelta(seconds=ttl_seconds),
+            credentials=encrypted_credentials,
+        )
+        combined_meta["lease_id"] = str(lease.id)
+        combined_meta["outcome"] = "success"
+
+        # --- Schedule revocation ---
+        from ee.integrations.secrets.dynamic.utils import schedule_lease_revocation
+
+        schedule_lease_revocation(lease)
+        combined_meta["revocation_scheduled"] = True
+
+        return lease, lease_data, combined_meta
+
+    except Exception as e:
+        # If we created a user but something failed later, clean it up
+        if created_username:
+            logger.warning(
+                f"Lease creation failed after user creation, cleaning up user {created_username}"
+            )
+            combined_meta["cleanup_attempted"] = True
+            try:
+                cleanup_failed_user_creation(created_username, iam_client)
+                combined_meta["cleanup_successful"] = True
+                logger.info(
+                    f"Successfully cleaned up user {created_username} after failed lease creation"
+                )
+            except Exception as cleanup_error:
+                combined_meta["cleanup_error"] = str(cleanup_error)
+                logger.error(
+                    f"Failed to cleanup user {created_username}: {cleanup_error}"
+                )
+                # Don't suppress the original error
+
+        # Re-raise the original exception
+        raise
+
+
+def cleanup_failed_user_creation(username: str, iam_client):
+    """
+    Clean up a partially created IAM user by removing all attached resources.
+    This is called when lease creation fails after user creation.
+    """
+    try:
+        # Delete all access keys
+        try:
+            access_keys = iam_client.list_access_keys(UserName=username)
+            for key in access_keys["AccessKeyMetadata"]:
+                iam_client.delete_access_key(
+                    UserName=username, AccessKeyId=key["AccessKeyId"]
+                )
+                logger.info(
+                    f"Cleaned up access key {key['AccessKeyId']} for user {username}"
+                )
+        except ClientError:
+            pass  # User might not have access keys yet
+
+        # Detach all managed policies
+        try:
+            attached_policies = iam_client.list_attached_user_policies(
+                UserName=username
+            )
+            for policy in attached_policies["AttachedPolicies"]:
+                iam_client.detach_user_policy(
+                    UserName=username, PolicyArn=policy["PolicyArn"]
+                )
+                logger.info(
+                    f"Cleaned up attached policy {policy['PolicyArn']} for user {username}"
+                )
+        except ClientError:
+            pass
+
+        # Delete all inline policies
+        try:
+            inline_policies = iam_client.list_user_policies(UserName=username)
+            for policy_name in inline_policies["PolicyNames"]:
+                iam_client.delete_user_policy(UserName=username, PolicyName=policy_name)
+                logger.info(
+                    f"Cleaned up inline policy {policy_name} for user {username}"
+                )
+        except ClientError:
+            pass
+
+        # Remove user from all groups
+        try:
+            groups_resp = iam_client.list_groups_for_user(UserName=username)
+            for group in groups_resp["Groups"]:
+                iam_client.remove_user_from_group(
+                    UserName=username, GroupName=group["GroupName"]
+                )
+                logger.info(
+                    f"Cleaned up group membership {group['GroupName']} for user {username}"
+                )
+        except ClientError:
+            pass
+
+        # Finally, delete the user
+        iam_client.delete_user(UserName=username)
+        logger.info(f"Cleaned up IAM user {username}")
+
+    except iam_client.exceptions.NoSuchEntityException:
+        logger.info(f"User {username} already deleted during cleanup")
+    except ClientError as e:
+        logger.error(f"Error during cleanup of user {username}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during cleanup of user {username}: {e}")
+        raise
 
 
 def revoke_aws_dynamic_secret_lease(
