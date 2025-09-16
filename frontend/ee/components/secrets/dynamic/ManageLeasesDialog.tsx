@@ -24,7 +24,6 @@ export const ManageLeasesDialog = ({ secret }: { secret: DynamicSecretType }) =>
   const handleClose = () => setIsOpen(false)
 
   const [fetchLeases, { data, refetch, loading }] = useLazyQuery(GetDynamicSecretLeases, {
-    //variables: { secretId: secret.id, orgId: organisation?.id },
     notifyOnNetworkStatusChange: true,
   })
 
