@@ -64,9 +64,15 @@ export const RevokeLeaseDialog = ({
           <div className="text-zinc-900 dark:text-zinc-100 text-sm">
             <p>Are you sure you want to revoke this lease?</p>
             <p>
-              This lease was created {relativeTimeFromDates(new Date(lease.createdAt))} and expires{' '}
-              {relativeTimeFromDates(new Date(lease.expiresAt))}{' '}
-              <span className="font-mono">({lease.expiresAt})</span>.
+              This lease was created{' '}
+              <span title={lease.createdAt}>
+                {relativeTimeFromDates(new Date(lease.createdAt))}
+              </span>{' '}
+              and expires{' '}
+              <span title={lease.expiresAt}>
+                {relativeTimeFromDates(new Date(lease.expiresAt))}
+              </span>
+              .
             </p>
           </div>
         </div>

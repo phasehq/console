@@ -100,18 +100,17 @@ export const CreateLeaseDialog = ({ secret }: { secret: DynamicSecretType }) => 
               Copy these values. You will not be able to view them once this dialog is closed!
             </Alert>
 
-            <AWSCredentials lease={lease} keyMap={(secret?.keyMap as KeyMap[]) || []} />
+            <Alert variant="info" size="sm" icon={true}>
+              <p>
+                This lease expires{' '}
+                <span title={lease.expiresAt}>
+                  {relativeTimeFromDates(new Date(lease.expiresAt))}
+                </span>
+                .
+              </p>
+            </Alert>
 
-            <div>
-              <div
-                className="flex items-center gap-2 text-neutral-500 text-sm"
-                title={lease.expiresAt}
-              >
-                <FaInfoCircle /> This lease expires{' '}
-                {relativeTimeFromDates(new Date(lease.expiresAt))}
-              </div>
-              <div className="font-mono text-sm text-neutral-500">({lease.expiresAt})</div>
-            </div>
+            <AWSCredentials lease={lease} keyMap={(secret?.keyMap as KeyMap[]) || []} />
           </div>
         ) : (
           <div className="space-y-2">

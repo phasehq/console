@@ -113,9 +113,15 @@ export const RenewLeaseDialog = ({
           <div className="py-4 space-y-4">
             <div className="text-zinc-900 dark:text-zinc-100 space-y-2 text-sm">
               <p>
-                This lease was created {relativeTimeFromDates(new Date(lease.createdAt))} and
-                expires {relativeTimeFromDates(new Date(lease.expiresAt))}{' '}
-                <span className="font-mono">({lease.expiresAt})</span>.
+                This lease was created{' '}
+                <span title={lease.createdAt}>
+                  {relativeTimeFromDates(new Date(lease.createdAt))}
+                </span>{' '}
+                and expires{' '}
+                <span title={lease.expiresAt}>
+                  {relativeTimeFromDates(new Date(lease.expiresAt))}
+                </span>
+                .
               </p>
 
               {renewalCount > 0 && (
@@ -149,7 +155,9 @@ export const RenewLeaseDialog = ({
             </div>
             {remainingRenewalTime > 0 ? (
               <div>
-                <p>Select a duration to extend this lease for:</p>
+                <p className="text-sm text-zinc-900 dark:text-zinc-100">
+                  Select a duration to extend this lease for:
+                </p>
                 <div className="flex items-end gap-4 justify-between">
                   <div className="relative w-full">
                     <span className="absolute left-2 bottom-3 text-zinc-900 dark:text-zinc-100">
