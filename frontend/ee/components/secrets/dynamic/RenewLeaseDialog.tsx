@@ -146,46 +146,55 @@ export const RenewLeaseDialog = ({
                   </span>
                 </div>
               </div>
-
-              <p>Select a duration to extend this lease for:</p>
             </div>
-            <div className="flex items-end gap-4 justify-between">
-              <div className="relative w-full">
-                <span className="absolute left-2 bottom-3 text-zinc-900 dark:text-zinc-100">+</span>
-                <Input
-                  value={ttl}
-                  setValue={setTtl}
-                  type="number"
-                  label="TTL (seconds)"
-                  min={MINIMUM_LEASE_TTL}
-                  max={remainingRenewalTime}
-                  required
-                  className="pl-6"
-                />
-              </div>
+            {remainingRenewalTime > 0 ? (
+              <div>
+                <p>Select a duration to extend this lease for:</p>
+                <div className="flex items-end gap-4 justify-between">
+                  <div className="relative w-full">
+                    <span className="absolute left-2 bottom-3 text-zinc-900 dark:text-zinc-100">
+                      +
+                    </span>
+                    <Input
+                      value={ttl}
+                      setValue={setTtl}
+                      type="number"
+                      label="TTL (seconds)"
+                      min={MINIMUM_LEASE_TTL}
+                      max={remainingRenewalTime}
+                      required
+                      className="pl-6"
+                    />
+                  </div>
 
-              <div className="flex items-center gap-2 py-1">
-                {ttlButtons.map((button) => (
-                  <Button
-                    variant={ttl === button.seconds ? 'secondary' : 'ghost'}
-                    key={button.label}
-                    onClick={() => setTtl(button.seconds)}
-                    disabled={parseInt(button.seconds) > remainingRenewalTime}
-                  >
-                    +{button.label}
-                  </Button>
-                ))}
-                {remainingRenewalTime > 0 && (
-                  <Button
-                    variant={ttl === remainingRenewalTime.toString() ? 'secondary' : 'ghost'}
-                    onClick={() => setTtl(remainingRenewalTime.toString())}
-                    title={`Extend to maximum remaining time (${remainingRenewalTime}s)`}
-                  >
-                    Max
-                  </Button>
-                )}
+                  <div className="flex items-center gap-2 py-1">
+                    {ttlButtons.map((button) => (
+                      <Button
+                        variant={ttl === button.seconds ? 'secondary' : 'ghost'}
+                        key={button.label}
+                        onClick={() => setTtl(button.seconds)}
+                        disabled={parseInt(button.seconds) > remainingRenewalTime}
+                      >
+                        +{button.label}
+                      </Button>
+                    ))}
+                    {remainingRenewalTime > 0 && (
+                      <Button
+                        variant={ttl === remainingRenewalTime.toString() ? 'secondary' : 'ghost'}
+                        onClick={() => setTtl(remainingRenewalTime.toString())}
+                        title={`Extend to maximum remaining time (${remainingRenewalTime}s)`}
+                      >
+                        Max
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-zinc-900 dark:text-zinc-100 text-sm">
+                This lease cannot be renewed any further.
+              </div>
+            )}
           </div>
         )}
 

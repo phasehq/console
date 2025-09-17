@@ -307,7 +307,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
                   <FaArrowRightLong className="text-neutral-500" />
                   <div className="flex-1">
                     <Input
-                      className="font-mono"
+                      className="font-mono ph-no-capture"
                       placeholder="Enter secret name"
                       value={key.keyName ?? ''}
                       setValue={(val) =>

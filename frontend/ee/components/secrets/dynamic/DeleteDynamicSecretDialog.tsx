@@ -17,6 +17,8 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
 import { relativeTimeFromDates } from '@/utils/time'
+import { ToggleSwitch } from '@/components/common/ToggleSwitch'
+import clsx from 'clsx'
 
 const ActiveLeaseCard = ({ lease }: { lease: DynamicSecretLeaseType }) => {
   return (
@@ -122,14 +124,14 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
       onClose={handleClose}
     >
       <div className="space-y-6">
-        <p className="text-neutral-500 py-4">
+        <p className="text-neutral-500 pt-4">
           Are you sure you want to delete this dynamic secret? This will delete the following
           secrets from your environment:
-          <ul>
+          <ul className="pt-2">
             {keyMap.map((k: KeyMap) => (
               <li
                 key={k.keyName}
-                className="list-disc list-inside font-mono text-red-400 line-through"
+                className="list-disc list-inside font-mono text-red-400 line-through ph-no-capture"
               >
                 {k.keyName?.toUpperCase()}
               </li>
@@ -154,31 +156,36 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
                 </div>
               )}
             </p>
-            <div className="flex items-center justify-end gap-2 text-red-400">
-              <input
-                type="checkbox"
-                className="cursor-pointer"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />
-              <div className=" text-sm">Revoke all active leases.</div>
-            </div>
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-end justify-between gap-4">
           <Button variant="secondary" type="button" onClick={closeModal}>
             Cancel
           </Button>
-          <Button
-            variant="danger"
-            disabled={!allowDelete}
-            onClick={handleDelete}
-            isLoading={deleteIsPending}
-            icon={FaTrashAlt}
-          >
-            Delete Dynamic Secret
-          </Button>
+          <div className="flex flex-col items-end gap-4">
+            {activeLeases.length > 0 && (
+              <div className="flex items-center justify-end gap-2 text-red-400">
+                <ToggleSwitch
+                  value={confirmed}
+                  onToggle={() => setConfirmed(!confirmed)}
+                  theme="red"
+                />
+                <div className={clsx('text-sm', confirmed ? '' : 'opacity-60')}>
+                  Revoke all active leases
+                </div>
+              </div>
+            )}
+            <Button
+              variant="danger"
+              disabled={!allowDelete}
+              onClick={handleDelete}
+              isLoading={deleteIsPending}
+              icon={FaTrashAlt}
+            >
+              Delete Dynamic Secret
+            </Button>
+          </div>
         </div>
       </div>
     </GenericDialog>

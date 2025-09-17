@@ -172,7 +172,7 @@ export const LeaseEventTimeline: React.FC<LeaseTimelineProps> = ({ lease, classN
                     </div>
 
                     {/* Metadata and request info */}
-                    <div className="pl-3 space-y-1 ">
+                    <div className="pl-3 space-y-1 ph-no-capture">
                       {(evt.ipAddress || evt.userAgent) && (
                         <div className="space-y-1">
                           {evt.ipAddress && <MetaRow k="IP" v={evt.ipAddress} />}

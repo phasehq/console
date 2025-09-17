@@ -61,7 +61,7 @@ export const RevokeLeaseDialog = ({
         <div className="text-neutral-500">Revoke the lease for these dynamic secrets</div>
 
         <div className="py-4 space-y-2">
-          <div className="text-zinc-900 dark:text-zinc-100">
+          <div className="text-zinc-900 dark:text-zinc-100 text-sm">
             <p>Are you sure you want to revoke this lease?</p>
             <p>
               This lease was created {relativeTimeFromDates(new Date(lease.createdAt))} and expires{' '}
