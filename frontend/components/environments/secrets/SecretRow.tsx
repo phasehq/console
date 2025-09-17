@@ -162,7 +162,7 @@ export default function SecretRow(props: {
       <div
         className={clsx(
           'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
-          'bg-zinc-200 group-hover:dark:bg-zinc-700',
+          'bg-zinc-200 dark:bg-zinc-700',
           'z-10 group-hover:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 opacity-0 group-hover:opacity-100',
           'transition ease'
         )}
@@ -228,7 +228,7 @@ export default function SecretRow(props: {
             onClick={toggleReveal}
             title={isRevealed ? 'Mask value' : 'Reveal value'}
           >
-            <span className="2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+            <span className="py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
             <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
           </Button>
         )}
