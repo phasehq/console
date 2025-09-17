@@ -1,4 +1,8 @@
-import { DynamicSecretLeaseType, DynamicSecretType } from '@/apollo/graphql'
+import {
+  ApiDynamicSecretLeaseEventEventTypeChoices,
+  DynamicSecretLeaseType,
+  DynamicSecretType,
+} from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
@@ -11,6 +15,7 @@ import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Input } from '@/components/common/Input'
+import ProgressBar from '@/components/common/ProgressBar'
 
 export const RenewLeaseDialog = ({
   secret,
@@ -24,8 +29,17 @@ export const RenewLeaseDialog = ({
   const [ttl, setTtl] = useState(secret.defaultTtlSeconds!.toString())
   const [renewedLease, setRenewedLease] = useState<DynamicSecretLeaseType | null>(null)
 
-  const ttlButtons = leaseTtlButtons.filter((button) =>
-    secret.maxTtlSeconds ? parseInt(button.seconds) <= secret.maxTtlSeconds : button
+  // Calculate renewal statistics
+  const renewalCount =
+    lease.events?.filter(
+      (event) => event?.eventType === ApiDynamicSecretLeaseEventEventTypeChoices.Renewed
+    ).length || 0
+  const currentTtlSeconds = lease.ttl // This is the total TTL (initial + all renewals)
+  const maxTtlSeconds = secret.maxTtlSeconds!
+  const remainingRenewalTime = Math.max(0, maxTtlSeconds - currentTtlSeconds)
+
+  const ttlButtons = leaseTtlButtons.filter(
+    (button) => parseInt(button.seconds) <= remainingRenewalTime
   )
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
@@ -40,8 +54,8 @@ export const RenewLeaseDialog = ({
   }
 
   const handleRenewLease = async () => {
-    if (parseInt(ttl) > secret.maxTtlSeconds!) {
-      toast.error(`The maximum allowed TTL for this secret is ${secret.maxTtlSeconds}`)
+    if (parseInt(ttl) > remainingRenewalTime) {
+      toast.error(`The maximum remaining renewal time is ${remainingRenewalTime} seconds`)
       return
     }
 
@@ -96,26 +110,59 @@ export const RenewLeaseDialog = ({
             </div>
           </div>
         ) : (
-          <div className="py-4 space-y-2">
-            <div className="text-zinc-900 dark:text-zinc-100">
+          <div className="py-4 space-y-4">
+            <div className="text-zinc-900 dark:text-zinc-100 space-y-2 text-sm">
               <p>
                 This lease was created {relativeTimeFromDates(new Date(lease.createdAt))} and
                 expires {relativeTimeFromDates(new Date(lease.expiresAt))}{' '}
                 <span className="font-mono">({lease.expiresAt})</span>.
               </p>
 
-              <p>Select a TTL to renew this lease.</p>
+              {renewalCount > 0 && (
+                <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                  This lease has been renewed <strong>{renewalCount}</strong> time
+                  {renewalCount !== 1 ? 's' : ''}.
+                </p>
+              )}
+
+              <div className="rounded-md py-2 text-sm">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    Total lease time used:
+                  </span>
+                  <span className="font-mono">
+                    {currentTtlSeconds}s / {maxTtlSeconds}s
+                  </span>
+                </div>
+                <ProgressBar
+                  percentage={(currentTtlSeconds / maxTtlSeconds) * 100}
+                  color="bg-emerald-500"
+                  size="sm"
+                />
+
+                <div className="flex justify-between items-center mt-2 text-xs text-neutral-500">
+                  <span>
+                    Maximum remaining renewal time: <strong>{remainingRenewalTime}s</strong>
+                  </span>
+                </div>
+              </div>
+
+              <p>Select a duration to extend this lease for:</p>
             </div>
             <div className="flex items-end gap-4 justify-between">
-              <Input
-                value={ttl}
-                setValue={setTtl}
-                type="number"
-                label="TTL (seconds)"
-                min={MINIMUM_LEASE_TTL}
-                max={secret.maxTtlSeconds!}
-                required
-              />
+              <div className="relative w-full">
+                <span className="absolute left-2 bottom-3 text-zinc-900 dark:text-zinc-100">+</span>
+                <Input
+                  value={ttl}
+                  setValue={setTtl}
+                  type="number"
+                  label="TTL (seconds)"
+                  min={MINIMUM_LEASE_TTL}
+                  max={remainingRenewalTime}
+                  required
+                  className="pl-6"
+                />
+              </div>
 
               <div className="flex items-center gap-2 py-1">
                 {ttlButtons.map((button) => (
@@ -123,10 +170,20 @@ export const RenewLeaseDialog = ({
                     variant={ttl === button.seconds ? 'secondary' : 'ghost'}
                     key={button.label}
                     onClick={() => setTtl(button.seconds)}
+                    disabled={parseInt(button.seconds) > remainingRenewalTime}
                   >
-                    {button.label}
+                    +{button.label}
                   </Button>
                 ))}
+                {remainingRenewalTime > 0 && (
+                  <Button
+                    variant={ttl === remainingRenewalTime.toString() ? 'secondary' : 'ghost'}
+                    onClick={() => setTtl(remainingRenewalTime.toString())}
+                    title={`Extend to maximum remaining time (${remainingRenewalTime}s)`}
+                  >
+                    Max
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -143,6 +200,7 @@ export const RenewLeaseDialog = ({
               icon={FiRefreshCw}
               onClick={handleRenewLease}
               isLoading={renewIsPending}
+              disabled={remainingRenewalTime <= 0}
             >
               {' '}
               Renew Lease

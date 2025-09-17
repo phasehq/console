@@ -246,6 +246,18 @@ def renew_dynamic_secret_lease(
     if not org.plan == Organisation.ENTERPRISE_PLAN:
         raise Exception("Dynamic secrets are only available on the Enterprise plan.")
 
+    # Check if adding this renewal would exceed max TTL
+    current_ttl_seconds = lease.ttl.total_seconds()
+    new_total_ttl = current_ttl_seconds + ttl
+    max_ttl_seconds = lease.secret.max_ttl.total_seconds()
+
+    if new_total_ttl > max_ttl_seconds:
+        remaining_seconds = max_ttl_seconds - current_ttl_seconds
+        raise Exception(
+            f"The renewal TTL would exceed the maximum TTL for this dynamic secret. "
+            f"Maximum remaining renewal time: {int(remaining_seconds)} seconds"
+        )
+
     if timedelta(seconds=ttl) > lease.secret.max_ttl:
         raise Exception(
             "The specified TTL exceeds the maximum TTL for this dynamic secret."
@@ -255,7 +267,9 @@ def renew_dynamic_secret_lease(
         raise Exception("This lease has expired and cannot be renewed")
 
     else:
-        lease.expires_at = timezone.now() + timedelta(seconds=ttl)
+        lease.expires_at = lease.expires_at + timedelta(seconds=ttl)
+        # Add the renewal TTL to the existing lease TTL
+        lease.ttl = lease.ttl + timedelta(seconds=ttl)
         lease.updated_at = timezone.now()
 
     # --- reschedule cleanup job ---

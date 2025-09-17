@@ -101,18 +101,39 @@ class DynamicSecretLeaseEventType(DjangoObjectType):
         model = DynamicSecretLeaseEvent
         fields = "__all__"
 
+    def resolve_ttl(self, info):
+        return int(self.ttl.total_seconds()) if self.ttl else None
+
 
 class DynamicSecretLeaseType(DjangoObjectType):
-
     credentials = graphene.Field(LeaseCredentialsUnion)
     events = graphene.List(DynamicSecretLeaseEventType)
+    ttl = graphene.Int()  # Add this to convert timedelta to seconds
 
     class Meta:
         model = DynamicSecretLease
-        fields = "__all__"
+        fields = (
+            "id",
+            "secret",
+            "name",
+            "organisation_member",
+            "service_account",
+            "ttl",
+            "status",
+            "expires_at",
+            "credentials",
+            "events",
+            "created_at",
+            "updated_at",
+            "revoked_at",
+            "deleted_at",
+        )
 
     def resolve_credentials(self, info):
         return getattr(self, "_credentials", None)
 
     def resolve_events(self, info):
         return self.events.all().order_by("created_at")
+
+    def resolve_ttl(self, info):
+        return int(self.ttl.total_seconds()) if self.ttl else None
