@@ -6,7 +6,7 @@ import {
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
-import { relativeTimeFromDates } from '@/utils/time'
+import { relativeTimeFromDates, humanReadableDuration } from '@/utils/time'
 import { useContext, useRef, useState } from 'react'
 import { FiRefreshCw } from 'react-icons/fi'
 import { RenewDynamicSecretLeaseOP } from '@/graphql/mutations/environments/secrets/dynamic/renewLease.gql'
@@ -136,8 +136,9 @@ export const RenewLeaseDialog = ({
                   <span className="text-neutral-600 dark:text-neutral-400">
                     Total lease time used:
                   </span>
-                  <span className="font-mono">
-                    {currentTtlSeconds}s / {maxTtlSeconds}s
+                  <span className="font-mono" title={`${currentTtlSeconds}s / ${maxTtlSeconds}s`}>
+                    {humanReadableDuration(currentTtlSeconds)} /{' '}
+                    {humanReadableDuration(maxTtlSeconds)}
                   </span>
                 </div>
                 <ProgressBar
@@ -148,7 +149,10 @@ export const RenewLeaseDialog = ({
 
                 <div className="flex justify-between items-center mt-2 text-xs text-neutral-500">
                   <span>
-                    Maximum remaining renewal time: <strong>{remainingRenewalTime}s</strong>
+                    Maximum remaining renewal time:{' '}
+                    <strong title={`${remainingRenewalTime}s`}>
+                      {humanReadableDuration(remainingRenewalTime)}
+                    </strong>
                   </span>
                 </div>
               </div>
