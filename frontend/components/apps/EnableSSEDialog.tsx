@@ -161,6 +161,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
                       </p>
                       <ul className="text-neutral-500 list-disc list-inside">
                         <li>Set up automatic syncing of secrets via third-party integrations</li>
+                        <li>Create and manage dynamic secrets</li>
                         <li>Access and update secrets over the API</li>
                       </ul>
 
