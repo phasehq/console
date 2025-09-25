@@ -386,9 +386,16 @@ def get_iam_client(secret: DynamicSecret) -> tuple[boto3.client, dict]:
     if has_role_arn:
         integration_credentials = get_aws_assume_role_credentials(secret.authentication)
         role_arn = integration_credentials.get("role_arn")
-        assumed_role = sts_client.assume_role(
-            RoleArn=role_arn, RoleSessionName="phase-dynamic-secret-session"
-        )
+        external_id = integration_credentials.get("external_id")
+
+        assume_params = {
+            "RoleArn": role_arn,
+            "RoleSessionName": "phase-dynamic-secret-session",
+        }
+        if external_id:
+            assume_params["ExternalId"] = external_id
+
+        assumed_role = sts_client.assume_role(**assume_params)
         aws_credentials = assumed_role["Credentials"]
     else:
         integration_credentials = get_aws_access_key_credentials(secret.authentication)
