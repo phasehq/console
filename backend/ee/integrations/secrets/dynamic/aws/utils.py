@@ -359,12 +359,17 @@ def get_sts_client(region="us-east-1"):
     aws_access_key_id = get_secret("AWS_INTEGRATION_ACCESS_KEY_ID")
     aws_secret_access_key = get_secret("AWS_INTEGRATION_SECRET_ACCESS_KEY")
 
-    sts_client = boto3.client(
-        "sts",
-        region_name=region,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-    )
+    # If explicit integration credentials are passed, use them.
+    # Otherwise, rely on the instance/machine role auth provider chain.
+    if aws_access_key_id and aws_secret_access_key:
+        sts_client = boto3.client(
+            "sts",
+            region_name=region,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+        )
+    else:
+        sts_client = boto3.client("sts", region_name=region)
 
     return sts_client
 
