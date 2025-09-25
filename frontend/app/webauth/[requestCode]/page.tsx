@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { HeroPattern } from '@/components/common/HeroPattern'
@@ -325,7 +326,8 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
               CLI Authentication failed
             </h1>
             <p className="text-neutral-500 text-base">
-              CLI authentication could not be completed from this page. Please follow these steps to retry the authentication:
+              CLI authentication could not be completed from this page. Please follow these steps to
+              retry the authentication:
             </p>
           </div>
 
@@ -336,7 +338,8 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   1
                 </span>
                 <p className="text-black dark:text-white">
-                  Exit out of the CLI by pressing <code className="font-mono font-bold">Ctrl+C</code>
+                  Exit out of the CLI by pressing{' '}
+                  <code className="font-mono font-bold">Ctrl+C</code>
                 </p>
               </div>
             </div>
@@ -346,7 +349,10 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
                   2
                 </span>
-                <p className="text-black dark:text-white">Retry authentication manually via the <code className="font-mono font-bold">token</code> mode:</p>
+                <p className="text-black dark:text-white">
+                  Retry authentication manually via the{' '}
+                  <code className="font-mono font-bold">token</code> mode:
+                </p>
               </div>
               <CliCommand command="auth --mode token" />
               <div className="pl-8 text-neutral-500 text-sm space-y-2">
@@ -356,7 +362,13 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                       Choose your Phase instance type as: <b>☁️ Phase Cloud</b>
                     </li>
                     <li>
-                      Enter your email address: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
+                      Enter your email address:{' '}
+                      <code
+                        className="text-emerald-500 cursor-pointer font-mono"
+                        onClick={() => handleCopy(session?.user?.email || '')}
+                      >
+                        {session?.user?.email}
+                      </code>
                     </li>
                   </ul>
                 ) : (
@@ -365,10 +377,22 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                       Choose your Phase instance type as: <b>🛠️ Self Hosted</b>
                     </li>
                     <li>
-                      Enter the host: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(getHostname() || '')}>{getHostname()}</code>
+                      Enter the host:{' '}
+                      <code
+                        className="text-emerald-500 cursor-pointer font-mono"
+                        onClick={() => handleCopy(getHostname() || '')}
+                      >
+                        {getHostname()}
+                      </code>
                     </li>
                     <li>
-                      Enter your email address: <code className="text-emerald-500 cursor-pointer font-mono" onClick={() => handleCopy(session?.user?.email || '')}>{session?.user?.email}</code>
+                      Enter your email address:{' '}
+                      <code
+                        className="text-emerald-500 cursor-pointer font-mono"
+                        onClick={() => handleCopy(session?.user?.email || '')}
+                      >
+                        {session?.user?.email}
+                      </code>
                     </li>
                   </ul>
                 )}
@@ -384,20 +408,16 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                 </p>
               </div>
               <div className="ph-no-capture">
-                <CliCommand
-                  command={userToken}
-                  prefix=""
-                  wrap={true}
-                />
+                <CliCommand command={userToken} prefix="" wrap={true} />
               </div>
             </div>
           </div>
 
           <div className="space-y-4 pt-16">
             <div className="text-center">
-              <a 
-                href="https://docs.phase.dev/cli/commands#auth" 
-                target="_blank" 
+              <a
+                href="https://docs.phase.dev/cli/commands#auth"
+                target="_blank"
                 rel="noreferrer"
                 className="text-sm text-emerald-500 hover:text-emerald-400 transition ease"
               >
