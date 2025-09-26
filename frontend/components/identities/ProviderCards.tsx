@@ -52,12 +52,12 @@ export const ProviderCards = ({ onProviderSelect }: ProviderCardsProps) => {
   const providers: IdentityProvider[] = data?.identityProviders ?? []
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8 max-w-screen-lg">
+    <>
       {providers.map((provider) => (
         <div key={provider.id}>
           <ProviderCard provider={provider} onClick={() => onProviderSelect(provider.id)} />
         </div>
       ))}
-    </div>
+    </>
   )
 }

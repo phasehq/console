@@ -1,37 +1,24 @@
 'use client'
 
-import { useContext, useState } from 'react'
+import { useContext, useState, useRef, useEffect } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
-import { useMutation, useQuery } from '@apollo/client'
+import { useQuery } from '@apollo/client'
 import GetOrganisationIdentities from '@/graphql/queries/identities/getOrganisationIdentities.gql'
-import DeleteIdentity from '@/graphql/mutations/identities/deleteIdentity.gql'
 import { Button } from '@/components/common/Button'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
-import { FaPlus, FaTrashAlt, FaEdit, FaBan } from 'react-icons/fa'
+import { FaPlus, FaEdit, FaBan } from 'react-icons/fa'
 import { EmptyState } from '@/components/common/EmptyState'
-import { toast } from 'react-toastify'
-import { IdentityProviderSelector } from '@/components/identities/IdentityProviderSelector'
-import { AwsIamIdentityDialog } from '@/components/identities/providers/aws/iam'
+import { AddNewIdentityDialog } from '@/components/identities/AddNewIdentityDialog'
+
 import { ProviderCards } from '@/components/identities/ProviderCards'
 import GetIdentityProviders from '@/graphql/queries/identities/getIdentityProviders.gql'
-
-type AwsIamConfig = {
-  trustedPrincipals: string[]
-  signatureTtlSeconds: number
-  stsEndpoint: string
-}
-
-type Identity = {
-  id: string
-  provider: string
-  name: string
-  description?: string | null
-  config: AwsIamConfig
-  tokenNamePattern?: string | null
-  defaultTtlSeconds: number
-  maxTtlSeconds: number
-}
+import { AwsIamIdentityForm } from '@/components/identities/providers/aws/iam'
+import GenericDialog from '@/components/common/GenericDialog'
+import { TbLockShare } from 'react-icons/tb'
+import { DeleteExternalIdentityDialog } from '@/components/identities/providers/DeleteExternalIdentityDialog'
+import { IdentityType } from '@/apollo/graphql'
+import { EditExternalIdentityDialog } from '@/components/identities/providers/EditExternalIdentityDialog'
 
 export default function IdentityPage() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -46,9 +33,6 @@ export default function IdentityPage() {
   const canUpdateIdentities = organisation
     ? userHasPermission(organisation.role!.permissions, 'Identities', 'update')
     : false
-  const canDeleteIdentities = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Identities', 'delete')
-    : false
 
   const { data, refetch } = useQuery(GetOrganisationIdentities, {
     variables: { organisationId: organisation?.id },
@@ -58,14 +42,24 @@ export default function IdentityPage() {
 
   const { data: providersData } = useQuery(GetIdentityProviders)
 
-  const [deleteIdentity, { loading: deleting }] = useMutation(DeleteIdentity)
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
 
-  const [providerSelectorOpen, setProviderSelectorOpen] = useState(false)
+  const awsEditDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const createDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const [awsEditDialogOpen, setAwsEditDialogOpen] = useState(false)
-  const [editingIdentity, setEditingIdentity] = useState<Identity | null>(null)
+  const [editingIdentity, setEditingIdentity] = useState<IdentityType | null>(null)
 
-  const identities: Identity[] = data?.identities ?? []
+  const identities: IdentityType[] = data?.identities ?? []
   const identityProviders = providersData?.identityProviders ?? []
+
+  const openCreateIdentityDialog = () => createDialogRef.current?.openModal()
+
+  // Effect to open dialog when awsEditDialogOpen changes
+  useEffect(() => {
+    if (awsEditDialogOpen && awsEditDialogRef.current) {
+      awsEditDialogRef.current.openModal()
+    }
+  }, [awsEditDialogOpen])
 
   // Helper function to get provider info by ID
   const getProviderInfo = (providerId: string) => {
@@ -73,26 +67,13 @@ export default function IdentityPage() {
     return provider || { name: providerId, iconId: 'unknown' }
   }
 
-  const handleCreateIdentity = () => {
-    if (!canCreateIdentities) return
-    // If no identities exist, direct provider selection isn't needed as cards are visible
-    // If identities exist, show provider selector modal
-    if (identities.length > 0) {
-      setProviderSelectorOpen(true)
-    }
-  }
-
   const handleProviderSelect = (providerId: string) => {
     setEditingIdentity(null) // Ensure we're creating, not editing
-    if (providerId === 'aws_iam') {
-      setAwsEditDialogOpen(true)
-    }
-    // Future providers can be handled here
-    // Close provider selector if it was open
-    setProviderSelectorOpen(false)
+    setSelectedProvider(providerId)
+    openCreateIdentityDialog()
   }
 
-  const handleEditIdentity = (identity: Identity) => {
+  const handleEditIdentity = (identity: IdentityType) => {
     if (!canUpdateIdentities) return
     setEditingIdentity(identity)
     if (identity.provider === 'aws_iam') {
@@ -101,31 +82,14 @@ export default function IdentityPage() {
   }
 
   const handleProviderSelectorSuccess = () => {
-    setProviderSelectorOpen(false)
     refetch()
   }
 
   const handleAwsEditSuccess = () => {
     setAwsEditDialogOpen(false)
     setEditingIdentity(null)
+    awsEditDialogRef.current?.closeModal()
     refetch()
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!canDeleteIdentities) return
-    const ok = window.confirm('Delete this identity? This cannot be undone.')
-    if (!ok) return
-    try {
-      await deleteIdentity({
-        variables: { id },
-        refetchQueries: [
-          { query: GetOrganisationIdentities, variables: { organisationId: organisation?.id } },
-        ],
-      })
-      toast.success('Identity deleted')
-    } catch (e) {
-      toast.error('Failed to delete identity')
-    }
   }
 
   // Early return if no read permission
@@ -159,7 +123,9 @@ export default function IdentityPage() {
             </div>
           </div>
           {canCreateIdentities ? (
-            <ProviderCards onProviderSelect={handleProviderSelect} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8">
+              <ProviderCards onProviderSelect={handleProviderSelect} />
+            </div>
           ) : (
             <EmptyState
               title="Access restricted"
@@ -183,8 +149,8 @@ export default function IdentityPage() {
           <div className="space-y-4">
             {canCreateIdentities && (
               <div className="flex justify-end">
-                <Button variant="primary" onClick={handleCreateIdentity}>
-                  <FaPlus /> Add identity
+                <Button onClick={openCreateIdentityDialog}>
+                  <FaPlus /> Add Identity Provider
                 </Button>
               </div>
             )}
@@ -204,7 +170,7 @@ export default function IdentityPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-500/20">
-                  {identities.map((idn: Identity) => {
+                  {identities.map((idn: IdentityType) => {
                     const providerInfo = getProviderInfo(idn.provider)
                     return (
                       <tr key={idn.id} className="group">
@@ -214,35 +180,16 @@ export default function IdentityPage() {
                           </div>
                           {providerInfo.name}
                         </td>
-                        <td className="px-6 py-4">
-                          <button
-                            className="text-left font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
-                            onClick={() => handleEditIdentity(idn)}
-                          >
-                            {idn.name}
-                          </button>
+                        <td className="px-6 py-4 text-zinc-900 dark:text-zinc-100 font-medium">
+                          {idn.name}
                         </td>
                         <td className="px-6 py-4 text-neutral-500 max-w-xl truncate">
                           {idn.description}
                         </td>
                         <td className="px-6 py-4 flex items-center justify-end gap-2">
                           <div className="opacity-0 group-hover:opacity-100 transition ease flex gap-2">
-                            {canUpdateIdentities && (
-                              <Button variant="secondary" onClick={() => handleEditIdentity(idn)}>
-                                <FaEdit /> Edit identity
-                              </Button>
-                            )}
-                            {canDeleteIdentities && (
-                              <Button
-                                variant="danger"
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  void handleDelete(idn.id)
-                                }}
-                              >
-                                <FaTrashAlt /> Delete
-                              </Button>
-                            )}
+                            {canUpdateIdentities && <EditExternalIdentityDialog identity={idn} />}
+                            <DeleteExternalIdentityDialog identity={idn} />
                           </div>
                         </td>
                       </tr>
@@ -255,25 +202,29 @@ export default function IdentityPage() {
         </div>
       )}
 
-      {/* Identity Provider Selector */}
-      <IdentityProviderSelector
-        isOpen={providerSelectorOpen}
-        onClose={() => setProviderSelectorOpen(false)}
+      <AddNewIdentityDialog
+        ref={createDialogRef}
+        preSelectedProvider={selectedProvider}
         organisationId={organisation?.id || ''}
         onSuccess={handleProviderSelectorSuccess}
       />
 
       {/* AWS IAM Edit Dialog */}
-      <AwsIamIdentityDialog
-        isOpen={awsEditDialogOpen}
+      <GenericDialog
+        ref={awsEditDialogRef}
+        title="Edit AWS IAM Identity"
+        size="lg"
         onClose={() => {
           setAwsEditDialogOpen(false)
           setEditingIdentity(null)
         }}
-        organisationId={organisation?.id || ''}
-        identity={editingIdentity}
-        onSuccess={handleAwsEditSuccess}
-      />
+      >
+        <AwsIamIdentityForm
+          organisationId={organisation?.id || ''}
+          identity={editingIdentity}
+          onSuccess={handleAwsEditSuccess}
+        />
+      </GenericDialog>
     </section>
   )
 }
