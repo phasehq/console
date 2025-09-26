@@ -2,7 +2,7 @@
 
 import { ServiceAccountType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Dialog, Transition } from '@headlessui/react'
@@ -18,14 +18,18 @@ import UpdateServiceAccount from '@/graphql/mutations/service-accounts/updateSer
 import { TbLockShare } from 'react-icons/tb'
 import { FaSearch, FaTimesCircle, FaServer } from 'react-icons/fa'
 import clsx from 'clsx'
+import GenericDialog from '@/components/common/GenericDialog'
+import { MdSearchOff } from 'react-icons/md'
+import Link from 'next/link'
 
 export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  const [isOpen, setIsOpen] = useState(false)
   const { data } = useQuery(GetOrganisationIdentities, {
     variables: { organisationId: organisation?.id },
     skip: !organisation,
   })
+
+  const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const [updateAccount, { loading }] = useMutation(UpdateServiceAccount)
 
@@ -42,13 +46,8 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
     setSelected(s)
   }
 
-  const open = () => {
-    if (!account.serverSideKeyManagementEnabled) {
-      const dlg = document.getElementById('sa-kms-dialog')
-    }
-    setIsOpen(true)
-  }
-  const close = () => setIsOpen(false)
+  const openManageIdentitiesDialog = () => dialogRef.current?.openModal()
+  const closeManageIdentitiesDialog = () => dialogRef.current?.closeModal()
 
   // Filter identities based on search query
   const filteredIdentities = orgIdentities.filter(
@@ -69,7 +68,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
         { query: GetServiceAccountDetail, variables: { orgId: organisation?.id, id: account.id } },
       ],
     })
-    close()
+    closeManageIdentitiesDialog()
     toast.success('Updated identities for this account')
   }
 
@@ -106,8 +105,8 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
               Manage which external identities are trusted for this account
             </div>
             {(account as any).identities && (account as any).identities.length > 0 && (
-              <Button variant="primary" onClick={() => setIsOpen(true)}>
-                <TbLockShare /> Manage identities
+              <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
+                <TbLockShare /> Manage External Identities
               </Button>
             )}
           </div>
@@ -133,127 +132,131 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
             </div>
           ) : (
             <EmptyState
-              title="No identities"
-              subtitle="No identities are enabled for this account."
+              title="No External Identities"
+              subtitle="No external identities are enabled for this account."
               graphic={
                 <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                   <TbLockShare />
                 </div>
               }
             >
-              <Button variant="primary" onClick={() => setIsOpen(true)}>
-                <TbLockShare /> Manage identities
+              <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
+                <TbLockShare /> Manage External Identities
               </Button>
             </EmptyState>
           )}
         </div>
       </div>
 
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={close}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-          </Transition.Child>
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="w-full max-w-3xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title
-                    as="h3"
-                    className="text-lg font-medium leading-6 text-black dark:text-white "
-                  >
-                    Manage identities
-                  </Dialog.Title>
-                  <div className="py-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
-                        <div className="">
-                          <FaSearch className="text-neutral-500" />
+      <GenericDialog title="Manage external identities" ref={dialogRef}>
+        {orgIdentities.length > 0 ? (
+          <div>
+            <div className="text-neutral-500 text-sm pb-4">
+              Manage External Identities associated with this Service Account
+            </div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
+                <div className="">
+                  <FaSearch className="text-neutral-500" />
+                </div>
+                <input
+                  placeholder="Search external identities"
+                  className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <FaTimesCircle
+                  className={clsx(
+                    'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                    searchQuery ? 'opacity-100' : 'opacity-0'
+                  )}
+                  role="button"
+                  onClick={() => setSearchQuery('')}
+                />
+              </div>
+            </div>
+            <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+              <thead>
+                <tr>
+                  <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Provider
+                  </th>
+                  <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Identity
+                  </th>
+
+                  <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Enabled
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-500/20">
+                {filteredIdentities.map((idn: any) => (
+                  <tr key={idn.id} className="group text-zinc-900 dark:text-zinc-100">
+                    <td className="font-medium inline-flex items-center gap-1 break-word text-2xl">
+                      <ProviderIcon providerId="aws" />
+                    </td>
+                    <td className="px-6 py-2">
+                      <div className="space-y-0">
+                        <div className="font-medium text-sm leading-tight">{idn.name}</div>
+                        <div className="text-neutral-500 text-xs leading-tight">
+                          {idn.description}
                         </div>
-                        <input
-                          placeholder="Search identities"
-                          className="custom bg-zinc-100 dark:bg-zinc-800"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        <FaTimesCircle
-                          className={clsx(
-                            'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
-                            searchQuery ? 'opacity-100' : 'opacity-0'
-                          )}
-                          role="button"
-                          onClick={() => setSearchQuery('')}
-                        />
                       </div>
-                    </div>
-                    <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
-                      <thead>
-                        <tr>
-                          <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Provider
-                          </th>
-                          <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Name
-                          </th>
-                          <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Description
-                          </th>
-                          <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Enabled
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-500/20">
-                        {filteredIdentities.map((idn: any) => (
-                          <tr key={idn.id} className="group">
-                            <td className="text-zinc-900 dark:text-zinc-100 font-medium inline-flex items-center gap-1 break-word">
-                              <div className="text-xl">
-                                <ProviderIcon providerId="aws" />
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">{idn.name}</td>
-                            <td className="px-6 py-4 text-neutral-500">{idn.description}</td>
-                            <td className="px-6 py-4 flex items-center justify-end gap-2">
-                              <ToggleSwitch
-                                value={selected.has(idn.id)}
-                                onToggle={() => toggle(idn.id)}
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="flex items-center justify-between mt-4">
-                      <Button variant="secondary" onClick={close}>
-                        Cancel
-                      </Button>
-                      <Button variant="primary" onClick={handleSave} isLoading={loading}>
-                        Save
-                      </Button>
-                    </div>
+                    </td>
+
+                    <td className="px-6 py-4 flex items-center justify-end gap-2">
+                      <ToggleSwitch value={selected.has(idn.id)} onToggle={() => toggle(idn.id)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {orgIdentities.length > 0 && filteredIdentities.length === 0 && (
+              <EmptyState
+                title={`No results for "${searchQuery}"`}
+                subtitle="Try adjusting your search term"
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <MdSearchOff />
                   </div>
-                </Dialog.Panel>
-              </Transition.Child>
+                }
+              >
+                <></>
+              </EmptyState>
+            )}
+            <div className="flex items-center justify-between mt-6">
+              <Button variant="secondary" onClick={closeManageIdentitiesDialog}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSave} isLoading={loading}>
+                Save
+              </Button>
             </div>
           </div>
-        </Dialog>
-      </Transition>
+        ) : (
+          <div>
+            <EmptyState
+              title="No External Identities"
+              subtitle="There are no external identities in your organisation. Create one first."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <TbLockShare />
+                </div>
+              }
+            >
+              <>
+                <Link href={`/${organisation?.name}/access/identities`}>
+                  <Button>
+                    <TbLockShare />
+                    Create an External Identity
+                  </Button>
+                </Link>
+              </>
+            </EmptyState>
+          </div>
+        )}
+      </GenericDialog>
     </div>
   )
 }
