@@ -7,6 +7,7 @@ from api.models import (
     ServiceAccount,
     ServiceAccountHandler,
     ServiceAccountToken,
+    Identity,
 )
 from api.utils.access.permissions import user_has_permission, user_is_org_member
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
@@ -151,11 +152,12 @@ class UpdateServiceAccountMutation(graphene.Mutation):
         service_account_id = graphene.ID()
         name = graphene.String()
         role_id = graphene.ID()
+        identity_ids = graphene.List(graphene.NonNull(graphene.ID), required=False)
 
     service_account = graphene.Field(ServiceAccountType)
 
     @classmethod
-    def mutate(cls, root, info, service_account_id, name, role_id):
+    def mutate(cls, root, info, service_account_id, name, role_id, identity_ids=None):
         user = info.context.user
         service_account = ServiceAccount.objects.get(id=service_account_id)
 
@@ -169,6 +171,13 @@ class UpdateServiceAccountMutation(graphene.Mutation):
         role = Role.objects.get(id=role_id)
         service_account.name = name
         service_account.role = role
+        if identity_ids is not None:
+            identities = Identity.objects.filter(
+                id__in=identity_ids,
+                organisation=service_account.organisation,
+                deleted_at=None,
+            )
+            service_account.identities.set(identities)
         service_account.save()
 
         return UpdateServiceAccountMutation(service_account=service_account)
