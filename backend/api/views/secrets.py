@@ -219,7 +219,7 @@ class E2EESecretsView(APIView):
         response_data = serializer.data
 
         if include_dynamic_secrets:
-            response_data.concat(dynamic_secrets_data)
+            response_data.extend(dynamic_secrets_data)
 
         return Response(
             response_data,
@@ -612,7 +612,7 @@ class PublicSecretsView(APIView):
         response_data = serializer.data
 
         if include_dynamic_secrets:
-            response_data.append(dynamic_secrets_data)
+            response_data.extend(dynamic_secrets_data)
 
         return Response(
             response_data,
