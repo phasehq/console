@@ -9,6 +9,13 @@ from api.utils.secrets import (
 from api.utils.crypto import decrypt_asymmetric
 from api.models import DynamicSecretLease, DynamicSecretLeaseEvent
 from api.utils.rest import get_resolver_request_meta
+from ee.integrations.secrets.dynamic.exceptions import (
+    LeaseAlreadyRevokedError,
+    LeaseExpiredError,
+    LeaseRenewalError,
+    PlanRestrictionError,
+    TTLExceededError,
+)
 from ee.integrations.secrets.dynamic.aws.utils import (
     create_aws_dynamic_secret_lease,
 )
@@ -244,7 +251,9 @@ def renew_dynamic_secret_lease(
     Organisation = apps.get_model("api", "Organisation")
     org = lease.secret.environment.app.organisation
     if not org.plan == Organisation.ENTERPRISE_PLAN:
-        raise Exception("Dynamic secrets are only available on the Enterprise plan.")
+        raise PlanRestrictionError(
+            "Dynamic secrets are only available on the Enterprise plan."
+        )
 
     # Check if adding this renewal would exceed max TTL
     current_ttl_seconds = lease.ttl.total_seconds()
@@ -253,18 +262,18 @@ def renew_dynamic_secret_lease(
 
     if new_total_ttl > max_ttl_seconds:
         remaining_seconds = max_ttl_seconds - current_ttl_seconds
-        raise Exception(
+        raise LeaseRenewalError(
             f"The renewal TTL would exceed the maximum TTL for this dynamic secret. "
             f"Maximum remaining renewal time: {int(remaining_seconds)} seconds"
         )
 
     if timedelta(seconds=ttl) > lease.secret.max_ttl:
-        raise Exception(
+        raise TTLExceededError(
             "The specified TTL exceeds the maximum TTL for this dynamic secret."
         )
 
     if lease.expires_at <= timezone.now():
-        raise Exception("This lease has expired and cannot be renewed")
+        raise LeaseExpiredError("This lease has expired and cannot be renewed")
 
     else:
         lease.expires_at = lease.expires_at + timedelta(seconds=ttl)
@@ -323,8 +332,9 @@ def schedule_lease_revocation(lease, immediate=False):
     # --- Schedule revocation ---
 
     if lease.revoked_at is not None:
-        logger.info(f"Lease {lease.id} already revoked at {lease.revoked_at}")
-        return
+        raise LeaseAlreadyRevokedError(
+            f"Lease has already been revoked at {lease.revoked_at}"
+        )
 
     scheduled_revoke_time = lease.expires_at
     if immediate:

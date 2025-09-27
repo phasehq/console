@@ -23,6 +23,14 @@ from api.utils.access.middleware import IsIPAllowed
 from ee.integrations.secrets.dynamic.aws.utils import (
     revoke_aws_dynamic_secret_lease,
 )
+from ee.integrations.secrets.dynamic.exceptions import (
+    DynamicSecretError,
+    PlanRestrictionError,
+    LeaseRenewalError,
+    LeaseExpiredError,
+    TTLExceededError,
+    LeaseAlreadyRevokedError,
+)
 from ee.integrations.secrets.dynamic.utils import (
     create_dynamic_secret_lease,
     renew_dynamic_secret_lease,
@@ -285,15 +293,26 @@ class DynamicSecretLeaseView(APIView):
                 organisation_member=org_member,
                 service_account=service_account,
             )
+        except PlanRestrictionError as e:
+            return Response({"error": str(e)}, status=403)
+        except (LeaseRenewalError, TTLExceededError, LeaseExpiredError) as e:
+            return Response({"error": str(e)}, status=400)
+        except DynamicSecretError as e:
+            # Catch any other dynamic secret errors
+            return Response({"error": str(e)}, status=400)
         except Exception as e:
-            logger.exception(
-                "Failed to renew dynamic secret lease (lease_id=%s)", lease_id
-            )
+            logger.exception("Unexpected error renewing lease (lease_id=%s)", lease_id)
             return Response(
-                {"error": "An internal error occurred while renewing the lease."},
-                status=400,
+                {"error": "An internal error occurred while renewing the lease"},
+                status=500,
             )
-        return Response(status=status.HTTP_200_OK)
+
+        return Response(
+            {
+                "message": f"Lease renewed successfully. Updated expiry: {lease.expires_at}"
+            },
+            status=status.HTTP_200_OK,
+        )
 
     # Revoke
     def delete(self, request, *args, **kwargs):
@@ -310,13 +329,33 @@ class DynamicSecretLeaseView(APIView):
         elif request.auth["auth_type"] == "ServiceAccount":
             service_account = request.auth["service_account"]
 
-        if lease.secret.provider == "aws":
-            revoke_aws_dynamic_secret_lease(
-                lease.id,
-                manual=True,
-                request=request,
-                organisation_member=org_member,
-                service_account=service_account,
+        try:
+            if lease.secret.provider == "aws":
+                revoke_aws_dynamic_secret_lease(
+                    lease.id,
+                    manual=True,
+                    request=request,
+                    organisation_member=org_member,
+                    service_account=service_account,
+                )
+
+            return Response(
+                {"message": "Lease revoked successfully"}, status=status.HTTP_200_OK
             )
 
-        return Response(status=status.HTTP_200_OK)
+        except LeaseAlreadyRevokedError as e:
+            # If lease is already revoked, still return success with message
+            return Response(
+                {"message": "Lease was already revoked"}, status=status.HTTP_200_OK
+            )
+        except PlanRestrictionError as e:
+            return Response({"error": str(e)}, status=403)
+        except DynamicSecretError as e:
+            # Catch any other dynamic secret errors
+            return Response({"error": str(e)}, status=400)
+        except Exception as e:
+            logger.exception("Unexpected error revoking lease (lease_id=%s)", lease_id)
+            return Response(
+                {"error": "An internal error occurred while revoking the lease"},
+                status=500,
+            )

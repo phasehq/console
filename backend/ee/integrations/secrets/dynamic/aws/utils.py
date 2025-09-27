@@ -7,6 +7,7 @@ from api.utils.syncing.aws.auth import get_aws_sts_session
 from api.utils.secrets import get_environment_keys
 
 from api.utils.rest import get_resolver_request_meta
+from ee.integrations.secrets.dynamic.exceptions import LeaseAlreadyRevokedError
 from backend.utils.secrets import get_secret
 from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
 import logging
@@ -821,7 +822,9 @@ def revoke_aws_dynamic_secret_lease(
 
     if lease.revoked_at is not None:
         logger.info(f"Lease {lease.id} already revoked at {lease.revoked_at}")
-        return
+        raise LeaseAlreadyRevokedError(
+            f"Lease has already been revoked at {lease.revoked_at}"
+        )
 
     logger.info(f"Revoking lease {lease.id} (manual={manual})")
 
