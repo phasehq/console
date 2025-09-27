@@ -113,7 +113,9 @@ export const OverrideDialog = (props: {
             activeOverride ? 'A Personal Secret is overriding this value' : 'Override this value'
           }
         >
-          <FaUserEdit className={clsx(activeOverride && 'text-amber-500')} />{' '}
+          <span className="py-1">
+            <FaUserEdit className={clsx('shrink-0', activeOverride && 'text-amber-500')} />
+          </span>
           <span className={clsx('hidden 2xl:block text-xs', activeOverride && 'text-amber-500')}>
             Override
           </span>

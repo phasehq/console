@@ -13,7 +13,9 @@ from .models import (
     EnvironmentKey,
     Lockbox,
     Organisation,
+    OrganisationMember,
     Secret,
+    ServiceAccount,
     ServiceToken,
     UserToken,
     PersonalSecret,
@@ -56,6 +58,59 @@ class OrganisationSerializer(serializers.ModelSerializer):
             return Organisation(**validated_data)
 
 
+class OrganisationMemberSerializer(serializers.ModelSerializer):
+
+    username = serializers.CharField(source="user.username", read_only=True)
+    full_name = serializers.SerializerMethodField()
+    email = serializers.EmailField(source="user.email", read_only=True)
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganisationMember
+        fields = [
+            "id",
+            "username",
+            "full_name",
+            "email",
+            "role",
+        ]
+        read_only_fields = fields
+
+    def get_full_name(self, obj):
+        social_acc = obj.user.socialaccount_set.first()
+        if social_acc:
+            return social_acc.extra_data.get("name")
+        return None
+
+    def get_role(self, obj):
+        r = getattr(obj, "role", None)
+        if not r:
+            return None
+        return {"id": r.id, "name": r.name}
+
+
+class ServiceAccountSerializer(serializers.ModelSerializer):
+
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServiceAccount
+        fields = [
+            "id",
+            "name",
+            "role",
+        ]
+        read_only_fields = fields
+
+    def get_role(self, obj):
+        if not obj.role:
+            return None
+        return {
+            "id": obj.role.id,
+            "name": obj.role.name,
+        }
+
+
 class PersonalSecretSerializer(serializers.ModelSerializer):
     value = serializers.SerializerMethodField()
 
@@ -78,6 +133,7 @@ class SecretSerializer(serializers.ModelSerializer):
     comment = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
 
     class Meta:
         model = Secret
@@ -126,6 +182,9 @@ class SecretSerializer(serializers.ModelSerializer):
             except PersonalSecret.DoesNotExist:
                 return None
         return None
+
+    def get_type(self, obj):
+        return "static"
 
 
 class EnvironmentSerializer(serializers.ModelSerializer):

@@ -31,7 +31,7 @@ export const Alert = (props: {
   return (
     <div
       className={clsx(
-        'rounded-lg ring-1 ring-inset p-4 flex items-center gap-4',
+        'rounded-lg ring-1 ring-inset p-4 flex items-center',
         variantStyles[props.variant],
         props.size ? sizeStyles[props.size] : sizeStyles['md']
       )}

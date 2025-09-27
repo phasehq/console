@@ -51,7 +51,13 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
 
 export const graphQlClient = new ApolloClient({
   link: from([errorLink, httpLink]),
-  cache: new InMemoryCache(),
+  cache: new InMemoryCache({
+  typePolicies: {
+    KeyMap: {
+      keyFields: ["id", "keyName"], // composite key
+    },
+  },
+}),
   defaultOptions: {
     watchQuery: {
       skipPollAttempt: () => document.hidden,

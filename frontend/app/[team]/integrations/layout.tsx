@@ -28,6 +28,10 @@ export default function AccessLayout({
         link: 'syncs',
       },
       {
+        name: 'Dynamic Secrets',
+        link: 'dynamic-secrets',
+      },
+      {
         name: 'Third-party credentials',
         link: 'credentials',
       },

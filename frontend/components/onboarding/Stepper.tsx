@@ -11,9 +11,10 @@ export type Step = {
 interface StepperProps {
   steps: Step[]
   activeStep: number
+  align?: 'center' | 'left'
 }
 
-export const Stepper = (props: StepperProps) => {
+export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) => {
   const ICON_WRAPPER_BASE =
     'rounded-full transition duration-500 ease-in-out h-10 w-10 py-3 border text-center flex justify-center items-center'
   const LABEL_BASE =
@@ -21,18 +22,18 @@ export const Stepper = (props: StepperProps) => {
   const THREAD_BASE = 'flex-auto border-t transition duration-500 ease-in-out'
 
   const stepIsComplete = (step: Step) => {
-    return step.index < props.activeStep
+    return step.index < activeStep
   }
 
   const stepIsActive = (step: Step) => {
-    return step.index === props.activeStep
+    return step.index === activeStep
   }
 
   return (
-    <div className="p-5 space-y-20">
+    <div className="space-y-16">
       <div className="mx-4 p-4">
         <div className="flex items-center">
-          {props.steps.map((step: Step, index: number) => (
+          {steps.map((step: Step, index: number) => (
             <>
               <div className="flex items-center text-emerald-500 relative">
                 <div
@@ -59,12 +60,11 @@ export const Stepper = (props: StepperProps) => {
                   {step.name}
                 </div>
               </div>
-              {index !== props.steps.length - 1 && (
+              {index !== steps.length - 1 && (
                 <div
                   className={clsx(
                     THREAD_BASE,
-                    stepIsActive(props.steps[step.index + 1]) ||
-                      stepIsComplete(props.steps[step.index + 1])
+                    stepIsActive(steps[step.index + 1]) || stepIsComplete(steps[step.index + 1])
                       ? 'border-emerald-500'
                       : 'border-zinc-500'
                   )}
@@ -74,13 +74,16 @@ export const Stepper = (props: StepperProps) => {
           ))}
         </div>
       </div>
-      <div className="space-y-1">
-        <div className="text-3xl text-black dark:text-white font-bold text-center">
-          {props.steps[props.activeStep].title}
+      <div
+        className={clsx(
+          'border-b border-neutral-500/40 pb-2',
+          align === 'center' && 'text-center px-4'
+        )}
+      >
+        <div className="text-xl text-zinc-900 dark:text-zinc-100 font-semibold">
+          {steps[activeStep].title}
         </div>
-        <div className="text-black/30 dark:text-white/40 text-center text-lg">
-          {props.steps[props.activeStep].description}
-        </div>
+        <div className="text-neutral-500  text-sm">{steps[activeStep].description}</div>
       </div>
     </div>
   )
