@@ -124,7 +124,6 @@ class DynamicSecretLeaseType(DjangoObjectType):
             "credentials",
             "events",
             "created_at",
-            "updated_at",
             "revoked_at",
             "deleted_at",
         )
