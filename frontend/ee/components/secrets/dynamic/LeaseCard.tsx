@@ -1,18 +1,15 @@
 import {
   ApiDynamicSecretLeaseStatusChoices,
-  DynamicSecretLeaseEventType,
   DynamicSecretLeaseType,
   DynamicSecretType,
 } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
-import { Button } from '@/components/common/Button'
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
-import { FaBan } from 'react-icons/fa6'
-import { FiRefreshCw } from 'react-icons/fi'
 import { RenewLeaseDialog } from './RenewLeaseDialog'
 import { RevokeLeaseDialog } from './RevokeLeaseDialog'
 import { LeaseHistoryDialog } from './LeaseHistoryDialog'
+import CopyButton from '@/components/common/CopyButton'
 
 export const LeaseCard = ({
   secret,
@@ -61,11 +58,13 @@ export const LeaseCard = ({
         <div>
           {' '}
           <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{lease.name}</div>
-          <div className="font-mono text-2xs text-neutral-500">{lease.id}</div>
+          <CopyButton buttonVariant="ghost" value={lease.id}>
+            <div className="font-mono text-2xs text-neutral-500">{lease.id}</div>
+          </CopyButton>
         </div>
       </div>
 
-      <div className="space-y-0 col-span-2 text-xs">
+      <div className="space-y-1 col-span-2 text-xs">
         <div className="text-neutral-500 flex items-center gap-1">
           Created {relativeTimeFromDates(new Date(lease.createdAt))}
           {(lease.organisationMember || lease.serviceAccount) && (

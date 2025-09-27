@@ -24,6 +24,7 @@ import { FaCog, FaCogs } from 'react-icons/fa'
 import { Textarea } from '@/components/common/TextArea'
 import { encryptAsymmetric } from '@/utils/crypto'
 import { leaseTtlButtons } from '@/utils/dynamicSecrets'
+import CopyButton from '@/components/common/CopyButton'
 
 type UpdateDynamicSecretDialogRef = {
   openModal: () => void
@@ -168,7 +169,15 @@ export const UpdateDynamicSecretDialog = forwardRef<
   return (
     <GenericDialog
       ref={dialogRef}
-      title={`Configure Dynamic Secret`}
+      title="Configure Dynamic Secret"
+      dialogTitle={
+        <div className="flex flex-col gap-1">
+          Configure {secret.name}
+          <CopyButton value={secret.id}>
+            <span className="text-2xs font-mono">{secret.id}</span>
+          </CopyButton>{' '}
+        </div>
+      }
       buttonVariant="secondary"
       buttonContent={
         <>
