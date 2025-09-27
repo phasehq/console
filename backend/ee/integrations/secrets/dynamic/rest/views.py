@@ -306,7 +306,7 @@ class DynamicSecretLeaseView(APIView):
 
         org_member = service_account = None
         if request.auth["auth_type"] == "User":
-            org_member = request.auth["org_member"].user
+            org_member = request.auth["org_member"]
         elif request.auth["auth_type"] == "ServiceAccount":
             service_account = request.auth["service_account"]
 
