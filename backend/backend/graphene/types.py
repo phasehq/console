@@ -392,7 +392,10 @@ class SecretFolderType(DjangoObjectType):
         return SecretFolder.objects.filter(folder=self).count()
 
     def resolve_secret_count(self, info):
-        return Secret.objects.filter(folder=self).count()
+        return (
+            Secret.objects.filter(folder=self).count()
+            + DynamicSecret.objects.filter(folder=self, deleted_at=None).count()
+        )
 
 
 class SecretEventType(DjangoObjectType):
