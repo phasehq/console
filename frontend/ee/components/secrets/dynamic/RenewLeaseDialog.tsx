@@ -34,7 +34,7 @@ export const RenewLeaseDialog = ({
     lease.events?.filter(
       (event) => event?.eventType === ApiDynamicSecretLeaseEventEventTypeChoices.Renewed
     ).length || 0
-  const currentTtlSeconds = lease.ttl // This is the total TTL (initial + all renewals)
+  const currentTtlSeconds = lease.ttl! // This is the total TTL (initial + all renewals)
   const maxTtlSeconds = secret.maxTtlSeconds!
   const remainingRenewalTime = Math.max(0, maxTtlSeconds - currentTtlSeconds)
 
