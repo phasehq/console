@@ -11,6 +11,7 @@ import { FiRefreshCw } from 'react-icons/fi'
 import { FaListCheck } from 'react-icons/fa6'
 import { CreateLeaseDialog } from './CreateLeaseDialog'
 import { EmptyState } from '@/components/common/EmptyState'
+import Spinner from '@/components/common/Spinner'
 
 export const ManageLeasesDialog = ({ secret }: { secret: DynamicSecretType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -68,6 +69,7 @@ export const ManageLeasesDialog = ({ secret }: { secret: DynamicSecretType }) =>
             Refresh
           </Button>
         </div>
+
         <div className="divide-y divide-neutral-500/20 max-h-[80vh] overflow-y-auto">
           {leases.slice(0, viewLimit === 0 ? undefined : viewLimit).map((lease) => (
             <LeaseCard key={lease.id} secret={secret} lease={lease} />
@@ -86,7 +88,13 @@ export const ManageLeasesDialog = ({ secret }: { secret: DynamicSecretType }) =>
           )}
         </div>
 
-        {leases.length === 0 && (
+        {leases.length === 0 && loading && (
+          <div className="flex items-center justify-center h-48">
+            <Spinner size="md" />
+          </div>
+        )}
+
+        {leases.length === 0 && !loading && (
           <EmptyState
             title="No leases"
             subtitle="There are no leases for this dynamic secret."
