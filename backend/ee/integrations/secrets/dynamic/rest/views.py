@@ -124,11 +124,21 @@ class DynamicSecretsView(APIView):
         if not dynamic_secrets.exists():
             return Response({"error": "No dynamic secrets found"}, status=404)
 
-        # If lease header is present, generate a lease per secret
+        # If lease param is present, generate a lease per secret
         include_lease = (
             "lease" in request.GET
             and request.GET.get("lease", "false").lower() != "false"
         )
+
+        # Get optional TTL parameter for lease creation
+        lease_ttl = request.GET.get("ttl")
+        if lease_ttl:
+            try:
+                lease_ttl = int(lease_ttl)
+            except ValueError:
+                return Response(
+                    {"error": "ttl must be a valid integer (seconds)"}, status=400
+                )
 
         # 2. Create leases for each secret
         service_account = org_member = None
@@ -144,14 +154,27 @@ class DynamicSecretsView(APIView):
                 try:
                     lease, _ = create_dynamic_secret_lease(
                         ds,
+                        ttl=lease_ttl,
                         organisation_member=org_member,
                         service_account=service_account,
                         request=request,
                     )
                     leases_by_secret_id[ds.id] = str(lease.id)
+                except PlanRestrictionError as e:
+                    return Response({"error": str(e)}, status=403)
+                except (TTLExceededError, LeaseRenewalError) as e:
+                    return Response({"error": str(e)}, status=400)
+                except DynamicSecretError as e:
+                    return Response({"error": str(e)}, status=400)
                 except Exception as e:
-                    logger.error(
-                        f"Failed to create lease for dynamic secret {ds.id}: {e}"
+                    logger.exception(
+                        "Unexpected error creating lease for dynamic secret %s", ds.id
+                    )
+                    return Response(
+                        {
+                            "error": "An internal error occurred while creating the lease"
+                        },
+                        status=500,
                     )
 
             # Serialize each secret with its lease_id in context
