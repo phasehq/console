@@ -2,7 +2,6 @@ from api.auth import PhaseTokenAuthentication
 from api.models import (
     DynamicSecret,
     DynamicSecretLease,
-    OrganisationMember,
 )
 from api.utils.secrets import (
     normalize_path_string,
@@ -16,7 +15,6 @@ from ee.integrations.secrets.dynamic.serializers import (
 )
 from api.utils.rest import (
     METHOD_TO_ACTION,
-    get_resolver_request_meta,
 )
 
 from api.utils.access.middleware import IsIPAllowed
@@ -93,8 +91,6 @@ class DynamicSecretsView(APIView):
         # Check if SSE is enabled for this environment
         if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
-
-        ip_address, user_agent = get_resolver_request_meta(request)
 
         dynamic_secrets_filter = {
             "environment": env,
