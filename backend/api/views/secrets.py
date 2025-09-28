@@ -178,6 +178,17 @@ class E2EESecretsView(APIView):
                 and request.headers.get("lease", "false").lower() != "false"
             )
 
+            # Get optional lease_ttl header for custom TTL
+            lease_ttl = request.headers.get("lease_ttl")
+            if lease_ttl:
+                try:
+                    lease_ttl = int(lease_ttl)
+                except ValueError:
+                    return Response(
+                        {"error": "lease_ttl must be a valid integer (seconds)"},
+                        status=400,
+                    )
+
             service_account = None
             if request.auth.get("service_account_token") is not None:
                 service_account = request.auth["service_account_token"].service_account
@@ -188,6 +199,7 @@ class E2EESecretsView(APIView):
                     try:
                         lease, _ = create_dynamic_secret_lease(
                             ds,
+                            ttl=lease_ttl,  # Pass the TTL if provided
                             organisation_member=request.auth.get("org_member"),
                             service_account=service_account,
                             request=request,
@@ -571,6 +583,17 @@ class PublicSecretsView(APIView):
                 and request.GET.get("lease", "false").lower() != "false"
             )
 
+            # Get optional lease_ttl parameter for custom TTL
+            lease_ttl = request.GET.get("lease_ttl")
+            if lease_ttl:
+                try:
+                    lease_ttl = int(lease_ttl)
+                except ValueError:
+                    return Response(
+                        {"error": "lease_ttl must be a valid integer (seconds)"},
+                        status=400,
+                    )
+
             service_account = None
             if request.auth.get("service_account_token") is not None:
                 service_account = request.auth["service_account_token"].service_account
@@ -581,6 +604,7 @@ class PublicSecretsView(APIView):
                     try:
                         lease, _ = create_dynamic_secret_lease(
                             ds,
+                            ttl=lease_ttl,
                             organisation_member=request.auth.get("org_member"),
                             service_account=service_account,
                             request=request,
