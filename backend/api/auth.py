@@ -64,7 +64,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 except DynamicSecret.DoesNotExist:
                     pass
             if not found:
-                raise exceptions.AuthenticationFailed("Secret not found")
+                raise exceptions.NotFound("Secret not found")
 
         # If env is still None, try resolving from header or query params
         if env is None:
