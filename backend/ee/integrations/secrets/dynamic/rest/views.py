@@ -259,12 +259,10 @@ class DynamicSecretLeaseView(APIView):
         ):
             if request.auth["org_member"] is not None:
                 leases_filter["organisation_member"] = request.auth["org_member"]
-            elif request.auth["service_account_token"] is not None:
-                leases_filter["service_account"] = request.auth[
-                    "service_account_token"
-                ]["service_account"]
+            elif request.auth["service_account"] is not None:
+                leases_filter["service_account"] = request.auth["service_account"]
 
-        leases = DynamicSecretLease.objects.filter(secret=secret).order_by(
+        leases = DynamicSecretLease.objects.filter(**leases_filter).order_by(
             "-created_at"
         )
         serializer = DynamicSecretLeaseSerializer(
