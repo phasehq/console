@@ -121,6 +121,9 @@ class DynamicSecretsView(APIView):
 
         dynamic_secrets = DynamicSecret.objects.filter(**dynamic_secrets_filter)
 
+        if not dynamic_secrets.exists():
+            return Response({"error": "No dynamic secrets found"}, status=404)
+
         # If lease header is present, generate a lease per secret
         include_lease = (
             "lease" in request.GET
