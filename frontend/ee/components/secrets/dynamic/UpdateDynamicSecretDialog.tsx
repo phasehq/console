@@ -173,9 +173,12 @@ export const UpdateDynamicSecretDialog = forwardRef<
       dialogTitle={
         <div className="flex flex-col gap-1">
           Configure {secret.name}
-          <CopyButton value={secret.id}>
-            <span className="text-2xs font-mono">{secret.id}</span>
-          </CopyButton>{' '}
+          <div className="flex items-center gap-1 text-xs text-neutral-500">
+            Dynamic Secret ID:
+            <CopyButton value={secret.id} buttonVariant="ghost">
+              <span className="text-2xs font-mono">{secret.id}</span>
+            </CopyButton>
+          </div>
         </div>
       }
       buttonVariant="secondary"
