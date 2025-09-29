@@ -32,8 +32,15 @@ import logging
 import json
 from api.content_negotiation import CamelCaseContentNegotiation
 from api.utils.access.middleware import IsIPAllowed
+from ee.integrations.secrets.dynamic.exceptions import (
+    DynamicSecretError,
+    PlanRestrictionError,
+    TTLExceededError,
+)
 from ee.integrations.secrets.dynamic.serializers import DynamicSecretSerializer
-from ee.integrations.secrets.dynamic.utils import create_dynamic_secret_lease
+from ee.integrations.secrets.dynamic.utils import (
+    create_dynamic_secret_lease,
+)
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
@@ -195,6 +202,7 @@ class E2EESecretsView(APIView):
 
             if include_lease:
                 leases_by_secret_id = {}
+                failed_leases = []
                 for ds in dynamic_secrets_qs:
                     try:
                         lease, _ = create_dynamic_secret_lease(
@@ -205,10 +213,39 @@ class E2EESecretsView(APIView):
                             request=request,
                         )
                         leases_by_secret_id[ds.id] = str(lease.id)
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to create lease for dynamic secret {ds.id}: {e}"
+                    except PlanRestrictionError as e:
+                        return Response({"error": str(e)}, status=403)
+                    except DynamicSecretError as e:
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": str(e),
+                            }
                         )
+                    except Exception as e:
+                        logger.exception(
+                            "Unexpected error creating lease for dynamic secret %s",
+                            ds.id,
+                        )
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": "Internal error occurred",
+                            }
+                        )
+
+                # If any leases failed to create, return error response
+                if failed_leases:
+                    return Response(
+                        {
+                            "error": "One or more dynamic secret leases could not be created",
+                            "failed_leases": failed_leases,
+                            "successful_leases": len(leases_by_secret_id),
+                        },
+                        status=400,
+                    )
 
                 # Serialize each secret with its lease_id in context
                 dynamic_secrets_data = [
@@ -600,6 +637,7 @@ class PublicSecretsView(APIView):
 
             if include_lease:
                 leases_by_secret_id = {}
+                failed_leases = []
                 for ds in dynamic_secrets_qs:
                     try:
                         lease, _ = create_dynamic_secret_lease(
@@ -610,10 +648,47 @@ class PublicSecretsView(APIView):
                             request=request,
                         )
                         leases_by_secret_id[ds.id] = str(lease.id)
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to create lease for dynamic secret {ds.id}: {e}"
+                    except PlanRestrictionError as e:
+                        return Response({"error": str(e)}, status=403)
+                    except (TTLExceededError,) as e:
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": str(e),
+                            }
                         )
+                    except DynamicSecretError as e:
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": str(e),
+                            }
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            "Unexpected error creating lease for dynamic secret %s",
+                            ds.id,
+                        )
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": "Internal error occurred",
+                            }
+                        )
+
+                # If any leases failed to create, return error response
+                if failed_leases:
+                    return Response(
+                        {
+                            "error": "One or more dynamic secret leases could not be created",
+                            "failed_leases": failed_leases,
+                            "successful_leases": len(leases_by_secret_id),
+                        },
+                        status=400,
+                    )
 
                 # Serialize each secret with its lease_id in context
                 dynamic_secrets_data = [
