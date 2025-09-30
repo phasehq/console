@@ -20,13 +20,17 @@ export const LeaseCard = ({
 }) => {
   const toTitleCase = (str: string) => str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
 
-  //const isExpired = new Date(lease.expiresAt) <= new Date()
+  const isExpired = new Date(lease.expiresAt) <= new Date()
   const isRevoked = lease.revokedAt !== null && new Date(lease.revokedAt) <= new Date()
 
   const leaseStatusBadge = (status: ApiDynamicSecretLeaseStatusChoices) => {
+    // Check if Active lease has actually expired
+    const isActiveButExpired = status === ApiDynamicSecretLeaseStatusChoices.Active && isExpired
+
     const styles: Record<ApiDynamicSecretLeaseStatusChoices, string> = {
-      [ApiDynamicSecretLeaseStatusChoices.Active]:
-        'bg-emerald-400/10 text-emerald-400 ring-1 ring-inset ring-emerald-400/10',
+      [ApiDynamicSecretLeaseStatusChoices.Active]: isActiveButExpired
+        ? 'bg-amber-400/10 text-amber-400 ring-1 ring-inset ring-amber-400/10'
+        : 'bg-emerald-400/10 text-emerald-400 ring-1 ring-inset ring-emerald-400/10',
       [ApiDynamicSecretLeaseStatusChoices.Created]:
         'bg-blue-400/10 text-blue-400 ring-1 ring-inset ring-blue-400/10',
       [ApiDynamicSecretLeaseStatusChoices.Expired]:
@@ -46,7 +50,7 @@ export const LeaseCard = ({
         )}
       >
         <span className="size-2 rounded-full bg-current" />
-        {toTitleCase(status)}
+        {isActiveButExpired ? 'Expiring' : toTitleCase(status)}
       </span>
     )
   }
@@ -94,7 +98,8 @@ export const LeaseCard = ({
             </div>
           ) : (
             <div className="text-neutral-500">
-              Expires {relativeTimeFromDates(new Date(lease.expiresAt))}
+              {isExpired ? 'Queued for revocation' : 'Expires'}{' '}
+              {relativeTimeFromDates(new Date(lease.expiresAt))}
             </div>
           )}
         </div>
