@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.gitlab",
     "allauth.socialaccount.providers.microsoft",
     "api.config.APIConfig",
+    # "ee",
     "logs",
     "graphene_django",
     "django_rq",
