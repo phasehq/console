@@ -180,10 +180,12 @@ export const CreateDynamicSecretDialog = forwardRef<
 
       if (parseInt(formData.defaultTTL, 10) > parseInt(formData.maxTTL, 10)) {
         toast.error('Default TTL must be less than or equal to Max TTL')
+        return false
       }
 
       if (parseInt(formData.maxTTL, 10) <= MINIMUM_LEASE_TTL) {
         toast.error(`Max TTL must be greater than ${MINIMUM_LEASE_TTL} seconds`)
+        return false
       }
 
       // Encrypt each keyName in keyMap
