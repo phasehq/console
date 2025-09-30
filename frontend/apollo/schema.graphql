@@ -13,9 +13,22 @@ type Query {
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
   kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
-  secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
+  secretLogs(
+    appId: ID
+    start: BigInt
+    end: BigInt
+    eventTypes: [String]
+    memberId: ID
+    memberType: MemberType
+    environmentId: ID
+  ): SecretLogsResponseType
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
-  appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
+  appEnvironments(
+    appId: ID
+    environmentId: ID
+    memberId: ID
+    memberType: MemberType
+  ): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
   appServiceAccounts(appId: ID): [ServiceAccountType]
   secrets(envId: ID, path: String, id: ID): [SecretType]
@@ -49,10 +62,16 @@ type Query {
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
   validateAwsAssumeRoleAuth: AWSValidationResultType
-  validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
+  validateAwsAssumeRoleCredentials(
+    roleArn: String!
+    region: String
+    externalId: String
+  ): AWSValidationResultType
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   stripeCustomerPortalUrl(organisationId: ID!): String
+  dynamicSecretProviders: [DynamicSecretProviderType]
+  dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]
 }
 
 type OrganisationType {
@@ -76,13 +95,19 @@ value as specified by
 scalar DateTime
 
 enum ApiOrganisationPlanChoices {
-  """Free"""
+  """
+  Free
+  """
   FR
 
-  """Pro"""
+  """
+  Pro
+  """
   PR
 
-  """Enterprise"""
+  """
+  Enterprise
+  """
   EN
 }
 
@@ -176,6 +201,7 @@ type EnvironmentType {
   updatedAt: DateTime!
   folders: [SecretFolderType]!
   secrets(path: String): [SecretType]!
+  dynamicSecrets(path: String): [DynamicSecretType]!
   folderCount: Int
   secretCount: Int
   members: [OrganisationMemberType]!
@@ -183,16 +209,24 @@ type EnvironmentType {
 }
 
 enum ApiEnvironmentEnvTypeChoices {
-  """Development"""
+  """
+  Development
+  """
   DEV
 
-  """Staging"""
+  """
+  Staging
+  """
   STAGING
 
-  """Production"""
+  """
+  Production
+  """
   PROD
 
-  """Custom"""
+  """
+  Custom
+  """
   CUSTOM
 }
 
@@ -314,16 +348,24 @@ type ServiceAccountTokenType {
 }
 
 enum ApiSecretEventEventTypeChoices {
-  """Create"""
+  """
+  Create
+  """
   C
 
-  """Read"""
+  """
+  Read
+  """
   R
 
-  """Update"""
+  """
+  Update
+  """
   U
 
-  """Delete"""
+  """
+  Delete
+  """
   D
 }
 
@@ -337,18 +379,27 @@ type PersonalSecretType {
   updatedAt: DateTime!
 }
 
-type EnvironmentSyncType {
+type DynamicSecretType {
   id: String!
+  name: String!
+  description: String!
   environment: EnvironmentType!
+  folder: SecretFolderType
   path: String!
-  options: JSONString!
   authentication: ProviderCredentialsType
-  isActive: Boolean!
+
+  """
+  Which provider this secret is associated with.
+  """
+  provider: ApiDynamicSecretProviderChoices!
+  config: DynamicSecretConfigUnion
+  keyMap: [KeyMap]
   createdAt: DateTime
-  lastSync: DateTime
-  status: ApiEnvironmentSyncStatusChoices!
-  serviceInfo: ServiceType
-  history: [EnvironmentSyncEventType!]!
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  leases: [DynamicSecretLeaseType!]!
+  defaultTtlSeconds: Int
+  maxTtlSeconds: Int
 }
 
 type ProviderCredentialsType {
@@ -369,20 +420,169 @@ type ProviderType {
   authScheme: String
 }
 
+enum ApiDynamicSecretProviderChoices {
+  """
+  AWS
+  """
+  AWS
+}
+
+union DynamicSecretConfigUnion = AWSConfigType
+
+type AWSConfigType {
+  usernameTemplate: String!
+  iamPath: String
+  permissionBoundaryArn: String
+  groups: String
+  policyArns: String
+  policyDocument: GenericScalar
+}
+
+"""
+The `GenericScalar` scalar type represents a generic
+GraphQL scalar value that could be:
+String, Boolean, Int, Float, List or Object.
+"""
+scalar GenericScalar
+
+type KeyMap {
+  id: String
+  keyName: String
+  masked: Boolean
+}
+
+type DynamicSecretLeaseType {
+  id: String!
+  name: String!
+  secret: DynamicSecretType!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ttl: Int
+
+  """
+  Current status of the lease
+  """
+  status: ApiDynamicSecretLeaseStatusChoices!
+  credentials: LeaseCredentialsUnion
+  createdAt: DateTime
+  expiresAt: DateTime
+  revokedAt: DateTime
+  deletedAt: DateTime
+  events: [DynamicSecretLeaseEventType]
+}
+
+enum ApiDynamicSecretLeaseStatusChoices {
+  """
+  Created
+  """
+  CREATED
+
+  """
+  Active
+  """
+  ACTIVE
+
+  """
+  Renewed
+  """
+  RENEWED
+
+  """
+  Revoked
+  """
+  REVOKED
+
+  """
+  Expired
+  """
+  EXPIRED
+}
+
+union LeaseCredentialsUnion = AwsCredentialsType
+
+type AwsCredentialsType {
+  accessKeyId: String
+  secretAccessKey: String
+  username: String
+}
+
+type DynamicSecretLeaseEventType {
+  id: ID!
+  lease: DynamicSecretLeaseType!
+  eventType: ApiDynamicSecretLeaseEventEventTypeChoices!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ipAddress: String
+  userAgent: String
+  metadata: JSONString!
+  createdAt: DateTime!
+}
+
+enum ApiDynamicSecretLeaseEventEventTypeChoices {
+  """
+  Created
+  """
+  CREATED
+
+  """
+  Active
+  """
+  ACTIVE
+
+  """
+  Renewed
+  """
+  RENEWED
+
+  """
+  Revoked
+  """
+  REVOKED
+
+  """
+  Expired
+  """
+  EXPIRED
+}
+
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  options: JSONString!
+  authentication: ProviderCredentialsType
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
+  serviceInfo: ServiceType
+  history: [EnvironmentSyncEventType!]!
+}
+
 enum ApiEnvironmentSyncStatusChoices {
-  """In progress"""
+  """
+  In progress
+  """
   IN_PROGRESS
 
-  """Completed"""
+  """
+  Completed
+  """
   COMPLETED
 
-  """cancelled"""
+  """
+  cancelled
+  """
   CANCELLED
 
-  """Timed out"""
+  """
+  Timed out
+  """
   TIMED_OUT
 
-  """Failed"""
+  """
+  Failed
+  """
   FAILED
 }
 
@@ -403,19 +603,29 @@ type EnvironmentSyncEventType {
 }
 
 enum ApiEnvironmentSyncEventStatusChoices {
-  """In progress"""
+  """
+  In progress
+  """
   IN_PROGRESS
 
-  """Completed"""
+  """
+  Completed
+  """
   COMPLETED
 
-  """cancelled"""
+  """
+  cancelled
+  """
   CANCELLED
 
-  """Timed out"""
+  """
+  Timed out
+  """
   TIMED_OUT
 
-  """Failed"""
+  """
+  Failed
+  """
   FAILED
 }
 
@@ -478,13 +688,19 @@ type ActivatedPhaseLicenseType {
 }
 
 enum ApiActivatedPhaseLicensePlanChoices {
-  """Free"""
+  """
+  Free
+  """
   FR
 
-  """Pro"""
+  """
+  Pro
+  """
   PR
 
-  """Enterprise"""
+  """
+  Enterprise
+  """
   EN
 }
 
@@ -539,9 +755,13 @@ type KMSLogType implements Node {
   longitude: Float
 }
 
-"""An object with an ID"""
+"""
+An object with an ID
+"""
 interface Node {
-  """The ID of the object"""
+  """
+  The ID of the object
+  """
   id: ID!
 }
 
@@ -771,63 +991,261 @@ enum PlanTypeEnum {
   ENTERPRISE
 }
 
+type DynamicSecretProviderType {
+  id: String!
+  name: String!
+  credentials: GenericScalar!
+  configMap: GenericScalar!
+}
+
 type Mutation {
-  createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
-  bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
-  createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
+  createOrganisation(
+    id: ID!
+    identityKey: String!
+    name: String!
+    wrappedKeyring: String!
+    wrappedRecovery: String!
+  ): CreateOrganisationMutation
+  bulkInviteOrganisationMembers(
+    invites: [InviteInput]!
+    orgId: ID!
+  ): BulkInviteOrganisationMembersMutation
+  createOrganisationMember(
+    identityKey: String!
+    inviteId: ID!
+    orgId: ID!
+    wrappedKeyring: String
+    wrappedRecovery: String
+  ): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
   updateOrganisationMemberRole(memberId: ID!, roleId: ID!): UpdateOrganisationMemberRole
-  updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+  updateMemberWrappedSecrets(
+    orgId: ID!
+    wrappedKeyring: String!
+    wrappedRecovery: String!
+  ): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
-  createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
+  createApp(
+    appSeed: String!
+    appToken: String!
+    appVersion: Int!
+    id: ID!
+    identityKey: String!
+    name: String!
+    organisationId: ID!
+    wrappedKeyShare: String!
+  ): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
   updateAppName(id: ID!, name: String!): UpdateAppNameMutation
-  addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
+  addAppMember(
+    appId: ID
+    envKeys: [EnvironmentKeyInput]
+    memberId: ID
+    memberType: MemberType
+  ): AddAppMemberMutation
   bulkAddAppMembers(appId: ID!, members: [AppMemberInputType]!): BulkAddAppMembersMutation
   removeAppMember(appId: ID, memberId: ID, memberType: MemberType): RemoveAppMemberMutation
-  updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): UpdateMemberEnvScopeMutation
-  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
+  updateMemberEnvironmentScope(
+    appId: ID
+    envKeys: [EnvironmentKeyInput]
+    memberId: ID
+    memberType: MemberType
+  ): UpdateMemberEnvScopeMutation
+  createEnvironment(
+    adminKeys: [EnvironmentKeyInput]
+    environmentData: EnvironmentInput!
+    wrappedSalt: String
+    wrappedSeed: String
+  ): CreateEnvironmentMutation
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
   swapEnvironmentOrder(environment1Id: ID!, environment2Id: ID!): SwapEnvironmentOrderMutation
-  createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
-  createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
-  createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
-  updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
+  createEnvironmentKey(
+    envId: ID!
+    identityKey: String!
+    userId: ID
+    wrappedSalt: String!
+    wrappedSeed: String!
+  ): CreateEnvironmentKeyMutation
+  createEnvironmentToken(
+    envId: ID!
+    identityKey: String!
+    name: String!
+    token: String!
+    wrappedKeyShare: String!
+  ): CreateEnvironmentTokenMutation
+  createCustomRole(
+    color: String
+    description: String
+    name: String
+    organisationId: ID!
+    permissions: JSONString
+  ): CreateCustomRoleMutation
+  updateCustomRole(
+    color: String
+    description: String
+    id: ID!
+    name: String
+    permissions: JSONString
+  ): UpdateCustomRoleMutation
   deleteCustomRole(id: ID!): DeleteCustomRoleMutation
-  createNetworkAccessPolicy(allowedIps: String!, isGlobal: Boolean!, name: String, organisationId: ID!): CreateNetworkAccessPolicyMutation
+  createNetworkAccessPolicy(
+    allowedIps: String!
+    isGlobal: Boolean!
+    name: String
+    organisationId: ID!
+  ): CreateNetworkAccessPolicyMutation
   updateNetworkAccessPolicy(policyInputs: [UpdatePolicyInput]): UpdateNetworkAccessPolicyMutation
   deleteNetworkAccessPolicy(id: ID!): DeleteNetworkAccessPolicyMutation
-  updateAccountNetworkAccessPolicies(accountInputs: [AccountPolicyInput], organisationId: ID!): UpdateAccountNetworkAccessPolicies
-  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
-  enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
-  updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
+  updateAccountNetworkAccessPolicies(
+    accountInputs: [AccountPolicyInput]
+    organisationId: ID!
+  ): UpdateAccountNetworkAccessPolicies
+  createServiceAccount(
+    handlers: [ServiceAccountHandlerInput]
+    identityKey: String
+    name: String
+    organisationId: ID
+    roleId: ID
+    serverWrappedKeyring: String
+    serverWrappedRecovery: String
+  ): CreateServiceAccountMutation
+  enableServiceAccountThirdPartyAuth(
+    serverWrappedKeyring: String
+    serverWrappedRecovery: String
+    serviceAccountId: ID
+  ): EnableServiceAccountThirdPartyAuthMutation
+  updateServiceAccountHandlers(
+    handlers: [ServiceAccountHandlerInput]
+    organisationId: ID
+  ): UpdateServiceAccountHandlersMutation
   updateServiceAccount(name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
-  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+  createServiceAccountToken(
+    expiry: BigInt
+    identityKey: String!
+    name: String!
+    serviceAccountId: ID
+    token: String!
+    wrappedKeyShare: String!
+  ): CreateServiceAccountTokenMutation
   deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
   toggleSyncActive(syncId: ID): ToggleSyncActive
   updateSyncAuthentication(credentialId: ID, syncId: ID): UpdateSyncAuthentication
-  createProviderCredentials(credentials: JSONString, name: String, orgId: ID, provider: String): CreateProviderCredentials
-  updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
+  createProviderCredentials(
+    credentials: JSONString
+    name: String
+    orgId: ID
+    provider: String
+  ): CreateProviderCredentials
+  updateProviderCredentials(
+    credentialId: ID
+    credentials: JSONString
+    name: String
+  ): UpdateProviderCredentials
   deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
-  createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
-  createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
-  createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, path: String, secretName: String): CreateAWSSecretsManagerSync
-  createGhActionsSync(credentialId: ID, envId: ID, owner: String, path: String, repoName: String): CreateGitHubActionsSync
-  createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
-  createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
-  createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
-  createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
-  createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
-  createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
-  createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
+  createCloudflarePagesSync(
+    credentialId: ID
+    deploymentId: ID
+    envId: ID
+    path: String
+    projectEnv: String
+    projectName: String
+  ): CreateCloudflarePagesSync
+  createCloudflareWorkersSync(
+    credentialId: ID
+    envId: ID
+    path: String
+    workerName: String
+  ): CreateCloudflareWorkersSync
+  createAwsSecretSync(
+    credentialId: ID
+    envId: ID
+    kmsId: String
+    path: String
+    secretName: String
+  ): CreateAWSSecretsManagerSync
+  createGhActionsSync(
+    credentialId: ID
+    envId: ID
+    owner: String
+    path: String
+    repoName: String
+  ): CreateGitHubActionsSync
+  createVaultSync(
+    credentialId: ID
+    engine: String
+    envId: ID
+    path: String
+    vaultPath: String
+  ): CreateVaultSync
+  createNomadSync(
+    credentialId: ID
+    envId: ID
+    nomadNamespace: String
+    nomadPath: String
+    path: String
+  ): CreateNomadSync
+  createGitlabCiSync(
+    credentialId: ID
+    envId: ID
+    isGroup: Boolean
+    masked: Boolean
+    path: String
+    protected: Boolean
+    resourceId: String
+    resourcePath: String
+  ): CreateGitLabCISync
+  createRailwaySync(
+    credentialId: ID
+    envId: ID
+    path: String
+    railwayEnvironment: RailwayResourceInput
+    railwayProject: RailwayResourceInput
+    railwayService: RailwayResourceInput
+  ): CreateRailwaySync
+  createVercelSync(
+    credentialId: ID
+    envId: ID
+    environment: String
+    path: String
+    projectId: String
+    projectName: String
+    secretType: String
+    teamId: String
+    teamName: String
+  ): CreateVercelSync
+  createRenderSync(
+    credentialId: ID
+    envId: ID
+    path: String
+    resourceId: String
+    resourceName: String
+    resourceType: RenderResourceType
+    secretFileName: String
+  ): CreateRenderSync
+  createUserToken(
+    expiry: BigInt
+    identityKey: String!
+    name: String!
+    orgId: ID!
+    token: String!
+    wrappedKeyShare: String!
+  ): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
-  createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
+  createServiceToken(
+    appId: ID!
+    environmentKeys: [EnvironmentKeyInput]
+    expiry: BigInt
+    identityKey: String!
+    name: String!
+    token: String!
+    wrappedKeyShare: String!
+  ): CreateServiceTokenMutation
   deleteServiceToken(tokenId: ID!): DeleteServiceTokenMutation
   createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
   deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
@@ -842,18 +1260,57 @@ type Mutation {
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation
-  createSubscriptionCheckoutSession(billingPeriod: BillingPeriodEnum, organisationId: ID!, planType: PlanTypeEnum): CreateSubscriptionCheckoutSession
+  createSubscriptionCheckoutSession(
+    billingPeriod: BillingPeriodEnum
+    organisationId: ID!
+    planType: PlanTypeEnum
+  ): CreateSubscriptionCheckoutSession
   deletePaymentMethod(organisationId: ID, paymentMethodId: String): DeletePaymentMethodMutation
   cancelSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
   resumeSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
-  modifySubscription(billingPeriod: BillingPeriodEnum, organisationId: ID!, planType: PlanTypeEnum, subscriptionId: String!): UpdateSubscriptionResponse
+  modifySubscription(
+    billingPeriod: BillingPeriodEnum
+    organisationId: ID!
+    planType: PlanTypeEnum
+    subscriptionId: String!
+  ): UpdateSubscriptionResponse
   createSetupIntent(organisationId: ID): CreateSetupIntentMutation
   setDefaultPaymentMethod(
     organisationId: ID
 
-    """Payment Method ID to set as default"""
+    """
+    Payment Method ID to set as default
+    """
     paymentMethodId: String!
   ): SetDefaultPaymentMethodMutation
+  createAwsDynamicSecret(
+    authenticationId: ID
+    config: AWSConfigInput!
+    defaultTtl: Int
+    description: String
+    environmentId: ID!
+    keyMap: [KeyMapInput]!
+    maxTtl: Int
+    name: String!
+    organisationId: ID!
+    path: String
+  ): CreateAWSDynamicSecretMutation
+  updateAwsDynamicSecret(
+    authenticationId: ID
+    config: AWSConfigInput!
+    defaultTtl: Int
+    description: String
+    dynamicSecretId: ID!
+    keyMap: [KeyMapInput]!
+    maxTtl: Int
+    name: String!
+    organisationId: ID!
+    path: String
+  ): UpdateAWSDynamicSecretMutation
+  deleteDynamicSecret(secretId: ID!): DeleteDynamicSecretMutation
+  createDynamicSecretLease(name: String, secretId: ID!, ttl: Int): LeaseDynamicSecret
+  renewDynamicSecretLease(leaseId: ID!, ttl: Int): RenewLeaseMutation
+  revokeDynamicSecretLease(leaseId: ID!): RevokeLeaseMutation
 }
 
 type CreateOrganisationMutation {
@@ -1254,4 +1711,42 @@ type CreateSetupIntentMutation {
 
 type SetDefaultPaymentMethodMutation {
   ok: Boolean
+}
+
+type CreateAWSDynamicSecretMutation {
+  dynamicSecret: DynamicSecretType
+}
+
+input AWSConfigInput {
+  usernameTemplate: String!
+  iamPath: String = "/"
+  permissionBoundaryArn: String
+  groups: String
+  policyArns: String
+  policyDocument: GenericScalar
+}
+
+input KeyMapInput {
+  id: String!
+  keyName: String!
+}
+
+type UpdateAWSDynamicSecretMutation {
+  dynamicSecret: DynamicSecretType
+}
+
+type DeleteDynamicSecretMutation {
+  ok: Boolean
+}
+
+type LeaseDynamicSecret {
+  lease: DynamicSecretLeaseType
+}
+
+type RenewLeaseMutation {
+  lease: DynamicSecretLeaseType
+}
+
+type RevokeLeaseMutation {
+  lease: DynamicSecretLeaseType
 }

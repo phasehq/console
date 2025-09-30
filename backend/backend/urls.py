@@ -14,7 +14,6 @@ from api.views.auth import (
 )
 from api.views.kms import kms
 
-
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 urlpatterns = [
@@ -32,6 +31,10 @@ urlpatterns = [
     path("secrets/tokens/", secrets_tokens),
     path("oauth/github/callback", github_integration_callback),
     path("lockbox/<box_id>", LockboxView.as_view()),
+    path(
+        "public/v1/secrets/dynamic/",
+        include("ee.integrations.secrets.dynamic.rest.urls"),
+    ),
 ]
 
 if CLOUD_HOSTED:
