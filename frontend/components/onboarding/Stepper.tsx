@@ -30,7 +30,7 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
   }
 
   return (
-    <div className="space-y-16">
+    <div className="space-y-10">
       <div className="mx-4 p-4">
         <div className="flex items-center">
           {steps.map((step: Step, index: number) => (
@@ -76,7 +76,7 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
       </div>
       <div
         className={clsx(
-          'border-b border-neutral-500/40 pb-2',
+          'border-b border-neutral-500/40 py-2',
           align === 'center' && 'text-center px-4'
         )}
       >

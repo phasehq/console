@@ -202,7 +202,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
             </div>
 
             {provider && (
-              <div className="space-y-4 pt-2">
+              <div className="space-y-3 pt-2">
                 {provider.configMap.map(
                   (field: {
                     id: keyof AwsConfigInput
@@ -230,8 +230,8 @@ export const UpdateDynamicSecretDialog = forwardRef<
           </div>
         )}
         {activeStep === 1 && (
-          <div className="space-y-6 divide-y divide-neutral-500/40 text-sm">
-            <div className="space-y-4">
+          <div className="divide-y divide-neutral-500/40 text-sm">
+            <div className="space-y-3 py-2">
               <Input
                 label="Name"
                 required
@@ -246,8 +246,8 @@ export const UpdateDynamicSecretDialog = forwardRef<
                 setValue={(val) => setFormData({ ...formData, description: val })}
               />
             </div>
-            <div className="space-y-4 pt-6">
-              <div className="border-b border-neutral-500/20">
+            <div className="space-y-3 py-2">
+              <div>
                 <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">TTLs</div>
                 <div className="text-neutral-500 text-xs">
                   Configure the default and max TTLs for generated secrets
@@ -304,38 +304,40 @@ export const UpdateDynamicSecretDialog = forwardRef<
                 </div>
               </div>
             </div>
-            <div className="space-y-4 pt-6">
-              <div className="border-b border-neutral-500/20">
+            <div className="space-y-3 py-2">
+              <div>
                 <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Outputs</div>
                 <div className="text-neutral-500 text-xs">
                   Configure how generated secrets are mapped to keys in your environment
                 </div>
               </div>
-              {formData.keyMap.map((key) => (
-                <div key={key.id} className="flex items-center gap-4">
-                  <div className="flex-1 font-mono text-sm text-zinc-900 dark:text-zinc-100">
-                    {toUpper(key.id)}
+              <div className="space-y-2">
+                {formData.keyMap.map((key) => (
+                  <div key={key.id} className="flex items-center gap-4">
+                    <div className="flex-1 font-mono text-sm text-zinc-900 dark:text-zinc-100">
+                      {toUpper(key.id)}
+                    </div>
+                    <FaArrowRightLong className="text-neutral-500" />
+                    <div className="flex-1">
+                      <Input
+                        className="font-mono ph-no-capture"
+                        placeholder="Enter secret name"
+                        value={key.keyName ?? ''}
+                        setValue={(val) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            keyMap: prev.keyMap.map((k) =>
+                              k.id === key.id
+                                ? { ...k, keyName: val.replace(/ /g, '_').toUpperCase() }
+                                : k
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
                   </div>
-                  <FaArrowRightLong className="text-neutral-500" />
-                  <div className="flex-1">
-                    <Input
-                      className="font-mono ph-no-capture"
-                      placeholder="Enter secret name"
-                      value={key.keyName ?? ''}
-                      setValue={(val) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          keyMap: prev.keyMap.map((k) =>
-                            k.id === key.id
-                              ? { ...k, keyName: val.replace(/ /g, '_').toUpperCase() }
-                              : k
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         )}

@@ -275,7 +275,7 @@ export const CreateDynamicSecretDialog = forwardRef<
 
               {/* Step 2: Config */}
               {activeStep === 0 && (
-                <div className="space-y-4 divide-y divide-neutral-500/40 text-sm">
+                <div className="divide-y divide-neutral-500/40 text-sm">
                   <div className="mt-2">
                     <ProviderCredentialPicker
                       credential={formData.credential}
@@ -285,7 +285,7 @@ export const CreateDynamicSecretDialog = forwardRef<
                       setDefault
                     />
                   </div>
-                  <div className="space-y-4 pt-2">
+                  <div className="space-y-3 py-2">
                     {provider.configMap.map(
                       (field: {
                         id: keyof AwsConfigInput
@@ -314,8 +314,8 @@ export const CreateDynamicSecretDialog = forwardRef<
 
               {/* Step 3: Key Mapping */}
               {activeStep === 1 && (
-                <div className="space-y-6 divide-y divide-neutral-500/40 text-sm">
-                  <div className="space-y-4">
+                <div className="divide-y divide-neutral-500/40 text-sm">
+                  <div className="space-y-3 py-2">
                     <Input
                       label="Name"
                       required
@@ -331,7 +331,7 @@ export const CreateDynamicSecretDialog = forwardRef<
                     />
                   </div>
 
-                  <div className="space-y-4 pt-6">
+                  <div className="space-y-3 py-2">
                     <div className="border-b border-neutral-500/20">
                       <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         TTLs
@@ -392,7 +392,7 @@ export const CreateDynamicSecretDialog = forwardRef<
                     </div>
                   </div>
 
-                  <div className="space-y-4 pt-6">
+                  <div className="space-y-3 py-2">
                     <div className="border-b border-neutral-500/20">
                       <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         Outputs
