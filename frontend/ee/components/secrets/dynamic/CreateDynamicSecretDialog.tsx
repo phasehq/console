@@ -334,7 +334,7 @@ export const CreateDynamicSecretDialog = forwardRef<
                   </div>
 
                   <div className="space-y-3 py-2">
-                    <div className="border-b border-neutral-500/20">
+                    <div>
                       <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         TTLs
                       </div>
@@ -395,7 +395,7 @@ export const CreateDynamicSecretDialog = forwardRef<
                   </div>
 
                   <div className="space-y-3 py-2">
-                    <div className="border-b border-neutral-500/20">
+                    <div>
                       <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         Outputs
                       </div>
