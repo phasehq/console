@@ -675,7 +675,7 @@ class PublicSecretsView(APIView):
                             {
                                 "secret_id": str(ds.id),
                                 "secret_name": ds.name,
-                                "error": "Internal error occurred",
+                                "error": str(e),
                             }
                         )
 

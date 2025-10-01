@@ -50,9 +50,7 @@ def resolve_app_service_accounts(root, info, app_id):
     if not user_has_permission(
         info.context.user, "read", "ServiceAccounts", app.organisation, True
     ):
-        raise GraphQLError(
-            "You don't have permission to read service accounts in this App"
-        )
+        return []
 
     if not user_can_access_app(info.context.user.userId, app_id):
         raise GraphQLError("You don't have access to this app")
