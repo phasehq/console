@@ -10,6 +10,7 @@ from api.utils.crypto import decrypt_asymmetric
 from api.models import DynamicSecretLease, DynamicSecretLeaseEvent
 from api.utils.rest import get_resolver_request_meta
 from ee.integrations.secrets.dynamic.exceptions import (
+    DynamicSecretError,
     LeaseAlreadyRevokedError,
     LeaseExpiredError,
     LeaseRenewalError,
@@ -202,6 +203,15 @@ def create_dynamic_secret_lease(
     try:
         lease_name = lease_name or secret.name
         ttl = ttl or int(secret.default_ttl.total_seconds())
+
+        if ttl > int(secret.max_ttl.total_seconds()):
+            raise TTLExceededError(
+                "The specified TTL exceeds the maximum TTL for this dynamic secret."
+            )
+
+        if ttl < 60:
+            raise DynamicSecretError("The specified TTL must be at least 60 seconds.")
+
         if secret.provider == "aws":
             lease, lease_data, meta = create_aws_dynamic_secret_lease(
                 secret=secret,
