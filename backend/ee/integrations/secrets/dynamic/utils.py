@@ -202,6 +202,15 @@ def create_dynamic_secret_lease(
     try:
         lease_name = lease_name or secret.name
         ttl = ttl or int(secret.default_ttl.total_seconds())
+
+        if ttl > int(secret.max_ttl.total_seconds()):
+            raise TTLExceededError(
+                "The specified TTL exceeds the maximum TTL for this dynamic secret."
+            )
+
+        if ttl < 60:
+            raise ValidationError("The specified TTL must be at least 60 seconds.")
+
         if secret.provider == "aws":
             lease, lease_data, meta = create_aws_dynamic_secret_lease(
                 secret=secret,
