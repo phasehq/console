@@ -1,6 +1,13 @@
 'use client'
 
-import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
+import {
+  ApiOrganisationPlanChoices,
+  DynamicSecretType,
+  EnvironmentType,
+  SecretFolderType,
+  SecretInput,
+  SecretType,
+} from '@/apollo/graphql'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { GetFolders } from '@/graphql/queries/secrets/getFolders.gql'
@@ -62,6 +69,11 @@ import Spinner from '@/components/common/Spinner'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
+import { FaBolt } from 'react-icons/fa6'
+import { CreateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
+import { DynamicSecretRow } from '@/ee/components/secrets/dynamic/DynamicSecretRow'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 
 export default function EnvironmentPath({
   params,
@@ -76,8 +88,12 @@ export default function EnvironmentPath({
   const highlightedRef = useRef<HTMLDivElement>(null)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
+
   const [serverSecrets, setServerSecrets] = useState<SecretType[]>([])
   const [clientSecrets, setClientSecrets] = useState<SecretType[]>([])
+
+  const [dynamicSecrets, setDynamicSecrets] = useState<DynamicSecretType[]>([])
+
   const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isLoading, setIsloading] = useState(false)
@@ -85,6 +101,8 @@ export default function EnvironmentPath({
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const [sort, setSort] = useState<SortOption>('-created')
 
@@ -185,6 +203,7 @@ export default function EnvironmentPath({
   }
 
   const environment = data?.appEnvironments[0] as EnvironmentType
+  //const dynamicSecrets: DynamicSecretType[] = data?.dynamicSecrets ?? []
 
   const envLinks =
     appEnvsData?.appEnvironments
@@ -379,7 +398,7 @@ export default function EnvironmentPath({
   useEffect(() => {
     if (data && envKeys) {
       const decryptSecrets = async () => {
-        const decryptedSecrets = await Promise.all(
+        const decryptedStaticSecrets = await Promise.all(
           data.secrets.map(async (secret: SecretType) => {
             const decryptedSecret = structuredClone(secret)
 
@@ -447,12 +466,36 @@ export default function EnvironmentPath({
             return decryptedSecret
           })
         )
-        return decryptedSecrets
+
+        //Decrypt dynamic secrets keyMap.keyName
+        const decryptedDynamicSecrets = await Promise.all(
+          (data.dynamicSecrets ?? []).map(async (secret: DynamicSecretType) => {
+            const decryptedSecret = structuredClone(secret)
+            if (decryptedSecret.keyMap && Array.isArray(decryptedSecret.keyMap)) {
+              decryptedSecret.keyMap = await Promise.all(
+                decryptedSecret.keyMap.map(async (keyMapItem) => ({
+                  ...keyMapItem,
+                  keyName: keyMapItem?.keyName
+                    ? await decryptAsymmetric(
+                        keyMapItem.keyName,
+                        envKeys.privateKey,
+                        envKeys.publicKey
+                      )
+                    : keyMapItem?.keyName,
+                }))
+              )
+            }
+            return decryptedSecret
+          })
+        )
+
+        return { decryptedStaticSecrets, decryptedDynamicSecrets }
       }
 
       decryptSecrets().then((decryptedSecrets) => {
-        setServerSecrets(decryptedSecrets)
-        setClientSecrets(decryptedSecrets)
+        setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
+        setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
+        setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
       })
     }
   }, [envKeys, data])
@@ -500,7 +543,7 @@ export default function EnvironmentPath({
       return false
     }
 
-    if (duplicateKeysExist(clientSecrets)) {
+    if (duplicateKeysExist(clientSecrets, dynamicSecrets)) {
       toast.error('Secret keys cannot be repeated!')
       setIsloading(false)
       return false
@@ -545,6 +588,19 @@ export default function EnvironmentPath({
   const cannonicalSecret = (id: string) => serverSecrets.find((secret) => secret.id === id)
 
   const filteredAndSortedSecrets = sortSecrets(filteredSecrets, sort)
+
+  const filteredDynamicSecrets =
+    searchQuery === ''
+      ? dynamicSecrets
+      : dynamicSecrets.filter((secret) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(`${secret.name}${secret.keyMap?.map((k) => k!.keyName).join('')}`)
+        })
+
+  const noSecrets =
+    filteredAndSortedSecrets.length === 0 &&
+    filteredFolders.length === 0 &&
+    filteredDynamicSecrets.length === 0
 
   const downloadEnvFile = () => {
     const envContent = serverSecrets
@@ -784,6 +840,8 @@ export default function EnvironmentPath({
       true
     )
 
+    const allowDynamicSecrets = organisation?.plan === ApiOrganisationPlanChoices.En
+
     if (!userCanCreateSecrets) return <></>
     return (
       <SplitButton
@@ -791,6 +849,18 @@ export default function EnvironmentPath({
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                allowDynamicSecrets
+                  ? dynamicSecretDialogRef.current?.openModal()
+                  : upsellDialogRef.current?.openModal()
+              }
+            >
+              <FaBolt /> Dynamic Secret{' '}
+              {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
+            </Button>
+
             <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
               <div className="flex items-center gap-2">
                 <FaFolderPlus /> New Folder
@@ -988,7 +1058,7 @@ export default function EnvironmentPath({
               ref={importDialogRef}
             />
 
-            {(clientSecrets.length > 0 || folders.length > 0) && (
+            {!noSecrets && (
               <div className="flex items-center w-full">
                 <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
@@ -1020,6 +1090,12 @@ export default function EnvironmentPath({
 
           <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
             <NewFolderMenu />
+            <CreateDynamicSecretDialog
+              environment={environment}
+              path={secretPath}
+              ref={dynamicSecretDialogRef}
+            />
+            <UpsellDialog ref={upsellDialogRef} title="Upgrade to Enterprise" />
 
             {organisation &&
               filteredFolders.map((folder: SecretFolderType) => (
@@ -1028,6 +1104,11 @@ export default function EnvironmentPath({
                   folder={folder}
                   handleDelete={handleDeleteFolder}
                 />
+              ))}
+
+            {environment &&
+              filteredDynamicSecrets.map((secret) => (
+                <DynamicSecretRow key={secret.id} secret={secret} environment={environment} />
               ))}
 
             {organisation &&
@@ -1058,7 +1139,7 @@ export default function EnvironmentPath({
                 </div>
               ))}
 
-            {filteredAndSortedSecrets.length === 0 && filteredFolders.length === 0 && (
+            {noSecrets && (
               <EmptyState
                 title={searchQuery ? `No results for "${searchQuery}"` : 'No secrets here'}
                 subtitle="Add secrets or folders here to get started"

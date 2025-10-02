@@ -5,6 +5,24 @@ from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from ee.integrations.secrets.dynamic.graphene.mutations import (
+    DeleteDynamicSecretMutation,
+    LeaseDynamicSecret,
+    RenewLeaseMutation,
+    RevokeLeaseMutation,
+)
+from ee.integrations.secrets.dynamic.graphene.types import (
+    DynamicSecretProviderType,
+    DynamicSecretType,
+)
+from ee.integrations.secrets.dynamic.aws.graphene.mutations import (
+    CreateAWSDynamicSecretMutation,
+    UpdateAWSDynamicSecretMutation,
+)
+from ee.integrations.secrets.dynamic.graphene.queries import (
+    resolve_dynamic_secret_providers,
+    resolve_dynamic_secrets,
+)
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
@@ -34,7 +52,7 @@ from ee.billing.graphene.queries.stripe import (
     StripeSubscriptionDetails,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
-    resolve_stripe_customer_portal_url
+    resolve_stripe_customer_portal_url,
 )
 from ee.billing.graphene.mutations.stripe import (
     CancelSubscriptionMutation,
@@ -390,7 +408,20 @@ class Query(graphene.ObjectType):
         StripeSubscriptionDetails, organisation_id=graphene.ID()
     )
 
-    stripe_customer_portal_url = graphene.String(organisation_id=graphene.ID(required=True))
+    stripe_customer_portal_url = graphene.String(
+        organisation_id=graphene.ID(required=True)
+    )
+
+    # Dynamic secrets
+    dynamic_secret_providers = graphene.List(DynamicSecretProviderType)
+    dynamic_secrets = graphene.List(
+        DynamicSecretType,
+        secret_id=graphene.ID(required=False),
+        app_id=graphene.ID(required=False),
+        env_id=graphene.ID(required=False),
+        path=graphene.String(required=False),
+        org_id=graphene.ID(),
+    )
 
     # --------------------------------------------------------------------
 
@@ -437,6 +468,9 @@ class Query(graphene.ObjectType):
     resolve_validate_aws_assume_role_credentials = (
         resolve_validate_aws_assume_role_credentials
     )
+
+    resolve_dynamic_secret_providers = resolve_dynamic_secret_providers
+    resolve_dynamic_secrets = resolve_dynamic_secrets
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -1018,6 +1052,14 @@ class Mutation(graphene.ObjectType):
     modify_subscription = ModifySubscriptionMutation.Field()
     create_setup_intent = CreateSetupIntentMutation.Field()
     set_default_payment_method = SetDefaultPaymentMethodMutation.Field()
+
+    # Dynamic Secrets
+    create_aws_dynamic_secret = CreateAWSDynamicSecretMutation.Field()
+    update_aws_dynamic_secret = UpdateAWSDynamicSecretMutation.Field()
+    delete_dynamic_secret = DeleteDynamicSecretMutation.Field()
+    create_dynamic_secret_lease = LeaseDynamicSecret.Field()
+    renew_dynamic_secret_lease = RenewLeaseMutation.Field()
+    revoke_dynamic_secret_lease = RevokeLeaseMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

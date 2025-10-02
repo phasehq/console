@@ -27,8 +27,8 @@ export const colors = [
  * @returns {string} The space-separated string.
  */
 export const camelCaseToSpaces = (str: string): string => {
-  return str.replace(/([a-z])([A-Z])/g, '$1 $2');
-};
+  return str.replace(/([a-z])([A-Z])/g, '$1 $2')
+}
 
 /**
  * Generates a hex color code from a given string.
@@ -39,19 +39,19 @@ export const camelCaseToSpaces = (str: string): string => {
  */
 export const stringToHexColor = (input: string): string => {
   // Simple hash function to generate a consistent hash from the input string
-  let hash = 0;
+  let hash = 0
   for (let i = 0; i < input.length; i++) {
-    hash = input.charCodeAt(i) + ((hash << 5) - hash);
+    hash = input.charCodeAt(i) + ((hash << 5) - hash)
   }
 
   // Convert the hash to a hex color code
-  let color = '#';
+  let color = '#'
   for (let i = 0; i < 3; i++) {
-    const value = (hash >> (i * 8)) & 0xFF;
-    color += ('00' + value.toString(16)).slice(-2);
+    const value = (hash >> (i * 8)) & 0xff
+    color += ('00' + value.toString(16)).slice(-2)
   }
 
-  return color;
+  return color
 }
 
 /**
@@ -62,27 +62,27 @@ export const stringToHexColor = (input: string): string => {
  */
 export const getContrastingTextColor = (hexColor: string): string => {
   // Convert hex to RGB
-  const r = parseInt(hexColor.slice(1, 3), 16);
-  const g = parseInt(hexColor.slice(3, 5), 16);
-  const b = parseInt(hexColor.slice(5, 7), 16);
+  const r = parseInt(hexColor.slice(1, 3), 16)
+  const g = parseInt(hexColor.slice(3, 5), 16)
+  const b = parseInt(hexColor.slice(5, 7), 16)
 
   // Calculate luminance
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
 
   // Return black or white depending on luminance
-  return luminance > 0.5 ? 'black' : 'white';
-};
+  return luminance > 0.5 ? 'black' : 'white'
+}
 
 /**
-* Generates a random hexadecimal color string.
-*
-* @returns {string} A string representing a random hex color in the format "#RRGGBB".
-*/
+ * Generates a random hexadecimal color string.
+ *
+ * @returns {string} A string representing a random hex color in the format "#RRGGBB".
+ */
 export const generateRandomHexColor = (): string => {
- // Generate a random number between 0 and 0xFFFFFF, then convert to a hexadecimal string
- const randomColor = Math.floor(Math.random() * 0xffffff).toString(16)
- // Pad the string with leading zeros if necessary to ensure it has a length of 6 characters
- return '#' + randomColor.padStart(6, '0')
+  // Generate a random number between 0 and 0xFFFFFF, then convert to a hexadecimal string
+  const randomColor = Math.floor(Math.random() * 0xffffff).toString(16)
+  // Pad the string with leading zeros if necessary to ensure it has a length of 6 characters
+  return '#' + randomColor.padStart(6, '0')
 }
 
 /**
@@ -91,21 +91,35 @@ export const generateRandomHexColor = (): string => {
  * @returns {string} A random color in hex format.
  */
 export const getRandomCuratedColor = (): string => {
-  const randomIndex = Math.floor(Math.random() * colors.length);
-  return colors[randomIndex];
-};
-
-
+  const randomIndex = Math.floor(Math.random() * colors.length)
+  return colors[randomIndex]
+}
 
 /**
  * Checks if a string contains at least one non-space character
- * 
- * @param {string} value 
+ *
+ * @param {string} value
  * @returns {boolean}
  */
 export const stringContainsCharacters = (value: string) => {
-  const trimmedValue = value.trim(); // Trim leading and trailing spaces
-  const isValid = /^(?!\s*$).+/.test(trimmedValue); // Validate using the regex
+  const trimmedValue = value.trim() // Trim leading and trailing spaces
+  const isValid = /^(?!\s*$).+/.test(trimmedValue) // Validate using the regex
 
   return isValid
-};
+}
+
+/**
+ * Generates a random alphanumeric string of specified length.
+ * @param {string} min Minimum length of the string (default is 6)
+ * @param {string} max Maximum length of the string (default is 18)
+ * @returns  A random string
+ */
+export const randomString = (min = 6, max = 18) => {
+  const length = Math.floor(Math.random() * (max - min + 1)) + min
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
