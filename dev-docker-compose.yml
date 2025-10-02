@@ -84,12 +84,16 @@ services:
     restart: always
     env_file:
       - .env.dev
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     volumes:
       - phase-postgres-data-dev:/var/lib/postgresql/data
     networks:
       - phase-net-dev
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres-user -d postgres-db-name"] # update the user and db based on your .env.dev
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
