@@ -24,6 +24,7 @@ import { IPChip } from '../../network/_components/IPChip'
 import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 import { ServiceAccountTokens } from './_components/ServiceAccountTokens'
 import { KeyManagementDialog } from '@/components/service-accounts/KeyManagementDialog'
+import { ServiceAccountIdentities } from './_components/ServiceAccountIdentities'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -135,62 +136,61 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
       <div className="pb-4">
         <Link
           href={`/${params.team}/access/service-accounts`}
-          className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
+          className="text-neutral-500 inline-flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
         >
           <FaChevronLeft /> Back to service accounts
         </Link>
       </div>
       <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
-        <div className="text-2xl font-semibold flex items-center gap-2">
-          <Avatar serviceAccount={account} size="xl" />
-          <div className="flex flex-col">
-            <h3 className="relative group w-full max-w-md">
-              <input
-                className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full "
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                readOnly={!userCanUpdateSA}
-                maxLength={64}
-              />
-              {nameUpdated ? (
-                <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
-                  <Button variant="secondary" onClick={resetName}>
-                    <span className="text-2xs">Discard</span>
-                  </Button>
-                  <Button variant="primary" onClick={updateName}>
-                    <span className="text-2xs">Save</span>
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center inset-y-0 gap-1 absolute right-2 opacity-0 group-hover:opacity-100 transition ease ">
-                  <FaEdit className="text-neutral-500 text-base" />
-                </div>
-              )}
-            </h3>
-            <span className="text-neutral-500 text-sm font-mono pl-2">{account.id}</span>
-            <div className="flex items-center gap-2 text-sm text-neutral-500 mt-1">
-              {account.serverSideKeyManagementEnabled ? (
-                <FaServer className="text-neutral-500" />
-              ) : (
-                <FaArrowDownUpLock className="text-neutral-500" />
-              )}
-              <span className="whitespace-nowrap">KMS Mode:</span>
-              <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                {account.serverSideKeyManagementEnabled ? 'Server-side' : 'Client-side'} key
-                management
-              </span>
-              {userCanUpdateSA && (
-                <KeyManagementDialog
-                  serviceAccount={account}
-                  trigger={
-                    <Button variant="secondary" className="flex items-center gap-2">
-                      <FaCog className="h-4 w-4" />
-                      <span>Manage</span>
-                    </Button>
-                  }
+        <div className="flex items-end justify-between">
+          <div className="text-2xl font-semibold flex items-center gap-2">
+            <Avatar serviceAccount={account} size="xl" />
+            <div>
+              <h3 className="relative group w-full max-w-md">
+                <input
+                  className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full "
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  readOnly={!userCanUpdateSA}
+                  maxLength={64}
                 />
-              )}
+                {nameUpdated ? (
+                  <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
+                    <Button variant="secondary" onClick={resetName}>
+                      <span className="text-2xs">Discard</span>
+                    </Button>
+                    <Button variant="primary" onClick={updateName}>
+                      <span className="text-2xs">Save</span>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center inset-y-0 gap-1 absolute right-2 opacity-0 group-hover:opacity-100 transition ease ">
+                    <FaEdit className="text-neutral-500 text-base" />
+                  </div>
+                )}
+              </h3>
+              <CopyButton
+                value={account.id}
+                buttonVariant="ghost"
+                title="Copy Service Account ID to clipboard"
+              >
+                <span className="text-neutral-500 text-sm font-mono">{account.id}</span>
+              </CopyButton>
             </div>
+          </div>
+          <div className="flex items-center gap-2 text-base text-neutral-500 mt-1">
+            {account.serverSideKeyManagementEnabled ? (
+              <FaServer className="text-sky-500" />
+            ) : (
+              <FaArrowDownUpLock className="text-emerald-500" />
+            )}
+
+            <span className="font-medium text-zinc-900 dark:text-zinc-100">
+              {account.serverSideKeyManagementEnabled ? 'Server-side' : 'Client-side'} KMS
+            </span>
+            {userCanUpdateSA && (
+              <KeyManagementDialog serviceAccount={account} buttonVariant={'secondary'} />
+            )}
           </div>
         </div>
 
@@ -319,6 +319,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             </div>
           )}
         </div>
+
+        <ServiceAccountIdentities account={account} />
 
         {userCanViewNetworkAccess && (
           <div className="py-4">
