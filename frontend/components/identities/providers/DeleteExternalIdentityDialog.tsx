@@ -19,7 +19,7 @@ export const DeleteExternalIdentityDialog = ({ identity }: { identity: IdentityT
   const closeModal = () => dialogRef.current?.closeModal()
 
   const canDeleteIdentities = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Identities', 'delete')
+    ? userHasPermission(organisation.role!.permissions, 'ExternalIdentities', 'delete')
     : false
 
   const [deleteIdentity, { loading: deleting }] = useMutation(DeleteIdentity)

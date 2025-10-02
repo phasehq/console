@@ -1,5 +1,11 @@
 from api.utils.access.permissions import user_has_permission, user_is_org_member
-from api.models import NetworkAccessPolicy, Organisation, OrganisationMember, Role, Identity
+from api.models import (
+    NetworkAccessPolicy,
+    Organisation,
+    OrganisationMember,
+    Role,
+    Identity,
+)
 from graphql import GraphQLError
 from django.db import transaction
 from api.utils.access.roles import default_roles
@@ -106,7 +112,7 @@ def resolve_identities(root, info, organisation_id):
     if user_has_permission(
         info.context.user.userId,
         "read",
-        "Identities",
+        "ExternalIdentities",
         Organisation.objects.get(id=organisation_id),
     ):
         return Identity.objects.filter(organisation_id=organisation_id, deleted_at=None)

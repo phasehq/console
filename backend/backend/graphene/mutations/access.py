@@ -257,7 +257,7 @@ class CreateIdentityMutation(graphene.Mutation):
         user = info.context.user
         org = Organisation.objects.get(id=organisation_id)
 
-        if not user_has_permission(user, "create", "Identities", org):
+        if not user_has_permission(user, "create", "ExternalIdentities", org):
             raise GraphQLError(
                 "You don't have the permissions required to create identities in this organisation"
             )
@@ -324,20 +324,22 @@ class UpdateIdentityMutation(graphene.Mutation):
         identity = Identity.objects.get(id=id, deleted_at=None)
 
         org = identity.organisation
-        if not user_has_permission(user, "update", "Identities", org):
+        if not user_has_permission(user, "update", "ExternalIdentities", org):
             raise GraphQLError(
                 "You don't have the permissions required to update identities in this organisation"
             )
 
         # Update basic fields using dictionary unpacking
         basic_updates = {
-            k: v for k, v in {
-                'name': name,
-                'description': description,
-                'token_name_pattern': token_name_pattern,
-                'default_ttl_seconds': default_ttl_seconds,
-                'max_ttl_seconds': max_ttl_seconds,
-            }.items() if v is not None
+            k: v
+            for k, v in {
+                "name": name,
+                "description": description,
+                "token_name_pattern": token_name_pattern,
+                "default_ttl_seconds": default_ttl_seconds,
+                "max_ttl_seconds": max_ttl_seconds,
+            }.items()
+            if v is not None
         }
         for field, value in basic_updates.items():
             setattr(identity, field, value)
@@ -345,16 +347,21 @@ class UpdateIdentityMutation(graphene.Mutation):
         # Update provider-specific config atomically
         config_updates = {}
         if trusted_principals is not None:
-            config_updates["trustedPrincipals"] = [p.strip() for p in trusted_principals.split(",") if p.strip()]
+            config_updates["trustedPrincipals"] = [
+                p.strip() for p in trusted_principals.split(",") if p.strip()
+            ]
         if signature_ttl_seconds is not None:
             config_updates["signatureTtlSeconds"] = signature_ttl_seconds
         if sts_endpoint is not None:
             config_updates["stsEndpoint"] = sts_endpoint
-        
+
         if config_updates:
             identity.config = {**(identity.config or {}), **config_updates}
 
-        if identity.default_ttl_seconds is not None and identity.max_ttl_seconds is not None:
+        if (
+            identity.default_ttl_seconds is not None
+            and identity.max_ttl_seconds is not None
+        ):
             if int(identity.default_ttl_seconds) > int(identity.max_ttl_seconds):
                 raise GraphQLError(
                     "Default token expiry must be less than or equal to Maximum token expiry"
@@ -377,7 +384,7 @@ class DeleteIdentityMutation(graphene.Mutation):
         identity = Identity.objects.get(id=id, deleted_at=None)
 
         org = identity.organisation
-        if not user_has_permission(user, "delete", "Identities", org):
+        if not user_has_permission(user, "delete", "ExternalIdentities", org):
             raise GraphQLError(
                 "You don't have the permissions required to delete identities in this organisation"
             )

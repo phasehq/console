@@ -25,13 +25,13 @@ export default function IdentityPage() {
 
   // Permission checks
   const canReadIdentities = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Identities', 'read')
+    ? userHasPermission(organisation.role!.permissions, 'ExternalIdentities', 'read')
     : false
   const canCreateIdentities = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Identities', 'create')
+    ? userHasPermission(organisation.role!.permissions, 'ExternalIdentities', 'create')
     : false
   const canUpdateIdentities = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Identities', 'update')
+    ? userHasPermission(organisation.role!.permissions, 'ExternalIdentities', 'update')
     : false
 
   const { data, refetch } = useQuery(GetOrganisationIdentities, {
