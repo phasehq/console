@@ -266,11 +266,14 @@ class CreateGitHubActionsSync(graphene.Mutation):
         credential_id = graphene.ID()
         repo_name = graphene.String()
         owner = graphene.String()
+        environment_name = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(cls, root, info, env_id, path, credential_id, repo_name, owner):
+    def mutate(
+        cls, root, info, env_id, path, credential_id, repo_name, owner, environment_name=None
+    ):
         service_id = "github_actions"
         service_config = ServiceConfig.get_service_config(service_id)
 
@@ -283,6 +286,8 @@ class CreateGitHubActionsSync(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         sync_options = {"repo_name": repo_name, "owner": owner}
+        if environment_name:
+            sync_options["environment_name"] = environment_name
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None

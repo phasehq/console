@@ -257,6 +257,7 @@ def perform_github_actions_sync(environment_sync):
     access_token, api_host = get_gh_actions_credentials(environment_sync)
     repo_name = environment_sync.options.get("repo_name")
     repo_owner = environment_sync.options.get("owner")
+    environment_name = environment_sync.options.get("environment_name")
 
     handle_sync_event(
         environment_sync,
@@ -265,6 +266,7 @@ def perform_github_actions_sync(environment_sync):
         repo_name,
         repo_owner,
         api_host,
+        environment_name,
     )
 
 
