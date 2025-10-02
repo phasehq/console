@@ -55,6 +55,7 @@ const GenericDialog = forwardRef(
     }
 
     useImperativeHandle(ref, () => ({
+      isOpen,
       openModal,
       closeModal,
     }))
@@ -120,8 +121,8 @@ const GenericDialog = forwardRef(
                       sizeClass
                     )}
                   >
-                    <Dialog.Title as="div" className="flex w-full justify-between gap-2">
-                      <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-all w-full">
+                    <Dialog.Title as="div" className="flex w-full justify-between gap-2 items-start">
+                      <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-all">
                         {dialogTitle || title}
                       </h3>
                       <Button variant="text" onClick={closeModal}>

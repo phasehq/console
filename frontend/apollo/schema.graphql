@@ -73,6 +73,8 @@ type Query {
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   stripeCustomerPortalUrl(organisationId: ID!): String
+  dynamicSecretProviders: [DynamicSecretProviderType]
+  dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]
 }
 
 type OrganisationType {
@@ -202,6 +204,7 @@ type EnvironmentType {
   updatedAt: DateTime!
   folders: [SecretFolderType]!
   secrets(path: String): [SecretType]!
+  dynamicSecrets(path: String): [DynamicSecretType]!
   folderCount: Int
   secretCount: Int
   members: [OrganisationMemberType]!
@@ -405,18 +408,27 @@ type PersonalSecretType {
   updatedAt: DateTime!
 }
 
-type EnvironmentSyncType {
+type DynamicSecretType {
   id: String!
+  name: String!
+  description: String!
   environment: EnvironmentType!
+  folder: SecretFolderType
   path: String!
-  options: JSONString!
   authentication: ProviderCredentialsType
-  isActive: Boolean!
+
+  """
+  Which provider this secret is associated with.
+  """
+  provider: ApiDynamicSecretProviderChoices!
+  config: DynamicSecretConfigUnion
+  keyMap: [KeyMap]
   createdAt: DateTime
-  lastSync: DateTime
-  status: ApiEnvironmentSyncStatusChoices!
-  serviceInfo: ServiceType
-  history: [EnvironmentSyncEventType!]!
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  leases: [DynamicSecretLeaseType!]!
+  defaultTtlSeconds: Int
+  maxTtlSeconds: Int
 }
 
 type ProviderCredentialsType {
@@ -435,6 +447,145 @@ type ProviderType {
   expectedCredentials: [String!]!
   optionalCredentials: [String!]!
   authScheme: String
+}
+
+enum ApiDynamicSecretProviderChoices {
+  """
+  AWS
+  """
+  AWS
+}
+
+union DynamicSecretConfigUnion = AWSConfigType
+
+type AWSConfigType {
+  usernameTemplate: String!
+  iamPath: String
+  permissionBoundaryArn: String
+  groups: String
+  policyArns: String
+  policyDocument: GenericScalar
+}
+
+"""
+The `GenericScalar` scalar type represents a generic
+GraphQL scalar value that could be:
+String, Boolean, Int, Float, List or Object.
+"""
+scalar GenericScalar
+
+type KeyMap {
+  id: String
+  keyName: String
+  masked: Boolean
+}
+
+type DynamicSecretLeaseType {
+  id: String!
+  name: String!
+  secret: DynamicSecretType!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ttl: Int
+
+  """
+  Current status of the lease
+  """
+  status: ApiDynamicSecretLeaseStatusChoices!
+  credentials: LeaseCredentialsUnion
+  createdAt: DateTime
+  expiresAt: DateTime
+  revokedAt: DateTime
+  deletedAt: DateTime
+  events: [DynamicSecretLeaseEventType]
+}
+
+enum ApiDynamicSecretLeaseStatusChoices {
+  """
+  Created
+  """
+  CREATED
+
+  """
+  Active
+  """
+  ACTIVE
+
+  """
+  Renewed
+  """
+  RENEWED
+
+  """
+  Revoked
+  """
+  REVOKED
+
+  """
+  Expired
+  """
+  EXPIRED
+}
+
+union LeaseCredentialsUnion = AwsCredentialsType
+
+type AwsCredentialsType {
+  accessKeyId: String
+  secretAccessKey: String
+  username: String
+}
+
+type DynamicSecretLeaseEventType {
+  id: ID!
+  lease: DynamicSecretLeaseType!
+  eventType: ApiDynamicSecretLeaseEventEventTypeChoices!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ipAddress: String
+  userAgent: String
+  metadata: JSONString!
+  createdAt: DateTime!
+}
+
+enum ApiDynamicSecretLeaseEventEventTypeChoices {
+  """
+  Created
+  """
+  CREATED
+
+  """
+  Active
+  """
+  ACTIVE
+
+  """
+  Renewed
+  """
+  RENEWED
+
+  """
+  Revoked
+  """
+  REVOKED
+
+  """
+  Expired
+  """
+  EXPIRED
+}
+
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  options: JSONString!
+  authentication: ProviderCredentialsType
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
+  serviceInfo: ServiceType
+  history: [EnvironmentSyncEventType!]!
 }
 
 enum ApiEnvironmentSyncStatusChoices {
@@ -877,6 +1028,13 @@ enum PlanTypeEnum {
   ENTERPRISE
 }
 
+type DynamicSecretProviderType {
+  id: String!
+  name: String!
+  credentials: GenericScalar!
+  configMap: GenericScalar!
+}
+
 type Mutation {
   createOrganisation(
     id: ID!
@@ -1014,6 +1172,7 @@ type Mutation {
     serverWrappedKeyring: String
     serverWrappedRecovery: String
   ): CreateServiceAccountMutation
+
   enableServiceAccountServerSideKeyManagement(
     serverWrappedKeyring: String
     serverWrappedRecovery: String
@@ -1022,6 +1181,13 @@ type Mutation {
   enableServiceAccountClientSideKeyManagement(
     serviceAccountId: ID
   ): EnableServiceAccountClientSideKeyManagementMutation
+  enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
+  enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
+  enableServiceAccountThirdPartyAuth(
+    serverWrappedKeyring: String
+    serverWrappedRecovery: String
+    serviceAccountId: ID
+  ): EnableServiceAccountThirdPartyAuthMutation
   updateServiceAccountHandlers(
     handlers: [ServiceAccountHandlerInput]
     organisationId: ID
@@ -1194,6 +1360,34 @@ type Mutation {
     """
     paymentMethodId: String!
   ): SetDefaultPaymentMethodMutation
+  createAwsDynamicSecret(
+    authenticationId: ID
+    config: AWSConfigInput!
+    defaultTtl: Int
+    description: String
+    environmentId: ID!
+    keyMap: [KeyMapInput]!
+    maxTtl: Int
+    name: String!
+    organisationId: ID!
+    path: String
+  ): CreateAWSDynamicSecretMutation
+  updateAwsDynamicSecret(
+    authenticationId: ID
+    config: AWSConfigInput!
+    defaultTtl: Int
+    description: String
+    dynamicSecretId: ID!
+    keyMap: [KeyMapInput]!
+    maxTtl: Int
+    name: String!
+    organisationId: ID!
+    path: String
+  ): UpdateAWSDynamicSecretMutation
+  deleteDynamicSecret(secretId: ID!): DeleteDynamicSecretMutation
+  createDynamicSecretLease(name: String, secretId: ID!, ttl: Int): LeaseDynamicSecret
+  renewDynamicSecretLease(leaseId: ID!, ttl: Int): RenewLeaseMutation
+  revokeDynamicSecretLease(leaseId: ID!): RevokeLeaseMutation
 }
 
 type CreateOrganisationMutation {
@@ -1611,3 +1805,42 @@ type CreateSetupIntentMutation {
 type SetDefaultPaymentMethodMutation {
   ok: Boolean
 }
+
+type CreateAWSDynamicSecretMutation {
+  dynamicSecret: DynamicSecretType
+}
+
+input AWSConfigInput {
+  usernameTemplate: String!
+  iamPath: String = "/"
+  permissionBoundaryArn: String
+  groups: String
+  policyArns: String
+  policyDocument: GenericScalar
+}
+
+input KeyMapInput {
+  id: String!
+  keyName: String!
+}
+
+type UpdateAWSDynamicSecretMutation {
+  dynamicSecret: DynamicSecretType
+}
+
+type DeleteDynamicSecretMutation {
+  ok: Boolean
+}
+
+type LeaseDynamicSecret {
+  lease: DynamicSecretLeaseType
+}
+
+type RenewLeaseMutation {
+  lease: DynamicSecretLeaseType
+}
+
+type RevokeLeaseMutation {
+  lease: DynamicSecretLeaseType
+}
+

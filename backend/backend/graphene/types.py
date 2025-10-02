@@ -4,6 +4,8 @@ from api.utils.access.permissions import (
     user_can_access_environment,
     user_has_permission,
 )
+from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_secrets
+from ee.integrations.secrets.dynamic.graphene.types import DynamicSecretType
 from backend.quotas import PLAN_CONFIG
 import graphene
 from enum import Enum
@@ -11,6 +13,8 @@ from graphene import ObjectType, relay, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
+    CustomUser,
+    DynamicSecret,
     Environment,
     EnvironmentKey,
     EnvironmentSync,
@@ -396,7 +400,10 @@ class SecretFolderType(DjangoObjectType):
         return SecretFolder.objects.filter(folder=self).count()
 
     def resolve_secret_count(self, info):
-        return Secret.objects.filter(folder=self).count()
+        return (
+            Secret.objects.filter(folder=self).count()
+            + DynamicSecret.objects.filter(folder=self, deleted_at=None).count()
+        )
 
 
 class SecretEventType(DjangoObjectType):
@@ -507,6 +514,9 @@ class EnvironmentType(DjangoObjectType):
     secrets = graphene.NonNull(
         graphene.List(SecretType), path=graphene.String(required=False)
     )
+    dynamic_secrets = graphene.NonNull(
+        graphene.List(DynamicSecretType), path=graphene.String(required=False)
+    )
     folder_count = graphene.Int()
     secret_count = graphene.Int()
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
@@ -549,6 +559,10 @@ class EnvironmentType(DjangoObjectType):
 
         return Secret.objects.filter(**filter).order_by("-created_at")
 
+    def resolve_dynamic_secrets(self, info, path=None):
+        # Reuse the existing resolver from queries.py
+        return resolve_dynamic_secrets(root=None, info=info, env_id=self.id, path=path)
+
     def resolve_folders(self, info, path=None):
         if not user_can_access_environment(info.context.user.userId, self.id):
             raise GraphQLError("You don't have access to this environment")
@@ -564,7 +578,10 @@ class EnvironmentType(DjangoObjectType):
         return SecretFolder.objects.filter(environment=self).count()
 
     def resolve_secret_count(self, info):
-        return Secret.objects.filter(environment=self, deleted_at=None).count()
+        return (
+            Secret.objects.filter(environment=self, deleted_at=None).count()
+            + DynamicSecret.objects.filter(environment=self, deleted_at=None).count()
+        )
 
     def resolve_wrapped_seed(self, info):
         org_member = OrganisationMember.objects.get(
