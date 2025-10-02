@@ -3,6 +3,7 @@ import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import CreateNewGhActionsSync from '@/graphql/mutations/syncing/github/CreateGhActionsSync.gql'
+import GetGithubEnvironments from '@/graphql/queries/syncing/github/getEnvironments.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
@@ -38,6 +39,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   })
 
   const [getGhRepos, { loading }] = useLazyQuery(GetGithubRepos)
+  const [getGhEnvironments] = useLazyQuery(GetGithubEnvironments)
 
   const [createGhActionsSync, { data: syncData, loading: creating }] =
     useMutation(CreateNewGhActionsSync)
@@ -45,9 +47,12 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
   const [repos, setRepos] = useState<GitHubRepoType[]>([])
+  const [environments, setEnvironments] = useState<string[]>([])
 
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined)
   const [query, setQuery] = useState('')
+  const [envQuery, setEnvQuery] = useState('')
 
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
@@ -67,6 +72,26 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
       setPhaseEnv(defaultEnv)
     }
   }, [appEnvsData])
+
+  // Load environments for selected repo when repo changes
+  useEffect(() => {
+    const loadEnvs = async () => {
+      if (!credential || !selectedRepo) return
+      const { data } = await getGhEnvironments({
+        variables: {
+          credentialId: credential.id,
+          owner: selectedRepo.owner,
+          repoName: selectedRepo.name,
+        },
+      })
+      if (data?.githubEnvironments) {
+        setEnvironments(data.githubEnvironments)
+      } else {
+        setEnvironments([])
+      }
+    }
+    loadEnvs()
+  }, [credential, selectedRepo, getGhEnvironments])
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -95,6 +120,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
           repoName: selectedRepo.name,
           owner: selectedRepo.owner,
           credentialId: credential.id,
+          environmentName: selectedEnvironment || null,
         },
         refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
       })
@@ -192,7 +218,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                       <div className="space-y-2">
                         <Combobox.Label as={Fragment}>
                           <label className="block text-neutral-500 text-sm" htmlFor="name">
-                            GitHub Repo
+                            GitHub Repository
                           </label>
                         </Combobox.Label>
                         <div className="w-full relative flex items-center">
@@ -270,6 +296,95 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                           </div>
                         </Combobox.Options>
                       </Transition>
+                    </>
+                  )}
+                </Combobox>
+              </div>
+              <div className="relative col-span-2">
+                <Combobox as="div" value={selectedEnvironment} onChange={setSelectedEnvironment}>
+                  {({ open }) => (
+                    <>
+                      <div className="space-y-2">
+                        <Combobox.Label as={Fragment}>
+                          <label className="block text-neutral-500 text-sm" htmlFor="gh-env">
+                            GitHub Environment (optional)
+                          </label>
+                        </Combobox.Label>
+                        <div className="w-full relative flex items-center">
+                        <Combobox.Input
+                          className={clsx('w-full', !selectedRepo && 'opacity-60 cursor-not-allowed pointer-events-none')}
+                          onChange={(e) => setEnvQuery(e.target.value)}
+                          displayValue={(env?: string) => (env ? env : envQuery)}
+                          aria-disabled={!selectedRepo}
+                            placeholder={
+                              !selectedRepo
+                                ? 'Select a repository'
+                                : environments.length === 0
+                                ? 'No environments found'
+                                : 'Select an environment'
+                            }
+                        />
+                          <div className="absolute inset-y-0 right-2 flex items-center">
+                            <Combobox.Button
+                              aria-disabled={!selectedRepo}
+                              className={clsx(!selectedRepo && 'pointer-events-none')}
+                            >
+                              <FaChevronDown
+                                className={clsx(
+                                  'text-neutral-500 transform transition ease',
+                                  open ? 'rotate-180' : 'rotate-0',
+                                  !selectedRepo && 'opacity-50 cursor-not-allowed'
+                                )}
+                              />
+                            </Combobox.Button>
+                          </div>
+                        </div>
+                      </div>
+                      {selectedRepo && (
+                        <Transition
+                          enter="transition duration-100 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-75 ease-out"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          <Combobox.Options as={Fragment}>
+                            <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
+                              <Combobox.Option as="div" key="__none__" value={undefined}>
+                                {({ active, selected }) => (
+                                  <div
+                                    className={clsx(
+                                      'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
+                                      active && 'bg-zinc-300 dark:bg-zinc-700'
+                                    )}
+                                  >
+                                    <div className="text-neutral-500 text-sm">No environment (repo-level)</div>
+                                    {selected && <FaCheckCircle className="shrink-0 text-emerald-500" />}
+                                  </div>
+                                )}
+                              </Combobox.Option>
+                              {environments
+                                .filter((env) => (envQuery ? env.toLowerCase().includes(envQuery.toLowerCase()) : true))
+                                .map((env) => (
+                                  <Combobox.Option as="div" key={env} value={env}>
+                                    {({ active, selected }) => (
+                                      <div
+                                        className={clsx(
+                                          'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
+                                          active && 'bg-zinc-300 dark:bg-zinc-700'
+                                        )}
+                                      >
+                                        <div className="font-semibold text-black dark:text-white">{env}</div>
+                                        {selected && <FaCheckCircle className="shrink-0 text-emerald-500" />}
+                                      </div>
+                                    )}
+                                  </Combobox.Option>
+                                ))}
+                            </div>
+                          </Combobox.Options>
+                        </Transition>
+                      )}
                     </>
                   )}
                 </Combobox>
