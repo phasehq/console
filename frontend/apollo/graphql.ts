@@ -243,18 +243,18 @@ export type AppType = {
   wrappedKeyShare: Scalars['String']['output'];
 };
 
-export type AwsIamConfigType = {
-  __typename?: 'AwsIamConfigType';
-  signatureTtlSeconds?: Maybe<Scalars['Int']['output']>;
-  stsEndpoint?: Maybe<Scalars['String']['output']>;
-  trustedPrincipals?: Maybe<Array<Maybe<Scalars['String']['output']>>>;
-}
-
 export type AwsCredentialsType = {
   __typename?: 'AwsCredentialsType';
   accessKeyId?: Maybe<Scalars['String']['output']>;
   secretAccessKey?: Maybe<Scalars['String']['output']>;
   username?: Maybe<Scalars['String']['output']>;
+};
+
+export type AwsIamConfigType = {
+  __typename?: 'AwsIamConfigType';
+  signatureTtlSeconds?: Maybe<Scalars['Int']['output']>;
+  stsEndpoint?: Maybe<Scalars['String']['output']>;
+  trustedPrincipals?: Maybe<Array<Maybe<Scalars['String']['output']>>>;
 };
 
 export enum BillingPeriodEnum {
