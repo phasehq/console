@@ -2,7 +2,7 @@ import base64
 import json
 from io import StringIO
 from urllib.parse import urlparse
-
+import fnmatch
 import requests
 from defusedxml.ElementTree import parse
 from django.http import JsonResponse
@@ -33,7 +33,9 @@ def aws_iam_auth(request):
     account_type = (account.get("type") or "service").lower()
     account_id = account.get("id")
     if account_type != "service" or not account_id:
-        return JsonResponse({"error": "Only service account authentication supported"}, status=400)
+        return JsonResponse(
+            {"error": "Only service account authentication supported"}, status=400
+        )
 
     # Decode signed request
     try:
@@ -52,9 +54,8 @@ def aws_iam_auth(request):
     try:
         from datetime import datetime, timezone as dt_timezone
 
-        dt = (
-            datetime.strptime(amz_date.replace("Z", ""), "%Y%m%dT%H%M%S")
-            .replace(tzinfo=dt_timezone.utc)
+        dt = datetime.strptime(amz_date.replace("Z", ""), "%Y%m%dT%H%M%S").replace(
+            tzinfo=dt_timezone.utc
         )
     except Exception:
         return JsonResponse({"error": "Invalid X-Amz-Date"}, status=400)
@@ -64,11 +65,15 @@ def aws_iam_auth(request):
     if service_account is None:
         return JsonResponse({"error": "Service account not found"}, status=404)
     if not service_account.server_wrapped_keyring:
-        return JsonResponse({"error": "Server-side key management must be enabled"}, status=403)
+        return JsonResponse(
+            {"error": "Server-side key management must be enabled"}, status=403
+        )
 
     identity = resolve_attached_identity(service_account, "aws_iam")
     if not identity:
-        return JsonResponse({"error": "No AWS IAM identity attached to this account"}, status=404)
+        return JsonResponse(
+            {"error": "No AWS IAM identity attached to this account"}, status=404
+        )
 
     try:
         max_skew = int(identity.config.get("signatureTtlSeconds", 60))
@@ -110,15 +115,18 @@ def aws_iam_auth(request):
         return JsonResponse({"error": "Failed to contact AWS STS"}, status=502)
 
     if resp.status_code != 200:
-        return JsonResponse({"error": "AWS STS validation failed", "status": resp.status_code}, status=401)
+        return JsonResponse(
+            {"error": "AWS STS validation failed", "status": resp.status_code},
+            status=401,
+        )
 
     arn = None
     try:
         xml_root = parse(StringIO(resp.text))
-        
+
         # AWS STS namespace
         ns = {"aws": "https://sts.amazonaws.com/doc/2011-06-15/"}
-        
+
         # Find the ARN element in the GetCallerIdentityResult
         arn_element = xml_root.find(".//aws:GetCallerIdentityResult/aws:Arn", ns)
         if arn_element is not None and arn_element.text:
@@ -130,11 +138,12 @@ def aws_iam_auth(request):
         return JsonResponse({"error": "Unable to parse AWS identity"}, status=500)
 
     # Trust check
-    import fnmatch
-
     trusted = identity.get_trusted_list()
     if any(p == "*" for p in trusted):
-        return JsonResponse({"error": "Invalid trusted principal pattern '*' is not allowed"}, status=400)
+        return JsonResponse(
+            {"error": "Invalid trusted principal pattern '*' is not allowed"},
+            status=400,
+        )
 
     def arn_matches_patterns(value: str, patterns: list[str]) -> bool:
         for pattern in patterns:
@@ -150,11 +159,14 @@ def aws_iam_auth(request):
     # Validate requested TTL
     requested_ttl = int(token_req.get("ttl") or identity.default_ttl_seconds)
     max_ttl = identity.max_ttl_seconds
-    
+
     if requested_ttl > max_ttl:
-        return JsonResponse({
-            "error": f"Requested TTL ({requested_ttl}s) exceeds maximum allowed TTL ({max_ttl}s)"
-        }, status=400)
+        return JsonResponse(
+            {
+                "error": f"Requested TTL ({requested_ttl}s) exceeds maximum allowed TTL ({max_ttl}s)"
+            },
+            status=400,
+        )
 
     try:
         auth = mint_service_account_token(
@@ -167,5 +179,3 @@ def aws_iam_auth(request):
         return JsonResponse({"error": "Failed to mint token"}, status=500)
 
     return JsonResponse({"authentication": auth})
-
-
