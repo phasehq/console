@@ -255,7 +255,7 @@ export const AwsIamIdentityForm = ({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-6 py-4">
+      <div className="space-y-6">
         <div className="space-y-2">
           <Input
             value={name}
@@ -460,7 +460,7 @@ export const AwsIamIdentityForm = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-4">
+        <div className="flex items-center justify-between pt-4">
           <div>
             {onBack && (
               <Button variant="secondary" onClick={onBack}>

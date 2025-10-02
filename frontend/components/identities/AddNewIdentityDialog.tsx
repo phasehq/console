@@ -50,7 +50,6 @@ export const AddNewIdentityDialog = forwardRef<
     <GenericDialog
       ref={dialogRef}
       title="Add Identity Provider"
-      size="lg"
       onClose={handleDialogClose}
       dialogTitle={
         <div>
@@ -58,14 +57,14 @@ export const AddNewIdentityDialog = forwardRef<
         </div>
       }
     >
-      <div className="space-y-8 pt-">
+      <div className="space-y-6">
         <div className="text-neutral-500 text-sm">
           {selectedProvider
             ? 'Configure your identity provider'
             : 'Select a provider below to create a new identity.'}
         </div>
         {!selectedProvider ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 gap-8">
             <ProviderCards onProviderSelect={handleProviderSelect} />
           </div>
         ) : selectedProvider === 'aws_iam' ? (

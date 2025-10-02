@@ -46,13 +46,15 @@ export const EditExternalIdentityDialog = ({ identity }: { identity: IdentityTyp
         </>
       }
     >
-      {identity.provider === 'aws_iam' && (
-        <AwsIamIdentityForm
-          organisationId={organisation?.id || ''}
-          identity={identity}
-          onSuccess={() => dialogRef.current?.closeModal()}
-        />
-      )}
+      <div className="pt-6">
+        {identity.provider === 'aws_iam' && (
+          <AwsIamIdentityForm
+            organisationId={organisation?.id || ''}
+            identity={identity}
+            onSuccess={() => dialogRef.current?.closeModal()}
+          />
+        )}
+      </div>
     </GenericDialog>
   )
 }
