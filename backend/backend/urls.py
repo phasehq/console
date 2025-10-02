@@ -48,7 +48,7 @@ public_urls = [
         "public/v1/secrets/dynamic/",
         include("ee.integrations.secrets.dynamic.rest.urls"),
     ),
-    path("public/identity/v1/aws/iam/auth/", aws_iam_auth),
+    path("public/identities/external/v1/aws/iam/auth/", aws_iam_auth),
 ]
 
 # Add public URLs to main urlpatterns
