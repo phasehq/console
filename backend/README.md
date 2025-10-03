@@ -11,7 +11,7 @@ Django + Graphene + DRF
 Dev docker compose instructions:
 
 ```bash
-docker compose -f dev-docker-compose.yml exec backend python manage.py graphql_schema --schema backend.schema.schema --out schema.graphql
+docker compose --env-file .env.dev -f dev-docker-compose.yml exec backend python manage.py graphql_schema --schema backend.schema.schema --out schema.graphql
 ```
 
 Overwrite the schema in `/frontend/apollo/schema.graphql`.
