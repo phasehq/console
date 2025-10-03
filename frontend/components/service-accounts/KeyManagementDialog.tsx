@@ -170,7 +170,7 @@ export const KeyManagementDialog = ({
         </>
       }
       dialogTitle={
-        <div className="flex w-full justify-between items-center">
+        <div className="flex w-full justify-between items-center pr-4">
           <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
             Key Management Settings
           </h3>
@@ -193,7 +193,7 @@ export const KeyManagementDialog = ({
       {' '}
       {userCanManageKeys ? (
         <form className="space-y-6" onSubmit={handleSave}>
-          <p className="text-neutral-500 text-sm pb-4">
+          <p className="text-neutral-500 text-sm">
             Choose where and how keys are managed for this Service Account
           </p>
 

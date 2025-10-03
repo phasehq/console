@@ -121,10 +121,15 @@ const GenericDialog = forwardRef(
                       sizeClass
                     )}
                   >
-                    <Dialog.Title as="div" className="flex w-full justify-between gap-2 items-start">
-                      <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-all">
-                        {dialogTitle || title}
-                      </h3>
+                    <Dialog.Title
+                      as="div"
+                      className="flex w-full justify-between gap-2 items-start"
+                    >
+                      {dialogTitle || (
+                        <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-all">
+                          {title}
+                        </h3>
+                      )}
                       <Button variant="text" onClick={closeModal}>
                         <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                       </Button>

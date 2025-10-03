@@ -47,21 +47,12 @@ export const AddNewIdentityDialog = forwardRef<
   }
 
   return (
-    <GenericDialog
-      ref={dialogRef}
-      title="Add Identity Provider"
-      onClose={handleDialogClose}
-      dialogTitle={
-        <div>
-          <h3>Add Identity Provider</h3>
-        </div>
-      }
-    >
+    <GenericDialog ref={dialogRef} title="Add External Identity" onClose={handleDialogClose}>
       <div className="space-y-6">
         <div className="text-neutral-500 text-sm">
           {selectedProvider
-            ? 'Configure your identity provider'
-            : 'Select a provider below to create a new identity.'}
+            ? 'Set up a new external identity'
+            : 'Select a provider below to set up a new identity'}
         </div>
         {!selectedProvider ? (
           <div className="grid grid-cols-1 gap-8">

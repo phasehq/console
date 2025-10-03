@@ -291,7 +291,7 @@ export const AwsIamIdentityForm = ({
           <Input
             value={signatureTtlInput}
             setValue={handleSignatureTtlChange}
-            label="Signatures expiry"
+            label="Signature expiry"
             placeholder={getTTLExamples().join(', ')}
             required
           />
@@ -439,7 +439,7 @@ export const AwsIamIdentityForm = ({
           <Input
             value={tokenNamePattern}
             setValue={setTokenNamePattern}
-            label="Token name prefix or suffix"
+            label="Token name"
             placeholder="Optional identifier (e.g. prod, staging)"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
