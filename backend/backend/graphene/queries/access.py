@@ -1,5 +1,11 @@
 from api.utils.access.permissions import user_has_permission, user_is_org_member
-from api.models import NetworkAccessPolicy, Organisation, OrganisationMember, Role
+from api.models import (
+    NetworkAccessPolicy,
+    Organisation,
+    OrganisationMember,
+    Role,
+    Identity,
+)
 from graphql import GraphQLError
 from django.db import transaction
 from api.utils.access.roles import default_roles
@@ -97,3 +103,20 @@ def resolve_client_ip(root, info):
     else:
         ip = request.META.get("REMOTE_ADDR")
     return ip
+
+
+def resolve_identities(root, info, organisation_id):
+    if not user_is_org_member(info.context.user.userId, organisation_id):
+        raise GraphQLError("You don't have access to this organisation")
+
+    if user_has_permission(
+        info.context.user.userId,
+        "read",
+        "ExternalIdentities",
+        Organisation.objects.get(id=organisation_id),
+    ):
+        return Identity.objects.filter(organisation_id=organisation_id, deleted_at=None)
+    else:
+        raise GraphQLError(
+            "You don't have permission to read identities in this Organisation"
+        )

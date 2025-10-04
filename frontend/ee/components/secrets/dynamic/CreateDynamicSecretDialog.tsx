@@ -35,7 +35,7 @@ import { MdOutlinePassword } from 'react-icons/md'
 import { camelCase } from 'lodash'
 import { toast } from 'react-toastify'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
-import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
+import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/ttl'
 import { Textarea } from '@/components/common/TextArea'
 import { encryptAsymmetric } from '@/utils/crypto'
 
