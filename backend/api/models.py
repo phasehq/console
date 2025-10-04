@@ -575,15 +575,17 @@ class ServiceAccountToken(models.Model):
         # Ensure only one of created_by or created_by_service_account is set
         # Service accounts can create tokens for themselves and others
         if not (self.created_by or self.created_by_service_account):
-            from django.core.exceptions import ValidationError
             raise ValidationError(
                 "Must set either created_by (organisation member) or created_by_service_account"
             )
         if self.created_by and self.created_by_service_account:
-            from django.core.exceptions import ValidationError
             raise ValidationError(
                 "Only one of created_by or created_by_service_account may be set"
             )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()  # This calls clean() and field validation
+        super().save(*args, **kwargs)
 
     def get_creator_account(self):
         return self.created_by or self.created_by_service_account
@@ -911,6 +913,7 @@ class Identity(models.Model):
 
     Scope: Organisation level; can be attached to multiple ServiceAccounts.
     """
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
     provider = models.CharField(max_length=64)
@@ -939,11 +942,14 @@ class Identity(models.Model):
         try:
             principals = self.config.get("trustedPrincipals", [])
             if isinstance(principals, list):
-                return [p.strip() for p in principals if isinstance(p, str) and p.strip()]
+                return [
+                    p.strip() for p in principals if isinstance(p, str) and p.strip()
+                ]
             # Fallback for legacy comma-separated string format
             return [p.strip() for p in str(principals).split(",") if p.strip()]
         except Exception:
             return []
+
 
 class PersonalSecret(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
