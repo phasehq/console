@@ -110,7 +110,13 @@ def aws_iam_auth(request):
 
     # Forward the signed request to AWS STS
     try:
-        resp = requests.request(method, configured, headers=headers, data=body)
+        resp = requests.request(
+            method, configured, headers=headers, data=body, timeout=10
+        )
+    except requests.exceptions.Timeout:
+        return JsonResponse({"error": "AWS STS request timed out"}, status=504)
+    except requests.exceptions.ConnectionError:
+        return JsonResponse({"error": "Unable to connect to AWS STS"}, status=502)
     except Exception:
         return JsonResponse({"error": "Failed to contact AWS STS"}, status=502)
 
