@@ -67,7 +67,6 @@ export const KeyManagementDialog = ({
     } else if (selectedMode === 'client' && serviceAccount.serverSideKeyManagementEnabled) {
       // Disable server-side encryption (switch to client-side)
       await handleDisableSSE()
-    } else {
     }
   }
 
