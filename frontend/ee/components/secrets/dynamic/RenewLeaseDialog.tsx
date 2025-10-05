@@ -5,7 +5,7 @@ import {
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
-import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/dynamicSecrets'
+import { leaseTtlButtons, MINIMUM_LEASE_TTL } from '@/utils/ttl'
 import { relativeTimeFromDates, humanReadableDuration } from '@/utils/time'
 import { useContext, useRef, useState } from 'react'
 import { FiRefreshCw } from 'react-icons/fi'
