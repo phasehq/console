@@ -1,9 +1,7 @@
 'use client'
 
-import React from 'react'
 import { OrganisationType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
-import { HeroPattern } from '@/components/common/HeroPattern'
 import { Input } from '@/components/common/Input'
 import Spinner from '@/components/common/Spinner'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
@@ -32,7 +30,6 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
 import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaShieldAlt } from 'react-icons/fa'
-import { MdContentCopy } from 'react-icons/md'
 import { SiGithub, SiGnometerminal, SiSlack } from 'react-icons/si'
 import { toast } from 'react-toastify'
 
