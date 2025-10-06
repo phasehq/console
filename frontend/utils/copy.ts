@@ -108,13 +108,20 @@ export const stringContainsCharacters = (value: string) => {
   return isValid
 }
 
-export const isUUID = (value: string) => {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+/**
+ * Regex to check if a string is a valid UUID
+ *
+ * @param {string} value
+ * @returns {boolean}
+ */
+export const isUUID = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+
 /**
  * Generates a random alphanumeric string of specified length.
- * @param {string} min Minimum length of the string (default is 6)
- * @param {string} max Maximum length of the string (default is 18)
- * @returns  A random string
+ * @param {number} min Minimum length of the string (default is 6)
+ * @param {number} max Maximum length of the string (default is 18)
+ * @returns {string} A random string
  */
 export const randomString = (min = 6, max = 18) => {
   const length = Math.floor(Math.random() * (max - min + 1)) + min
