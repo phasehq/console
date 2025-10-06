@@ -4,6 +4,8 @@ from api.utils.access.permissions import (
     user_can_access_environment,
     user_has_permission,
 )
+from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_secrets
+from ee.integrations.secrets.dynamic.graphene.types import DynamicSecretType
 from backend.quotas import PLAN_CONFIG
 import graphene
 from enum import Enum
@@ -12,6 +14,7 @@ from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
     CustomUser,
+    DynamicSecret,
     Environment,
     EnvironmentKey,
     EnvironmentSync,
@@ -30,12 +33,12 @@ from api.models import (
     SecretEvent,
     SecretFolder,
     SecretTag,
-    ServerEnvironmentKey,
     ServiceAccount,
     ServiceAccountHandler,
     ServiceAccountToken,
     ServiceToken,
     UserToken,
+    Identity,
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
@@ -327,6 +330,14 @@ class ProviderType(graphene.ObjectType):
     auth_scheme = graphene.String()
 
 
+class IdentityProviderType(graphene.ObjectType):
+    id = graphene.String(required=True)
+    name = graphene.String(required=True)
+    description = graphene.String(required=True)
+    icon_id = graphene.String(required=True)
+    supported = graphene.Boolean(required=True)
+
+
 class ServiceType(ObjectType):
     id = graphene.String()
     name = graphene.String()
@@ -389,7 +400,10 @@ class SecretFolderType(DjangoObjectType):
         return SecretFolder.objects.filter(folder=self).count()
 
     def resolve_secret_count(self, info):
-        return Secret.objects.filter(folder=self).count()
+        return (
+            Secret.objects.filter(folder=self).count()
+            + DynamicSecret.objects.filter(folder=self, deleted_at=None).count()
+        )
 
 
 class SecretEventType(DjangoObjectType):
@@ -500,6 +514,9 @@ class EnvironmentType(DjangoObjectType):
     secrets = graphene.NonNull(
         graphene.List(SecretType), path=graphene.String(required=False)
     )
+    dynamic_secrets = graphene.NonNull(
+        graphene.List(DynamicSecretType), path=graphene.String(required=False)
+    )
     folder_count = graphene.Int()
     secret_count = graphene.Int()
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
@@ -542,6 +559,10 @@ class EnvironmentType(DjangoObjectType):
 
         return Secret.objects.filter(**filter).order_by("-created_at")
 
+    def resolve_dynamic_secrets(self, info, path=None):
+        # Reuse the existing resolver from queries.py
+        return resolve_dynamic_secrets(root=None, info=info, env_id=self.id, path=path)
+
     def resolve_folders(self, info, path=None):
         if not user_can_access_environment(info.context.user.userId, self.id):
             raise GraphQLError("You don't have access to this environment")
@@ -557,7 +578,10 @@ class EnvironmentType(DjangoObjectType):
         return SecretFolder.objects.filter(environment=self).count()
 
     def resolve_secret_count(self, info):
-        return Secret.objects.filter(environment=self, deleted_at=None).count()
+        return (
+            Secret.objects.filter(environment=self, deleted_at=None).count()
+            + DynamicSecret.objects.filter(environment=self, deleted_at=None).count()
+        )
 
     def resolve_wrapped_seed(self, info):
         org_member = OrganisationMember.objects.get(
@@ -676,11 +700,12 @@ class AppMembershipType(DjangoObjectType):
 
 class ServiceAccountType(DjangoObjectType):
 
-    third_party_auth_enabled = graphene.Boolean()
+    server_side_key_management_enabled = graphene.Boolean()
     handlers = graphene.List(ServiceAccountHandlerType)
     tokens = graphene.List(ServiceAccountTokenType)
     app_memberships = graphene.List(graphene.NonNull(AppMembershipType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
+    identities = graphene.List(graphene.NonNull(lambda: IdentityType))
 
     class Meta:
         model = ServiceAccount
@@ -694,7 +719,7 @@ class ServiceAccountType(DjangoObjectType):
             "deleted_at",
         )
 
-    def resolve_third_party_auth_enabled(self, info):
+    def resolve_server_side_key_management_enabled(self, info):
         return (
             self.server_wrapped_keyring is not None
             and self.server_wrapped_recovery is not None
@@ -739,6 +764,9 @@ class ServiceAccountType(DjangoObjectType):
         account_policies = self.network_policies.all()
 
         return list(chain(account_policies, global_policies))
+
+    def resolve_identities(self, info):
+        return self.identities.filter(deleted_at=None)
 
 
 class EnvironmentKeyType(DjangoObjectType):
@@ -994,3 +1022,40 @@ class AWSValidationResultType(graphene.ObjectType):
     method = graphene.String()
     error = graphene.String()
     assumed_role_arn = graphene.String()
+
+
+class AwsIamConfigType(graphene.ObjectType):
+    trusted_principals = graphene.List(graphene.String)
+    signature_ttl_seconds = graphene.Int()
+    sts_endpoint = graphene.String()
+
+
+class IdentityConfigUnion(graphene.Union):
+    class Meta:
+        types = (AwsIamConfigType,)
+
+
+class IdentityType(DjangoObjectType):
+    config = graphene.Field(IdentityConfigUnion)
+
+    class Meta:
+        model = Identity
+        fields = "__all__"
+
+    def resolve_config(self, info):
+        """Map provider-specific config into typed objects"""
+        provider = (self.provider or '').lower()
+        cfg = self.config or {}
+        
+        if provider == 'aws_iam':
+            try:
+                ttl = int(cfg.get('signatureTtlSeconds', 60))
+            except Exception:
+                ttl = 60
+            return AwsIamConfigType(
+                trusted_principals=self.get_trusted_list(),
+                signature_ttl_seconds=ttl,
+                sts_endpoint=cfg.get('stsEndpoint'),
+            )
+        
+        return None

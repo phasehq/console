@@ -17,6 +17,9 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   message = '',
   size,
 }) => {
+  // Ensure percentage is between 0 and 100
+  const clampedPercentage = Math.min(100, Math.max(0, percentage))
+
   const height = () => {
     if (!size || size === 'md') return 'h-2'
     else if (size === 'sm') return 'h-1'
@@ -29,7 +32,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         <div
           className={clsx(color, 'transition-all ease float-left rounded-sm', height())}
           style={{
-            width: `${percentage}%`,
+            width: `${clampedPercentage}%`,
           }}
         ></div>
       </div>

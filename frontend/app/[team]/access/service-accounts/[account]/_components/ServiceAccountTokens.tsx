@@ -94,10 +94,23 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-500">by</span>
-                      <Avatar member={token!.createdBy!} size="sm" />
-                      <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                        {token?.createdBy?.fullName}
-                      </span>
+                      {token?.createdBy ? (
+                        <>
+                          <Avatar member={token.createdBy} size="sm" />
+                          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                            {token.createdBy.fullName}
+                          </span>
+                        </>
+                      ) : token?.createdByServiceAccount ? (
+                        <>
+                          <Avatar serviceAccount={token.createdByServiceAccount} size="sm" />
+                          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                            {token.createdByServiceAccount.name}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-neutral-400 italic">Unknown</span>
+                      )}
                     </div>
                   </div>
 
