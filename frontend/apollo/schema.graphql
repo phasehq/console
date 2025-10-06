@@ -42,6 +42,7 @@ type Query {
   cloudflareWorkers(credentialId: ID): [CloudflareWorkerType]
   awsSecrets(credentialId: ID): [AWSSecretType]
   githubRepos(credentialId: ID): [GitHubRepoType]
+  githubEnvironments(credentialId: ID, owner: String, repoName: String): [String]
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
   railwayProjects(credentialId: ID): [RailwayProjectType]
@@ -991,7 +992,7 @@ type Mutation {
   createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
   createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
   createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, path: String, secretName: String): CreateAWSSecretsManagerSync
-  createGhActionsSync(credentialId: ID, envId: ID, owner: String, path: String, repoName: String): CreateGitHubActionsSync
+  createGhActionsSync(credentialId: ID, envId: ID, environmentName: String, owner: String, path: String, repoName: String): CreateGitHubActionsSync
   createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync

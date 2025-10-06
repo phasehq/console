@@ -70,6 +70,7 @@ from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
+    resolve_github_environments,
     resolve_gitlab_projects,
     resolve_gitlab_groups,
     resolve_server_public_key,
@@ -384,6 +385,9 @@ class Query(graphene.ObjectType):
         GitHubRepoType,
         credential_id=graphene.ID(),
     )
+    github_environments = graphene.List(
+        graphene.String, credential_id=graphene.ID(), owner=graphene.String(), repo_name=graphene.String()
+    )
 
     gitlab_projects = graphene.List(GitLabProjectType, credential_id=graphene.ID())
     gitlab_groups = graphene.List(GitLabGroupType, credential_id=graphene.ID())
@@ -458,6 +462,7 @@ class Query(graphene.ObjectType):
     resolve_aws_secrets = resolve_aws_secret_manager_secrets
 
     resolve_github_repos = resolve_gh_repos
+    resolve_github_environments = resolve_github_environments
 
     resolve_gitlab_projects = resolve_gitlab_projects
     resolve_gitlab_groups = resolve_gitlab_groups
