@@ -17,11 +17,45 @@ export type NavigationContext = {
   subPage?: string | null
   activeApp?: AppType
   activeEnv?: EnvironmentType
+  // Add support for non-team routes
+  route?: string | null // e.g., 'signup', 'webauth', 'lockbox'
+  routeParam?: string | null // e.g., boxId, requestCode
 }
 
 export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] => {
-  const { team, context, page, subPage, activeApp, activeEnv } = ctx
+  const { team, context, page, subPage, activeApp, activeEnv, route, routeParam } = ctx
 
+  // Handle non-team routes first
+  if (route) {
+    const breadcrumbs: NavigationItem[] = []
+
+    switch (route) {
+      case 'signup':
+        breadcrumbs.push({ label: 'Sign Up', isLink: false })
+        break
+      case 'login':
+        breadcrumbs.push({ label: 'Login', isLink: false })
+        break
+      case 'webauth':
+        breadcrumbs.push({ label: 'WebAuth', isLink: false })
+        break
+      case 'lockbox':
+        breadcrumbs.push({ label: 'Lockbox', isLink: false })
+        break
+      case 'invite':
+        breadcrumbs.push({ label: 'Invitation', isLink: false })
+        break
+      case 'ip-restricted':
+        breadcrumbs.push({ label: 'Access Restricted', isLink: false })
+        break
+      default:
+        breadcrumbs.push({ label: startCase(route), isLink: false })
+    }
+
+    return breadcrumbs
+  }
+
+  // Team-based routes (existing logic)
   const breadcrumbs: NavigationItem[] = [
     { label: team ?? '', href: `/${team}`, isLink: Boolean(team) },
   ]
@@ -95,6 +129,10 @@ export const generatePageTitle = (ctx: NavigationContext): string => {
     .filter((crumb) => crumb.label && crumb.label.trim())
     .map((crumb) => startCase(crumb.label))
     .reverse()
+
+  if (titleParts.length === 0) {
+    return 'Phase Console'
+  }
 
   return `${titleParts.join(' · ')} | Phase Console`
 }
