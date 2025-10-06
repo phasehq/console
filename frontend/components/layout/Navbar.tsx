@@ -1,7 +1,7 @@
 'use client'
 
 import { useLazyQuery, useQuery } from '@apollo/client'
-import { useContext, useEffect } from 'react'
+import { useContext, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { startCase } from 'lodash'
 import { useSearchParams } from 'next/navigation'
@@ -11,6 +11,7 @@ import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments
 import { AppType, EnvironmentType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
+import { generateBreadcrumbs, generatePageTitle, NavigationContext } from '@/utils/navigation'
 
 import { Button } from '../common/Button'
 import { StatusIndicator } from '../common/StatusIndicator'
@@ -19,7 +20,6 @@ import CommandPalette from '../common/CommandPalette'
 import UserMenu from '../UserMenu'
 
 import { useParsedRoute } from '@/utils/route'
-import { isUUID } from '@/utils/copy'
 
 export const NavBar = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -44,49 +44,24 @@ export const NavBar = () => {
   const activeApp = context === 'apps' ? apps.find((app) => app.id === appId) : undefined
   const activeEnv = activeApp ? envs.find((env) => env.id === envId) : undefined
 
+  // Create navigation context
+  const navigationContext: NavigationContext = useMemo(
+    () => ({
+      team,
+      context,
+      appId,
+      envId,
+      page,
+      subPage,
+      activeApp,
+      activeEnv,
+    }),
+    [team, context, appId, envId, page, subPage, activeApp, activeEnv]
+  )
+
+  const breadcrumbs = generateBreadcrumbs(navigationContext)
+
   const BreadCrumbs = () => {
-    type Breadcrumb = { label: string; href?: string; isLink?: boolean }
-
-    const breadcrumbs: Breadcrumb[] = [
-      { label: team ?? '', href: `/${team}`, isLink: Boolean(team) },
-    ]
-
-    if (activeApp) {
-      breadcrumbs.push({
-        label: activeApp.name,
-        href: page ? `/${team}/apps/${activeApp.id}` : undefined,
-        isLink: Boolean(page),
-      })
-    }
-
-    if (!activeApp && context && page === undefined) {
-      breadcrumbs.push({
-        label: context,
-        isLink: false,
-      })
-    }
-
-    if (page) {
-      breadcrumbs.push({
-        label: page,
-        isLink: Boolean(activeApp),
-      })
-    }
-
-    if (subPage && !isUUID(subPage)) {
-      breadcrumbs.push({
-        label: subPage,
-        isLink: false,
-      })
-    }
-
-    if (activeEnv) {
-      breadcrumbs.push({
-        label: activeEnv.name,
-        isLink: false,
-      })
-    }
-
     return (
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         <Link href="/" className="shrink-0">
@@ -94,7 +69,7 @@ export const NavBar = () => {
         </Link>
 
         {breadcrumbs.map((crumb, index) => (
-          <div key={index} className="flex items-center gap-2 text-sm">
+          <div key={index} className="flex items-center gap-2 text-xs">
             <span className="shrink-0">/</span>
             {crumb.isLink && crumb.href ? (
               <Link
@@ -120,27 +95,10 @@ export const NavBar = () => {
     }
   }, [activeApp, getAppEnvs])
 
+  // Update page title using the utility
   useEffect(() => {
-    let title = 'Phase'
-
-    if (activeEnv && activeApp) {
-      title = `${startCase(activeEnv.name)} – ${startCase(activeApp.name)} – ${startCase(team)} | Phase`
-    } else if (activeApp && subPage) {
-      title = `${startCase(subPage)} – ${startCase(activeApp.name)} – ${startCase(team)} | Phase`
-    } else if (activeApp && page) {
-      title = `${startCase(page)} – ${startCase(activeApp.name)} – ${startCase(team)} | Phase`
-    } else if (activeApp) {
-      title = `${startCase(activeApp.name)} – ${startCase(team)} | Phase`
-    } else if (page && context) {
-      title = `${startCase(page)} – ${startCase(context)} – ${startCase(team)} | Phase`
-    } else if (context) {
-      title = `${startCase(context)} – ${startCase(team)} | Phase`
-    } else if (team) {
-      title = `${startCase(team)} | Phase`
-    }
-
-    document.title = title
-  }, [activeApp, activeEnv, team, context, page, subPage, tab])
+    document.title = generatePageTitle(navigationContext)
+  }, [navigationContext, tab])
 
   return (
     <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-sm bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
