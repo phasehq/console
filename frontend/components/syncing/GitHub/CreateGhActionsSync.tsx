@@ -29,6 +29,22 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
   const { appId, closeModal } = props
 
+  const [createGhActionsSync, { data: syncData, loading: creating }] =
+    useMutation(CreateNewGhActionsSync)
+
+  const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
+
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined)
+  const [query, setQuery] = useState('')
+  const [envQuery, setEnvQuery] = useState('')
+
+  const [repos, setRepos] = useState<GitHubRepoType[]>([])
+  const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
+  const [path, setPath] = useState('/')
+
+  const [credentialsValid, setCredentialsValid] = useState(false)
+
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
       appId,
@@ -38,26 +54,18 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
     variables: { orgId: organisation!.id },
   })
 
-  const [getGhRepos, { loading }] = useLazyQuery(GetGithubRepos)
-  const [getGhEnvironments] = useLazyQuery(GetGithubEnvironments)
+  const [getGhRepos] = useLazyQuery(GetGithubRepos)
 
-  const [createGhActionsSync, { data: syncData, loading: creating }] =
-    useMutation(CreateNewGhActionsSync)
+  const { data: environmentsData } = useQuery(GetGithubEnvironments, {
+    variables: {
+      credentialId: credential?.id,
+      owner: selectedRepo?.owner,
+      repoName: selectedRepo?.name,
+    },
+    skip: !credential || !selectedRepo, // Only fetch when we have both credential and selected repo
+  })
 
-  const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
-
-  const [repos, setRepos] = useState<GitHubRepoType[]>([])
-  const [environments, setEnvironments] = useState<string[]>([])
-
-  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
-  const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined)
-  const [query, setQuery] = useState('')
-  const [envQuery, setEnvQuery] = useState('')
-
-  const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
-  const [path, setPath] = useState('/')
-
-  const [credentialsValid, setCredentialsValid] = useState(false)
+  const environments = environmentsData?.githubEnvironments || []
 
   useEffect(() => {
     if (credentialsData && credentialsData.savedCredentials.length > 0) {
@@ -72,26 +80,6 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
       setPhaseEnv(defaultEnv)
     }
   }, [appEnvsData])
-
-  // Load environments for selected repo when repo changes
-  useEffect(() => {
-    const loadEnvs = async () => {
-      if (!credential || !selectedRepo) return
-      const { data } = await getGhEnvironments({
-        variables: {
-          credentialId: credential.id,
-          owner: selectedRepo.owner,
-          repoName: selectedRepo.name,
-        },
-      })
-      if (data?.githubEnvironments) {
-        setEnvironments(data.githubEnvironments)
-      } else {
-        setEnvironments([])
-      }
-    }
-    loadEnvs()
-  }, [credential, selectedRepo, getGhEnvironments])
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -142,7 +130,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   })
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="space-y-6">
       <div>
         <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
           <SiGithub />
@@ -311,19 +299,22 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                           </label>
                         </Combobox.Label>
                         <div className="w-full relative flex items-center">
-                        <Combobox.Input
-                          className={clsx('w-full', !selectedRepo && 'opacity-60 cursor-not-allowed pointer-events-none')}
-                          onChange={(e) => setEnvQuery(e.target.value)}
-                          displayValue={(env?: string) => (env ? env : envQuery)}
-                          aria-disabled={!selectedRepo}
+                          <Combobox.Input
+                            className={clsx(
+                              'w-full',
+                              !selectedRepo && 'opacity-60 cursor-not-allowed pointer-events-none'
+                            )}
+                            onChange={(e) => setEnvQuery(e.target.value)}
+                            displayValue={(env?: string) => (env ? env : envQuery)}
+                            aria-disabled={!selectedRepo}
                             placeholder={
                               !selectedRepo
                                 ? 'Select a repository'
                                 : environments.length === 0
-                                ? 'No environments found'
-                                : 'Select an environment'
+                                  ? 'No environments found'
+                                  : 'Select an environment'
                             }
-                        />
+                          />
                           <div className="absolute inset-y-0 right-2 flex items-center">
                             <Combobox.Button
                               aria-disabled={!selectedRepo}
@@ -359,14 +350,22 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                                       active && 'bg-zinc-300 dark:bg-zinc-700'
                                     )}
                                   >
-                                    <div className="text-neutral-500 text-sm">No environment (repo-level)</div>
-                                    {selected && <FaCheckCircle className="shrink-0 text-emerald-500" />}
+                                    <div className="text-neutral-500 text-sm">
+                                      No environment (repo-level)
+                                    </div>
+                                    {selected && (
+                                      <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                    )}
                                   </div>
                                 )}
                               </Combobox.Option>
                               {environments
-                                .filter((env) => (envQuery ? env.toLowerCase().includes(envQuery.toLowerCase()) : true))
-                                .map((env) => (
+                                .filter((env: string) =>
+                                  envQuery
+                                    ? env.toLowerCase().includes(envQuery.toLowerCase())
+                                    : true
+                                )
+                                .map((env: string) => (
                                   <Combobox.Option as="div" key={env} value={env}>
                                     {({ active, selected }) => (
                                       <div
@@ -375,8 +374,12 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                                           active && 'bg-zinc-300 dark:bg-zinc-700'
                                         )}
                                       >
-                                        <div className="font-semibold text-black dark:text-white">{env}</div>
-                                        {selected && <FaCheckCircle className="shrink-0 text-emerald-500" />}
+                                        <div className="font-semibold text-black dark:text-white">
+                                          {env}
+                                        </div>
+                                        {selected && (
+                                          <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                        )}
                                       </div>
                                     )}
                                   </Combobox.Option>
@@ -400,7 +403,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
               </Button>
             )}
           </div>
-          <Button isLoading={loading || creating} variant="primary" type="submit">
+          <Button isLoading={creating} variant="primary" type="submit">
             {credentialsValid ? 'Create' : 'Next'}
           </Button>
         </div>
