@@ -221,12 +221,6 @@ export const CreateServiceAccountDialog = () => {
               )}
             </Listbox>
           </div>
-          {/* <div>
-            <label className="block text-neutral-500 text-sm mb-2" htmlFor="role">
-              Enable third-party authentication
-            </label>
-            <ToggleSwitch value={thirdParty} onToggle={() => setThirdParty(!thirdParty)} />
-          </div> */}
         </div>
         <div className="flex justify-end items-center gap-2 pt-8">
           <Button type="submit" variant="primary" isLoading={createPending}>

@@ -3,6 +3,7 @@ type Query {
   organisations: [OrganisationType]
   roles(orgId: ID): [RoleType]
   networkAccessPolicies(organisationId: ID): [NetworkAccessPolicyType]
+  identities(organisationId: ID): [IdentityType]
   organisationNameAvailable(name: String): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -32,6 +33,8 @@ type Query {
   sseEnabled(appId: ID): Boolean
   providers: [ProviderType]
   services: [ServiceType]
+  awsStsEndpoints: [JSONString]
+  identityProviders: [IdentityProviderType]
   savedCredentials(orgId: ID): [ProviderCredentialsType]
   syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
   envSyncs(envId: ID): [EnvironmentSyncType]
@@ -284,11 +287,12 @@ type ServiceAccountType {
   createdAt: DateTime
   updatedAt: DateTime!
   deletedAt: DateTime
-  thirdPartyAuthEnabled: Boolean
+  serverSideKeyManagementEnabled: Boolean
   handlers: [ServiceAccountHandlerType]
   tokens: [ServiceAccountTokenType]
   appMemberships: [AppMembershipType!]
   networkPolicies: [NetworkAccessPolicyType!]
+  identities: [IdentityType!]
 }
 
 type ServiceAccountHandlerType {
@@ -309,12 +313,37 @@ type ServiceAccountTokenType {
   token: String!
   wrappedKeyShare: String!
   createdBy: OrganisationMemberType
+  createdByServiceAccount: ServiceAccountType
   createdAt: DateTime
   updatedAt: DateTime!
   deletedAt: DateTime
   expiresAt: DateTime
   secreteventSet: [SecretEventType!]!
   lastUsed: DateTime
+}
+
+type IdentityType {
+  id: String!
+  organisation: OrganisationType!
+  provider: String!
+  name: String!
+  description: String
+  config: IdentityConfigUnion
+  tokenNamePattern: String
+  defaultTtlSeconds: Int!
+  maxTtlSeconds: Int!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  serviceAccounts: [ServiceAccountType!]!
+}
+
+union IdentityConfigUnion = AwsIamConfigType
+
+type AwsIamConfigType {
+  trustedPrincipals: [String]
+  signatureTtlSeconds: Int
+  stsEndpoint: String
 }
 
 enum ApiSecretEventEventTypeChoices {
@@ -723,6 +752,14 @@ type EnvironmentTokenType {
   updatedAt: DateTime!
 }
 
+type IdentityProviderType {
+  id: String!
+  name: String!
+  description: String!
+  iconId: String!
+  supported: Boolean!
+}
+
 type CloudFlarePagesType {
   name: String
   deploymentId: String
@@ -937,6 +974,13 @@ type Mutation {
   enableServiceAccountThirdPartyAuth(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountThirdPartyAuthMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   updateServiceAccount(name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
+  createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
+  updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
+  deleteIdentity(id: ID!): DeleteIdentityMutation
+  enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
+  enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
+  updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
+  updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
   createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
   deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
@@ -1154,6 +1198,18 @@ enum AccountTypeEnum {
   SERVICE
 }
 
+type CreateIdentityMutation {
+  identity: IdentityType
+}
+
+type UpdateIdentityMutation {
+  identity: IdentityType
+}
+
+type DeleteIdentityMutation {
+  ok: Boolean
+}
+
 type CreateServiceAccountMutation {
   serviceAccount: ServiceAccountType
 }
@@ -1165,7 +1221,11 @@ input ServiceAccountHandlerInput {
   wrappedRecovery: String!
 }
 
-type EnableServiceAccountThirdPartyAuthMutation {
+type EnableServiceAccountServerSideKeyManagementMutation {
+  serviceAccount: ServiceAccountType
+}
+
+type EnableServiceAccountClientSideKeyManagementMutation {
   serviceAccount: ServiceAccountType
 }
 

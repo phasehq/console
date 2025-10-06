@@ -1,6 +1,7 @@
 import re
 from nacl.hash import blake2b
 from nacl.utils import random
+from nacl.utils import random as random_bytes
 from base64 import b64encode, b64decode
 from django.conf import settings
 from nacl.bindings import (
@@ -12,6 +13,8 @@ from nacl.bindings import (
     crypto_kx_server_session_keys,
     crypto_secretbox_NONCEBYTES,
     crypto_generichash,
+    crypto_sign_ed25519_pk_to_curve25519,
+    crypto_sign_ed25519_sk_to_curve25519,
 )
 from nacl.encoding import RawEncoder
 from typing import Tuple
@@ -230,3 +233,94 @@ def validate_encrypted_string(encrypted_string):
         return bool(match)
 
     return True
+
+
+def xor_bytes(first: bytes, second: bytes) -> bytes:
+    """
+    XOR two byte strings of equal length.
+
+    Args:
+        first: First byte string.
+        second: Second byte string. Must be the same length as `first`.
+
+    Returns:
+        A new byte string containing the XOR of the inputs.
+
+    Raises:
+        ValueError: If the inputs are not the same length.
+    """
+    if len(first) != len(second):
+        raise ValueError("xor_bytes inputs must be the same length")
+    return bytes(x ^ y for x, y in zip(first, second))
+
+
+def split_secret_hex(secret_hex: str) -> Tuple[str, str]:
+    """
+    Split a secret (hex string) into two additive/XOR shares.
+
+    This uses a one-time pad approach where a uniformly random share is
+    generated and the second share is computed as share2 = random ^ secret.
+
+    Args:
+        secret_hex: Secret as a hex string.
+
+    Returns:
+        Tuple of two hex strings (share_a, share_b).
+    """
+    secret_bytes = bytes.fromhex(secret_hex)
+    random_share = random_bytes(len(secret_bytes))
+    last_share = xor_bytes(random_share, secret_bytes)
+    return random_share.hex(), last_share.hex()
+
+
+def random_hex(nbytes: int = 32) -> str:
+    """
+    Generate a random hex string.
+
+    Args:
+        nbytes: Number of random bytes to generate. Defaults to 32.
+
+    Returns:
+        Hex string of length 2 * nbytes.
+    """
+
+    return random_bytes(nbytes).hex()
+
+
+def ed25519_to_kx(pub_hex: str, priv_hex: str) -> Tuple[str, str]:
+    """
+    Convert an Ed25519 keypair to Curve25519 (key exchange) form.
+
+    This is useful when the stored signing keys are in Ed25519 form but we
+    require Curve25519 keys for symmetric key agreement operations.
+
+    Args:
+        pub_hex: Ed25519 public key in hex.
+        priv_hex: Ed25519 private key in hex.
+
+    Returns:
+        Tuple of hex strings (kx_public_hex, kx_private_hex).
+    """
+
+    pub_kx = crypto_sign_ed25519_pk_to_curve25519(bytes.fromhex(pub_hex)).hex()
+    priv_kx = crypto_sign_ed25519_sk_to_curve25519(bytes.fromhex(priv_hex)).hex()
+    return pub_kx, priv_kx
+
+
+def wrap_share_hex(share_hex: str, wrap_key_hex: str) -> str:
+    """
+    Wrap (encrypt) a hex-encoded share using a symmetric key, returning hex.
+
+    This reuses the module's low-level XChaCha20-Poly1305 helper `encrypt_raw`
+    to avoid duplicate cryptographic code paths.
+
+    Args:
+        share_hex: The plaintext share to encrypt, as a hex string.
+        wrap_key_hex: Symmetric key as a hex string (32-byte key recommended).
+
+    Returns:
+        A hex string representing ciphertext||nonce.
+    """
+    key_bytes = bytes.fromhex(wrap_key_hex)
+    ct_plus_nonce = encrypt_raw(share_hex, key_bytes)
+    return bytes(ct_plus_nonce).hex()
