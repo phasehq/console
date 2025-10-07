@@ -23,7 +23,7 @@ import { toast } from 'react-toastify'
 import { FaCog, FaCogs } from 'react-icons/fa'
 import { Textarea } from '@/components/common/TextArea'
 import { encryptAsymmetric } from '@/utils/crypto'
-import { leaseTtlButtons } from '@/utils/dynamicSecrets'
+import { leaseTtlButtons } from '@/utils/ttl'
 import CopyButton from '@/components/common/CopyButton'
 
 type UpdateDynamicSecretDialogRef = {
