@@ -38,7 +38,7 @@
     "@types/libsodium-wrappers-sumo": "^0.7.8",
     "lodash": "^4.17.21",
     "@types/lodash": "^4.17.1",
-    "next": "^14.2.25",
+    "next": "^14.2.33",
     "next-auth": "^4.24.11",
     "nextjs-toploader": "^3.8.16",
     "npm": "^10.4.0",
