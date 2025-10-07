@@ -116,7 +116,7 @@ export const CreateSyncDialog = (props: {
                   </Dialog.Title>
 
                   {userCanReadEnvs && userCanCreateIntegrations ? (
-                    <div className="py-4">{isOpen && renderSyncPanel(props.service)}</div>
+                    <div className="pt-4">{isOpen && renderSyncPanel(props.service)}</div>
                   ) : (
                     <EmptyState
                       title="Access restricted"
