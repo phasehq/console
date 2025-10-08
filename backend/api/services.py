@@ -28,7 +28,7 @@ class Providers:
         "name": "GitHub",
         "expected_credentials": ["access_token"],
         "optional_credentials": ["host_url", "api_url"],
-        "auth_scheme": "oauth",
+        "auth_scheme": "oauth,token",
     }
 
     GITLAB = {
