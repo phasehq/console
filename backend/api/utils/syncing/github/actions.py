@@ -19,8 +19,11 @@ class GitHubRepoType(ObjectType):
 
 
 def normalize_api_host(api_host):
+    if not api_host or api_host.strip() == "":
+        api_host = GITHUB_CLOUD_API_URL
+
     stripped_host = api_host.rstrip("/")
-    
+
     if stripped_host == GITHUB_CLOUD_API_URL.rstrip("/"):
         return stripped_host
     else:
@@ -77,7 +80,9 @@ def list_repos(credential_id):
             all_repos.extend(serialize_repos(repos_on_page))
             page += 1
         else:
-            raise Exception(f"Error fetching user repositories: {user_repos_response.text}")
+            raise Exception(
+                f"Error fetching user repositories: {user_repos_response.text}"
+            )
 
     return all_repos
 
@@ -122,7 +127,10 @@ def list_environments(credential_id, owner, repo_name):
 
     api_host = normalize_api_host(api_host)
 
-    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"}
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/vnd.github+json",
+    }
 
     environments = []
     page = 1
@@ -180,7 +188,9 @@ def get_all_secrets(repo, owner, headers, api_host=GITHUB_CLOUD_API_URL):
     return all_secrets
 
 
-def get_all_env_secrets(repo, owner, environment_name, headers, api_host=GITHUB_CLOUD_API_URL):
+def get_all_env_secrets(
+    repo, owner, environment_name, headers, api_host=GITHUB_CLOUD_API_URL
+):
     api_host = normalize_api_host(api_host)
     all_secrets = []
     page = 1
@@ -216,11 +226,11 @@ def sync_github_secrets(
         }
 
         if environment_name:
-            public_key_url = (
-                f"{api_host}/repos/{owner}/{repo}/environments/{environment_name}/secrets/public-key"
-            )
+            public_key_url = f"{api_host}/repos/{owner}/{repo}/environments/{environment_name}/secrets/public-key"
         else:
-            public_key_url = f"{api_host}/repos/{owner}/{repo}/actions/secrets/public-key"
+            public_key_url = (
+                f"{api_host}/repos/{owner}/{repo}/actions/secrets/public-key"
+            )
 
         public_key_response = requests.get(public_key_url, headers=headers)
         if public_key_response.status_code != 200:
@@ -249,9 +259,7 @@ def sync_github_secrets(
 
             secret_data = {"encrypted_value": encrypted_value, "key_id": key_id}
             if environment_name:
-                secret_url = (
-                    f"{api_host}/repos/{owner}/{repo}/environments/{environment_name}/secrets/{key}"
-                )
+                secret_url = f"{api_host}/repos/{owner}/{repo}/environments/{environment_name}/secrets/{key}"
             else:
                 secret_url = f"{api_host}/repos/{owner}/{repo}/actions/secrets/{key}"
             response = requests.put(secret_url, headers=headers, json=secret_data)
@@ -265,9 +273,7 @@ def sync_github_secrets(
         for secret_name in existing_secret_names:
             if secret_name not in local_secrets:
                 if environment_name:
-                    delete_url = (
-                        f"{api_host}/repos/{owner}/{repo}/environments/{environment_name}/secrets/{secret_name}"
-                    )
+                    delete_url = f"{api_host}/repos/{owner}/{repo}/environments/{environment_name}/secrets/{secret_name}"
                 else:
                     delete_url = (
                         f"{api_host}/repos/{owner}/{repo}/actions/secrets/{secret_name}"
