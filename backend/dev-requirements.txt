@@ -1,1 +1,4 @@
 pytest==8.3.4
+Faker==37.4.0
+colorama==0.4.6
+tzdata==2025.2
