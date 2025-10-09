@@ -555,6 +555,7 @@ class CreateVercelSync(graphene.Mutation):
         project_name = graphene.String()
         environment = graphene.String()
         secret_type = graphene.String()
+        custom_environment_id = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
@@ -572,6 +573,7 @@ class CreateVercelSync(graphene.Mutation):
         project_name,
         environment="production",
         secret_type="encrypted",
+        custom_environment_id=None,
     ):
         service_id = "vercel"
 
@@ -589,6 +591,8 @@ class CreateVercelSync(graphene.Mutation):
             "environment": environment,
             "secret_type": secret_type,
         }
+        if custom_environment_id is not None:
+            sync_options["custom_environment_id"] = custom_environment_id
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None

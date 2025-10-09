@@ -44,6 +44,7 @@ type Query {
   gitlabGroups(credentialId: ID): [GitLabGroupType]
   railwayProjects(credentialId: ID): [RailwayProjectType]
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
+  vercelProjectEnvironments(credentialId: ID, projectId: String): [VercelEnvironmentType]
   renderServices(credentialId: ID): [RenderServiceType]
   renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
   testVercelCreds(credentialId: ID): Boolean
@@ -830,6 +831,11 @@ type VercelProjectType {
   environment: [String]
 }
 
+type VercelEnvironmentType {
+  slug: String
+  id: String
+}
+
 type RenderServiceType {
   id: ID!
   name: String!
@@ -956,7 +962,7 @@ type Mutation {
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
-  createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
+  createVercelSync(credentialId: ID, customEnvironmentId: String, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
   createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation

@@ -1,0 +1,6 @@
+query GetVercelProjectEnvironments($credentialId: ID!, $projectId: String!) {
+  vercelProjectEnvironments(credentialId: $credentialId, projectId: $projectId) {
+    slug
+    id
+  }
+}

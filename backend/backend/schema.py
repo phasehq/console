@@ -66,6 +66,7 @@ from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
+    resolve_vercel_project_environments,
     resolve_github_environments,
     resolve_gitlab_projects,
     resolve_gitlab_groups,
@@ -384,6 +385,15 @@ class Query(graphene.ObjectType):
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
     vercel_projects = graphene.List(VercelTeamProjectsType, credential_id=graphene.ID())
+    class VercelEnvironmentType(graphene.ObjectType):
+        slug = graphene.String()
+        id = graphene.String()
+
+    vercel_project_environments = graphene.List(
+        VercelEnvironmentType,
+        credential_id=graphene.ID(),
+        project_id=graphene.String(),
+    )
 
     render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
     render_envgroups = graphene.List(RenderEnvGroupType, credential_id=graphene.ID())
@@ -459,6 +469,7 @@ class Query(graphene.ObjectType):
     resolve_railway_projects = resolve_railway_projects
 
     resolve_vercel_projects = resolve_vercel_projects
+    resolve_vercel_project_environments = resolve_vercel_project_environments
 
     resolve_render_services = resolve_render_services
     resolve_render_envgroups = resolve_render_envgroups

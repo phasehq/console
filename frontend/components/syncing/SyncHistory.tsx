@@ -3,9 +3,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { SyncStatusIndicator } from './SyncStatusIndicator'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import Link from 'next/link'
 import { FaChevronRight, FaExternalLinkAlt } from 'react-icons/fa'
-import { Button } from '../common/Button'
 
 const FormattedJSON = (props: { jsonData: string }) => {
   const parseJSON = (jsonString: string) => {
@@ -22,7 +20,7 @@ const FormattedJSON = (props: { jsonData: string }) => {
   // Format the JSON (or keep the original string if it's not valid JSON)
   const formattedJSON = jsonData
     ? jsonData.message || jsonData.error || JSON.stringify(jsonData, null, 2)
-    : 'No detail available'
+    : 'Sync details not available'
 
   return (
     <div className="overflow-auto py-4">

@@ -21,6 +21,7 @@ import { SiVercel } from 'react-icons/si'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { Input } from '@/components/common/Input'
+import GetVercelProjectEnvironments from '@/graphql/queries/syncing/vercel/getProjectEnvironments.gql'
 
 export const CreateVercelSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -35,6 +36,9 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
   })
 
   const [getVercelProjects, { loading }] = useLazyQuery(GetVercelProjects)
+  const [getVercelEnvironments, { loading: loadingEnvs }] = useLazyQuery(
+    GetVercelProjectEnvironments
+  )
 
   const [createVercelSync, { loading: creating }] = useMutation(CreateNewVercelSync)
 
@@ -48,7 +52,9 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
 
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
-  const [environment, setEnvironment] = useState('production')
+  const [environment, setEnvironment] = useState<string | null>(null)
+  const [envQuery, setEnvQuery] = useState('')
+  const [environments, setEnvironments] = useState<{ slug: string; id: string | null }[]>([])
   const [secretType, setSecretType] = useState('encrypted')
 
   const [credentialsValid, setCredentialsValid] = useState(false)
@@ -79,7 +85,12 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
           variables: { credentialId: credential.id },
         })
         if (projectsData?.vercelProjects) {
-          setVercelTeams(projectsData.vercelProjects)
+          const teams = projectsData.vercelProjects
+          setVercelTeams(teams)
+          // Auto-pick first team if available
+          if (!vercelTeam && teams.length > 0) {
+            setVercelTeam(teams[0])
+          }
           setCredentialsValid(true)
         }
       } catch (error: any) {
@@ -88,8 +99,16 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
     } else if (!vercelProject) {
       toast.error('Please select a Vercel project!')
       return false
+    } else if (!environment) {
+      toast.error('Please select a Vercel environment!')
+      return false
     } else {
       try {
+        
+        // Map the custom environment slug to the custom environment id
+        const selectedEnvObj = environments.find((e) => e.slug === environment)
+        const customEnvId = selectedEnvObj?.id || null
+
         await createVercelSync({
           variables: {
             envId: phaseEnv?.id,
@@ -99,8 +118,9 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
             projectName: vercelProject.name,
             teamId: vercelTeam?.id,
             teamName: vercelTeam?.teamName,
-            environment,
+            environment: environment!,
             secretType,
+            customEnvironmentId: customEnvId,
           },
           refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
         })
@@ -125,7 +145,27 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
           project!.name?.toLowerCase().includes(projectQuery.toLowerCase())
         )
 
-  const environments = ['production', 'preview', 'development', 'all']
+  // Load Vercel environments when project/team changes
+  useEffect(() => {
+    const loadEnvs = async () => {
+      if (!credential || !vercelProject) return
+      // clear any previously selected environment as project changed
+      setEnvironment(null)
+      const { data } = await getVercelEnvironments({
+        variables: {
+          credentialId: credential.id,
+          projectId: vercelProject.id,
+          teamId: vercelTeam?.id || null,
+        },
+      })
+      if (data?.vercelProjectEnvironments?.length) {
+        setEnvironments(data.vercelProjectEnvironments)
+      } else {
+        setEnvironments([])
+      }
+    }
+    loadEnvs()
+  }, [credential, vercelProject, vercelTeam, getVercelEnvironments])
   const secretTypes = [
     { value: 'plain', label: 'Plain Text' },
     { value: 'encrypted', label: 'Encrypted' },
@@ -334,32 +374,88 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                 <div></div>
               )}
 
-              <div>
-                <RadioGroup value={environment} onChange={setEnvironment}>
-                  <RadioGroup.Label as={Fragment}>
-                    <label className="block text-neutral-500 text-sm  mb-2">
-                      Target Environment <span className="text-red-500">*</span>
-                    </label>
-                  </RadioGroup.Label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {environments.map((env) => (
-                      <RadioGroup.Option key={env} value={env} as={Fragment}>
-                        {({ active, checked }) => (
-                          <div
+              <div className="relative">
+                <Combobox value={environment} onChange={setEnvironment}>
+                  {({ open }) => (
+                    <>
+                      <div className="space-y-2">
+                        <Combobox.Label as={Fragment}>
+                          <label className="block text-neutral-500 text-sm">
+                            Target Environment <span className="text-red-500">*</span>
+                          </label>
+                        </Combobox.Label>
+                        <div className="w-full relative flex items-center">
+                          <Combobox.Input
                             className={clsx(
-                              'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800 rounded-full capitalize',
-                              active && 'border-zinc-700',
-                              checked && 'bg-zinc-700'
+                              'w-full',
+                              !vercelProject && 'opacity-60 cursor-not-allowed pointer-events-none'
                             )}
-                          >
-                            {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
-                            {env}
+                            onChange={(e) => setEnvQuery(e.target.value)}
+                            displayValue={(env?: string | null) => env || envQuery}
+                            placeholder={
+                              !vercelProject
+                                ? 'Select a Vercel project first'
+                                : loadingEnvs
+                                ? 'Loading environments...'
+                                : 'Please select an environment'
+                            }
+                            aria-disabled={!vercelProject}
+                            required={!!vercelProject}
+                          />
+                          <div className="absolute inset-y-0 right-2 flex items-center">
+                            <Combobox.Button
+                              aria-disabled={!vercelProject}
+                              className={clsx(!vercelProject && 'pointer-events-none')}
+                            >
+                              <FaChevronDown
+                                className={clsx(
+                                  'text-neutral-500 transform transition ease cursor-pointer',
+                                  open ? 'rotate-180' : 'rotate-0'
+                                )}
+                              />
+                            </Combobox.Button>
                           </div>
-                        )}
-                      </RadioGroup.Option>
-                    ))}
-                  </div>
-                </RadioGroup>
+                        </div>
+                      </div>
+                      {vercelProject && (
+                        <Transition
+                          enter="transition duration-100 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-75 ease-out"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          <Combobox.Options as={Fragment}>
+                            <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full">
+                            {environments
+                                .filter((env) =>
+                                envQuery
+                                  ? env.slug.toLowerCase().includes(envQuery.toLowerCase())
+                                  : true
+                                )
+                                .map((env) => (
+                                <Combobox.Option key={env.slug} value={env.slug}>
+                                    {({ active, selected }) => (
+                                      <div
+                                        className={clsx(
+                                          'flex items-center justify-between gap-2 p-2 cursor-pointer rounded-md w-full',
+                                          active && 'bg-zinc-400 dark:bg-zinc-700'
+                                        )}
+                                      >
+                                      <div className="font-semibold text-black dark:text-white">{env.slug}</div>
+                                        {selected && <FaDotCircle className="text-emerald-500" />}
+                                      </div>
+                                    )}
+                                  </Combobox.Option>
+                                ))}
+                            </div>
+                          </Combobox.Options>
+                        </Transition>
+                      )}
+                    </>
+                  )}
+                </Combobox>
               </div>
 
               <div>

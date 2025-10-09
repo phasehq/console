@@ -369,6 +369,7 @@ def perform_vercel_sync(environment_sync):
     vercel_team = vercel_sync_options.get("team")
     vercel_environment = vercel_sync_options.get("environment", "production")
     vercel_secret_type = vercel_sync_options.get("secret_type", "encrypted")
+    vercel_custom_env_id = vercel_sync_options.get("custom_environment_id")
 
     handle_sync_event(
         environment_sync,
@@ -378,6 +379,7 @@ def perform_vercel_sync(environment_sync):
         vercel_team["id"] if vercel_team is not None else None,
         vercel_environment,
         vercel_secret_type,
+        vercel_custom_env_id,
     )
 
 

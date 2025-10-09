@@ -1,7 +1,4 @@
 import requests
-import graphene
-from graphene import ObjectType
-
 from api.utils.syncing.auth import get_credentials
 
 VERCEL_API_BASE_URL = "https://api.vercel.com"
@@ -106,7 +103,51 @@ def list_vercel_projects(credential_id):
         raise Exception(f"Error listing Vercel projects: {str(e)}")
 
 
-def get_existing_env_vars(token, project_id, team_id=None, target_environment=None):
+def list_vercel_project_environments(credential_id, project_id, team_id=None):
+    """List available environments for a specific Vercel project.
+
+    Returns a list of dicts: { slug: string, id: string | null }
+    Includes defaults (production/preview/development) with id=None,
+    and adds custom environments with their ids.
+    """
+    token = get_vercel_credentials(credential_id)
+
+    url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/custom-environments"
+
+    response = requests.get(url, headers=get_vercel_headers(token))
+    if response.status_code != 200:
+        # Fall back to defaults if we cannot read custom environments
+        return [
+            {"slug": "production", "id": None},
+            {"slug": "preview", "id": None},
+            {"slug": "development", "id": None},
+        ]
+
+    custom_envs = response.json().get("environments", [])
+
+    result = [
+        {"slug": "production", "id": None},
+        {"slug": "preview", "id": None},
+        {"slug": "development", "id": None},
+    ]
+
+    for env in custom_envs:
+        slug = (env.get("slug") or env.get("id") or "").strip()
+        if slug:
+            result.append({"slug": slug, "id": env.get("id")})
+
+    # De-duplicate by slug while preserving order
+    seen = set()
+    deduped = []
+    for item in result:
+        if item["slug"] in seen:
+            continue
+        seen.add(item["slug"])
+        deduped.append(item)
+    return deduped
+
+
+def get_existing_env_vars(token, project_id, team_id=None, target_environment=None, custom_environment_id=None):
     """
     Retrieve environment variables for a specific Vercel project and environment.
     
@@ -121,20 +162,29 @@ def get_existing_env_vars(token, project_id, team_id=None, target_environment=No
         url += f"?teamId={team_id}"
     response = requests.get(url, headers=get_vercel_headers(token))
 
+    print(f"response: {response.json()}")
+
     if response.status_code != 200:
         raise Exception(f"Error retrieving environment variables: {response.text}")
 
     envs = response.json().get("envs", [])
-    
-    # Filter variables by target environment if specified
-    if target_environment:
-        envs = [env for env in envs if target_environment in env["target"]]
+
+    # Filter variables by target environment or custom environment if specified
+    if custom_environment_id is not None:
+        envs = [
+            env
+            for env in envs
+            if custom_environment_id in (env.get("customEnvironmentIds") or [])
+        ]
+    elif target_environment:
+        envs = [env for env in envs if target_environment in env.get("target", [])]
 
     return {
         env["key"]: {
             "id": env["id"],
             "value": env["value"],
             "target": env["target"],
+            "customEnvironmentIds": env.get("customEnvironmentIds"),
             "comment": env.get("comment"),
         }
         for env in envs
@@ -159,6 +209,7 @@ def sync_vercel_secrets(
     team_id,
     environment="production",
     secret_type="encrypted",
+    custom_environment_id=None,
 ):
     """
     Sync secrets to a specific Vercel project environment.
@@ -183,15 +234,25 @@ def sync_vercel_secrets(
             if environment == "all"
             else [environment]
         )
+        default_envs = {"production", "preview", "development"}
 
         all_updates_successful = True
         messages = []
 
         # Process each target environment separately
         for target_env in target_environments:
-            # Get existing environment variables for this specific environment
+            # If caller provided a custom env id (stored at sync creation), prefer it and skip lookups
+            custom_env_id = (
+                custom_environment_id if target_env not in default_envs else None
+            )
+
+            # Get existing environment variables for this destination
             existing_env_vars = get_existing_env_vars(
-                token, project_id, team_id, target_environment=target_env
+                token,
+                project_id,
+                team_id,
+                target_environment=target_env if custom_env_id is None else None,
+                custom_environment_id=custom_env_id,
             )
 
             # Prepare payload for bulk creation
@@ -207,21 +268,46 @@ def sync_vercel_secrets(
                         # Only delete if we're updating this specific variable
                         delete_env_var(token, project_id, team_id, existing_var["id"])
 
-                env_var = {
-                    "key": key,
-                    "value": value,
-                    "type": secret_type,
-                    "target": [target_env],  # Set target to specific environment
-                }
+                env_var = {"key": key, "value": value, "type": secret_type}
+                if custom_env_id is None:
+                    env_var["target"] = [target_env]
+                else:
+                    env_var["customEnvironmentIds"] = [custom_env_id]
                 if comment:
                     env_var["comment"] = comment
                 payload.append(env_var)
 
-            # Delete environment variables not in the source (only for this environment)
+            # Delete or scope-update variables not in the source (only for this destination)
             for key, env_var in existing_env_vars.items():
                 if not any(s[0] == key for s in secrets):
-                    delete_env_var(token, project_id, team_id, env_var["id"])
+                    if custom_env_id is None:
+                        # Default envs: safe to delete this env-scoped record
+                        delete_env_var(token, project_id, team_id, env_var["id"])
+                    else:
+                        # Custom env: remove only the custom env id from this variable, preserve others
+                        existing_custom_ids = env_var.get("customEnvironmentIds") or []
+                        remaining_custom_ids = [cid for cid in existing_custom_ids if cid != custom_env_id]
+                        remaining_targets = env_var.get("target") or []
 
+                        # If the record didn't actually target this custom env (edge-case), skip
+                        if len(remaining_custom_ids) == len(existing_custom_ids):
+                            continue
+
+                        if not remaining_custom_ids and not remaining_targets:
+                            # No remaining scopes; delete the variable entirely
+                            delete_env_var(token, project_id, team_id, env_var["id"])
+                        else:
+                            # Upsert variable with remaining scopes to drop only this custom env
+                            update_var = {
+                                "key": key,
+                                "value": env_var["value"],
+                                "type": secret_type,
+                            }
+                            if remaining_targets:
+                                update_var["target"] = remaining_targets
+                            if remaining_custom_ids:
+                                update_var["customEnvironmentIds"] = remaining_custom_ids
+                            payload.append(update_var)
             # Bulk create environment variables
             if payload:
                 url = f"{VERCEL_API_BASE_URL}/v10/projects/{project_id}/env?upsert=true"

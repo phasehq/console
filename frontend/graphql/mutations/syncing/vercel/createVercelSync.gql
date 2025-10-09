@@ -8,6 +8,7 @@ mutation CreateNewVercelSync(
   $teamName: String!
   $environment: String!
   $secretType: String!
+  $customEnvironmentId: String
 ) {
   createVercelSync(
     envId: $envId
@@ -19,6 +20,7 @@ mutation CreateNewVercelSync(
     teamName: $teamName
     environment: $environment
     secretType: $secretType
+    customEnvironmentId: $customEnvironmentId
   ) {
     sync {
       id

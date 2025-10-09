@@ -27,7 +27,11 @@ from api.utils.syncing.gitlab.main import list_gitlab_groups, list_gitlab_projec
 from api.utils.syncing.railway.main import (
     fetch_railway_projects,
 )
-from api.utils.syncing.vercel.main import test_vercel_creds, list_vercel_projects
+from api.utils.syncing.vercel.main import (
+    test_vercel_creds,
+    list_vercel_projects,
+    list_vercel_project_environments,
+)
 from api.utils.syncing.cloudflare.workers import list_cloudflare_workers
 from api.utils.syncing.render.main import (
     list_render_services,
@@ -271,6 +275,14 @@ def resolve_vercel_projects(root, info, credential_id):
         return projects
     except Exception as ex:
         raise GraphQLError(f"Error listing Vercel projects: {str(ex)}")
+
+
+def resolve_vercel_project_environments(root, info, credential_id, project_id):
+    try:
+        envs = list_vercel_project_environments(credential_id, project_id)
+        return envs
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Vercel project environments: {str(ex)}")
 
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
