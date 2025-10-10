@@ -70,12 +70,21 @@ def get_project_custom_environments(token, project_id, team_id=None):
     response = requests.get(url, headers=get_vercel_headers(token))
 
     if response.status_code != 200:
-        # If custom environments endpoint fails, return empty list (project might not have custom envs)
-        logger.info("No custom environments found or error occurred.")
+        # Log error details for debugging
+        logger.error(
+            f"Failed to fetch custom environments for project '{project_id}'"
+            f"{' (team: ' + team_id + ')' if team_id else ''}: "
+            f"Status code: {response.status_code}, Response: {response.text}"
+        )
         return []
 
     # Parse the correct response structure
     custom_envs = response.json().get("environments", [])
+    if not custom_envs:
+        logger.info(
+            f"No custom environments exist for project '{project_id}'"
+            f"{' (team: ' + team_id + ')' if team_id else ''}."
+        )
     return [
         {
             "id": env["id"],
