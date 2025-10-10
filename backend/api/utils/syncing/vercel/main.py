@@ -1,19 +1,25 @@
 import requests
-import graphene
-from graphene import ObjectType
-
+import logging
+from graphene import ObjectType, List, ID, String
 from api.utils.syncing.auth import get_credentials
+
+logger = logging.getLogger(__name__)
 
 VERCEL_API_BASE_URL = "https://api.vercel.com"
 
 
-from graphene import ObjectType, List, ID, String
+class VercelEnvironmentType(ObjectType):
+    id = ID(required=True)
+    name = String(required=True)
+    description = String()
+    slug = String(required=True)
+    type = String()  # "standard" or "custom"
 
 
 class VercelProjectType(ObjectType):
     id = ID(required=True)
     name = String(required=True)
-    environment = List(String)
+    environments = List(VercelEnvironmentType)
 
 
 class VercelTeamProjectsType(ObjectType):
@@ -43,6 +49,42 @@ def test_vercel_creds(credential_id):
         return response.status_code == 200
     except Exception:
         return False
+
+
+def get_project_custom_environments(token, project_id, team_id=None):
+    """
+    Retrieve custom environments for a specific Vercel project.
+
+    Args:
+        token (str): Vercel API token
+        project_id (str): Project ID
+        team_id (str, optional): Team ID
+
+    Returns:
+        list: List of custom environment dictionaries
+    """
+    url = f"{VERCEL_API_BASE_URL}/v1/projects/{project_id}/custom-environments"
+    if team_id:
+        url += f"?teamId={team_id}"
+
+    response = requests.get(url, headers=get_vercel_headers(token))
+
+    if response.status_code != 200:
+        # If custom environments endpoint fails, return empty list (project might not have custom envs)
+        logger.info("No custom environments found or error occurred.")
+        return []
+
+    # Parse the correct response structure
+    custom_envs = response.json().get("environments", [])
+    return [
+        {
+            "id": env["id"],
+            "name": env["slug"].title(),  # Use slug as name, capitalize first letter
+            "description": env.get("description", ""),
+            "slug": env["slug"],
+        }
+        for env in custom_envs
+    ]
 
 
 def list_vercel_projects(credential_id):
@@ -79,24 +121,68 @@ def list_vercel_projects(credential_id):
                 team_projects_url, headers=get_vercel_headers(token)
             )
             if team_projects_response.status_code != 200:
-                print(
+                logger.error(
                     f"Failed to list projects for team {team_name}: {team_projects_response.text}"
                 )
                 continue
 
             team_projects = team_projects_response.json().get("projects", [])
+
+            # Get available environments for each project (including custom environments)
+            projects_with_envs = []
+            for project in team_projects:
+                project_id = project["id"]
+                custom_envs = get_project_custom_environments(
+                    token, project_id, team_id
+                )
+
+                # Standard environments
+                environments = [
+                    {
+                        "id": "dev",
+                        "name": "Development",
+                        "slug": "development",
+                        "type": "standard",
+                    },
+                    {
+                        "id": "prev",
+                        "name": "Preview",
+                        "slug": "preview",
+                        "type": "standard",
+                    },
+                    {
+                        "id": "prod",
+                        "name": "Production",
+                        "slug": "production",
+                        "type": "standard",
+                    },
+                ]
+
+                # Add custom environments with full details
+                for env in custom_envs:
+                    environments.append(
+                        {
+                            "id": env["id"],
+                            "name": env["name"],
+                            "description": env.get("description", ""),
+                            "slug": env["slug"],
+                            "type": "custom",
+                        }
+                    )
+
+                projects_with_envs.append(
+                    {
+                        "id": project["id"],
+                        "name": project["name"],
+                        "environments": environments,
+                    }
+                )
+
             result.append(
                 {
                     "id": team_id,
                     "team_name": team_name,
-                    "projects": [
-                        {
-                            "id": project["id"],
-                            "name": project["name"],
-                            "environment": ["development", "preview", "production"],
-                        }
-                        for project in team_projects
-                    ],
+                    "projects": projects_with_envs,
                 }
             )
 
@@ -109,7 +195,7 @@ def list_vercel_projects(credential_id):
 def get_existing_env_vars(token, project_id, team_id=None, target_environment=None):
     """
     Retrieve environment variables for a specific Vercel project and environment.
-    
+
     Args:
         token (str): Vercel API token
         project_id (str): Project ID
@@ -125,7 +211,7 @@ def get_existing_env_vars(token, project_id, team_id=None, target_environment=No
         raise Exception(f"Error retrieving environment variables: {response.text}")
 
     envs = response.json().get("envs", [])
-    
+
     # Filter variables by target environment if specified
     if target_environment:
         envs = [env for env in envs if target_environment in env["target"]]
@@ -152,6 +238,45 @@ def delete_env_var(token, project_id, team_id, env_var_id):
         raise Exception(f"Error deleting environment variable: {response.text}")
 
 
+def resolve_environment_targets(token, project_id, team_id, environment):
+    """
+    Resolve environment string to actual target environments.
+    Handles standard environments and custom environment resolution.
+
+    Args:
+        token (str): Vercel API token
+        project_id (str): Project ID
+        team_id (str): Team ID
+        environment (str): Environment specification
+
+    Returns:
+        list: List of resolved environment targets
+    """
+    # Handle "all" case
+    if environment == "all":
+        standard_envs = ["production", "preview", "development"]
+        custom_envs = get_project_custom_environments(token, project_id, team_id)
+        custom_env_slugs = [env["slug"] for env in custom_envs]
+        return standard_envs + custom_env_slugs
+
+    # Handle standard environments
+    if environment in ["production", "preview", "development"]:
+        return [environment]
+
+    # Check if it's a custom environment slug
+    custom_envs = get_project_custom_environments(token, project_id, team_id)
+    custom_env_slugs = [env["slug"] for env in custom_envs]
+
+    if environment in custom_env_slugs:
+        return [environment]
+
+    # If not found, raise an error
+    available_envs = ["production", "preview", "development"] + custom_env_slugs
+    raise Exception(
+        f"Environment '{environment}' not found. Available environments: {available_envs}"
+    )
+
+
 def sync_vercel_secrets(
     secrets,
     credential_id,
@@ -162,13 +287,14 @@ def sync_vercel_secrets(
 ):
     """
     Sync secrets to a specific Vercel project environment.
+    Now properly handles custom environments using customEnvironmentIds.
 
     Args:
         secrets (list of tuple): List of (key, value, comment) tuples to sync
         credential_id (str): The ID of the stored credentials
         project_id (str): The Vercel project ID
         team_id (str): The Vercel project team ID
-        environment (str): Target environment (development/preview/production/all)
+        environment (str): Target environment (development/preview/production/all/custom-env-slug)
         secret_type (str): Type of secret (plain/encrypted/sensitive)
 
     Returns:
@@ -177,12 +303,14 @@ def sync_vercel_secrets(
     try:
         token = get_vercel_credentials(credential_id)
 
-        # Determine target environments
-        target_environments = (
-            ["production", "preview", "development"]
-            if environment == "all"
-            else [environment]
+        # Resolve target environments (handles custom environments)
+        target_environments = resolve_environment_targets(
+            token, project_id, team_id, environment
         )
+
+        # Get custom environments mapping for proper target identification
+        custom_envs = get_project_custom_environments(token, project_id, team_id)
+        custom_env_map = {env["slug"]: env["id"] for env in custom_envs}
 
         all_updates_successful = True
         messages = []
@@ -200,21 +328,31 @@ def sync_vercel_secrets(
                 # Check if the environment variable exists and needs updating
                 if key in existing_env_vars:
                     existing_var = existing_env_vars[key]
-                    if (
-                        value != existing_var["value"]
-                        or comment != existing_var.get("comment")
+                    if value != existing_var["value"] or comment != existing_var.get(
+                        "comment"
                     ):
                         # Only delete if we're updating this specific variable
                         delete_env_var(token, project_id, team_id, existing_var["id"])
 
+                # Create environment variable with proper targeting
                 env_var = {
                     "key": key,
                     "value": value,
                     "type": secret_type,
-                    "target": [target_env],  # Set target to specific environment
                 }
+
+                # Add comment if provided
                 if comment:
                     env_var["comment"] = comment
+
+                # Handle custom vs standard environments differently
+                if target_env in custom_env_map:
+                    # For custom environments, use customEnvironmentIds
+                    env_var["customEnvironmentIds"] = [custom_env_map[target_env]]
+                else:
+                    # For standard environments, use target array
+                    env_var["target"] = [target_env]
+
                 payload.append(env_var)
 
             # Delete environment variables not in the source (only for this environment)
@@ -224,14 +362,16 @@ def sync_vercel_secrets(
 
             # Bulk create environment variables
             if payload:
+
                 url = f"{VERCEL_API_BASE_URL}/v10/projects/{project_id}/env?upsert=true"
                 if team_id is not None:
                     url += f"&teamId={team_id}"
+
                 response = requests.post(
                     url, headers=get_vercel_headers(token), json=payload
                 )
 
-                if response.status_code != 201:
+                if response.status_code not in [200, 201]:
                     all_updates_successful = False
                     messages.append(
                         f"Failed to sync secrets for environment {target_env}: {response.text}"

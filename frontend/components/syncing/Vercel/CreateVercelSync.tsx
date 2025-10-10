@@ -9,6 +9,7 @@ import { Button } from '../../common/Button'
 import {
   EnvironmentType,
   ProviderCredentialsType,
+  VercelEnvironmentType,
   VercelProjectType,
   VercelTeamProjectsType,
 } from '@/apollo/graphql'
@@ -48,7 +49,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
 
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
-  const [environment, setEnvironment] = useState('production')
+  const [vercelEnvironment, setVercelEnvironment] = useState<VercelEnvironmentType | null>(null)
   const [secretType, setSecretType] = useState('encrypted')
 
   const [credentialsValid, setCredentialsValid] = useState(false)
@@ -99,7 +100,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
             projectName: vercelProject.name,
             teamId: vercelTeam?.id,
             teamName: vercelTeam?.teamName,
-            environment,
+            environment: vercelEnvironment?.slug,
             secretType,
           },
           refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
@@ -125,7 +126,8 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
           project!.name?.toLowerCase().includes(projectQuery.toLowerCase())
         )
 
-  const environments = ['production', 'preview', 'development', 'all']
+  const environments: VercelEnvironmentType[] =
+    (vercelProject?.environments as VercelEnvironmentType[]) || []
   const secretTypes = [
     { value: 'plain', label: 'Plain Text' },
     { value: 'encrypted', label: 'Encrypted' },
@@ -133,7 +135,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
   ]
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="py-4 space-y-6">
       <div>
         <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
           <SiVercel className="text-2xl" />
@@ -335,7 +337,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
               )}
 
               <div>
-                <RadioGroup value={environment} onChange={setEnvironment}>
+                <RadioGroup value={vercelEnvironment} onChange={setVercelEnvironment}>
                   <RadioGroup.Label as={Fragment}>
                     <label className="block text-neutral-500 text-sm  mb-2">
                       Target Environment <span className="text-red-500">*</span>
@@ -343,7 +345,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                   </RadioGroup.Label>
                   <div className="flex flex-wrap items-center gap-2">
                     {environments.map((env) => (
-                      <RadioGroup.Option key={env} value={env} as={Fragment}>
+                      <RadioGroup.Option key={env.id} value={env} as={Fragment}>
                         {({ active, checked }) => (
                           <div
                             className={clsx(
@@ -353,7 +355,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                             )}
                           >
                             {checked ? <FaDotCircle className="text-emerald-500" /> : <FaCircle />}
-                            {env}
+                            {env.name}
                           </div>
                         )}
                       </RadioGroup.Option>

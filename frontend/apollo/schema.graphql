@@ -864,7 +864,15 @@ type VercelTeamProjectsType {
 type VercelProjectType {
   id: ID!
   name: String!
-  environment: [String]
+  environments: [VercelEnvironmentType]
+}
+
+type VercelEnvironmentType {
+  id: ID!
+  name: String!
+  description: String
+  slug: String!
+  type: String
 }
 
 type RenderServiceType {
