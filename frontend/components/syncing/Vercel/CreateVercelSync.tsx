@@ -135,7 +135,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
   ]
 
   return (
-    <div className="py-4 space-y-6">
+    <div className="pt-4 space-y-6">
       <div>
         <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
           <SiVercel className="text-2xl" />
