@@ -379,7 +379,7 @@ def sync_vercel_secrets(
                 response = requests.post(
                     url, headers=get_vercel_headers(token), json=payload
                 )
-
+                # Accept both 200 and 201 status codes as successful responses
                 if response.status_code not in [200, 201]:
                     all_updates_successful = False
                     messages.append(
