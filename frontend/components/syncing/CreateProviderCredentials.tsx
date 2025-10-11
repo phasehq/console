@@ -83,6 +83,12 @@ export const CreateProviderCredentials = (props: {
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
+
+      if (provider.id === 'github') {
+        setAuthMethod('oauth')
+      } else {
+        setAuthMethod('token')
+      }
     }
     if (provider) handleProviderChange(provider)
   }, [provider])
