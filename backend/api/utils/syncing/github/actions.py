@@ -234,6 +234,11 @@ def sync_github_secrets(
 
         public_key_response = requests.get(public_key_url, headers=headers)
         if public_key_response.status_code != 200:
+            if public_key_response.status_code == 404:
+                return False, {
+                    "response_code": public_key_response.status_code,
+                    "message": "Unable to access repository. Please verify the repository exists and your access token has the required permissions (Secrets: Read and write, Environments: Read-only).",
+                }
             return False, {
                 "response_code": public_key_response.status_code,
                 "message": f"Failed to fetch repository public key: {public_key_response.text}",
