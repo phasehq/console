@@ -94,7 +94,7 @@ export const SetupGhAuth = () => {
                           : ' border-transparent cursor-pointer'
                       )}
                     >
-                      GitHub
+                      GitHub.com
                     </div>
                   )}
                 </Tab>
