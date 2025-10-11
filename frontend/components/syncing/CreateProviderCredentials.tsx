@@ -211,7 +211,7 @@ export const CreateProviderCredentials = (props: {
                         : ' border-transparent cursor-pointer'
                     )}
                   >
-                    Setup with OAuth
+                    GitHub OAuth
                   </div>
                 )}
               </Tab>
@@ -226,7 +226,7 @@ export const CreateProviderCredentials = (props: {
                         : ' border-transparent cursor-pointer'
                     )}
                   >
-                    Enter token manually
+                    GitHub Token
                   </div>
                 )}
               </Tab>
