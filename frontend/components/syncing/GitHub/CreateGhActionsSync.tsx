@@ -54,7 +54,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
     variables: { orgId: organisation!.id },
   })
 
-  const [getGhRepos] = useLazyQuery(GetGithubRepos)
+  const [getGhRepos, { loading: loadingRepos }] = useLazyQuery(GetGithubRepos)
 
   const { data: environmentsData } = useQuery(GetGithubEnvironments, {
     variables: {
@@ -403,7 +403,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
               </Button>
             )}
           </div>
-          <Button isLoading={creating} variant="primary" type="submit">
+          <Button isLoading={credentialsValid ? creating : loadingRepos} variant="primary" type="submit">
             {credentialsValid ? 'Create' : 'Next'}
           </Button>
         </div>
