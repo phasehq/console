@@ -33,4 +33,4 @@ export const encryptProviderCredentials = async (
 }
 
 export const isCredentialSecret = (credential: string) =>
-  !/(?:addr|host)/i.test(credential.toLowerCase())
+  !/(?:addr|host|url)/i.test(credential.toLowerCase())
