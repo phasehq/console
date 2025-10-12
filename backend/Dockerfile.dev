@@ -19,11 +19,11 @@ RUN apk update && apk add --no-cache \
     mariadb-dev \
     python3-dev
 
-COPY requirements.txt /app/requirements.txt
+# Copy and install Python dependencies
+COPY requirements.txt dev-requirements.txt /app/
 
-# Install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt -r dev-requirements.txt
 
 COPY . /app
 
