@@ -68,6 +68,13 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
     }
   }, [appEnvsData])
 
+  // Preselect first available Vercel team
+  useEffect(() => {
+    if (vercelTeams.length > 0) {
+      setVercelTeam(vercelTeams[0])
+    }
+  }, [vercelTeams])
+
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
