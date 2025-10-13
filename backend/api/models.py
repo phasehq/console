@@ -584,7 +584,7 @@ class ServiceAccountToken(models.Model):
             )
 
     def save(self, *args, **kwargs):
-        self.full_clean()  # This calls clean() and field validation
+        self.clean()
         super().save(*args, **kwargs)
 
     def get_creator_account(self):
