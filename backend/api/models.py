@@ -530,7 +530,7 @@ class ServiceTokenManager(models.Manager):
             raise ValueError("Cannot add more service tokens to this app.")
         return super().create(*args, **kwargs)
 
-
+# Deprecated Legacy App-linked Service Tokens
 class ServiceToken(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     app = models.ForeignKey(App, on_delete=models.CASCADE)
@@ -569,7 +569,7 @@ class ServiceAccountToken(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
-    expires_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
 
     def clean(self):
         # Ensure only one of created_by or created_by_service_account is set
