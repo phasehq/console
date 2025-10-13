@@ -88,7 +88,7 @@ def get_project_custom_environments(token, project_id, team_id=None):
     return [
         {
             "id": env["id"],
-            "name": env["slug"].title(),  # Use slug as name, capitalize first letter
+            "name": env["slug"].capitalize(),  # Use slug as name, capitalize first letter
             "description": env.get("description", ""),
             "slug": env["slug"],
         }
