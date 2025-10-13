@@ -47,9 +47,12 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
   const [vercelProject, setVercelProject] = useState<VercelProjectType | null>(null)
   const [projectQuery, setProjectQuery] = useState('')
 
+  const [vercelEnvironment, setVercelEnvironment] = useState<VercelEnvironmentType | null>(null)
+  const [envQuery, setEnvQuery] = useState('')
+
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
-  const [vercelEnvironment, setVercelEnvironment] = useState<VercelEnvironmentType | null>(null)
+
   const [secretType, setSecretType] = useState('encrypted')
 
   const [credentialsValid, setCredentialsValid] = useState(false)
@@ -133,13 +136,27 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
           project!.name?.toLowerCase().includes(projectQuery.toLowerCase())
         )
 
-  const environments: VercelEnvironmentType[] =
-    (vercelProject?.environments as VercelEnvironmentType[]) || []
+  // const environments: VercelEnvironmentType[] =
+  //   (vercelProject?.environments as VercelEnvironmentType[]) || []
+  const filteredEnvs: VercelEnvironmentType[] =
+    envQuery === ''
+      ? (vercelProject?.environments as VercelEnvironmentType[]) ?? []
+      : ((vercelProject?.environments as VercelEnvironmentType[]) ?? []).filter((env) =>
+          env?.name?.toLowerCase().includes(envQuery.toLowerCase())
+        )
+
   const secretTypes = [
     { value: 'plain', label: 'Plain Text' },
     { value: 'encrypted', label: 'Encrypted' },
     { value: 'sensitive', label: 'Sensitive' },
   ]
+
+  // Environment type badge styling
+  const envTypeBadgeStyles = {
+    all: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
+    standard: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    custom: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  }
 
   return (
     <div className="pt-4 space-y-6">
@@ -314,7 +331,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                           leaveTo="transform scale-95 opacity-0"
                         >
                           <Combobox.Options as={Fragment}>
-                            <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full">
+                            <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                               {filteredProjects!.map((project) => (
                                 <Combobox.Option key={project!.id} value={project}>
                                   {({ active }) => (
@@ -343,8 +360,84 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                 <div></div>
               )}
 
-              <div>
-                <RadioGroup value={vercelEnvironment} onChange={setVercelEnvironment}>
+              <div className="relative">
+                <Combobox value={vercelEnvironment} onChange={setVercelEnvironment}>
+                  {({ open }) => (
+                    <>
+                      <div className="space-y-2">
+                        <Combobox.Label as={Fragment}>
+                          <label className="block text-neutral-500 text-sm">
+                            Project Environment <span className="text-red-500">*</span>
+                          </label>
+                        </Combobox.Label>
+                        <div className="w-full relative flex items-center">
+                          <Combobox.Input
+                            className="w-full"
+                            onChange={(event) => setEnvQuery(event.target.value)}
+                            displayValue={(env: VercelEnvironmentType) => env?.name!}
+                            required
+                          />
+                          <div className="absolute inset-y-0 right-2 flex items-center">
+                            <Combobox.Button>
+                              <FaChevronDown
+                                className={clsx(
+                                  'text-neutral-500 transform transition ease cursor-pointer',
+                                  open ? 'rotate-180' : 'rotate-0'
+                                )}
+                              />
+                            </Combobox.Button>
+                          </div>
+                        </div>
+                      </div>
+                      <Transition
+                        enter="transition duration-100 ease-out"
+                        enterFrom="transform scale-95 opacity-0"
+                        enterTo="transform scale-100 opacity-100"
+                        leave="transition duration-75 ease-out"
+                        leaveFrom="transform scale-100 opacity-100"
+                        leaveTo="transform scale-95 opacity-0"
+                      >
+                        <Combobox.Options as={Fragment}>
+                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
+                            {filteredEnvs!.map((env) => (
+                              <Combobox.Option key={env!.id} value={env}>
+                                {({ active }) => (
+                                  <div
+                                    className={clsx(
+                                      'flex items-center gap-1 p-1 cursor-pointer rounded-md w-full justify-between',
+                                      active && 'bg-zinc-400 dark:bg-zinc-700'
+                                    )}
+                                  >
+                                    <div>
+                                      <div className="font-semibold text-zinc-900 dark:text-zinc-100 text-sm">
+                                        {env!.name}
+                                      </div>
+                                      <div className="text-neutral-500 text-2xs font-mono">
+                                        {env!.id}
+                                      </div>
+                                    </div>
+                                    <div
+                                      className={clsx(
+                                        'text-2xs rounded-full px-2 py-0.5 font-medium capitalize',
+                                        envTypeBadgeStyles[
+                                          env!.type as keyof typeof envTypeBadgeStyles
+                                        ]
+                                      )}
+                                    >
+                                      {env!.type}
+                                    </div>
+                                  </div>
+                                )}
+                              </Combobox.Option>
+                            ))}
+                          </div>
+                        </Combobox.Options>
+                      </Transition>
+                    </>
+                  )}
+                </Combobox>
+
+                {/* <RadioGroup value={vercelEnvironment} onChange={setVercelEnvironment}>
                   <RadioGroup.Label as={Fragment}>
                     <label className="block text-neutral-500 text-sm  mb-2">
                       Target Environment <span className="text-red-500">*</span>
@@ -368,7 +461,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                       </RadioGroup.Option>
                     ))}
                   </div>
-                </RadioGroup>
+                </RadioGroup> */}
               </div>
 
               <div>

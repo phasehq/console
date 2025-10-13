@@ -9,6 +9,7 @@ query GetVercelProjects($credentialId: ID!) {
         id
         name
         slug
+        type
       }
     }
   }
