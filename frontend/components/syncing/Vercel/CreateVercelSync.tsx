@@ -136,8 +136,6 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
           project!.name?.toLowerCase().includes(projectQuery.toLowerCase())
         )
 
-  // const environments: VercelEnvironmentType[] =
-  //   (vercelProject?.environments as VercelEnvironmentType[]) || []
   const filteredEnvs: VercelEnvironmentType[] =
     envQuery === ''
       ? (vercelProject?.environments as VercelEnvironmentType[]) ?? []
