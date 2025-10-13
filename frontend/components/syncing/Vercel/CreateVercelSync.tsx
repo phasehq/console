@@ -267,14 +267,14 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
+                          <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                             {filteredTeams.map((team) => (
                               <Combobox.Option as="div" key={team.id} value={team}>
                                 {({ active }) => (
                                   <div
                                     className={clsx(
                                       'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
-                                      active && 'bg-zinc-400 dark:bg-zinc-700'
+                                      active && 'bg-zinc-300 dark:bg-zinc-700'
                                     )}
                                   >
                                     <div className="font-semibold text-black dark:text-white">
@@ -331,14 +331,14 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                           leaveTo="transform scale-95 opacity-0"
                         >
                           <Combobox.Options as={Fragment}>
-                            <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
+                            <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                               {filteredProjects!.map((project) => (
                                 <Combobox.Option key={project!.id} value={project}>
                                   {({ active }) => (
                                     <div
                                       className={clsx(
                                         'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
-                                        active && 'bg-zinc-400 dark:bg-zinc-700'
+                                        active && 'bg-zinc-300 dark:bg-zinc-700'
                                       )}
                                     >
                                       <div className="font-semibold text-black dark:text-white">
@@ -398,14 +398,14 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
+                          <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                             {filteredEnvs!.map((env) => (
                               <Combobox.Option key={env!.id} value={env}>
                                 {({ active }) => (
                                   <div
                                     className={clsx(
                                       'flex items-center gap-1 p-1 cursor-pointer rounded-md w-full justify-between',
-                                      active && 'bg-zinc-400 dark:bg-zinc-700'
+                                      active && 'bg-zinc-300 dark:bg-zinc-700'
                                     )}
                                   >
                                     <div>
