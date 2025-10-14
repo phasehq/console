@@ -51,6 +51,17 @@ def test_vercel_creds(credential_id):
         return False
 
 
+def delete_env_var(token, project_id, team_id, env_var_id):
+    """Delete a Vercel environment variable using its ID."""
+    url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env/{env_var_id}"
+    if team_id is not None:
+        url += f"?teamId={team_id}"
+    response = requests.delete(url, headers=get_vercel_headers(token))
+
+    if response.status_code != 200:
+        raise Exception(f"Error deleting environment variable: {response.text}")
+
+
 def get_project_custom_environments(token, project_id, team_id=None):
     """
     Retrieve custom environments for a specific Vercel project.
@@ -74,9 +85,8 @@ def get_project_custom_environments(token, project_id, team_id=None):
             logger.warning(
                 f"Failed to fetch custom environments for project '{project_id}'"
                 f"{' (team: ' + team_id + ')' if team_id else ''}: "
-                f"Status code: {response.status_code}, Response: {response.text}"
+                f"Status code: {response.status_code}"
             )
-            # Return empty list but log the failure
             return []
 
         custom_envs = response.json().get("environments", [])
@@ -209,40 +219,62 @@ def list_vercel_projects(credential_id):
         raise Exception(f"Error listing Vercel projects: {str(e)}")
 
 
-def get_existing_env_vars(token, project_id, team_id=None, target_environment=None):
+def get_existing_env_vars(token, project_id, team_id, target_environment):
     """
     Retrieve environment variables for a specific Vercel project and environment.
+    Only returns variables that EXCLUSIVELY target the specified environment.
 
     Args:
         token (str): Vercel API token
         project_id (str): Project ID
-        team_id (str, optional): Team ID
-        target_environment (str, optional): Specific environment to filter by
+        team_id (str): Team ID
+        target_environment (str): Specific environment to filter by (REQUIRED)
+
+    Returns:
+        dict: Dictionary mapping variable keys to their metadata (id, value, target, comment)
     """
     url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env"
     if team_id is not None:
         url += f"?teamId={team_id}"
-    response = requests.get(url, headers=get_vercel_headers(token))
 
+    response = requests.get(url, headers=get_vercel_headers(token))
     if response.status_code != 200:
         raise Exception(f"Error retrieving environment variables: {response.text}")
 
     envs = response.json().get("envs", [])
+    filtered_envs = []
 
-    # Filter variables by target environment if specified
-    if target_environment:
-        # Get custom environments to map slugs to IDs for proper filtering
-        custom_envs = get_project_custom_environments(token, project_id, team_id)
-        custom_env_map = {env["slug"]: env["id"] for env in custom_envs}
+    # Get custom environments to map slugs to IDs for proper filtering
+    custom_envs = get_project_custom_environments(token, project_id, team_id)
+    custom_env_map = {env["slug"]: env["id"] for env in custom_envs}
 
-        # Check if target_environment is a custom environment
+    for env in envs:
+        env_targets = set(env.get("target", []))
+        custom_env_ids = set(env.get("customEnvironmentIds", []))
+
         if target_environment in custom_env_map:
-            # For custom environments, check if the custom environment ID is in the target array
+            # For custom environments, check customEnvironmentIds field
             custom_env_id = custom_env_map[target_environment]
-            envs = [env for env in envs if custom_env_id in env["target"]]
+
+            # Variable should ONLY target this custom environment
+            if (
+                len(custom_env_ids) == 1
+                and custom_env_id in custom_env_ids
+                and len(env_targets) == 0
+            ):
+                filtered_envs.append(env)
         else:
-            # For standard environments, use the slug directly
-            envs = [env for env in envs if target_environment in env["target"]]
+            # For standard environments, only include if it EXCLUSIVELY targets this environment
+            if (
+                len(env_targets) == 1
+                and target_environment in env_targets
+                and len(custom_env_ids) == 0
+            ):
+                filtered_envs.append(env)
+
+    logger.info(
+        f"Found {len(filtered_envs)} variables exclusively targeting environment: {target_environment}"
+    )
 
     return {
         env["key"]: {
@@ -251,58 +283,8 @@ def get_existing_env_vars(token, project_id, team_id=None, target_environment=No
             "target": env["target"],
             "comment": env.get("comment"),
         }
-        for env in envs
+        for env in filtered_envs
     }
-
-
-def delete_env_var(token, project_id, team_id, env_var_id):
-    """Delete a Vercel environment variable using its ID."""
-    url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env/{env_var_id}"
-    if team_id is not None:
-        url += f"?teamId={team_id}"
-    response = requests.delete(url, headers=get_vercel_headers(token))
-
-    if response.status_code != 200:
-        raise Exception(f"Error deleting environment variable: {response.text}")
-
-
-def resolve_environment_targets(token, project_id, team_id, environment):
-    """
-    Resolve environment string to actual target environments.
-    Handles standard environments and custom environment resolution.
-
-    Args:
-        token (str): Vercel API token
-        project_id (str): Project ID
-        team_id (str): Team ID
-        environment (str): Environment specification
-
-    Returns:
-        list: List of resolved environment targets
-    """
-    # Handle "all" case
-    if environment == "all":
-        standard_envs = ["production", "preview", "development"]
-        custom_envs = get_project_custom_environments(token, project_id, team_id)
-        custom_env_slugs = [env["slug"] for env in custom_envs]
-        return standard_envs + custom_env_slugs
-
-    # Handle standard environments
-    if environment in ["production", "preview", "development"]:
-        return [environment]
-
-    # Check if it's a custom environment slug
-    custom_envs = get_project_custom_environments(token, project_id, team_id)
-    custom_env_slugs = [env["slug"] for env in custom_envs]
-
-    if environment in custom_env_slugs:
-        return [environment]
-
-    # If not found, raise an error
-    available_envs = ["production", "preview", "development"] + custom_env_slugs
-    raise Exception(
-        f"Environment '{environment}' not found. Available environments: {available_envs}"
-    )
 
 
 def sync_vercel_secrets(
@@ -315,6 +297,7 @@ def sync_vercel_secrets(
 ):
     """
     Sync secrets to a specific Vercel project environment.
+    For 'all' environments, creates separate variables for each environment to avoid cross-environment deletion issues.
 
     Args:
         secrets (list of tuple): List of (key, value, comment) tuples to sync
@@ -339,12 +322,6 @@ def sync_vercel_secrets(
             environment not in ["all", "production", "preview", "development"]
             and environment not in custom_env_map
         ):
-            # If custom envs failed to load, give a more helpful error
-            if not custom_envs:
-                logger.warning(
-                    "Custom environments could not be loaded - this may cause sync issues"
-                )
-
             available_envs = ["all", "production", "preview", "development"] + list(
                 custom_env_map.keys()
             )
@@ -352,113 +329,111 @@ def sync_vercel_secrets(
                 f"Environment '{environment}' not found. Available environments: {available_envs}"
             )
 
-        logger.info(f"Syncing secrets to environment: {environment}")
+        logger.info(f"Syncing {len(secrets)} secrets to environment: {environment}")
 
-        # Get existing environment variables with proper scoping
+        # Determine target environments to sync to
         if environment == "all":
-            # For 'all', we need to be more surgical about which vars to delete
-            # Only delete vars that exist in the environments we're targeting
-            all_existing_vars = get_existing_env_vars(token, project_id, team_id)
-
-            # Filter to only vars that target the environments we're syncing to
-            target_env_ids = set(["production", "preview", "development"])
-            if custom_envs:
-                target_env_ids.update([env["id"] for env in custom_envs])
-
-            existing_env_vars = {}
-            for key, var in all_existing_vars.items():
-                # Check if this var targets any of our sync environments
-                var_targets = set(var["target"])
-                if var_targets.intersection(target_env_ids):
-                    existing_env_vars[key] = var
-        else:
-            # For specific environments, filter appropriately
-            existing_env_vars = get_existing_env_vars(
-                token, project_id, team_id, target_environment=environment
+            target_environments = ["production", "preview", "development"] + list(
+                custom_env_map.keys()
             )
-
-        # Prepare payload for bulk creation
-        payload = []
-        for key, value, comment in secrets:
-            # Check if the environment variable exists and needs updating
-            if key in existing_env_vars:
-                existing_var = existing_env_vars[key]
-                if value != existing_var["value"] or comment != existing_var.get(
-                    "comment"
-                ):
-                    # Delete the existing variable so we can recreate it
-                    delete_env_var(token, project_id, team_id, existing_var["id"])
-
-            # Create environment variable with proper targeting
-            env_var = {
-                "key": key,
-                "value": value,
-                "type": secret_type,
-            }
-
-            # Add comment if provided
-            if comment:
-                env_var["comment"] = comment
-
-            # Handle different environment targeting
-            if environment == "all":
-                # For 'all' environments, target standard environments and add custom environment IDs
-                env_var["target"] = ["production", "preview", "development"]
-                if custom_envs:
-                    env_var["customEnvironmentIds"] = [env["id"] for env in custom_envs]
-                logger.info(
-                    f"Targeting all environments with custom IDs: {[env['id'] for env in custom_envs]}"
-                )
-            elif environment in custom_env_map:
-                # For custom environments, use customEnvironmentIds
-                env_var["customEnvironmentIds"] = [custom_env_map[environment]]
-                logger.info(
-                    f"Using customEnvironmentIds for {environment}: {custom_env_map[environment]}"
-                )
-            else:
-                # For standard environments, use target array
-                env_var["target"] = [environment]
-                logger.info(f"Using target for {environment}")
-
-            payload.append(env_var)
-
-        # Handle deletion of variables not in the source
-        # Only delete vars that were in our filtered existing_env_vars
-        for key, env_var in existing_env_vars.items():
-            if not any(s[0] == key for s in secrets):
-                logger.info(
-                    f"Deleting environment variable '{key}' (ID: {env_var['id']})"
-                )
-                delete_env_var(token, project_id, team_id, env_var["id"])
-
-        # Bulk create environment variables
-        if payload:
             logger.info(
-                f"Syncing {len(payload)} variables to environment: {environment}"
+                f"Syncing to all environments individually: {target_environments}"
             )
-
-            url = f"{VERCEL_API_BASE_URL}/v10/projects/{project_id}/env?upsert=true"
-            if team_id is not None:
-                url += f"&teamId={team_id}"
-
-            response = requests.post(
-                url, headers=get_vercel_headers(token), json=payload
-            )
-
-            logger.info(f"API response: {response.status_code}")
-            if response.status_code >= 400:
-                logger.error(f"Response body: {response.text}")
-
-            if response.status_code not in [200, 201]:
-                error_msg = f"Failed to sync secrets: {response.text}"
-                logger.error(error_msg)
-                return False, {"message": error_msg}
-            else:
-                success_msg = f"Successfully synced {len(payload)} secrets to environment: {environment}"
-                logger.info(success_msg)
-                return True, {"message": success_msg}
         else:
-            return True, {"message": "No secrets to sync"}
+            target_environments = [environment]
+
+        all_success = True
+        messages = []
+
+        # Process each target environment separately
+        for target_env in target_environments:
+            logger.info(f"Processing environment: {target_env}")
+
+            # Get existing environment variables for this specific environment
+            existing_env_vars = get_existing_env_vars(
+                token, project_id, team_id, target_environment=target_env
+            )
+
+            logger.info(
+                f"Found {len(existing_env_vars)} existing variables for environment: {target_env}"
+            )
+
+            # Prepare payload for this specific environment
+            payload = []
+            updated_count = 0
+
+            for key, value, comment in secrets:
+                # Check if the environment variable exists and needs updating
+                if key in existing_env_vars:
+                    existing_var = existing_env_vars[key]
+                    if value != existing_var["value"] or comment != existing_var.get(
+                        "comment"
+                    ):
+                        logger.info(f"Updating variable in environment: {target_env}")
+                        delete_env_var(token, project_id, team_id, existing_var["id"])
+                        updated_count += 1
+
+                # Create environment variable with proper targeting for this specific environment
+                env_var = {
+                    "key": key,
+                    "value": value,
+                    "type": secret_type,
+                }
+
+                if comment:
+                    env_var["comment"] = comment
+
+                # Always create single-environment variables
+                if target_env in custom_env_map:
+                    # For custom environments, use customEnvironmentIds
+                    env_var["customEnvironmentIds"] = [custom_env_map[target_env]]
+                else:
+                    # For standard environments, use target array
+                    env_var["target"] = [target_env]
+
+                payload.append(env_var)
+
+            # Handle deletion of variables not in the source for this specific environment
+            secrets_to_keep = {secret[0] for secret in secrets}
+            deleted_count = 0
+
+            for key, env_var in existing_env_vars.items():
+                if key not in secrets_to_keep:
+                    logger.info(
+                        f"Deleting unused variable from environment: {target_env}"
+                    )
+                    delete_env_var(token, project_id, team_id, env_var["id"])
+                    deleted_count += 1
+
+            # Bulk create environment variables for this environment
+            if payload:
+                logger.info(
+                    f"Syncing {len(payload)} variables to environment: {target_env}"
+                )
+
+                url = f"{VERCEL_API_BASE_URL}/v10/projects/{project_id}/env?upsert=true"
+                if team_id is not None:
+                    url += f"&teamId={team_id}"
+
+                response = requests.post(
+                    url, headers=get_vercel_headers(token), json=payload
+                )
+
+                if response.status_code not in [200, 201]:
+                    all_success = False
+                    error_msg = (
+                        f"Failed to sync secrets to {target_env}: {response.text}"
+                    )
+                    logger.error(error_msg)
+                    messages.append(error_msg)
+                else:
+                    success_msg = f"Successfully synced to {target_env}: {len(payload)} total, {updated_count} updated, {deleted_count} deleted"
+                    logger.info(success_msg)
+                    messages.append(success_msg)
+            else:
+                messages.append(f"No secrets to sync for environment: {target_env}")
+
+        return all_success, {"message": "\n".join(messages)}
 
     except Exception as e:
         error_msg = f"Failed to sync secrets: {str(e)}"
