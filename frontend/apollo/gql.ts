@@ -162,7 +162,7 @@ const documents = {
     "query GetRailwayProjects($credentialId: ID!) {\n  railwayProjects(credentialId: $credentialId) {\n    id\n    name\n    environments {\n      id\n      name\n    }\n    services {\n      id\n      name\n    }\n  }\n}": types.GetRailwayProjectsDocument,
     "query GetRenderResources($credentialId: ID!) {\n  renderServices(credentialId: $credentialId) {\n    id\n    name\n    type\n  }\n  renderEnvgroups(credentialId: $credentialId) {\n    id\n    name\n  }\n}": types.GetRenderResourcesDocument,
     "query TestVaultAuth($credentialId: ID!) {\n  testVaultCreds(credentialId: $credentialId)\n}": types.TestVaultAuthDocument,
-    "query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    teamName\n    projects {\n      id\n      name\n      environment\n    }\n  }\n}": types.GetVercelProjectsDocument,
+    "query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    teamName\n    projects {\n      id\n      name\n      environments {\n        id\n        name\n        slug\n        type\n      }\n    }\n  }\n}": types.GetVercelProjectsDocument,
     "query GetOrganisationMemberDetail($organisationId: ID!, $id: ID) {\n  organisationMembers(organisationId: $organisationId, memberId: $id) {\n    id\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    lastLogin\n    self\n    appMemberships {\n      id\n      name\n      sseEnabled\n      environments {\n        id\n        name\n      }\n    }\n    tokens {\n      id\n      name\n      createdAt\n      expiresAt\n    }\n    networkPolicies {\n      id\n      name\n      allowedIps\n      isGlobal\n    }\n  }\n}": types.GetOrganisationMemberDetailDocument,
     "query GetUserTokens($organisationId: ID!) {\n  userTokens(organisationId: $organisationId) {\n    id\n    name\n    wrappedKeyShare\n    createdAt\n    expiresAt\n  }\n}": types.GetUserTokensDocument,
 };
@@ -780,7 +780,7 @@ export function graphql(source: "query TestVaultAuth($credentialId: ID!) {\n  te
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    teamName\n    projects {\n      id\n      name\n      environment\n    }\n  }\n}"): (typeof documents)["query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    teamName\n    projects {\n      id\n      name\n      environment\n    }\n  }\n}"];
+export function graphql(source: "query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    teamName\n    projects {\n      id\n      name\n      environments {\n        id\n        name\n        slug\n        type\n      }\n    }\n  }\n}"): (typeof documents)["query GetVercelProjects($credentialId: ID!) {\n  vercelProjects(credentialId: $credentialId) {\n    id\n    teamName\n    projects {\n      id\n      name\n      environments {\n        id\n        name\n        slug\n        type\n      }\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
