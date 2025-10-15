@@ -17,16 +17,16 @@ export const EnvSyncStatus = (props: {
   const syncStatus = () => {
     if (
       syncs.some(
-        (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.Failed
-      )
-    )
-      return ApiEnvironmentSyncStatusChoices.Failed
-    else if (
-      syncs.some(
         (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.InProgress
       )
     )
       return ApiEnvironmentSyncStatusChoices.InProgress
+    else if (
+      syncs.some(
+        (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.Failed
+      )
+    )
+      return ApiEnvironmentSyncStatusChoices.Failed
     else return ApiEnvironmentSyncStatusChoices.Completed
   }
 
