@@ -1,3 +1,4 @@
+from api.utils.access.ip import get_client_ip
 from graphql import GraphQLResolveInfo
 from graphql import GraphQLError
 from api.models import NetworkAccessPolicy, Organisation, OrganisationMember
@@ -51,7 +52,7 @@ class IPWhitelistMiddleware:
             except OrganisationMember.DoesNotExist:
                 raise GraphQLError("You are not a member of this organisation")
 
-            ip = self.get_client_ip(request)
+            ip = get_client_ip(request)
 
             account_policies = org_member.network_policies.all()
             global_policies = (
