@@ -1,4 +1,5 @@
 from django.db import connection
+import re
 
 
 def get_approximate_count(queryset, threshold=10000):
@@ -13,7 +14,6 @@ def get_approximate_count(queryset, threshold=10000):
     Returns:
         int: Estimated or exact row count
     """
-    import re
 
     try:
         with connection.cursor() as cursor:
