@@ -861,6 +861,96 @@ class Query(graphene.ObjectType):
 
         return SecretLogsResponseType(logs=secret_events, count=count)
 
+    def resolve_app_activity_chart(root, info, app_id, period=TimeRange.DAY):
+        """
+        Converts app log activity for the chosen time period into time series data that can be used to draw a chart
+        Args:
+            app_id (string): app uuid
+            period (TimeRange, optional): The desired time period. Defaults to 'day'.
+        Raises:
+            GraphQLError: If the requesting user does not have access to this app
+        Returns:
+            List[ChartDataPointType]: Time series decrypt count data
+        """
+
+        app = App.objects.get(id=app_id)
+        if not user_can_access_app(info.context.user.userId, app_id):
+            raise GraphQLError("You don't have access to this app")
+
+        end_date = datetime.now()  # current time
+
+        # default values for period='day'
+        # 24 hours before current time
+        start_date = end_date - timedelta(hours=24)
+        time_iteration = timedelta(hours=1)
+
+        match period:
+            case TimeRange.HOUR:
+                # 7 days before current time
+                start_date = end_date - timedelta(hours=1)
+                time_iteration = timedelta(minutes=5)
+            case TimeRange.WEEK:
+                # 7 days before current time
+                start_date = end_date - timedelta(days=7)
+                time_iteration = timedelta(days=1)
+            case TimeRange.MONTH:
+                # 30 days before current time
+                start_date = end_date - timedelta(days=30)
+                time_iteration = timedelta(days=1)
+            case TimeRange.YEAR:
+                # 365 days before current time
+                start_date = end_date - timedelta(days=365)
+                time_iteration = timedelta(days=5)
+            case TimeRange.ALL_TIME:
+                # 365 days before current time
+                start_date = end_date - timedelta(days=365)
+                time_iteration = timedelta(days=7)
+
+        time_series_logs = []
+
+        # initialize the iterators
+        current_date = start_date
+        index = 0
+
+        # loop through each iteration in the period and calculate the number of decrypts per time_iteration
+        while current_date <= end_date:
+            # Get the start and end of the current measurement period as datetime objects
+            start_of_measurement_period = current_date.replace(second=0, microsecond=0)
+            if (current_date + time_iteration) > end_date:
+                end_of_measurement_period = end_date
+            else:
+                end_of_measurement_period = start_of_measurement_period + time_iteration
+
+            # Convert the start and end of the measurement period to unix timestamps
+            start_unix = int(start_of_measurement_period.timestamp() * 1000)
+            end_unix = int(end_of_measurement_period.timestamp() * 1000)
+
+            # Get the count of decrypts in the measurement period
+            if CLOUD_HOSTED:
+                decrypts = get_app_log_count_range(
+                    f"phApp:v{app.app_version}:{app.identity_key}", start_unix, end_unix
+                )
+            else:
+                decrypts = KMSDBLog.objects.filter(
+                    app_id=f"phApp:v{app.app_version}:{app.identity_key}",
+                    timestamp__lte=end_unix,
+                    timestamp__gte=start_unix,
+                ).count()
+
+            time_series_logs.append(
+                ChartDataPointType(index=str(index), date=end_unix, data=decrypts)
+            )
+
+            # Increment current_date by one time iteration
+            current_date += time_iteration
+            index += 1
+
+        return time_series_logs
+
+    resolve_stripe_checkout_details = resolve_stripe_checkout_details
+    resolve_stripe_subscription_details = resolve_stripe_subscription_details
+    resolve_stripe_customer_portal_url = resolve_stripe_customer_portal_url
+
 
 class Mutation(graphene.ObjectType):
     create_organisation = CreateOrganisationMutation.Field()
