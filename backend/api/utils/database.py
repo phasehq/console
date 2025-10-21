@@ -1,10 +1,17 @@
 from django.db import connection
 
 
-def get_approximate_count(queryset):
+def get_approximate_count(queryset, threshold=10000):
     """
     Get approximate count using PostgreSQL statistics for better performance.
-    Falls back to exact count if estimation fails.
+    Falls back to exact count for smaller datasets.
+
+    Args:
+        queryset: Django QuerySet to count
+        threshold: Use exact count if estimate is below this value (default: 10000)
+
+    Returns:
+        int: Estimated or exact row count
     """
     import re
 
@@ -19,7 +26,11 @@ def get_approximate_count(queryset):
                 if "rows=" in row_str:
                     match = re.search(r"rows=(\d+)", row_str)
                     if match:
-                        return int(match.group(1))
+                        estimated_count = int(match.group(1))
+                        # For small datasets, get exact count for accuracy
+                        if estimated_count < threshold:
+                            return queryset.count()
+                        return estimated_count
     except Exception:
         pass
 
