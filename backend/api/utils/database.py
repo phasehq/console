@@ -1,5 +1,8 @@
 from django.db import connection
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_approximate_count(queryset, threshold=10000):
@@ -31,7 +34,9 @@ def get_approximate_count(queryset, threshold=10000):
                         if estimated_count < threshold:
                             return queryset.count()
                         return estimated_count
-    except Exception:
-        pass
+    except Exception as e:
+        logger.info(
+            f"Failed to get approximate count, falling back to exact count: {str(e)}"
+        )
 
     return queryset.count()
