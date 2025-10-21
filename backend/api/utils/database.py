@@ -27,9 +27,9 @@ def get_approximate_count(queryset, threshold=10000):
             for row in result:
                 row_str = str(row[0])
                 if "rows=" in row_str:
-                    match = re.search(r"rows=(\d+)", row_str)
+                    match = re.search(r"rows=(\d+(?:\.\d+)?)", row_str)
                     if match:
-                        estimated_count = int(match.group(1))
+                        estimated_count = int(float(match.group(1)))
                         # For small datasets, get exact count for accuracy
                         if estimated_count < threshold:
                             return queryset.count()
