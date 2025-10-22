@@ -874,6 +874,18 @@ class SecretEvent(models.Model):
         (DELETE, "Delete"),
     ]
 
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["secret_id", "event_type", "timestamp"],
+                name="secret_event_history_idx",
+            ),
+            models.Index(
+                fields=["timestamp", "environment"],
+                name="secret_logs_idx",
+            ),
+        ]
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
