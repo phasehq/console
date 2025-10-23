@@ -5,6 +5,7 @@ from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.utils.database import get_approximate_count
 from ee.integrations.secrets.dynamic.graphene.mutations import (
     DeleteDynamicSecretMutation,
     LeaseDynamicSecret,
@@ -90,7 +91,10 @@ from .graphene.queries.syncing import (
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
-from .graphene.queries.identity import resolve_aws_sts_endpoints, resolve_identity_providers
+from .graphene.queries.identity import (
+    resolve_aws_sts_endpoints,
+    resolve_identity_providers,
+)
 from .graphene.queries.access import (
     resolve_roles,
     resolve_organisation_global_access_users,
@@ -386,7 +390,10 @@ class Query(graphene.ObjectType):
         credential_id=graphene.ID(),
     )
     github_environments = graphene.List(
-        graphene.String, credential_id=graphene.ID(), owner=graphene.String(), repo_name=graphene.String()
+        graphene.String,
+        credential_id=graphene.ID(),
+        owner=graphene.String(),
+        repo_name=graphene.String(),
     )
 
     gitlab_projects = graphene.List(GitLabProjectType, credential_id=graphene.ID())
@@ -502,7 +509,6 @@ class Query(graphene.ObjectType):
     resolve_aws_sts_endpoints = resolve_aws_sts_endpoints
     resolve_identity_providers = resolve_identity_providers
 
-    
     resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_name_available(root, info, name):
@@ -845,7 +851,8 @@ class Query(graphene.ObjectType):
                     secret_events_query = secret_events_query.filter(
                         service_account_id=member_id
                     )
-            count = secret_events_query.count()
+
+            count = get_approximate_count(secret_events_query)
             secret_events = secret_events_query.order_by("-timestamp")[:25]
 
         else:
@@ -857,14 +864,11 @@ class Query(graphene.ObjectType):
     def resolve_app_activity_chart(root, info, app_id, period=TimeRange.DAY):
         """
         Converts app log activity for the chosen time period into time series data that can be used to draw a chart
-
         Args:
             app_id (string): app uuid
             period (TimeRange, optional): The desired time period. Defaults to 'day'.
-
         Raises:
             GraphQLError: If the requesting user does not have access to this app
-
         Returns:
             List[ChartDataPointType]: Time series decrypt count data
         """
