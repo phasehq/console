@@ -536,8 +536,11 @@ export default function SecretLogs(props: { app: string }) {
   }
 
   const hasActiveFilters =
-    eventTypes.length > 0 || selectedUser !== null || selectedAccount !== null || dateRange !== null
-  selectedEnvironment !== null
+    eventTypes.length > 0 ||
+    selectedUser !== null ||
+    selectedAccount !== null ||
+    dateRange !== null ||
+    selectedEnvironment !== null
 
   const filterCategoryTitleStyle =
     'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
@@ -555,12 +558,15 @@ export default function SecretLogs(props: { app: string }) {
     return `${year}-${month}-${day}T${hours}:${minutes}`
   }
 
+  const COUNT_ACCURACY_THRESHOLD = 10000
+
   return (
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
           <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-200 dark:bg-neutral-900">
             <span className="text-neutral-500 font-light text-lg">
+              {totalCount >= COUNT_ACCURACY_THRESHOLD ? '~' : ''}
               {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
             </span>
 
