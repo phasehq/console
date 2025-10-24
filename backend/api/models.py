@@ -881,7 +881,7 @@ class SecretEvent(models.Model):
                 name="secret_event_history_idx",
             ),
             models.Index(
-                fields=["timestamp", "environment"],
+                fields=["-timestamp", "environment"],
                 name="secret_logs_idx",
             ),
         ]
