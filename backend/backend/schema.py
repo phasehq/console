@@ -804,6 +804,7 @@ class Query(graphene.ObjectType):
         member_type=None,
         environment_id=None,
     ):
+
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
@@ -825,11 +826,12 @@ class Query(graphene.ObjectType):
         if environment_id is not None:
             env_keys_filter["environment_id"] = environment_id
 
-        env_keys = EnvironmentKey.objects.filter(**env_keys_filter).select_related(
-            "environment"
+        # Get environment IDs as a list instead of environment objects
+        env_ids = list(
+            EnvironmentKey.objects.filter(**env_keys_filter)
+            .values_list("environment_id", flat=True)
+            .distinct()
         )
-
-        envs = [env_key.environment for env_key in env_keys]
 
         start_dt = datetime.fromtimestamp(start / 1000)
         end_dt = datetime.fromtimestamp(end / 1000)
@@ -837,8 +839,11 @@ class Query(graphene.ObjectType):
         if user_has_permission(
             info.context.user, "read", "Logs", app.organisation, True
         ):
+            # Use environment_id__in instead of environment__in
             secret_events_query = SecretEvent.objects.filter(
-                environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
+                environment_id__in=env_ids,
+                timestamp__gte=start_dt,
+                timestamp__lte=end_dt,
             )
             if event_types:
                 secret_events_query = secret_events_query.filter(
