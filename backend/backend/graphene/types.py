@@ -430,25 +430,19 @@ class SecretEventType(DjangoObjectType):
         )
 
     def resolve_user(self, info):
-        # Resolve if the user has either Org or App member read permissions
-        if user_has_permission(
-            info.context.user,
-            "read",
-            "Members",
-            self.secret.environment.app.organisation,
-            True,
-        ) or user_has_permission(
-            info.context.user,
-            "read",
-            "Members",
-            self.secret.environment.app.organisation,
-            False,
-        ):
+        # use the precomputed permission flag; return None if not allowed
+        if getattr(info.context, "can_view_members", False):
             return self.user
+        return None
 
     def resolve_service_account(self, info):
-        if self.service_account_token:
+        # service_account_token__service_account was select_related,
+        # so no extra query if present
+        if self.service_account_token_id and getattr(
+            self, "service_account_token", None
+        ):
             return self.service_account_token.service_account
+        return self.service_account  # may be already selected via select_related
 
 
 class PersonalSecretType(DjangoObjectType):
@@ -489,9 +483,35 @@ class SecretType(DjangoObjectType):
         # interfaces = (relay.Node, )
 
     def resolve_history(self, info):
-        return SecretEvent.objects.filter(
-            secret_id=self.id, event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE]
-        ).order_by("timestamp")
+        user = info.context.user
+
+        # Compute can_view_members only once per request
+        organisation = self.environment.app.organisation
+        can_view_members = user_has_permission(
+            user, "read", "Members", organisation, True
+        ) or user_has_permission(user, "read", "Members", organisation, False)
+        setattr(info.context, "can_view_members", can_view_members)
+
+        # Return queryset with select_related/prefetch_related to avoid N+1s
+        qs = (
+            SecretEvent.objects.filter(
+                secret_id=self.id,
+                event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
+            )
+            .select_related(
+                "secret__environment__app__organisation",
+                "user",
+                "service_account",
+                "service_token",
+                "service_account_token__service_account",
+                "environment",
+                "folder",
+            )
+            .prefetch_related("tags")
+            .order_by("timestamp")
+        )
+
+        return qs
 
     def resolve_override(self, info):
         if info.context.user:
@@ -1044,18 +1064,18 @@ class IdentityType(DjangoObjectType):
 
     def resolve_config(self, info):
         """Map provider-specific config into typed objects"""
-        provider = (self.provider or '').lower()
+        provider = (self.provider or "").lower()
         cfg = self.config or {}
-        
-        if provider == 'aws_iam':
+
+        if provider == "aws_iam":
             try:
-                ttl = int(cfg.get('signatureTtlSeconds', 60))
+                ttl = int(cfg.get("signatureTtlSeconds", 60))
             except Exception:
                 ttl = 60
             return AwsIamConfigType(
                 trusted_principals=self.get_trusted_list(),
                 signature_ttl_seconds=ttl,
-                sts_endpoint=cfg.get('stsEndpoint'),
+                sts_endpoint=cfg.get("stsEndpoint"),
             )
-        
+
         return None
