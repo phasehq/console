@@ -234,7 +234,11 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
 from django.utils import timezone
+from itertools import chain
+import time
+import logging
 
+logger = logging.getLogger(__name__)
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -685,9 +689,7 @@ class Query(graphene.ObjectType):
         user = info.context.user
 
         # load secret with its org to avoid extra queries
-        secret = Secret.objects.select_related("environment__app__organisation").get(
-            id=secret_id
-        )
+        secret = Secret.objects.get(id=secret_id)
 
         if not user_can_access_environment(user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this secret")
@@ -698,24 +700,11 @@ class Query(graphene.ObjectType):
         ) or user_has_permission(
             user, "read", "Members", secret.environment.app.organisation, False
         )
-        print("can_view_members ---------------> ", can_view_members)
+
         setattr(info.context, "can_view_members", can_view_members)
 
         # return a queryset with all necessary relations preloaded to avoid N+1s
-        qs = (
-            SecretEvent.objects.filter(secret_id=secret_id)
-            .select_related(
-                "secret__environment__app__organisation",
-                "user",
-                "service_account",
-                "service_token",
-                "service_account_token__service_account",
-                "environment",
-                "folder",
-            )
-            .prefetch_related("tags")
-            .order_by("-timestamp")
-        )
+        qs = SecretEvent.objects.filter(secret_id=secret_id).order_by("-timestamp")
 
         return qs
 
@@ -834,8 +823,11 @@ class Query(graphene.ObjectType):
         member_type=None,
         environment_id=None,
     ):
+
+        start_time = time.time()
         user = info.context.user
 
+        # --- Access checks ---
         if not user_can_access_app(user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
@@ -843,7 +835,6 @@ class Query(graphene.ObjectType):
 
         if end == 0:
             end = datetime.now().timestamp() * 1000
-
         if start == 0:
             start = (datetime.now() - timedelta(days=30)).timestamp() * 1000
 
@@ -868,47 +859,64 @@ class Query(graphene.ObjectType):
         start_dt = datetime.fromtimestamp(start / 1000)
         end_dt = datetime.fromtimestamp(end / 1000)
 
-        # --- compute permission ONCE (used by field resolvers) ---
+        # --- Permissions ---
         can_see_members = user_has_permission(
             user, "read", "Members", app.organisation, True
         ) or user_has_permission(user, "read", "Members", app.organisation, False)
-
-        # Expose to resolvers via context (simple and effective)
         setattr(info.context, "can_view_members", can_see_members)
 
         if not user_has_permission(user, "read", "Logs", app.organisation, True):
             return SecretLogsResponseType(logs=[], count=0)
 
-        # Build the base queryset
-        qs = SecretEvent.objects.filter(
-            timestamp__gte=start_dt, timestamp__lte=end_dt, environment_id__in=env_ids
-        )
-
+        # --- Build queries ---
+        base_filter = {
+            "timestamp__gte": start_dt,
+            "timestamp__lte": end_dt,
+        }
         if event_types:
-            qs = qs.filter(event_type__in=event_types)
-
+            base_filter["event_type__in"] = event_types
         if member_id:
             if member_type == MemberType.USER or member_type is None:
-                qs = qs.filter(user_id=member_id)
+                base_filter["user_id"] = member_id
             elif member_type == MemberType.SERVICE:
-                qs = qs.filter(service_account_id=member_id)
+                base_filter["service_account_id"] = member_id
 
-        # --- Eager-load everything we need to avoid N+1s ---
-        # we include the relation chain used in resolve_user:
-        # secret -> environment -> app -> organisation
-        qs = qs.select_related(
-            "user",  # For displaying user info
-            "service_account",  # For displaying SA info
-            "service_token",  # For displaying token info
-            "service_account_token__service_account",  # For SA token -> SA
-            "environment",  # For environment name
-            "folder",  # For folder info
-        ).prefetch_related("tags")
+        logs_qs = None
 
-        # Order + limit (page size 25)
-        logs_qs = qs.order_by("-timestamp")[:25]
+        # SINGLE environment → normal fast path
+        if len(env_ids) == 1:
+            logs_qs = (
+                SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
+                .order_by("-timestamp")
+                .prefetch_related("tags")[:25]
+            )
 
-        count = get_approximate_count(qs)
+        # MULTIPLE environments → per-env small scans + in-memory merge
+        else:
+            per_env_qs = [
+                SecretEvent.objects.filter(
+                    environment_id=env_id, **base_filter
+                ).order_by("-timestamp")[:25]
+                for env_id in env_ids
+            ]
+
+            # Evaluate each small queryset (3–10 small scans)
+            combined = list(chain.from_iterable(per_env_qs))
+
+            # Merge and trim to top 25 overall
+            combined_sorted = sorted(combined, key=lambda e: e.timestamp, reverse=True)[
+                :25
+            ]
+            logs_qs = combined_sorted
+
+        # --- Approximate count (run only once, on combined filter) ---
+        count_qs = SecretEvent.objects.filter(environment_id__in=env_ids, **base_filter)
+        count = get_approximate_count(count_qs)
+
+        end_time = time.time()
+        logger.info(
+            f"resolve_secret_logs executed in {(end_time - start_time)*1000:.2f} ms"
+        )
 
         return SecretLogsResponseType(logs=logs_qs, count=count)
 
