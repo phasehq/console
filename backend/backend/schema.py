@@ -897,13 +897,12 @@ class Query(graphene.ObjectType):
         # we include the relation chain used in resolve_user:
         # secret -> environment -> app -> organisation
         qs = qs.select_related(
-            "secret__environment__app__organisation",
-            "user",
-            "service_account",
-            "service_token",
-            "service_account_token__service_account",
-            "environment",
-            "folder",
+            "user",  # For displaying user info
+            "service_account",  # For displaying SA info
+            "service_token",  # For displaying token info
+            "service_account_token__service_account",  # For SA token -> SA
+            "environment",  # For environment name
+            "folder",  # For folder info
         ).prefetch_related("tags")
 
         # Order + limit (page size 25)
