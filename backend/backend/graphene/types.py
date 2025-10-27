@@ -492,24 +492,11 @@ class SecretType(DjangoObjectType):
         ) or user_has_permission(user, "read", "Members", organisation, False)
         setattr(info.context, "can_view_members", can_view_members)
 
-        # Return queryset with select_related/prefetch_related to avoid N+1s
-        qs = (
-            SecretEvent.objects.filter(
-                secret_id=self.id,
-                event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
-            )
-            .select_related(
-                "secret__environment__app__organisation",
-                "user",
-                "service_account",
-                "service_token",
-                "service_account_token__service_account",
-                "environment",
-                "folder",
-            )
-            .prefetch_related("tags")
-            .order_by("timestamp")
-        )
+        # Return queryset WITHOUT select_related - let field resolvers handle it
+        qs = SecretEvent.objects.filter(
+            secret_id=self.id,
+            event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
+        ).order_by("timestamp")
 
         return qs
 
