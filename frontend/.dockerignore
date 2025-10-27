@@ -1,0 +1,24 @@
+# Prevent host dependencies and build output from leaking into Docker context
+node_modules
+.next
+
+# Tests/coverage and caches
+coverage
+.cache
+
+.env*
+!.env.example
+
+# Logs and OS junk
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+.DS_Store
+
+# IDE
+.vscode
+.idea
+
+

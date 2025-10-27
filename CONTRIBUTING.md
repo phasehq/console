@@ -57,12 +57,12 @@ Any third-party components incorporated into our code are licensed under the ori
 
 3. Install the dependencies:
     ```bash
-    docker compose -f dev-docker-compose.yml build
+    docker compose --env-file .env.dev  -f dev-docker-compose.yml build
     ```
 
 4. Start the containers in dev mode using:
     ```bash
-    docker compose -f dev-docker-compose.yml up
+    docker compose --env-file .env.dev -f dev-docker-compose.yml up -d
     ```
 
 5. The Console is now running at <https://localhost> with [HMR (Hot Module Replacement)](https://webpack.js.org/concepts/hot-module-replacement) and a self-signed certificate.

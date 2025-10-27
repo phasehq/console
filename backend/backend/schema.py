@@ -5,12 +5,32 @@ from api.utils.syncing.github.actions import GitHubRepoType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.utils.database import get_approximate_count
+from ee.integrations.secrets.dynamic.graphene.mutations import (
+    DeleteDynamicSecretMutation,
+    LeaseDynamicSecret,
+    RenewLeaseMutation,
+    RevokeLeaseMutation,
+)
+from ee.integrations.secrets.dynamic.graphene.types import (
+    DynamicSecretProviderType,
+    DynamicSecretType,
+)
+from ee.integrations.secrets.dynamic.aws.graphene.mutations import (
+    CreateAWSDynamicSecretMutation,
+    UpdateAWSDynamicSecretMutation,
+)
+from ee.integrations.secrets.dynamic.graphene.queries import (
+    resolve_dynamic_secret_providers,
+    resolve_dynamic_secrets,
+)
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
     DeleteServiceAccountMutation,
     DeleteServiceAccountTokenMutation,
-    EnableServiceAccountThirdPartyAuthMutation,
+    EnableServiceAccountClientSideKeyManagementMutation,
+    EnableServiceAccountServerSideKeyManagementMutation,
     UpdateServiceAccountHandlersMutation,
     UpdateServiceAccountMutation,
 )
@@ -24,6 +44,9 @@ from .graphene.mutations.access import (
     CreateNetworkAccessPolicyMutation,
     DeleteCustomRoleMutation,
     DeleteNetworkAccessPolicyMutation,
+    CreateIdentityMutation,
+    UpdateIdentityMutation,
+    DeleteIdentityMutation,
     UpdateAccountNetworkAccessPolicies,
     UpdateCustomRoleMutation,
     UpdateNetworkAccessPolicyMutation,
@@ -33,7 +56,7 @@ from ee.billing.graphene.queries.stripe import (
     StripeSubscriptionDetails,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
-    resolve_stripe_customer_portal_url
+    resolve_stripe_customer_portal_url,
 )
 from ee.billing.graphene.mutations.stripe import (
     CancelSubscriptionMutation,
@@ -48,6 +71,7 @@ from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
+    resolve_github_environments,
     resolve_gitlab_projects,
     resolve_gitlab_groups,
     resolve_server_public_key,
@@ -67,11 +91,16 @@ from .graphene.queries.syncing import (
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
+from .graphene.queries.identity import (
+    resolve_aws_sts_endpoints,
+    resolve_identity_providers,
+)
 from .graphene.queries.access import (
     resolve_roles,
     resolve_organisation_global_access_users,
     resolve_network_access_policies,
     resolve_client_ip,
+    resolve_identities,
 )
 from .graphene.queries.service_accounts import (
     resolve_service_accounts,
@@ -165,6 +194,7 @@ from .graphene.types import (
     PhaseLicenseType,
     ProviderCredentialsType,
     ProviderType,
+    IdentityProviderType,
     RoleType,
     SecretEventType,
     SecretFolderType,
@@ -178,6 +208,7 @@ from .graphene.types import (
     TimeRange,
     UserTokenType,
     AWSValidationResultType,
+    IdentityType,
 )
 import graphene
 from graphql import GraphQLError
@@ -217,6 +248,7 @@ class Query(graphene.ObjectType):
     network_access_policies = graphene.List(
         NetworkAccessPolicyType, organisation_id=graphene.ID()
     )
+    identities = graphene.List(IdentityType, organisation_id=graphene.ID())
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
@@ -324,6 +356,8 @@ class Query(graphene.ObjectType):
     providers = graphene.List(ProviderType)
 
     services = graphene.List(ServiceType)
+    aws_sts_endpoints = graphene.List(graphene.JSONString)
+    identity_providers = graphene.List(IdentityProviderType)
 
     saved_credentials = graphene.List(ProviderCredentialsType, org_id=graphene.ID())
 
@@ -354,6 +388,12 @@ class Query(graphene.ObjectType):
     github_repos = graphene.List(
         GitHubRepoType,
         credential_id=graphene.ID(),
+    )
+    github_environments = graphene.List(
+        graphene.String,
+        credential_id=graphene.ID(),
+        owner=graphene.String(),
+        repo_name=graphene.String(),
     )
 
     gitlab_projects = graphene.List(GitLabProjectType, credential_id=graphene.ID())
@@ -389,7 +429,20 @@ class Query(graphene.ObjectType):
         StripeSubscriptionDetails, organisation_id=graphene.ID()
     )
 
-    stripe_customer_portal_url = graphene.String(organisation_id=graphene.ID(required=True))
+    stripe_customer_portal_url = graphene.String(
+        organisation_id=graphene.ID(required=True)
+    )
+
+    # Dynamic secrets
+    dynamic_secret_providers = graphene.List(DynamicSecretProviderType)
+    dynamic_secrets = graphene.List(
+        DynamicSecretType,
+        secret_id=graphene.ID(required=False),
+        app_id=graphene.ID(required=False),
+        env_id=graphene.ID(required=False),
+        path=graphene.String(required=False),
+        org_id=graphene.ID(),
+    )
 
     # --------------------------------------------------------------------
 
@@ -416,6 +469,7 @@ class Query(graphene.ObjectType):
     resolve_aws_secrets = resolve_aws_secret_manager_secrets
 
     resolve_github_repos = resolve_gh_repos
+    resolve_github_environments = resolve_github_environments
 
     resolve_gitlab_projects = resolve_gitlab_projects
     resolve_gitlab_groups = resolve_gitlab_groups
@@ -437,6 +491,9 @@ class Query(graphene.ObjectType):
         resolve_validate_aws_assume_role_credentials
     )
 
+    resolve_dynamic_secret_providers = resolve_dynamic_secret_providers
+    resolve_dynamic_secrets = resolve_dynamic_secrets
+
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
             user=info.context.user, deleted_at=None
@@ -446,6 +503,11 @@ class Query(graphene.ObjectType):
 
     resolve_roles = resolve_roles
     resolve_network_access_policies = resolve_network_access_policies
+
+    # Identities
+    resolve_identities = resolve_identities
+    resolve_aws_sts_endpoints = resolve_aws_sts_endpoints
+    resolve_identity_providers = resolve_identity_providers
 
     resolve_organisation_plan = resolve_organisation_plan
 
@@ -789,7 +851,8 @@ class Query(graphene.ObjectType):
                     secret_events_query = secret_events_query.filter(
                         service_account_id=member_id
                     )
-            count = secret_events_query.count()
+
+            count = get_approximate_count(secret_events_query)
             secret_events = secret_events_query.order_by("-timestamp")[:25]
 
         else:
@@ -801,14 +864,11 @@ class Query(graphene.ObjectType):
     def resolve_app_activity_chart(root, info, app_id, period=TimeRange.DAY):
         """
         Converts app log activity for the chosen time period into time series data that can be used to draw a chart
-
         Args:
             app_id (string): app uuid
             period (TimeRange, optional): The desired time period. Defaults to 'day'.
-
         Raises:
             GraphQLError: If the requesting user does not have access to this app
-
         Returns:
             List[ChartDataPointType]: Time series decrypt count data
         """
@@ -929,10 +989,18 @@ class Mutation(graphene.ObjectType):
     delete_network_access_policy = DeleteNetworkAccessPolicyMutation.Field()
     update_account_network_access_policies = UpdateAccountNetworkAccessPolicies.Field()
 
+    # Identities
+    create_identity = CreateIdentityMutation.Field()
+    update_identity = UpdateIdentityMutation.Field()
+    delete_identity = DeleteIdentityMutation.Field()
+
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
-    enable_service_account_third_party_auth = (
-        EnableServiceAccountThirdPartyAuthMutation.Field()
+    enable_service_account_server_side_key_management = (
+        EnableServiceAccountServerSideKeyManagementMutation.Field()
+    )
+    enable_service_account_client_side_key_management = (
+        EnableServiceAccountClientSideKeyManagementMutation.Field()
     )
     update_service_account_handlers = UpdateServiceAccountHandlersMutation.Field()
     update_service_account = UpdateServiceAccountMutation.Field()
@@ -1014,6 +1082,14 @@ class Mutation(graphene.ObjectType):
     modify_subscription = ModifySubscriptionMutation.Field()
     create_setup_intent = CreateSetupIntentMutation.Field()
     set_default_payment_method = SetDefaultPaymentMethodMutation.Field()
+
+    # Dynamic Secrets
+    create_aws_dynamic_secret = CreateAWSDynamicSecretMutation.Field()
+    update_aws_dynamic_secret = UpdateAWSDynamicSecretMutation.Field()
+    delete_dynamic_secret = DeleteDynamicSecretMutation.Field()
+    create_dynamic_secret_lease = LeaseDynamicSecret.Field()
+    renew_dynamic_secret_lease = RenewLeaseMutation.Field()
+    revoke_dynamic_secret_lease = RevokeLeaseMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

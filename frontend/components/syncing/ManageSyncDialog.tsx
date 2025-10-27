@@ -82,7 +82,7 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
                         </span>
 
                         <span className="tracking-wider text-base text-neutral-500">
-                          {sync.environment.envType}
+                          {sync.environment.name}
                         </span>
                       </div>
 

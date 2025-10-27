@@ -17,7 +17,7 @@ from backend.quotas import (
     can_add_environment,
     can_add_service_token,
 )
-
+from django.core.exceptions import ValidationError
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -278,6 +278,9 @@ class ServiceAccount(models.Model):
     server_wrapped_recovery = models.TextField(null=True)
     network_policies = models.ManyToManyField(
         NetworkAccessPolicy, blank=True, related_name="service_accounts"
+    )
+    identities = models.ManyToManyField(
+        "Identity", blank=True, related_name="service_accounts"
     )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -556,10 +559,36 @@ class ServiceAccountToken(models.Model):
     created_by = models.ForeignKey(
         OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
     )
+    created_by_service_account = models.ForeignKey(
+        ServiceAccount,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="created_tokens",
+    )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
+
+    def clean(self):
+        # Ensure only one of created_by or created_by_service_account is set
+        # Service accounts can create tokens for themselves and others
+        if not (self.created_by or self.created_by_service_account):
+            raise ValidationError(
+                "Must set either created_by (organisation member) or created_by_service_account"
+            )
+        if self.created_by and self.created_by_service_account:
+            raise ValidationError(
+                "Only one of created_by or created_by_service_account may be set"
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def get_creator_account(self):
+        return self.created_by or self.created_by_service_account
 
     def delete(self, *args, **kwargs):
         """
@@ -609,12 +638,12 @@ class SecretFolder(models.Model):
         ]
 
     def delete(self, *args, **kwargs):
-      env = self.environment
-      super().delete(*args, **kwargs)
-      # Update the 'updated_at' timestamp of the associated Environment
-      if env:
-          env.updated_at = timezone.now()
-          env.save()
+        env = self.environment
+        super().delete(*args, **kwargs)
+        # Update the 'updated_at' timestamp of the associated Environment
+        if env:
+            env.updated_at = timezone.now()
+            env.save()
 
 
 class SecretTag(models.Model):
@@ -651,15 +680,185 @@ class Secret(models.Model):
             self.environment.updated_at = timezone.now()
             self.environment.save()
 
+    def delete(self, *args, **kwargs):
+        env = self.environment
+        super().delete(*args, **kwargs)
+        # Update the 'updated_at' timestamp of the associated Environment
+        if env:
+            env.updated_at = timezone.now()
+            env.save()
+
+
+class DynamicSecret(models.Model):
+
+    PROVIDER_CHOICES = [("aws", "AWS")]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.TextField()
+    description = models.TextField(blank=True)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    path = models.TextField(default="/")
+    default_ttl = models.DurationField(
+        help_text="Default TTL for leases (must be <= max_ttl)."
+    )
+    max_ttl = models.DurationField(help_text="Maximum allowed TTL for leases.")
+    authentication = models.ForeignKey(
+        ProviderCredentials, on_delete=models.SET_NULL, null=True
+    )
+    provider = models.CharField(
+        max_length=50,
+        choices=PROVIDER_CHOICES,
+        help_text="Which provider this secret is associated with.",
+    )
+    config = models.JSONField()
+    key_map = models.JSONField(
+        help_text="Provider-agnostic mapping of keys: "
+        "[{'id': '<key_id>', 'key_name': '<encrypted_key_name>', 'key_digest': '<key_digest>'}, ...]",
+        default=list,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        # Call the "real" save() method to save the Secret
+        super().save(*args, **kwargs)
+
+        # Update the 'updated_at' timestamp of the associated Environment
+        if self.environment:
+            self.environment.updated_at = timezone.now()
+            self.environment.save()
 
     def delete(self, *args, **kwargs):
-      env = self.environment
-      super().delete(*args, **kwargs)
-      # Update the 'updated_at' timestamp of the associated Environment
-      if env:
-          env.updated_at = timezone.now()
-          env.save()
+        # Soft delete the object by setting the 'deleted_at' field.
+        self.updated_at = timezone.now()
+        self.deleted_at = timezone.now()
+        self.save()
 
+        # Revoke all active leases
+        from ee.integrations.secrets.dynamic.utils import schedule_lease_revocation
+
+        for lease in self.leases.filter(status=DynamicSecretLease.ACTIVE):
+            schedule_lease_revocation(lease, True)
+
+        # Update the 'updated_at' timestamp of the associated Environment
+        env = self.environment
+        if env:
+            env.updated_at = timezone.now()
+            env.save()
+
+
+class DynamicSecretLease(models.Model):
+
+    CREATED = "created"
+    ACTIVE = "active"
+    RENEWED = "renewed"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+
+    STATUS_OPTIONS = [
+        (CREATED, "Created"),
+        (ACTIVE, "Active"),
+        (RENEWED, "Renewed"),
+        (REVOKED, "Revoked"),
+        (EXPIRED, "Expired"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.TextField()
+    description = models.TextField(blank=True)
+    secret = models.ForeignKey(
+        DynamicSecret, on_delete=models.CASCADE, related_name="leases"
+    )
+    organisation_member = models.ForeignKey(
+        OrganisationMember, null=True, blank=True, on_delete=models.CASCADE
+    )
+    service_account = models.ForeignKey(
+        ServiceAccount, null=True, blank=True, on_delete=models.CASCADE
+    )
+    ttl = models.DurationField()
+    status = models.CharField(
+        max_length=50,
+        choices=STATUS_OPTIONS,
+        default=ACTIVE,
+        help_text="Current status of the lease",
+    )
+    credentials = models.JSONField(
+        default=dict,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    renewed_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField(null=True)
+    revoked_at = models.DateTimeField(null=True)
+    deleted_at = models.DateTimeField(null=True)
+    cleanup_job_id = models.TextField(default=uuid4)
+
+    def clean(self):
+        """
+        Ensure only one of organisation_member or service_account is set.
+        """
+        if not (self.organisation_member or self.service_account):
+            raise ValidationError(
+                "Must set either organisation_member or service_account"
+            )
+        if self.organisation_member and self.service_account:
+            raise ValidationError(
+                "Only one of organisation_member or service_account may be set"
+            )
+
+    def get_account(self):
+        """
+        Return whichever account is associated with this lease.
+        """
+        return self.organisation_member or self.service_account
+
+
+class DynamicSecretLeaseEvent(models.Model):
+
+    EVENT_TYPES = DynamicSecretLease.STATUS_OPTIONS
+
+    id = models.BigAutoField(primary_key=True)
+    lease = models.ForeignKey(
+        DynamicSecretLease, on_delete=models.CASCADE, related_name="events"
+    )
+    event_type = models.CharField(
+        max_length=50, choices=EVENT_TYPES, default=DynamicSecretLease.CREATED
+    )
+    organisation_member = models.ForeignKey(
+        OrganisationMember,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="lease_events",
+    )
+    service_account = models.ForeignKey(
+        ServiceAccount,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="lease_events",
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, null=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        """
+        Ensure only one of organisation_member or service_account is set.
+        """
+        if not (self.organisation_member or self.service_account):
+            raise ValidationError(
+                "Must set either organisation_member or service_account"
+            )
+        if self.organisation_member and self.service_account:
+            raise ValidationError(
+                "Only one of organisation_member or service_account may be set"
+            )
+
+    def get_actor(self):
+        return self.organisation_member or self.service_account
 
 
 class SecretEvent(models.Model):
@@ -706,6 +905,50 @@ class SecretEvent(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
+
+
+class Identity(models.Model):
+    """
+    Third-party identity configuration.
+
+    Scope: Organisation level; can be attached to multiple ServiceAccounts.
+    """
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
+    provider = models.CharField(max_length=64)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+
+    # Provider-specific configuration
+    # Example for aws_iam:
+    # {
+    #   "trustedPrincipals": "arn:..., arn:...",
+    #   "signatureTtlSeconds": 60,
+    #   "stsEndpoint": "https://sts.amazonaws.com"
+    # }
+    config = models.JSONField(default=dict)
+
+    # Token configuration
+    token_name_pattern = models.CharField(max_length=128, blank=True, null=True)
+    default_ttl_seconds = models.IntegerField(default=3600)
+    max_ttl_seconds = models.IntegerField(default=86400)
+
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def get_trusted_list(self):
+        try:
+            principals = self.config.get("trustedPrincipals", [])
+            if isinstance(principals, list):
+                return [
+                    p.strip() for p in principals if isinstance(p, str) and p.strip()
+                ]
+            # Fallback for legacy comma-separated string format
+            return [p.strip() for p in str(principals).split(",") if p.strip()]
+        except Exception:
+            return []
 
 
 class PersonalSecret(models.Model):

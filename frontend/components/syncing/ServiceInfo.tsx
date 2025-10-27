@@ -20,12 +20,15 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
 
     return <div className="flex gap-2 text-neutral-500">{secretName}</div>
   } else if (sync.serviceInfo?.id?.includes('github')) {
-    const repoName = JSON.parse(sync.options)['repo_name']
-    const owner = JSON.parse(sync.options)['owner']
+    const ghSyncMeta = JSON.parse(sync.options)
+    const repoName = ghSyncMeta['repo_name']
+    const owner = ghSyncMeta['owner']
+    const ghEnv = ghSyncMeta['environment_name']
 
     return (
       <div className="flex gap-2 text-neutral-500">
         {owner}/{repoName}
+        {ghEnv && <span className="font-normal">({ghEnv})</span>}
       </div>
     )
   } else if (sync.serviceInfo?.id?.includes('hashicorp_vault')) {
