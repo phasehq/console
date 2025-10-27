@@ -42,6 +42,7 @@ from api.models import (
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
+from django.db.models import Max
 from datetime import datetime
 from api.utils.access.roles import default_roles
 from graphql import GraphQLError
@@ -303,14 +304,14 @@ class ServiceAccountTokenType(DjangoObjectType):
         fields = "__all__"
 
     def resolve_last_used(self, info):
-        event = (
+        latest_event = (
             SecretEvent.objects.filter(service_account_token=self)
-            .order_by("-timestamp")
             .only("timestamp")
+            .order_by("-timestamp")
             .first()
         )
-        if event:
-            return event.timestamp
+
+        return latest_event.timestamp if latest_event else None
 
 
 class MemberType(graphene.Enum):

@@ -876,13 +876,20 @@ class SecretEvent(models.Model):
 
     class Meta:
         indexes = [
+            # For secret history queries
             models.Index(
                 fields=["secret_id", "event_type", "timestamp"],
                 name="secret_event_history_idx",
             ),
+            # For logs queries (per-environment)
             models.Index(
                 fields=["environment", "-timestamp"],
                 name="secret_logs_env_idx",
+            ),
+            # For service account token last_used queries
+            models.Index(
+                fields=["service_account_token", "-timestamp"],
+                name="sa_token_last_used_idx",
             ),
         ]
 
