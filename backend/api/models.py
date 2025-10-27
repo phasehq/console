@@ -880,12 +880,6 @@ class SecretEvent(models.Model):
                 fields=["secret_id", "event_type", "timestamp"],
                 name="secret_event_history_idx",
             ),
-            # For queries filtering by timestamp first (multiple environments)
-            models.Index(
-                fields=["-timestamp", "environment"],
-                name="secret_logs_timestamp_idx",
-            ),
-            # For queries filtering by single environment
             models.Index(
                 fields=["environment", "-timestamp"],
                 name="secret_logs_env_idx",
