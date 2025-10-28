@@ -437,13 +437,11 @@ class SecretEventType(DjangoObjectType):
         return None
 
     def resolve_service_account(self, info):
-        # service_account_token__service_account was select_related,
-        # so no extra query if present
         if self.service_account_token_id and getattr(
             self, "service_account_token", None
         ):
             return self.service_account_token.service_account
-        return self.service_account  # may be already selected via select_related
+        return self.service_account
 
 
 class PersonalSecretType(DjangoObjectType):
@@ -493,7 +491,6 @@ class SecretType(DjangoObjectType):
         ) or user_has_permission(user, "read", "Members", organisation, False)
         setattr(info.context, "can_view_members", can_view_members)
 
-        # Return queryset WITHOUT select_related - let field resolvers handle it
         qs = SecretEvent.objects.filter(
             secret_id=self.id,
             event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
