@@ -6,20 +6,28 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0111_identity_serviceaccount_identities'),
+        ("api", "0111_identity_serviceaccount_identities"),
     ]
 
     operations = [
-        migrations.AddIndex(
-            model_name='secretevent',
-            index=models.Index(fields=['secret_id', 'event_type', 'timestamp'], name='secret_event_history_idx'),
+        migrations.AddIndexConcurrently(
+            model_name="secretevent",
+            index=models.Index(
+                fields=["secret_id", "event_type", "timestamp"],
+                name="secret_event_history_idx",
+            ),
         ),
-        migrations.AddIndex(
-            model_name='secretevent',
-            index=models.Index(fields=['environment', '-timestamp'], name='secret_logs_env_idx'),
+        migrations.AddIndexConcurrently(
+            model_name="secretevent",
+            index=models.Index(
+                fields=["environment", "-timestamp"], name="secret_logs_env_idx"
+            ),
         ),
-        migrations.AddIndex(
-            model_name='secretevent',
-            index=models.Index(fields=['service_account_token', '-timestamp'], name='sa_token_last_used_idx'),
+        migrations.AddIndexConcurrently(
+            model_name="secretevent",
+            index=models.Index(
+                fields=["service_account_token", "-timestamp"],
+                name="sa_token_last_used_idx",
+            ),
         ),
     ]
