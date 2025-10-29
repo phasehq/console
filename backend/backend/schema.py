@@ -237,6 +237,8 @@ from django.utils import timezone
 from itertools import chain
 import time
 import logging
+import heapq
+from django.db.models import prefetch_related_objects
 
 logger = logging.getLogger(__name__)
 
@@ -823,20 +825,21 @@ class Query(graphene.ObjectType):
         member_type=None,
         environment_id=None,
     ):
-
+        PAGE_SIZE = 25
         start_time = time.time()
         user = info.context.user
 
-        # --- Access checks ---
+        # Access checks
         if not user_can_access_app(user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
         app = App.objects.get(id=app_id)
 
+        # Time range defaults
         if end == 0:
-            end = datetime.now().timestamp() * 1000
+            end = timezone.now().timestamp() * 1000
         if start == 0:
-            start = (datetime.now() - timedelta(days=30)).timestamp() * 1000
+            start = (timezone.now() - timedelta(days=30)).timestamp() * 1000
 
         org_member = OrganisationMember.objects.get(
             user=user, organisation=app.organisation, deleted_at=None
@@ -856,10 +859,14 @@ class Query(graphene.ObjectType):
             .distinct()
         )
 
-        start_dt = datetime.fromtimestamp(start / 1000)
-        end_dt = datetime.fromtimestamp(end / 1000)
+        # Nothing to fetch, early return
+        if not env_ids:
+            return SecretLogsResponseType(logs=[], count=0)
 
-        # --- Permissions ---
+        start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+
+        # Permissions
         can_see_members = user_has_permission(
             user, "read", "Members", app.organisation, True
         ) or user_has_permission(user, "read", "Members", app.organisation, False)
@@ -868,7 +875,7 @@ class Query(graphene.ObjectType):
         if not user_has_permission(user, "read", "Logs", app.organisation, True):
             return SecretLogsResponseType(logs=[], count=0)
 
-        # --- Build queries ---
+        # Base filter
         base_filter = {
             "timestamp__gte": start_dt,
             "timestamp__lte": end_dt,
@@ -881,41 +888,41 @@ class Query(graphene.ObjectType):
             elif member_type == MemberType.SERVICE:
                 base_filter["service_account_id"] = member_id
 
-        logs_qs = None
-
-        # SINGLE environment → normal fast path
         if len(env_ids) == 1:
+            # Single environment → simple fast path
             logs_qs = (
                 SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
-                .order_by("-timestamp")
-                .prefetch_related("tags")[:25]
+                .order_by("-timestamp", "-id")
+                .prefetch_related("tags")[:PAGE_SIZE]
             )
 
-        # MULTIPLE environments → per-env small scans + in-memory merge
         else:
+            # Multiple environments — always do per-env small scans + merge
             per_env_qs = [
                 SecretEvent.objects.filter(
                     environment_id=env_id, **base_filter
-                ).order_by("-timestamp")[:25]
+                ).order_by("-timestamp", "-id")[:PAGE_SIZE]
                 for env_id in env_ids
             ]
+            combined = list(
+                chain.from_iterable(per_env_qs)
+            )  # Flatten all per-env querysets into one list of events (evaluate them)
+            logs_qs = heapq.nlargest(
+                PAGE_SIZE, combined, key=lambda e: e.timestamp
+            )  # Efficiently select the newest 25 events overall
+            prefetch_related_objects(logs_qs, "tags")
 
-            # Evaluate each small queryset (3–10 small scans)
-            combined = list(chain.from_iterable(per_env_qs))
-
-            # Merge and trim to top 25 overall
-            combined_sorted = sorted(combined, key=lambda e: e.timestamp, reverse=True)[
-                :25
-            ]
-            logs_qs = combined_sorted
-
-        # --- Approximate count (run only once, on combined filter) ---
+        # Approximate count (on combined filter)
         count_qs = SecretEvent.objects.filter(environment_id__in=env_ids, **base_filter)
         count = get_approximate_count(count_qs)
 
-        end_time = time.time()
+        # --- Timing log ---
+        elapsed = (time.time() - start_time) * 1000
         logger.info(
-            f"resolve_secret_logs executed in {(end_time - start_time)*1000:.2f} ms"
+            "resolve_secret_logs executed in %.2f ms (envs=%d, count≈%d)",
+            elapsed,
+            len(env_ids),
+            count,
         )
 
         return SecretLogsResponseType(logs=logs_qs, count=count)
