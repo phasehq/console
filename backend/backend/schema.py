@@ -690,7 +690,6 @@ class Query(graphene.ObjectType):
     def resolve_secret_history(root, info, secret_id):
         user = info.context.user
 
-        # load secret with its org to avoid extra queries
         secret = Secret.objects.get(id=secret_id)
 
         if not user_can_access_environment(user.userId, secret.environment.id):

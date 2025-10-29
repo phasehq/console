@@ -42,8 +42,6 @@ from api.models import (
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
-from django.db.models import Max
-from datetime import datetime
 from api.utils.access.roles import default_roles
 from graphql import GraphQLError
 from itertools import chain
