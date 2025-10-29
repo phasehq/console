@@ -31,7 +31,9 @@ def get_approximate_count(queryset, threshold=10000):
         with connection.cursor() as cursor:
             sql, params = queryset.query.sql_with_params()
             cursor.execute(f"EXPLAIN (FORMAT JSON) {sql}", params)
-            plan = cursor.fetchone()[0][0]  # first element of EXPLAIN JSON array
+            # EXPLAIN (FORMAT JSON) returns a single row, whose first column is a JSON array.
+            explain_result = cursor.fetchone()[0]  # Get the JSON array from the first column
+            plan = explain_result[0]  # Get the first plan dictionary from the array
             estimated_count = int(plan["Plan"]["Plan Rows"])
 
             if estimated_count < threshold:
