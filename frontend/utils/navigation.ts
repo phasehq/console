@@ -127,7 +127,13 @@ export const generatePageTitle = (ctx: NavigationContext): string => {
   // Filter out empty labels and reverse for title (most specific first)
   const titleParts = breadcrumbs
     .filter((crumb) => crumb.label && crumb.label.trim())
-    .map((crumb) => startCase(crumb.label))
+    .map((crumb, index) => {
+      // Don't apply startCase to org names (first breadcrumb)
+      if (index === 0) {
+        return crumb.label
+      }
+      return startCase(crumb.label)
+    })
     .reverse()
 
   if (titleParts.length === 0) {
