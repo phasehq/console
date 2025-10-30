@@ -124,12 +124,12 @@ export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] =>
 export const generatePageTitle = (ctx: NavigationContext): string => {
   const breadcrumbs = generateBreadcrumbs(ctx)
 
-  // Filter out empty labels and reverse for title (most specific first)
-  const titleParts = breadcrumbs
-    .filter((crumb) => crumb.label && crumb.label.trim())
+  const filteredCrumbs = breadcrumbs.filter((crumb) => crumb.label && crumb.label.trim())
+
+  // Apply startCase to all except the first breadcrumb (team/org name)
+  const titleParts = filteredCrumbs
     .map((crumb, index) => {
-      // Don't apply startCase to org names (first breadcrumb)
-      if (index === 0) {
+      if (index === 0 && ctx.team) {
         return crumb.label
       }
       return startCase(crumb.label)
