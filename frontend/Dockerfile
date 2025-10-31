@@ -1,5 +1,5 @@
 # ---- Base Node ----
-FROM node:lts-alpine3.19@sha256:2f46fd49c767554c089a5eb219115313b72748d8f62f5eccb58ef52bc36db4ad AS base
+FROM node:22-alpine3.20@sha256:2289fb1fba0f4633b08ec47b94a89c7e20b829fc5679f9b7b298eaa2f1ed8b7e AS base
 
 # Set working directory
 WORKDIR /app
