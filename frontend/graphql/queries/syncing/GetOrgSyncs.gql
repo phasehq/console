@@ -57,6 +57,13 @@ query GetOrganisationSyncs($orgId: ID!) {
     sseEnabled
     members {
       id
+      fullName
+      avatarUrl
+      email
+    }
+    serviceAccounts {
+      id
+      name
     }
     environments {
       id

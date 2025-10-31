@@ -1,0 +1,3 @@
+query GetGithubEnvironments($credentialId: ID!, $owner: String!, $repoName: String!) {
+  githubEnvironments(credentialId: $credentialId, owner: $owner, repoName: $repoName)
+}

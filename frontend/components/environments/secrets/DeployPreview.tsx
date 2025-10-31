@@ -137,16 +137,16 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
           </div>
         )}
         {change.value?.new && (
-          <div className="flex flex-row space-x-1 flex-wrap items-center text-sm">
+          <div className="flex flex-row space-x-1 flex-wrap items-start text-sm">
             <p className="text-zinc-500 mr-1 font-mono">VALUE:</p>
             {change.value?.old && (
-              <p className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through font-mono break-all">
+              <p className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture line-through font-mono break-all whitespace-pre-wrap">
                 {change.value.old}
               </p>
             )}
             <p
               className={clsx(
-                'break-all',
+                'break-all whitespace-pre-wrap',
                 change.type == 'Added'
                   ? 'text-zinc-900 dark:text-zinc-100 font-mono'
                   : 'dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 ph-no-capture font-mono '
@@ -207,7 +207,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
   return (
     <div>
       <GenericDialog
-        buttonVariant=""
+        buttonVariant="ghost"
         title="Preview undeployed changes"
         buttonContent={
           <Alert variant="info" size="sm" icon={true}>

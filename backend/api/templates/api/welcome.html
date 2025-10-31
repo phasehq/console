@@ -1,0 +1,198 @@
+{% extends 'base.html' %} {% block content %}
+<tbody>
+  <tr>
+    <td
+      style="direction: ltr; font-size: 0px; padding: 20px; text-align: center"
+    >
+      <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:560px;" ><![endif]-->
+      <div
+        class="mj-column-per-100 mj-outlook-group-fix"
+        style="
+          font-size: 0px;
+          text-align: left;
+          direction: ltr;
+          display: inline-block;
+          vertical-align: top;
+          width: 100%;
+        "
+      >
+        <table
+          border="0"
+          cellpadding="0"
+          cellspacing="0"
+          role="presentation"
+          style="vertical-align: top"
+          width="100%"
+        >
+          <tbody>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 16px;
+                    font-weight: 700;
+                    line-height: 1;
+                    text-align: left;
+                    color: #000000;
+                  "
+                >
+                  Hi {{ name }},
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  Welcome to Phase! Here are some resources to help you get started:
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  <ul>
+                    <li><a href="https://docs.phase.dev" style="color:#34d399!important;">Explore the docs</a></li>
+                    <li><a href="https://docs.phase.dev/console/apps#create-an-app" style="color:#34d399!important;">Create an App</a></li>
+                    <li><a href="https://docs.phase.dev/cli/install" style="color:#34d399!important;">Install the CLI</a></li>
+                    <li><a href="https://docs.phase.dev/console/users#add-users-to-an-organisation" style="color:#34d399!important;">Invite your team</a></li>
+                  </ul>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  If you have any questions, feedback or need support, please reach out to us on Slack, GitHub, or X. You can also email us at <a href="mailto:info@phase.dev" style="color:#34d399!important;">info@phase.dev</a>.
+                </div>
+              </td>
+            </tr>
+            
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  <div
+                    style="
+                      font-family: Arial, sans-serif;
+                      font-size: 16px;
+                      line-height: 1.25;
+                      text-align: left;
+                      color: #bbbbbb;
+                    "
+                  >
+                    <a
+                      href="{{ org_home_link }}"
+                      style="
+                        background-color: #34d399;
+                        color: #ffffff !important;
+                        padding: 10px 20px;
+                        border-radius: 999px;
+                        text-decoration: none;
+                        display: inline-block;
+                        font-weight: 700;
+                      "
+                      >Go to {{ organisation }} home</a
+                    >
+                  </div>
+                </div>
+              </td>
+            </tr>
+            
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #000000;
+                  "
+                >
+                  Cheers<br />
+                  The Phase Team
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <!--[if mso | IE]></td></tr></table><![endif]-->
+    </td>
+  </tr>
+</tbody>
+{% endblock %}

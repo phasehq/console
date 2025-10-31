@@ -1,5 +1,10 @@
-mutation AddMemberToApp($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {
-  addAppMember(memberId: $memberId, appId: $appId, envKeys: $envKeys) {
+mutation AddMemberToApp(
+  $memberId: ID!
+  $memberType: MemberType
+  $appId: ID!
+  $envKeys: [EnvironmentKeyInput]
+) {
+  addAppMember(memberId: $memberId, memberType: $memberType, appId: $appId, envKeys: $envKeys) {
     app {
       id
     }

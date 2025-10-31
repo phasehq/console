@@ -1,0 +1,7 @@
+mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {
+  bulkAddAppMembers(appId: $appId, members: $members) {
+    app {
+      id
+    }
+  }
+}

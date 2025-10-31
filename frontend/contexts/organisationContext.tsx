@@ -26,7 +26,9 @@ interface OrganisationProviderProps {
 }
 
 export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ children }) => {
-  const [getOrgs, { data: orgsData, loading: queryLoading }] = useLazyQuery(GetOrganisations)
+  const [getOrgs, { data: orgsData, loading: queryLoading }] = useLazyQuery(GetOrganisations, {
+    pollInterval: 10000,
+  })
 
   const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
 

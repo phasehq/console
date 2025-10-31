@@ -22,7 +22,7 @@ export const CliInstallCommands = () => {
       styledScript: (
         <div className="space-y-1">
           <pre>
-            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> scoop bucket add
+            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> bucket add
             phasehq https://github.com/phasehq/scoop-cli.git
           </pre>
           <pre>
@@ -63,22 +63,23 @@ export const CliInstallCommands = () => {
     },
     {
       name: 'Python Pip',
-      rawScript: 'pip install phase',
+      rawScript: 'pip install phase-cli',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">pip3</span> install phase-cli
+          <span className="text-emerald-800 dark:text-emerald-300">pip</span> install phase-cli
         </pre>
       ),
     },
     {
       name: 'Alpine Linux',
-      rawScript: 'apk add --no-cache curl && curl -fsSL https://pkg.phase.dev/install.sh | sh',
+      rawScript: 'apk update && apk add --no-cache curl bash && curl -fsSL https://pkg.phase.dev/install.sh | bash',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">apk</span> add --no-cache curl &&
+          <span className="text-emerald-800 dark:text-emerald-300">apk</span> update &&
+          <span className="text-emerald-800 dark:text-emerald-300"> apk</span> add --no-cache curl bash &&
           <span className="text-emerald-800 dark:text-emerald-300"> curl</span> -fsSL
           https://pkg.phase.dev/install.sh |
-          <span className="text-emerald-800 dark:text-emerald-300">sh</span>
+          <span className="text-emerald-800 dark:text-emerald-300"> bash</span>
         </pre>
       ),
     },
@@ -117,7 +118,7 @@ export const CliInstallCommands = () => {
           <Tab.Panel as={Fragment} key={platform.name}>
             <div className="group relative overflow-x-auto rounded-b-lg border-x border-b border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-4 text-left text-sm text-zinc-900 dark:text-zinc-100">
               <code>{platform.styledScript}</code>
-              <div className="absolute right-4 top-3.5 ">
+              <div className="absolute right-4 top-3.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                 <CopyButton value={platform.rawScript} />
               </div>
             </div>

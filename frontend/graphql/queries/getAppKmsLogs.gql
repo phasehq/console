@@ -1,6 +1,6 @@
 query GetAppKmsLogs($appId: ID!, $start: BigInt, $end: BigInt) {
-  logs(appId: $appId, start: $start, end: $end) {
-    kms {
+  kmsLogs(appId: $appId, start: $start, end: $end) {
+    logs {
       id
       timestamp
       phaseNode
@@ -10,6 +10,6 @@ query GetAppKmsLogs($appId: ID!, $start: BigInt, $end: BigInt) {
       city
       phSize
     }
+    count
   }
-  kmsLogsCount(appId: $appId)
 }

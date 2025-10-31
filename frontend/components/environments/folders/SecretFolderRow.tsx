@@ -3,9 +3,22 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { FaFolder, FaKey } from 'react-icons/fa'
 import { DeleteFolderConfirmDialog } from './DeleteDialog'
+import { organisationContext } from '@/contexts/organisationContext'
+import { useContext } from 'react'
+import { userHasPermission } from '@/utils/access/permissions'
 
 export const SecretFolderRow = (props: { folder: SecretFolderType; handleDelete: Function }) => {
   const { folder, handleDelete } = props
+
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  // Permissions
+  const userCanDeleteFolders = userHasPermission(
+    organisation?.role?.permissions,
+    'Secrets',
+    'delete',
+    true
+  )
 
   const pathname = usePathname()
 
@@ -28,9 +41,11 @@ export const SecretFolderRow = (props: { folder: SecretFolderType; handleDelete:
           </span>
         </div>
       </Link>
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-center px-2">
-        <DeleteFolderConfirmDialog folder={folder} onDelete={handleDelete} />
-      </div>
+      {userCanDeleteFolders && (
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity ease flex items-center px-2">
+          <DeleteFolderConfirmDialog folder={folder} onDelete={handleDelete} />
+        </div>
+      )}
     </div>
   )
 }

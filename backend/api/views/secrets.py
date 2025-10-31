@@ -1,11 +1,12 @@
 from api.auth import PhaseTokenAuthentication
 from api.models import (
+    DynamicSecret,
+    DynamicSecretLease,
     Environment,
     PersonalSecret,
     Secret,
     SecretEvent,
     SecretTag,
-    ServerEnvironmentKey,
 )
 from api.serializers import (
     SecretSerializer,
@@ -17,46 +18,92 @@ from api.utils.secrets import (
     compute_key_digest,
     get_environment_keys,
 )
-from api.utils.permissions import user_can_access_environment
+from api.utils.access.permissions import (
+    user_has_permission,
+)
 from api.utils.audit_logging import log_secret_event
 
 from api.utils.crypto import encrypt_asymmetric, validate_encrypted_string
 from api.utils.rest import (
+    METHOD_TO_ACTION,
     get_resolver_request_meta,
 )
-
+import logging
 import json
+from api.content_negotiation import CamelCaseContentNegotiation
+from api.utils.access.middleware import IsIPAllowed
+from ee.integrations.secrets.dynamic.exceptions import (
+    DynamicSecretError,
+    PlanRestrictionError,
+    TTLExceededError,
+)
+from ee.integrations.secrets.dynamic.serializers import DynamicSecretSerializer
+from ee.integrations.secrets.dynamic.utils import (
+    create_dynamic_secret_lease,
+)
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.utils import timezone
 from djangorestframework_camel_case.render import (
     CamelCaseJSONRenderer,
 )
+from rest_framework.renderers import JSONRenderer
+
+logger = logging.getLogger(__name__)
 
 
 class E2EESecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsIPAllowed]
+    content_negotiation_class = CamelCaseContentNegotiation
 
-    @csrf_exempt
-    def dispatch(self, request, *args):
-        return super(E2EESecretsView, self).dispatch(request, *args)
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
 
-    def get(self, request):
+        # Determine the action based on the request method
+        action = METHOD_TO_ACTION.get(request.method)
+        if not action:
+            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+
+        # Perform permission check
+        account = None
+        if request.auth["auth_type"] == "User":
+            account = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            account = request.auth["service_account"]
+
+        if account is not None:
+            env = request.auth["environment"]
+            organisation = env.app.organisation
+
+            if not user_has_permission(
+                account,
+                action,
+                "Secrets",
+                organisation,
+                True,
+                request.auth.get("service_account") is not None,
+            ):
+                raise PermissionDenied(
+                    f"You don't have permission to {action} secrets in this environment."
+                )
+
+    def get(self, request, *args, **kwargs):
 
         env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
         if not env.id:
-            return HttpResponse(status=404)
+            return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
+        # Filter by key
         try:
             key_digest = request.headers["keydigest"]
             if key_digest:
@@ -64,11 +111,26 @@ class E2EESecretsView(APIView):
         except:
             pass
 
+        # Filter by path
         try:
             path = request.headers["path"]
             if path:
                 path = normalize_path_string(path)
                 secrets_filter["path"] = path
+        except:
+            pass
+
+        # Filter by tags
+        try:
+            tag_names = request.headers["tags"]
+            if tag_names:
+                tag_list = tag_names.split(",")
+                # Fetch all matching tags for the given organization
+                tags = SecretTag.objects.filter(
+                    organisation=env.app.organisation, name__in=tag_list
+                )
+                # Filter secrets based on these tags
+                secrets_filter["tags__in"] = tags
         except:
             pass
 
@@ -80,6 +142,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.READ,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -88,14 +151,136 @@ class E2EESecretsView(APIView):
             secrets, many=True, context={"org_member": request.auth["org_member"]}
         )
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        include_dynamic_secrets = (
+            # treat presence (any value) of either header as True unless explicitly "false"
+            (
+                "dynamic" in request.headers
+                and request.headers.get("dynamic", "false").lower() != "false"
+            )
+            or (
+                "include_dynamic" in request.headers
+                and request.headers.get("include_dynamic", "false").lower() != "false"
+            )
+        )
 
-    def post(self, request):
+        dynamic_secrets_data = []
+        if include_dynamic_secrets:
+            dynamic_secrets_filter = {
+                "environment": env,
+                "deleted_at": None,
+            }
+            try:
+                path = request.headers.get("path")
+                if path:
+                    path = normalize_path_string(path)
+                    dynamic_secrets_filter["path"] = path
+            except Exception:
+                pass
+
+            dynamic_secrets_qs = DynamicSecret.objects.filter(**dynamic_secrets_filter)
+
+            # If lease header is present, generate a lease per secret
+            include_lease = (
+                "lease" in request.headers
+                and request.headers.get("lease", "false").lower() != "false"
+            )
+
+            # Get optional lease_ttl header for custom TTL
+            lease_ttl = request.headers.get("lease_ttl")
+            if lease_ttl:
+                try:
+                    lease_ttl = int(lease_ttl)
+                except ValueError:
+                    return Response(
+                        {"error": "lease_ttl must be a valid integer (seconds)"},
+                        status=400,
+                    )
+
+            service_account = None
+            if request.auth.get("service_account_token") is not None:
+                service_account = request.auth["service_account_token"].service_account
+
+            if include_lease:
+                leases_by_secret_id = {}
+                failed_leases = []
+                for ds in dynamic_secrets_qs:
+                    try:
+                        lease, _ = create_dynamic_secret_lease(
+                            ds,
+                            ttl=lease_ttl,  # Pass the TTL if provided
+                            organisation_member=request.auth.get("org_member"),
+                            service_account=service_account,
+                            request=request,
+                        )
+                        leases_by_secret_id[ds.id] = str(lease.id)
+                    except PlanRestrictionError as e:
+                        return Response({"error": str(e)}, status=403)
+                    except DynamicSecretError as e:
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": str(e),
+                            }
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            "Unexpected error creating lease for dynamic secret %s",
+                            ds.id,
+                        )
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": "Internal error occurred",
+                            }
+                        )
+
+                # If any leases failed to create, return error response
+                if failed_leases:
+                    return Response(
+                        {
+                            "error": "One or more dynamic secret leases could not be created",
+                            "failed_leases": failed_leases,
+                            "successful_leases": len(leases_by_secret_id),
+                        },
+                        status=400,
+                    )
+
+                # Serialize each secret with its lease_id in context
+                dynamic_secrets_data = [
+                    DynamicSecretSerializer(
+                        ds,
+                        context={
+                            "sse": False,
+                            "with_credentials": True,
+                            "lease_id": leases_by_secret_id.get(ds.id),
+                        },
+                    ).data
+                    for ds in dynamic_secrets_qs
+                ]
+            else:
+                # Serialize without lease
+                dynamic_secrets_data = DynamicSecretSerializer(
+                    dynamic_secrets_qs, many=True, context={"sse": False}
+                ).data
+
+        response_data = serializer.data
+
+        if include_dynamic_secrets:
+            response_data.extend(dynamic_secrets_data)
+
+        return Response(
+            response_data,
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, *args, **kwargs):
 
         env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
         if not env:
-            return HttpResponse(status=404)
+            return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
         request_body = json.loads(request.body)
 
@@ -119,7 +304,9 @@ class E2EESecretsView(APIView):
                         {"error": "Invalid ciphertext format"}, status=400
                     )
 
-            tags = SecretTag.objects.filter(id__in=secret["tags"])
+            tags = SecretTag.objects.filter(
+                name__in=secret["tags"], organisation=env.app.organisation
+            )
 
             try:
                 path = normalize_path_string(secret["path"])
@@ -150,6 +337,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.CREATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -164,12 +352,12 @@ class E2EESecretsView(APIView):
 
         return Response(status=status.HTTP_200_OK)
 
-    def put(self, request):
+    def put(self, request, *args, **kwargs):
 
         env_id = request.headers["environment"]
         env = Environment.objects.get(id=env_id)
         if not env:
-            return HttpResponse(status=404)
+            return JsonResponse({"error": "Environment doesn't exist"}, status=404)
 
         request_body = json.loads(request.body)
 
@@ -182,6 +370,27 @@ class E2EESecretsView(APIView):
 
         for secret in request_body["secrets"]:
 
+            secret_obj = Secret.objects.get(id=secret["id"])
+
+            tags = SecretTag.objects.filter(
+                name__in=secret["tags"], organisation=env.app.organisation
+            )
+
+            if "key" not in secret:
+                secret["key"] = secret_obj.key
+                try:
+                    secret["keyDigest"] = secret_obj.key_digest
+                except:
+                    return JsonResponse(
+                        {"error": "Key supplied without digest"}, status=400
+                    )
+
+            if "value" not in secret:
+                secret["value"] = secret_obj.value
+
+            if "comment" not in secret:
+                secret["comment"] = secret_obj.comment
+
             # Check that all encrypted fields are valid
             encrypted_fields = [secret["key"], secret["value"], secret["comment"]]
             if "override" in secret:
@@ -192,10 +401,6 @@ class E2EESecretsView(APIView):
                     return JsonResponse(
                         {"error": "Invalid ciphertext format"}, status=400
                     )
-
-            secret_obj = Secret.objects.get(id=secret["id"])
-
-            tags = SecretTag.objects.filter(id__in=secret["tags"])
 
             secret_data = {
                 "environment": env,
@@ -230,6 +435,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.UPDATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -248,7 +454,7 @@ class E2EESecretsView(APIView):
 
         return Response(status=status.HTTP_200_OK)
 
-    def delete(self, request):
+    def delete(self, request, *args, **kwargs):
 
         request_body = json.loads(request.body)
 
@@ -256,16 +462,10 @@ class E2EESecretsView(APIView):
 
         secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"])
 
-        for secret in secrets_to_delete:
-            if not Secret.objects.filter(id=secret.id).exists():
-                return HttpResponse(status=404)
+        if not secrets_to_delete.exists():
+            return Response(status=status.HTTP_200_OK)
 
-            if request.auth[
-                "org_member"
-            ] is not None and not user_can_access_environment(
-                request.auth["org_member"].user.userId, secret.environment.id
-            ):
-                return HttpResponse(status=403)
+        env = secrets_to_delete[0].environment
 
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
@@ -277,6 +477,7 @@ class E2EESecretsView(APIView):
                 SecretEvent.DELETE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -286,25 +487,58 @@ class E2EESecretsView(APIView):
 
 class PublicSecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsIPAllowed]
     renderer_classes = [
         CamelCaseJSONRenderer,
     ]
 
-    @csrf_exempt
-    def dispatch(self, request, *args):
-        return super(PublicSecretsView, self).dispatch(request, *args)
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
 
-    def get(self, request):
+        # Determine the action based on the request method
+        action = METHOD_TO_ACTION.get(request.method)
+        if not action:
+            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+
+        # Perform permission check
+        account = None
+        if request.auth["auth_type"] == "User":
+            account = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            account = request.auth["service_account"]
+
+        if account is not None:
+            env = request.auth["environment"]
+            organisation = env.app.organisation
+
+            if not user_has_permission(
+                account,
+                action,
+                "Secrets",
+                organisation,
+                True,
+                request.auth.get("service_account") is not None,
+            ):
+                raise PermissionDenied(
+                    f"You don't have permission to {action} secrets in this environment."
+                )
+
+    def get(self, request, *args, **kwargs):
         env = request.auth["environment"]
 
         # Check if SSE is enabled for this environment
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
         secrets_filter = {"environment": env, "deleted_at": None}
+
+        account = None
+        if request.auth["auth_type"] == "User":
+            account = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            account = request.auth["service_account"]
 
         # Filter by key
         key = request.GET.get("key")
@@ -318,6 +552,17 @@ class PublicSecretsView(APIView):
             path = normalize_path_string(path)
             secrets_filter["path"] = path
 
+        # Filter by tags
+        tag_names = request.GET.get("tags")
+        if tag_names:
+            tag_list = tag_names.split(",")
+            # Fetch all matching tags for the given organization
+            tags = SecretTag.objects.filter(
+                organisation=env.app.organisation, name__in=tag_list
+            )
+            # Filter secrets based on these tags
+            secrets_filter["tags__in"] = tags
+
         secrets = Secret.objects.filter(**secrets_filter)
 
         for secret in secrets:
@@ -326,6 +571,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.READ,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -333,17 +579,151 @@ class PublicSecretsView(APIView):
         serializer = SecretSerializer(
             secrets,
             many=True,
-            context={"org_member": request.auth["org_member"], "sse": True},
+            context={
+                "org_member": request.auth["org_member"],
+                "account": account,
+                "sse": True,
+            },
         )
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        include_dynamic_secrets = (
+            # treat presence (any value) of either param as True unless explicitly "false"
+            (
+                "dynamic" in request.GET
+                and request.GET.get("dynamic", "false").lower() != "false"
+            )
+            or (
+                "include_dynamic" in request.GET
+                and request.GET.get("include_dynamic", "false").lower() != "false"
+            )
+        )
 
-    def post(self, request):
+        dynamic_secrets_data = []
+        if include_dynamic_secrets:
+            dynamic_secrets_filter = {
+                "environment": env,
+                "deleted_at": None,
+            }
+            try:
+                path = request.GET.get("path")
+                if path:
+                    path = normalize_path_string(path)
+                    dynamic_secrets_filter["path"] = path
+            except Exception:
+                pass
+
+            dynamic_secrets_qs = DynamicSecret.objects.filter(**dynamic_secrets_filter)
+
+            # If ?lease is present, generate a lease per secret
+            include_lease = (
+                "lease" in request.GET
+                and request.GET.get("lease", "false").lower() != "false"
+            )
+
+            # Get optional lease_ttl parameter for custom TTL
+            lease_ttl = request.GET.get("lease_ttl")
+            if lease_ttl:
+                try:
+                    lease_ttl = int(lease_ttl)
+                except ValueError:
+                    return Response(
+                        {"error": "lease_ttl must be a valid integer (seconds)"},
+                        status=400,
+                    )
+
+            service_account = None
+            if request.auth.get("service_account_token") is not None:
+                service_account = request.auth["service_account_token"].service_account
+
+            if include_lease:
+                leases_by_secret_id = {}
+                failed_leases = []
+                for ds in dynamic_secrets_qs:
+                    try:
+                        lease, _ = create_dynamic_secret_lease(
+                            ds,
+                            ttl=lease_ttl,
+                            organisation_member=request.auth.get("org_member"),
+                            service_account=service_account,
+                            request=request,
+                        )
+                        leases_by_secret_id[ds.id] = str(lease.id)
+                    except PlanRestrictionError as e:
+                        return Response({"error": str(e)}, status=403)
+                    except (TTLExceededError,) as e:
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": str(e),
+                            }
+                        )
+                    except DynamicSecretError as e:
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": str(e),
+                            }
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            "Unexpected error creating lease for dynamic secret %s",
+                            ds.id,
+                        )
+                        failed_leases.append(
+                            {
+                                "secret_id": str(ds.id),
+                                "secret_name": ds.name,
+                                "error": str(e),
+                            }
+                        )
+
+                # If any leases failed to create, return error response
+                if failed_leases:
+                    return Response(
+                        {
+                            "error": "One or more dynamic secret leases could not be created",
+                            "failed_leases": failed_leases,
+                            "successful_leases": len(leases_by_secret_id),
+                        },
+                        status=400,
+                    )
+
+                # Serialize each secret with its lease_id in context
+                dynamic_secrets_data = [
+                    DynamicSecretSerializer(
+                        ds,
+                        context={
+                            "sse": True,
+                            "with_credentials": True,
+                            "lease_id": leases_by_secret_id.get(ds.id),
+                        },
+                    ).data
+                    for ds in dynamic_secrets_qs
+                ]
+            else:
+                # Serialize without lease
+                dynamic_secrets_data = DynamicSecretSerializer(
+                    dynamic_secrets_qs, many=True, context={"sse": True}
+                ).data
+
+        response_data = serializer.data
+
+        if include_dynamic_secrets:
+            response_data.extend(dynamic_secrets_data)
+
+        return Response(
+            response_data,
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
 
         # Check if SSE is enabled for this environment
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
         request_body = json.loads(request.body)
@@ -412,6 +792,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.CREATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -434,12 +815,12 @@ class PublicSecretsView(APIView):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def put(self, request):
+    def put(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
 
         # Check if SSE is enabled for this environment
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
         request_body = json.loads(request.body)
@@ -528,6 +909,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.UPDATE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
@@ -554,12 +936,12 @@ class PublicSecretsView(APIView):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def delete(self, request):
+    def delete(self, request, *args, **kwargs):
 
         env = request.auth["environment"]
 
         # Check if SSE is enabled for this environment
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
         request_body = json.loads(request.body)
@@ -570,14 +952,7 @@ class PublicSecretsView(APIView):
 
         for secret in secrets_to_delete:
             if not Secret.objects.filter(id=secret.id).exists():
-                return HttpResponse(status=404)
-
-            if request.auth[
-                "org_member"
-            ] is not None and not user_can_access_environment(
-                request.auth["org_member"].user.userId, secret.environment.id
-            ):
-                return HttpResponse(status=403)
+                return JsonResponse({"error": "Secret does not exist"}, status=404)
 
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
@@ -589,6 +964,7 @@ class PublicSecretsView(APIView):
                 SecretEvent.DELETE,
                 request.auth["org_member"],
                 request.auth["service_token"],
+                request.auth["service_account_token"],
                 ip_address,
                 user_agent,
             )
