@@ -234,7 +234,13 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from logs.models import KMSDBLog
 from django.utils import timezone
+from itertools import chain
+import time
+import logging
+import heapq
+from django.db.models import prefetch_related_objects
 
+logger = logging.getLogger(__name__)
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -682,12 +688,26 @@ class Query(graphene.ObjectType):
         return SecretFolder.objects.filter(**filter).order_by("created_at")
 
     def resolve_secret_history(root, info, secret_id):
+        user = info.context.user
+
         secret = Secret.objects.get(id=secret_id)
-        if not user_can_access_environment(
-            info.context.user.userId, secret.environment.id
-        ):
+
+        if not user_can_access_environment(user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this secret")
-        return SecretEvent.objects.filter(secret_id=secret_id)
+
+        # compute permission once and store it on the request context
+        can_view_members = user_has_permission(
+            user, "read", "Members", secret.environment.app.organisation, True
+        ) or user_has_permission(
+            user, "read", "Members", secret.environment.app.organisation, False
+        )
+
+        setattr(info.context, "can_view_members", can_view_members)
+
+        # return a queryset with all necessary relations preloaded to avoid N+1s
+        qs = SecretEvent.objects.filter(secret_id=secret_id).order_by("-timestamp")
+
+        return qs
 
     def resolve_secret_tags(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
@@ -804,16 +824,24 @@ class Query(graphene.ObjectType):
         member_type=None,
         environment_id=None,
     ):
-        if not user_can_access_app(info.context.user.userId, app_id):
+        PAGE_SIZE = 25
+        start_time = time.time()
+        user = info.context.user
+
+        # Access checks
+        if not user_can_access_app(user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
         app = App.objects.get(id=app_id)
 
+        # Time range defaults
         if end == 0:
-            end = datetime.now().timestamp() * 1000
+            end = timezone.now().timestamp() * 1000
+        if start == 0:
+            start = (timezone.now() - timedelta(days=30)).timestamp() * 1000
 
         org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=app.organisation, deleted_at=None
+            user=user, organisation=app.organisation, deleted_at=None
         )
 
         env_keys_filter = {
@@ -821,45 +849,82 @@ class Query(graphene.ObjectType):
             "user": org_member,
             "deleted_at": None,
         }
-
         if environment_id is not None:
             env_keys_filter["environment_id"] = environment_id
 
-        env_keys = EnvironmentKey.objects.filter(**env_keys_filter).select_related(
-            "environment"
+        env_ids = list(
+            EnvironmentKey.objects.filter(**env_keys_filter)
+            .values_list("environment_id", flat=True)
+            .distinct()
         )
 
-        envs = [env_key.environment for env_key in env_keys]
+        # Nothing to fetch, early return
+        if not env_ids:
+            return SecretLogsResponseType(logs=[], count=0)
 
-        start_dt = datetime.fromtimestamp(start / 1000)
-        end_dt = datetime.fromtimestamp(end / 1000)
+        start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
 
-        if user_has_permission(
-            info.context.user, "read", "Logs", app.organisation, True
-        ):
-            secret_events_query = SecretEvent.objects.filter(
-                environment__in=envs, timestamp__lte=end_dt, timestamp__gte=start_dt
+        # Permissions
+        can_see_members = user_has_permission(
+            user, "read", "Members", app.organisation, True
+        ) or user_has_permission(user, "read", "Members", app.organisation, False)
+        setattr(info.context, "can_view_members", can_see_members)
+
+        if not user_has_permission(user, "read", "Logs", app.organisation, True):
+            return SecretLogsResponseType(logs=[], count=0)
+
+        # Base filter
+        base_filter = {
+            "timestamp__gte": start_dt,
+            "timestamp__lte": end_dt,
+        }
+        if event_types:
+            base_filter["event_type__in"] = event_types
+        if member_id:
+            if member_type == MemberType.USER or member_type is None:
+                base_filter["user_id"] = member_id
+            elif member_type == MemberType.SERVICE:
+                base_filter["service_account_id"] = member_id
+
+        if len(env_ids) == 1:
+            # Single environment → simple fast path
+            logs_qs = (
+                SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
+                .order_by("-timestamp", "-id")
+                .prefetch_related("tags")[:PAGE_SIZE]
             )
-            if event_types:
-                secret_events_query = secret_events_query.filter(
-                    event_type__in=event_types
-                )
-            if member_id:
-                if member_type == MemberType.USER or member_type is None:
-                    secret_events_query = secret_events_query.filter(user_id=member_id)
-                elif member_type == MemberType.SERVICE:
-                    secret_events_query = secret_events_query.filter(
-                        service_account_id=member_id
-                    )
-
-            count = get_approximate_count(secret_events_query)
-            secret_events = secret_events_query.order_by("-timestamp")[:25]
 
         else:
-            count = 0
-            secret_events = []
+            # Multiple environments — always do per-env small scans + merge
+            per_env_qs = [
+                SecretEvent.objects.filter(
+                    environment_id=env_id, **base_filter
+                ).order_by("-timestamp", "-id")[:PAGE_SIZE]
+                for env_id in env_ids
+            ]
+            combined = list(
+                chain.from_iterable(per_env_qs)
+            )  # Flatten all per-env querysets into one list of events (evaluate them)
+            logs_qs = heapq.nlargest(
+                PAGE_SIZE, combined, key=lambda e: e.timestamp
+            )  # Efficiently select the newest 25 events overall
+            prefetch_related_objects(logs_qs, "tags")
 
-        return SecretLogsResponseType(logs=secret_events, count=count)
+        # Approximate count (on combined filter)
+        count_qs = SecretEvent.objects.filter(environment_id__in=env_ids, **base_filter)
+        count = get_approximate_count(count_qs)
+
+        # --- Timing log ---
+        elapsed = (time.time() - start_time) * 1000
+        logger.info(
+            "resolve_secret_logs executed in %.2f ms (envs=%d, count≈%d)",
+            elapsed,
+            len(env_ids),
+            count,
+        )
+
+        return SecretLogsResponseType(logs=logs_qs, count=count)
 
     def resolve_app_activity_chart(root, info, app_id, period=TimeRange.DAY):
         """
