@@ -1,9 +1,7 @@
 import os
 from pathlib import Path
-from datetime import timedelta
 import logging.config
 from backend.utils.secrets import get_secret
-
 from ee.licensing.verifier import check_license
 
 # Clear prev config
@@ -97,6 +95,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.gitlab",
     "allauth.socialaccount.providers.microsoft",
     "api.config.APIConfig",
+    # "ee",
     "logs",
     "graphene_django",
     "django_rq",
@@ -120,6 +119,16 @@ SOCIALACCOUNT_PROVIDERS = {
             "client_id": os.getenv("GITHUB_CLIENT_ID"),
             "secret": get_secret("GITHUB_CLIENT_SECRET"),
         },
+    },
+    "github-enterprise": {
+        "SCOPE": [
+            "user read:user user:email",
+        ],
+        "APP": {
+            "client_id": os.getenv("GITHUB_ENTERPRISE_CLIENT_ID"),
+            "secret": get_secret("GITHUB_ENTERPRISE_CLIENT_SECRET"),
+        },
+        "GITHUB_URL": os.getenv("GITHUB_ENTERPRISE_BASE_URL"),
     },
     "gitlab": {
         "SCOPE": [
@@ -164,6 +173,14 @@ SOCIALACCOUNT_PROVIDERS = {
             }
         ]
     },
+    "authentik": {
+        "APP": {
+            "client_id": os.getenv("AUTHENTIK_CLIENT_ID"),
+            "secret": get_secret("AUTHENTIK_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "email", "profile"],
+    },
 }
 
 
@@ -179,10 +196,12 @@ OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI")
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = os.getenv("SMTP_SERVER")
 EMAIL_PORT = int(os.getenv("SMTP_PORT", 587))
-EMAIL_USE_TLS = True
+EMAIL_USE_TLS = os.getenv("SMTP_USE_TLS", "True").lower() in ("true", "1")
+EMAIL_USE_SSL = os.getenv("SMTP_USE_SSL", "False").lower() in ("true", "1")
 EMAIL_HOST_USER = os.getenv("SMTP_USERNAME")
 EMAIL_HOST_PASSWORD = get_secret("SMTP_PASSWORD")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+EMAIL_TIMEOUT = int(os.getenv("SMTP_TIMEOUT", 5))
 
 
 SITE_ID = 1
@@ -231,6 +250,9 @@ REST_FRAMEWORK = {
 
 GRAPHENE = {
     "SCHEMA": "backend.schema.schema",
+    "MIDDLEWARE": [
+        "backend.graphene.middleware.IPWhitelistMiddleware",
+    ],
 }
 
 ROOT_URLCONF = "backend.urls"
@@ -357,6 +379,8 @@ try:
         "free": os.getenv("STRIPE_FREE"),
         "pro_monthly": os.getenv("STRIPE_PRO_MONTHLY"),
         "pro_yearly": os.getenv("STRIPE_PRO_YEARLY"),
+        "enterprise_monthly": os.getenv("STRIPE_ENTERPRISE_MONTHLY"),
+        "enterprise_yearly": os.getenv("STRIPE_ENTERPRISE_YEARLY"),
     }
 except:
     pass

@@ -7,6 +7,7 @@ import 'react-toastify/dist/ReactToastify.min.css'
 import '@/utils/logoAnimation.css'
 import NextTopLoader from 'nextjs-toploader'
 import { Metadata } from 'next'
+import { getHostname } from '@/utils/appConfig'
 
 const inter = Inter({
   weight: 'variable',
@@ -21,10 +22,37 @@ const jetbrains_mono = JetBrains_Mono({
   variable: '--font-jetbrains-mono',
 })
 
+const host = getHostname()
+
+const title = 'Phase Console'
+const description = 'Application secrets and configuration management for developers.'
+
 // TODO: Set metadata for specific page routes
 export const metadata: Metadata = {
-  title: 'Phase Console',
-  description: 'Open source secrets manager',
+  title,
+  description,
+  openGraph: {
+    title,
+    description,
+    url: host,
+    siteName: 'Phase',
+    images: [
+      {
+        url: `${host}/assets/images/meta.png`,
+        width: 1200,
+        height: 675,
+        alt: title,
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title,
+    description,
+    images: [`${host}/assets/images/meta.png`],
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

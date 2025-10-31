@@ -75,11 +75,11 @@ export const StatusIndicator = () => {
 
   return (
     <Link href={STATUS_PAGE_BASE_URL} target="_blank" className="hidden lg:block">
-      <Button variant="secondary" className="whitespace-nowrap">
+      <Button variant="secondary">
         <span
           className={clsx('h-2 w-2 mr-1 rounded-full', statusColor(), isLoading && 'animate-pulse')}
         ></span>
-        <span className="truncate">{status?.description || 'Loading'}</span>
+        <span className="truncate whitespace-nowrap">{status?.description || 'Loading'}</span>
       </Button>
     </Link>
   )

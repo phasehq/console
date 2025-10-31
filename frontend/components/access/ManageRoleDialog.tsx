@@ -113,6 +113,9 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
         existingRolePolicy.permissions['ServiceAccounts']
       )
 
+      if (mustUpdateServiceAccountHandlers)
+        await updateServiceAccountHandlers(organisation!.id, keyring!)
+
       const updated = await updateRole({
         variables: {
           id: role.id,
@@ -123,9 +126,6 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
         },
         refetchQueries: [{ query: GetRoles, variables: { orgId: organisation!.id } }],
       })
-
-      if (mustUpdateServiceAccountHandlers)
-        await updateServiceAccountHandlers(organisation!.id, keyring!)
 
       if (updated.data.updateCustomRole.role.id) {
         resolve(true)

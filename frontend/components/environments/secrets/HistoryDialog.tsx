@@ -121,7 +121,7 @@ export const HistoryDialog = ({
     if (log.user)
       return (
         <div className="flex items-center gap-1 text-sm">
-          <Avatar imagePath={log.user?.avatarUrl!} size="sm" />
+          <Avatar member={log.user} size="sm" />
           {log.user.fullName || log.user.email}
         </div>
       )
@@ -133,12 +133,22 @@ export const HistoryDialog = ({
       )
     else if (log.serviceAccount)
       return (
-        <div className="flex items-center gap-1 text-sm">
-          <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-6">
-            <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
-          </div>{' '}
-          {log.serviceAccount.name}
-          {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
+        <div
+          className={clsx(
+            'flex items-center gap-1 text-sm',
+            log.serviceAccount.deletedAt && 'grayscale'
+          )}
+        >
+          <Avatar serviceAccount={log.serviceAccount} size="sm" />
+          <span className={clsx(log.serviceAccount.deletedAt ? 'line-through' : '')}>
+            {log.serviceAccount.name}
+          </span>{' '}
+          {log.serviceAccount.deletedAt && (
+            <span className="text-neutral-500 font-normal">(Deleted)</span>
+          )}
+          {log.serviceAccountToken &&
+            !log.serviceAccount.deletedAt &&
+            ` (${log.serviceAccountToken.name})`}
         </div>
       )
   }
@@ -149,7 +159,10 @@ export const HistoryDialog = ({
     <>
       <div className="flex items-center justify-center">
         <Button variant="outline" onClick={openModal} title="View secret history" tabIndex={-1}>
-          <FaHistory /> <span className="hidden 2xl:block text-xs">History</span>
+          <span className="py-1">
+            <FaHistory className="shrink-0" />
+          </span>
+          <span className="hidden 2xl:block text-xs">History</span>
         </Button>
       </div>
 

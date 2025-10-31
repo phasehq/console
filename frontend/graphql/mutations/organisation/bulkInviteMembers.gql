@@ -1,0 +1,9 @@
+mutation BulkInviteMembers($orgId: ID!, $invites: [InviteInput!]!) {
+  bulkInviteOrganisationMembers(orgId: $orgId, invites: $invites) {
+    invites {
+      id
+      inviteeEmail
+      expiresAt
+    }
+  }
+}

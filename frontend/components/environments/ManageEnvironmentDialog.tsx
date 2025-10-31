@@ -22,6 +22,7 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { userHasPermission } from '@/utils/access/permissions'
+import { sanitizeInput } from '@/utils/environment'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -42,12 +43,16 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
-    await renameEnvironment({
+    const { data } = await renameEnvironment({
       variables: { environmentId: props.environment?.id, name },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
       ],
     })
+
+    if (!data) {
+      return
+    }
     toast.success('Environment renamed!')
   }
 
@@ -64,13 +69,23 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
             ? 'Upgrade to Pro to rename Environments'
             : "You don't have the permissions required to rename this Environment"}
       </Alert>
-      <Input
-        value={name}
-        setValue={setName}
-        label="Environment name"
-        required
-        disabled={!allowRename}
-      />
+
+      <div className="space-y-2">
+        <Input
+          value={sanitizeInput(name)}
+          setValue={setName}
+          label="Environment name"
+          required
+          maxLength={32}
+          disabled={!allowRename}
+        />
+        {allowRename && (
+          <p className="text-xs text-neutral-500">
+            Use up to 32 characters. Only letters, numbers, hyphens and underscores allowed.
+          </p>
+        )}
+      </div>
+
       {allowRename && (
         <div className="flex justify-end">
           <Button type="submit" variant="primary" disabled={name === props.environment.name}>
@@ -250,7 +265,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
         {props.environment.members?.map((member) =>
           member ? (
             <div key={member.email} title={member.fullName || member.email || ''}>
-              <Avatar imagePath={member.avatarUrl!} size="lg" />
+              <Avatar member={member} size="lg" />
             </div>
           ) : (
             <></>

@@ -25,9 +25,10 @@ import { usePathname } from 'next/navigation'
 import { arraysEqual } from '@/utils/crypto'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
+import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 
 const INPUT_BASE_STYLE =
-  'w-full font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture'
+  'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
 
 const EnvSecret = ({
   appSecretId,
@@ -61,15 +62,18 @@ const EnvSecret = ({
   const [readSecret] = useMutation(LogSecretReads)
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
+  const isEmptyValue = clientEnvSecret.secret?.value === ''
 
-  const [showValue, setShowValue] = useState<boolean>(valueIsNew || false)
+  const [showValue, setShowValue] = useState<boolean>(
+    valueIsNew || !serverEnvSecret || isEmptyValue || false
+  )
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
     : false
   const booleanValue = clientEnvSecret.secret?.value.toLowerCase() === 'true'
 
-  // Permisssions
+  // Permissions
   const userCanUpdateSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
     !serverEnvSecret
@@ -102,7 +106,11 @@ const EnvSecret = ({
   const handleDeleteValue = () =>
     deleteEnvValue(appSecretId, clientEnvSecret!.env as EnvironmentType)
 
-  const handleAddValue = () => addEnvValue(appSecretId, clientEnvSecret.env as EnvironmentType)
+  const handleAddValue = () => {
+    addEnvValue(appSecretId, clientEnvSecret.env as EnvironmentType)
+    // Ensure the value is visible after adding it
+    setShowValue(true)
+  }
 
   const valueIsModified = () => {
     if (serverEnvSecret) {
@@ -167,7 +175,7 @@ const EnvSecret = ({
           <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
             <FaPlus />
             Add value
-          </Button>{' '}
+          </Button>
         </div>
       ) : (
         <div className="flex justify-between items-center w-full">
@@ -197,23 +205,20 @@ const EnvSecret = ({
                   </Switch>
                 </div>
               )}
-              <input
+              <MaskedTextarea
                 className={clsx(
                   INPUT_BASE_STYLE,
                   inputTextColor(),
-                  'rounded-sm font-mono text-sm font-medium'
+                  'rounded-sm focus:outline-none py-2'
                 )}
-                type={showValue ? 'text' : 'password'}
-                disabled={stagedForDelete}
                 value={clientEnvSecret.secret.value}
-                placeholder="VALUE"
-                onChange={(e) =>
-                  updateEnvValue(appSecretId, clientEnvSecret.env.id!, e.target.value)
-                }
+                onChange={(v) => updateEnvValue(appSecretId, clientEnvSecret.env.id!, v)}
+                isRevealed={showValue}
+                expanded={true}
               />
             </div>
             {clientEnvSecret.secret !== null && (
-              <div className="flex items-center gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
+              <div className="flex items-start pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
                 <Button variant="outline" onClick={toggleShowValue}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
@@ -411,14 +416,14 @@ export const AppSecretRow = ({
                   {index + 1}
                 </span>
               </button>
-              <div className="relative w-full group">
+              <div className="relative group flex-1 min-w-60 md:min-w-80">
                 <input
                   ref={keyInputRef}
                   disabled={stagedForDelete || !userCanUpdateSecrets}
                   className={clsx(
                     INPUT_BASE_STYLE,
                     rowInputColor(),
-                    'rounded-sm',
+                    'rounded-sm ',
                     keyIsBlank
                       ? 'ring-1 ring-inset ring-red-500'
                       : keyIsDuplicate
@@ -430,6 +435,7 @@ export const AppSecretRow = ({
                   onClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
                 />
+
                 <div className="absolute inset-y-0 right-2 flex gap-1 items-center opacity-0 group-hover:opacity-100 transition ease">
                   {userCanDeleteSecrets && (
                     <Button
@@ -449,10 +455,13 @@ export const AppSecretRow = ({
             {envs.map((env) => (
               <td
                 key={env.env.id}
-                className={'px-6 whitespace-nowrap group cursor-pointer'}
+                className="px-6 whitespace-nowrap group cursor-pointer"
                 onClick={toggleAccordion}
               >
-                <div className="flex items-center justify-center" title={tooltipText(env)}>
+                <div
+                  className="flex items-center justify-center text-sm xl:text-base"
+                  title={tooltipText(env)}
+                >
                   {env.secret !== null ? (
                     env.secret.value.length === 0 ? (
                       <FaCircle className="text-neutral-500 shrink-0" />

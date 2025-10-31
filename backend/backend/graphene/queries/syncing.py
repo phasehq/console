@@ -20,18 +20,19 @@ from api.utils.access.permissions import (
 )
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.aws.secrets_manager import list_aws_secrets
-from api.utils.syncing.github.actions import list_repos
+from api.utils.syncing.github.actions import list_repos, list_environments
 from api.utils.syncing.vault.main import test_vault_creds
 from api.utils.syncing.nomad.main import test_nomad_creds
 from api.utils.syncing.gitlab.main import list_gitlab_groups, list_gitlab_projects
 from api.utils.syncing.railway.main import (
     fetch_railway_projects,
 )
-from api.utils.syncing.vercel.main import (
-    test_vercel_creds,
-    list_vercel_projects
-)
+from api.utils.syncing.vercel.main import test_vercel_creds, list_vercel_projects
 from api.utils.syncing.cloudflare.workers import list_cloudflare_workers
+from api.utils.syncing.render.main import (
+    list_render_services,
+    list_render_environment_groups,
+)
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -122,30 +123,78 @@ def resolve_cloudflare_workers(root, info, credential_id):
 
 def resolve_aws_secret_manager_secrets(root, info, credential_id):
     pk, sk = get_server_keypair()
-
     credential = ProviderCredentials.objects.get(id=credential_id)
 
-    access_key_id = decrypt_asymmetric(
-        credential.credentials["access_key_id"], sk.hex(), pk.hex()
-    )
-
-    secret_access_key = decrypt_asymmetric(
-        credential.credentials["secret_access_key"], sk.hex(), pk.hex()
-    )
-
-    region = decrypt_asymmetric(credential.credentials["region"], sk.hex(), pk.hex())
-
     try:
-        secrets = list_aws_secrets(access_key_id, secret_access_key, region)
+        decrypted_creds = {}
+
+        for key in [
+            "role_arn",
+            "external_id",
+            "region",
+            "access_key_id",
+            "secret_access_key",
+        ]:
+            if key in credential.credentials:
+                decrypted_creds[key] = decrypt_asymmetric(
+                    credential.credentials[key], sk.hex(), pk.hex()
+                )
+
+        secrets = list_aws_secrets(
+            region=decrypted_creds.get("region"),
+            AWS_ACCESS_KEY_ID=decrypted_creds.get("access_key_id"),
+            AWS_SECRET_ACCESS_KEY=decrypted_creds.get("secret_access_key"),
+            role_arn=decrypted_creds.get("role_arn"),
+            external_id=decrypted_creds.get("external_id"),
+        )
+
         return secrets
     except Exception as ex:
         raise GraphQLError(ex)
+
+
+def resolve_validate_aws_assume_role_auth(root, info):
+    """
+    Validate if AWS assume role authentication is available for the Phase instance.
+    """
+    from api.utils.syncing.aws.auth import validate_aws_assume_role_auth
+
+    try:
+        validation_result = validate_aws_assume_role_auth()
+        return validation_result
+    except Exception as ex:
+        raise GraphQLError(str(ex))
+
+
+def resolve_validate_aws_assume_role_credentials(
+    root, info, role_arn, region=None, external_id=None
+):
+    """
+    Validate if specific AWS assume role credentials can be successfully used.
+    """
+    from api.utils.syncing.aws.auth import validate_aws_assume_role_credentials
+
+    try:
+        validation_result = validate_aws_assume_role_credentials(
+            role_arn, region, external_id
+        )
+        return validation_result
+    except Exception as ex:
+        raise GraphQLError(str(ex))
 
 
 def resolve_gh_repos(root, info, credential_id):
     try:
         secrets = list_repos(credential_id)
         return secrets
+    except Exception as ex:
+        raise GraphQLError(ex)
+
+
+def resolve_github_environments(root, info, credential_id, owner, repo_name):
+    try:
+        envs = list_environments(credential_id, owner, repo_name)
+        return envs
     except Exception as ex:
         raise GraphQLError(ex)
 
@@ -189,6 +238,27 @@ def resolve_railway_projects(root, info, credential_id):
     except Exception as ex:
         raise GraphQLError(f"Error listing Railway environments: {str(ex)}")
 
+
+def resolve_render_services(root, info, credential_id):
+    """Resolver for listing Render services."""
+    try:
+
+        services = list_render_services(credential_id)
+        return services
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Render services: {str(ex)}")
+
+
+def resolve_render_envgroups(root, info, credential_id):
+    """Resolver for listing Render Environment Groups."""
+    try:
+
+        envgroups = list_render_environment_groups(credential_id)
+        return envgroups
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Render Environment Groups: {str(ex)}")
+
+
 def resolve_vercel_projects(root, info, credential_id):
     """Resolver for listing Vercel projects."""
     try:
@@ -196,11 +266,12 @@ def resolve_vercel_projects(root, info, credential_id):
             raise GraphQLError(
                 "Could not authenticate with Vercel. Please check that your credentials are valid"
             )
-        
+
         projects = list_vercel_projects(credential_id)
         return projects
     except Exception as ex:
         raise GraphQLError(f"Error listing Vercel projects: {str(ex)}")
+
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
 

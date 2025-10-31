@@ -2,6 +2,8 @@ query GetSubscriptionDetails($organisationId: ID!) {
   stripeSubscriptionDetails(organisationId: $organisationId) {
     subscriptionId
     planName
+    planType
+    billingPeriod
     status
     nextPaymentAmount
     currentPeriodStart

@@ -13,6 +13,7 @@ query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
     fullName
     avatarUrl
     createdAt
+    lastLogin
     self
   }
 }

@@ -31,30 +31,13 @@ export function EntraIDProvider(options: EntraIDProviderConfig): OAuthConfig<Ent
     idToken: true,
     checks: ['pkce', 'state', 'nonce'],
     profile: async (profile, tokens) => {
-      // Get the profile photo from the Microsoft Graph API
-      let image
-      try {
-        const response = await fetch(`https://graph.microsoft.com/v1.0/me/photo/$value`, {
-          headers: { Authorization: `Bearer ${tokens.access_token}` },
-        })
-
-        // Convert ArrayBuffer to base64 if response is OK
-        if (response.ok) {
-          const pictureBuffer = await response.arrayBuffer()
-          const pictureBase64 = Buffer.from(pictureBuffer).toString('base64')
-          image = `data:image/jpeg;base64,${pictureBase64}`
-        }
-      } catch (error) {
-        console.error('Error fetching Entra ID profile photo:', error)
-      }
-      
-      if (!profile.email) throw new Error("User does not have a valid email")
+      if (!profile.email) throw new Error('User does not have a valid email')
 
       return {
         id: profile.sub,
         name: profile.name || '',
         email: profile.email,
-        image: image || profile.picture || '',
+        image: '',
       }
     },
   }

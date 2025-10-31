@@ -60,7 +60,9 @@ export const SecretPropertyDiffs = ({
           <div className="flex flex-col w-full">
             <div className="flex-1 items-end gap-4 justify-between bg-red-200 dark:bg-red-950">
               <div>
-                <s className=" text-red-500 ph-no-capture">{previousItem.value}</s>
+                <s className=" text-red-500 ph-no-capture whitespace-pre-wrap">
+                  {previousItem.value}
+                </s>
               </div>
               <div className="flex items-center justify-end p-1">
                 <Button
@@ -73,7 +75,7 @@ export const SecretPropertyDiffs = ({
                 </Button>
               </div>
             </div>
-            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture">
+            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture whitespace-pre-wrap break word">
               {historyItem!.value}
             </span>
           </div>

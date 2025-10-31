@@ -9,7 +9,7 @@ import {
 } from '@/utils/tokens'
 import { forwardRef, Fragment, useContext, useImperativeHandle, useRef, useState } from 'react'
 import { FaCheckCircle, FaCircle, FaExternalLinkSquareAlt, FaPlus } from 'react-icons/fa'
-import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
+import { GetServiceAccountTokens } from '@/graphql/queries/service-accounts/getServiceAccountTokens.gql'
 import { CreateSAToken } from '@/graphql/mutations/service-accounts/createServiceAccountToken.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import {
@@ -120,9 +120,10 @@ const CreateServiceAccountTokenDialog = forwardRef(
             variables: mutationPayload,
             refetchQueries: [
               {
-                query: GetServiceAccounts,
+                query: GetServiceAccountTokens,
                 variables: {
                   orgId: organisation!.id,
+                  id: serviceAccount.id,
                 },
               },
             ],

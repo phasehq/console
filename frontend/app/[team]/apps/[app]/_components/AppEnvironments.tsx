@@ -91,26 +91,33 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
         {appEnvironments?.map((env: EnvironmentType, index: number) => (
           <Card key={env.id}>
             <div className="group">
-              <div className="flex gap-4">
+              <div className="flex gap-2 xl:gap-4">
                 <div className="pt-1.5">
-                  <BsListColumnsReverse className="text-black dark:text-white text-2xl" />
+                  <BsListColumnsReverse className="text-black dark:text-white text-lg xl:text-xl" />
                 </div>
                 <div className="space-y-6 w-full min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <Link href={`${pathname}/environments/${env.id}`} className="group min-w-0">
-                      <div className="font-semibold text-lg truncate">{env.name}</div>
-                      <div className="text-neutral-500">
+                      <div className="font-semibold text-base xl:text-lg truncate">{env.name}</div>
+                      <div className="text-neutral-500 text-xs xl:text-sm">
                         {/* Text-based secrets and folder count on wider screens */}
                         <div className="hidden lg:block">
-                          {env.secretCount} secrets across {env.folderCount} folders
+                          {env.secretCount} secrets{' '}
+                          {env.folderCount! > 0 ? `across ${env.folderCount} folders` : ''}
                         </div>
                         {/* Icon-based secrets and folder count on narrower screens */}
                         <div className="flex items-center gap-3 lg:hidden">
-                          <div className="flex items-center gap-1.5" title={`${env.secretCount} secrets`}>
+                          <div
+                            className="flex items-center gap-1.5"
+                            title={`${env.secretCount} secrets`}
+                          >
                             <FaKey className="text-sm" />
                             <span>{env.secretCount}</span>
                           </div>
-                          <div className="flex items-center gap-1.5" title={`${env.folderCount} folders`}>
+                          <div
+                            className="flex items-center gap-1.5"
+                            title={`${env.folderCount} folders`}
+                          >
                             <FaFolder className="text-sm" />
                             <span>{env.folderCount}</span>
                           </div>
@@ -123,7 +130,9 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                   <div className="flex items-center">
                     <Link href={`${pathname}/environments/${env.id}`}>
                       <Button variant="primary">
-                        Explore <FaArrowRight />
+                        <div className="flex items-center gap-1 xl:gap-2 text-2xs xl:text-xs">
+                          Explore <FaArrowRight />
+                        </div>
                       </Button>
                     </Link>
                   </div>

@@ -29,6 +29,11 @@ import { ThemeContext } from '@/contexts/themeContext'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { FaArrowsRotate, FaCodeMerge, FaListCheck } from 'react-icons/fa6'
 import { userHasPermission } from '@/utils/access/permissions'
+import { KeyringContext } from '@/contexts/keyringContext'
+import { useSecretSearch } from '@/hooks/useSecretSearch'
+import debounce from 'lodash/debounce'
+import Spinner from './Spinner'
+import clsx from 'clsx'
 
 type CommandItem = {
   id: string
@@ -51,6 +56,7 @@ const CommandPalette: React.FC = () => {
   const router = useRouter()
   const { activeOrganisation, organisations } = useContext(organisationContext)
   const { theme, setTheme } = useContext(ThemeContext)
+  const { keyring } = useContext(KeyringContext)
 
   // Permission checks
   const userCanReadApps = userHasPermission(activeOrganisation?.role?.permissions, 'Apps', 'read')
@@ -109,7 +115,7 @@ const CommandPalette: React.FC = () => {
       name: 'Go to Integrations',
       description: 'Manage integrations',
       icon: <FaProjectDiagram />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations`),
+      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations/syncs`),
     },
     {
       id: 'go-pat',
@@ -251,6 +257,32 @@ const CommandPalette: React.FC = () => {
       ],
     })) || []
 
+  // Debounce helper for query input
+  const debouncedSetQuery = React.useMemo(() => debounce((val: string) => setQuery(val), 250), [])
+  React.useEffect(() => {
+    return () => {
+      debouncedSetQuery.cancel()
+    }
+  }, [debouncedSetQuery])
+
+  // Secret search hook (fetches/decrypts keys only when query is set)
+  const { results: secretResults, loading: secretLoading } = useSecretSearch(
+    query,
+    activeOrganisation?.id,
+    keyring
+  )
+
+  const secretCommands: CommandItem[] = secretResults.map((secret) => ({
+    id: secret.id,
+    name: secret.key,
+    description: `${secret.appName} • ${secret.envName} • ${secret.path}`,
+    icon: <FaKey />,
+    action: () =>
+      handleNavigation(
+        `/${activeOrganisation?.name}/apps/${secret.appId}/environments/${secret.envId}${secret.path === '/' ? '' : secret.path}?secret=${secret.id}`
+      ),
+  }))
+
   const allCommands: CommandGroup[] = [
     {
       name: 'Actions',
@@ -262,6 +294,15 @@ const CommandPalette: React.FC = () => {
       icon: <FaCompass />,
       items: navigationCommands,
     },
+    ...(secretCommands.length > 0
+      ? [
+          {
+            name: 'Secrets',
+            icon: <FaKey />,
+            items: secretCommands,
+          },
+        ]
+      : []),
     ...(appCommands.length > 0 ? appCommands : []),
     {
       name: 'Resources',
@@ -325,6 +366,27 @@ const CommandPalette: React.FC = () => {
     }, 100)
   }
 
+  function highlightMatch(text: string, query: string) {
+    if (!query) return [text]
+
+    const lowerText = text.toLowerCase()
+    const lowerQuery = query.toLowerCase()
+    const matchIndex = lowerText.indexOf(lowerQuery)
+
+    if (matchIndex === -1) return [text]
+
+    return [
+      text.slice(0, matchIndex),
+      <mark
+        key="highlight"
+        className="bg-emerald-200 dark:bg-emerald-400/20 text-inherit font-semibold"
+      >
+        {text.slice(matchIndex, matchIndex + query.length)}
+      </mark>,
+      text.slice(matchIndex + query.length),
+    ]
+  }
+
   return (
     <>
       <button
@@ -334,7 +396,7 @@ const CommandPalette: React.FC = () => {
         <div>
           <FaSearch className="h-4 w-4 flex-shrink-0" />
         </div>
-        <span className="flex-grow text-left truncate">Find something...</span>
+        <span className="flex-grow text-left truncate">Look up secrets...</span>
         <kbd className="flex-shrink-0 text-2xs text-zinc-400 dark:text-zinc-500">
           <kbd className="font-sans">{modifierKey}</kbd>
           <kbd className="font-sans"> + K</kbd>
@@ -380,8 +442,13 @@ const CommandPalette: React.FC = () => {
                 <Combobox.Input
                   className="w-full custom caret-emerald-400 border-0 rounded-xl bg-transparent pl-12 pr-4 py-3 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 focus:ring-0"
                   placeholder="Type a command or search..."
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => debouncedSetQuery(event.target.value)}
                 />
+                {secretLoading && (
+                  <div className="absolute right-4 top-0 bottom-0 flex items-center">
+                    <Spinner size="sm" color="neutral" />
+                  </div>
+                )}
               </div>
 
               {filteredCommands.length > 0 && (
@@ -416,10 +483,18 @@ const CommandPalette: React.FC = () => {
                                     {item.icon}
                                   </div>
                                   <div>
-                                    <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm">
-                                      {item.name}
+                                    <div
+                                      className={clsx(
+                                        'font-medium text-zinc-900 dark:text-zinc-100 text-sm',
+                                        group.name === 'Secrets' ? 'font-mono' : ''
+                                      )}
+                                    >
+                                      {highlightMatch(item.name, query)}
                                     </div>
-                                    <div className="text-zinc-500 text-xs">{item.description}</div>
+
+                                    <div className="text-zinc-500 dark:text-zinc-400 text-xs">
+                                      {highlightMatch(item.description, query)}
+                                    </div>
                                   </div>
                                 </div>
                                 <div>

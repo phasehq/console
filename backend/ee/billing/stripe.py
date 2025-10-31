@@ -76,5 +76,10 @@ def map_stripe_plan_to_tier(stripe_plan_id):
         or stripe_plan_id == settings.STRIPE["prices"]["pro_yearly"]
     ):
         return Organisation.PRO_PLAN
+    if (
+        stripe_plan_id == settings.STRIPE["prices"]["enterprise_monthly"]
+        or stripe_plan_id == settings.STRIPE["prices"]["enterprise_yearly"]
+    ):
+        return Organisation.ENTERPRISE_PLAN
     elif stripe_plan_id == settings.STRIPE["prices"]["free"]:
         return Organisation.FREE_PLAN

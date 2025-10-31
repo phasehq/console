@@ -86,7 +86,7 @@ const Sidebar = () => {
 
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth <= 950) {
+      if (window.innerWidth <= 1024) {
         setIsAutoCollapsed(true) // Auto-collapse
       } else {
         setIsAutoCollapsed(false) // Reset auto-collapse
@@ -231,9 +231,9 @@ const Sidebar = () => {
     },
     {
       name: 'Integrations',
-      href: `/${team}/integrations`,
+      href: `/${team}/integrations/syncs`,
       icon: <FaProjectDiagram />,
-      active: usePathname() === `/${team}/integrations`,
+      active: usePathname()?.split('/')[2] === `integrations`,
     },
     {
       name: 'Access Control',

@@ -1,4 +1,4 @@
-import { FaTrash } from 'react-icons/fa'
+import { FaTrash, FaTrashAlt } from 'react-icons/fa'
 import { DeleteServiceAccountOp } from '@/graphql/mutations/service-accounts/deleteServiceAccount.gql'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { useMutation } from '@apollo/client'
@@ -15,7 +15,7 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
-  const [deleteAccount] = useMutation(DeleteServiceAccountOp)
+  const [deleteAccount, { loading }] = useMutation(DeleteServiceAccountOp)
 
   const handleDelete = async () => {
     const deleted = await deleteAccount({
@@ -39,21 +39,22 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
     <GenericDialog
       title={`Delete ${account.name}`}
       buttonContent={
-        <>
-          <FaTrash /> Delete
-        </>
+        <span className="flex items-center gap-1">
+          <FaTrashAlt /> Delete
+        </span>
       }
       buttonVariant="danger"
       ref={dialogRef}
     >
       <div className="space-y-4">
         <div className="text-neutral-500 py-4">
-          Are you sure you want to delete this service account? This will delete all service tokens
-          associated with this account.
+          Are you sure you want to delete{' '}
+          <span className="text-zinc-900 dark:text-zinc-100">{account.name}</span>? This will delete
+          all service tokens associated with this account.
         </div>
         <div className="flex justify-end">
-          <Button variant="danger" onClick={handleDelete}>
-            <FaTrash /> Delete
+          <Button variant="danger" icon={FaTrashAlt} onClick={handleDelete} isLoading={loading}>
+            Delete
           </Button>
         </div>
       </div>

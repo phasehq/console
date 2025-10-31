@@ -1,15 +1,23 @@
 import re
 from django.db import transaction
 from django.apps import apps
-
-# from api.models import SecretFolder, Secret, ServerEnvironmentKey
-
+import logging
 from api.utils.crypto import (
     blake2b_digest,
     decrypt_asymmetric,
     env_keypair,
     get_server_keypair,
 )
+from api.utils.access.permissions import (
+    service_account_can_access_environment,
+    user_can_access_environment,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class SecretReferenceException(Exception):
+    pass
 
 
 def get_environment_keys(environment_id):
@@ -81,28 +89,27 @@ def create_environment_folder_structure(complete_path, environment_id):
 
     environment = Environment.objects.get(id=environment_id)
 
-    with transaction.atomic():
-        for i, segment in enumerate(path_segments):
-            # For each folder except the first, the path includes its parent's name
-            # For the first segment, current_path should remain "/" as its location
+    for i, segment in enumerate(path_segments):
+        # For each folder except the first, the path includes its parent's name
+        # For the first segment, current_path should remain "/" as its location
 
-            if i > 0:
-                current_path += (
-                    f"/{path_segments[i-1]}"
-                    if current_path != "/"
-                    else path_segments[i - 1]
-                )
-
-            # Check if the folder already exists at the current path and with the given name
-            folder, _ = SecretFolder.objects.get_or_create(
-                name=segment,
-                environment=environment,
-                folder=current_folder,
-                path=current_path,
+        if i > 0:
+            current_path += (
+                f"/{path_segments[i-1]}"
+                if current_path != "/"
+                else path_segments[i - 1]
             )
 
-            # Update the current_folder to the folder that was just created or found
-            current_folder = folder
+        # Check if the folder already exists at the current path and with the given name
+        folder, _ = SecretFolder.objects.get_or_create(
+            name=segment,
+            environment=environment,
+            folder=current_folder,
+            path=current_path,
+        )
+
+        # Update the current_folder to the folder that was just created or found
+        current_folder = folder
 
     return current_folder
 
@@ -137,7 +144,8 @@ def normalize_path_string(path):
 
 def check_for_duplicates_blind(secrets, environment):
     """
-    Checks if a list of secrets contains any duplicates internally or in the target env + path by checking each secret's key_digest
+    Checks if a list of secrets contains any duplicates internally or in the target env + path by checking each secret's key_digest.
+    Also checks key_map key_digest for DynamicSecret objects at the environment and path.
 
     Args:
         secrets (List[Dict]): The list of encrypted secrets to check for duplicates.
@@ -147,38 +155,59 @@ def check_for_duplicates_blind(secrets, environment):
         bool: True if a duplicate is found, False otherwise.
     """
     Secret = apps.get_model("api", "Secret")
+    DynamicSecret = apps.get_model("api", "DynamicSecret")
 
     processed_secrets = set()  # Set to store processed secrets
 
+    # --- Collect digests from input secrets ---
     for secret in secrets:
         if "keyDigest" in secret:
             try:
                 path = normalize_path_string(secret["path"])
             except:
                 path = "/"
+            processed_secrets.add((path, secret["keyDigest"]))
 
-            # Check if the secret is already processed
-            if (path, secret["keyDigest"]) in processed_secrets:
-                return True  # Found a duplicate within the list
-
-            # Check if the secret already exists in the database
+    # --- Check static secrets in DB ---
+    for secret in secrets:
+        if "keyDigest" in secret:
+            try:
+                path = normalize_path_string(secret["path"])
+            except:
+                path = "/"
             query_duplicates = Secret.objects.filter(
                 environment=environment,
                 path=path,
                 key_digest=secret["keyDigest"],
                 deleted_at=None,
             )
-
             if "id" in secret:
                 query_duplicates = query_duplicates.exclude(id=secret["id"])
-
             if query_duplicates.exists():
-                return True  # Found a duplicate in the database
+                return True
 
-            # Add the processed secret to the set
-            processed_secrets.add((path, secret["keyDigest"]))
+    # --- Check dynamic secrets key_map in DB ---
+    for secret in secrets:
+        try:
+            path = normalize_path_string(secret.get("path", "/"))
+        except:
+            path = "/"
+        dynamic_secrets_qs = DynamicSecret.objects.filter(
+            environment=environment,
+            path=path,
+            deleted_at=None,
+        )
+        exclude_id = secret.get("dynamic_secret_id")
+        if exclude_id:
+            dynamic_secrets_qs = dynamic_secrets_qs.exclude(id=exclude_id)
+        for dyn_secret in dynamic_secrets_qs:
+            key_map = dyn_secret.key_map or []
+            for entry in key_map:
+                key_digest = entry.get("key_digest")
+                if key_digest and (path, key_digest) in processed_secrets:
+                    return True
 
-    return False  # No duplicates found
+    return False
 
 
 def decompose_path_and_key(composed_key):
@@ -202,22 +231,26 @@ def decompose_path_and_key(composed_key):
     return normalize_path_string(path), key_name
 
 
-def decrypt_secret_value(secret):
+def decrypt_secret_value(secret, require_resolved_references=False, account=None):
     """
     Decrypts the given secret's value and resolves all references.
 
     Args:
         secret (Secret): The secret instance to decrypt.
+        require_resolved_references (bool): If True, raise an exception if any reference cannot be resolved.
+        account: (OrganisationMember | ServiceAccount): The account attempting to decrypt the secret value.
 
     Returns:
-        value (str): Decrypted secret value, with all local and cross env references replace inline.
+        value (str): Decrypted secret value, with all local and cross env/app references replaced inline.
     """
     Secret = apps.get_model("api", "Secret")
     Environment = apps.get_model("api", "Environment")
+    App = apps.get_model("api", "App")
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+    ServiceAccount = apps.get_model("api", "ServiceAccount")
 
-    # Regex patterns to detect refernces
-    cross_env_pattern = re.compile(r"\$\{(.+?)\.(.+?)\}")
+    # Regex patterns to detect references
+    cross_app_env_pattern = re.compile(r"\$\{(.+?)::(.+?)\.(.+?)\}")
     local_ref_pattern = re.compile(r"\$\{([^.]+?)\}")
 
     pk, sk = get_server_keypair()
@@ -225,6 +258,8 @@ def decrypt_secret_value(secret):
     server_env_key = ServerEnvironmentKey.objects.get(
         environment_id=secret.environment.id
     )
+
+    org = secret.environment.app.organisation
 
     app = server_env_key.environment.app
 
@@ -238,17 +273,47 @@ def decrypt_secret_value(secret):
     # Decrypt secret value
     value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
 
-    # Resolve cross-env references
-    cross_env_matches = re.findall(cross_env_pattern, value)
+    # Resolve cross-app and cross-env references
+    cross_app_env_matches = re.findall(cross_app_env_pattern, value)
+    unresolved_references = []
 
-    for ref_env, ref_key in cross_env_matches:
-
+    for ref_app, ref_env, ref_key in cross_app_env_matches:
         try:
             path, key_name = decompose_path_and_key(ref_key)
 
+            referenced_app = App.objects.get(name__iexact=ref_app, organisation=org)
+
             referenced_environment = Environment.objects.get(
-                name__iexact=ref_env, app=app
+                name__iexact=ref_env, app=referenced_app
             )
+
+            if account:
+                is_service_account = isinstance(account, ServiceAccount)
+
+                if is_service_account:
+                    if not service_account_can_access_environment(
+                        account.id, referenced_environment.id
+                    ):
+                        if require_resolved_references:
+                            raise SecretReferenceException(
+                                "This service account doesn't have permission to read secrets in one or more referenced environments."
+                            )
+                        else:
+
+                            return value
+
+                else:
+                    if not user_can_access_environment(
+                        account.userId, referenced_environment.id
+                    ):
+                        if require_resolved_references:
+                            raise SecretReferenceException(
+                                "You don't have permission to read secrets in one or more referenced environments."
+                            )
+                        else:
+
+                            return value
+
             referenced_environment_key = ServerEnvironmentKey.objects.get(
                 environment_id=referenced_environment.id
             )
@@ -276,18 +341,40 @@ def decrypt_secret_value(secret):
                 referenced_env_pubkey,
             )
 
-            value = value.replace(f"${{{ref_env}.{ref_key}}}", referenced_secret_value)
-        except:
-            print(
-                f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
+            value = value.replace(
+                f"${{{ref_app}::{ref_env}.{ref_key}}}", referenced_secret_value
             )
-            pass
+        except App.DoesNotExist:
+            unresolved_references.append(
+                f"The referenced app '{ref_app}' does not exist"
+            )
+        except App.MultipleObjectsReturned:
+            unresolved_references.append(
+                f"Could not resolve a cross-app reference because two or more apps named '{ref_app}' exist!"
+            )
+        except ServerEnvironmentKey.DoesNotExist:
+            unresolved_references.append(
+                f"The referenced app '{ref_app}' does not have SSE (Server-Side Encryption) enabled."
+            )
+        except Environment.DoesNotExist:
+            unresolved_references.append(
+                f"The referenced environment '{ref_env}' does not exist"
+            )
+        except Secret.DoesNotExist:
+            unresolved_references.append(
+                f"The referenced secret does not exist in '{ref_app}::{ref_env}' at the requested path"
+            )
+        except Exception as ex:
+            unresolved_references.append(str(ex))
+
+    if require_resolved_references and unresolved_references:
+        raise SecretReferenceException("\n".join(unresolved_references))
 
     # Resolve local references
     local_ref_matches = re.findall(local_ref_pattern, value)
+    unresolved_local_references = []
 
     for ref_key in local_ref_matches:
-
         try:
             path, key_name = decompose_path_and_key(ref_key)
 
@@ -311,9 +398,11 @@ def decrypt_secret_value(secret):
                 referenced_secret_value,
             )
         except:
-            print(
-                f"Warning: The referenced environment or key either does not exist or the server does not have access to it."
+            unresolved_local_references.append(
+                f"The referenced key {ref_key} does not exist in the {secret.environment.name} environment."
             )
-            pass
+
+    if require_resolved_references and unresolved_local_references:
+        raise SecretReferenceException("\n".join(unresolved_local_references))
 
     return value

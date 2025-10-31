@@ -4,7 +4,18 @@ export const isCloudHosted = () => {
   )
 }
 
-export const getHostname = () => `${window.location.protocol}//${window.location.host}`
+export const getHostname = () => {
+  if (typeof window !== 'undefined') {
+    // Client-side: use window.location
+    return `${window.location.protocol}//${window.location.host}`
+  }
+
+  // Server-side: use NEXTAUTH_URL environment variable
+  return process.env.NEXTAUTH_URL
+    ? `${process.env.NEXTAUTH_URL}`
+    : ''
+}
+
 
 export const getApiHost = () => {
   return isCloudHosted() ? 'https://api.phase.dev' : `${getHostname()}/service/public`

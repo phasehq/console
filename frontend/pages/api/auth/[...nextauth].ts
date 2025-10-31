@@ -3,17 +3,24 @@ import type { NextAuthOptions } from 'next-auth'
 import GitHubProvider from 'next-auth/providers/github'
 import GoogleProvider from 'next-auth/providers/google'
 import GitlabProvider from 'next-auth/providers/gitlab'
+import AuthentikProvider from 'next-auth/providers/authentik'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { getSecret } from '@/utils/secretConfig'
 import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvider'
 import { EntraIDProvider } from '@/ee/authentication/sso/oidc/util/entraidProvider'
+import GitHubEnterpriseProvider from '@/ee/authentication/sso/oidc/util/githubEnterpriseProvider'
+import { custom } from 'openid-client'
 
 type AccessTokenResponse = {
   access_token: string
   refresh_token: string
 }
+
+custom.setHttpOptionsDefaults({
+  timeout: 10000, // ms
+})
 
 type NextAuthOptionsCallback = (req: NextApiRequest, res: NextApiResponse) => NextAuthOptions
 
@@ -39,6 +46,35 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
         GitHubProvider({
           clientId: process.env.GITHUB_CLIENT_ID,
           clientSecret: clientSecret,
+        })
+      )
+    }
+  }
+
+  if (process.env.GITHUB_ENTERPRISE_CLIENT_ID) {
+    const clientSecret = getSecret('GITHUB_ENTERPRISE_CLIENT_SECRET')
+    if (clientSecret) {
+      const baseUrl = process.env.GITHUB_ENTERPRISE_BASE_URL
+      const apiBase = `${process.env.GITHUB_ENTERPRISE_API_URL}/v3`
+
+      providers.push(
+        GitHubEnterpriseProvider({
+          clientId: process.env.GITHUB_ENTERPRISE_CLIENT_ID,
+          clientSecret,
+          authorization: {
+            url: `${baseUrl}/login/oauth/authorize`,
+            params: { scope: 'read:user user:email' },
+          },
+          token: `${baseUrl}/login/oauth/access_token`,
+          userinfo: `${apiBase}/user`,
+          profile(profile) {
+            return {
+              id: profile.id.toString(),
+              name: profile.name ?? profile.login,
+              email: profile.email,
+              image: profile.avatar_url,
+            }
+          },
         })
       )
     }
@@ -132,6 +168,19 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     }
   }
 
+  if (process.env.AUTHENTIK_CLIENT_ID) {
+    const clientSecret = getSecret('AUTHENTIK_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        AuthentikProvider({
+          clientId: process.env.AUTHENTIK_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: `${process.env.AUTHENTIK_URL}/application/o/${process.env.AUTHENTIK_APP_SLUG}`,
+        })
+      )
+    }
+  }
+
   return {
     secret: process.env.NEXTAUTH_SECRET,
     session: {
@@ -170,7 +219,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
                 access_token: id_token,
                 id_token: id_token,
               }
-            } else if (account.provider === 'github') {
+            } else if (account.provider === 'github' || account.provider === 'github-enterprise') {
               const { access_token } = account
               loginPayload = {
                 access_token: access_token,
@@ -183,7 +232,8 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
             } else if (
               account.provider === 'google-oidc' ||
               account.provider === 'jumpcloud-oidc' ||
-              account.provider === 'entra-id-oidc'
+              account.provider === 'entra-id-oidc' ||
+              account.provider === 'authentik'
             ) {
               const { access_token, id_token } = account
               if (!id_token) {

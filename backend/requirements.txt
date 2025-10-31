@@ -16,7 +16,7 @@ crontab==1.0.1
 cryptography==44.0.1
 defusedxml==0.7.1
 dj-rest-auth==7.0.1
-Django==4.2.16
+Django==4.2.25
 django-allauth==65.4.1
 django-cors-headers==3.14.0
 django-filter==23.1
@@ -28,7 +28,7 @@ graphene==3.2.1
 graphene-django==3.0.0
 graphql-core==3.2.3
 graphql-relay==3.2.0
-gunicorn==22.0.0
+gunicorn==23.0.0
 hvac==2.1.0
 hyperlink==21.0.0
 idna==3.4

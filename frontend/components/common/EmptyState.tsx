@@ -3,7 +3,7 @@ import { ReactNode } from 'react'
 export const EmptyState = (props: {
   children: ReactNode
   title: string
-  subtitle: string
+  subtitle: ReactNode
   graphic?: ReactNode
 }) => {
   const { children, title, subtitle, graphic } = props

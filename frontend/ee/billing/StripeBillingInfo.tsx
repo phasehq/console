@@ -25,7 +25,6 @@ import {
   SiMastercard,
   SiVisa,
 } from 'react-icons/si'
-
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
 import { Alert } from '@/components/common/Alert'
@@ -33,6 +32,8 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import { AddPaymentMethodDialog, AddPaymentMethodForm } from './AddPaymentMethodForm'
+import { ModifySubscriptionDialog } from './ModifySubscriptionDialog'
+import { StripeCustomerPortalLink } from './StripeCustomerPortalLink'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
@@ -328,7 +329,7 @@ const ManagePaymentMethodsDialog = () => {
           ))}
         </div>
 
-        {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr && (
+        {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
           <div className="flex justify-end">
             <AddPaymentMethodDialog onSuccess={refetchSubscription} />
           </div>
@@ -414,19 +415,25 @@ export const StripeBillingInfo = () => {
     const classMap: Record<string, string> = {
       free: 'border-t-neutral-500', // For free plan
       pro_active: 'border-t-emerald-500', // For active pro plan
-      pro_cancelled: 'border-t-amber-500', // For cancelled pro plan
+      enterprise_active: 'border-t-emerald-500', // For active pro plan
+      cancelled: 'border-t-amber-500', // For cancelled pro plan
     }
 
     if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr) {
       return classMap.free
     } else if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr) {
       if (subscriptionData?.cancelAtPeriodEnd) {
-        return classMap.pro_cancelled
+        return classMap.cancelled
       } else {
         return classMap.pro_active
       }
+    } else if (activeOrganisation?.plan === ApiOrganisationPlanChoices.En) {
+      if (subscriptionData?.cancelAtPeriodEnd) {
+        return classMap.cancelled
+      } else {
+        return classMap.enterprise_active
+      }
     }
-
     return '' // Default case if no condition matches
   }
 
@@ -492,17 +499,25 @@ export const StripeBillingInfo = () => {
           )}
 
           {userCanUpdateBilling && (
-            <div className="flex items-center gap-2">
-              <ManagePaymentMethodsDialog />
-              {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
-                <div>
-                  {!subscriptionData.cancelAtPeriodEnd ? (
-                    <CancelSubscriptionDialog subscriptionId={subscriptionData?.subscriptionId!} />
-                  ) : (
-                    <ResumeSubscription subscriptionData={subscriptionData} />
-                  )}
-                </div>
-              )}
+            <div className="flex flex-col items-end gap-4">
+              <div className="flex items-center gap-2">
+                {/* {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr && <UpsellDialog />} */}
+                {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
+                  <div className="flex items-center justify-end gap-4">
+                    {!subscriptionData.cancelAtPeriodEnd && <ModifySubscriptionDialog />}
+                    {!subscriptionData.cancelAtPeriodEnd ? (
+                      <CancelSubscriptionDialog
+                        subscriptionId={subscriptionData?.subscriptionId!}
+                      />
+                    ) : (
+                      <ResumeSubscription subscriptionData={subscriptionData} />
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <StripeCustomerPortalLink />
+              </div>
             </div>
           )}
         </div>

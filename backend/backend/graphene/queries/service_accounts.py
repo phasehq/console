@@ -13,7 +13,7 @@ def resolve_service_accounts(root, info, org_id, service_account_id=None):
     org = Organisation.objects.get(id=org_id)
     if user_has_permission(info.context.user.userId, "read", "ServiceAccounts", org):
 
-        filter = {"organisation": org}
+        filter = {"organisation": org, "deleted_at": None}
 
         if service_account_id is not None:
             filter["id"] = service_account_id
@@ -50,9 +50,7 @@ def resolve_app_service_accounts(root, info, app_id):
     if not user_has_permission(
         info.context.user, "read", "ServiceAccounts", app.organisation, True
     ):
-        raise GraphQLError(
-            "You don't have permission to read service accounts in this App"
-        )
+        return []
 
     if not user_can_access_app(info.context.user.userId, app_id):
         raise GraphQLError("You don't have access to this app")

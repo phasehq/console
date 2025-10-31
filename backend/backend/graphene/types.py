@@ -4,6 +4,8 @@ from api.utils.access.permissions import (
     user_can_access_environment,
     user_has_permission,
 )
+from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_secrets
+from ee.integrations.secrets.dynamic.graphene.types import DynamicSecretType
 from backend.quotas import PLAN_CONFIG
 import graphene
 from enum import Enum
@@ -12,12 +14,14 @@ from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
     CustomUser,
+    DynamicSecret,
     Environment,
     EnvironmentKey,
     EnvironmentSync,
     EnvironmentSyncEvent,
     EnvironmentToken,
     Lockbox,
+    NetworkAccessPolicy,
     Organisation,
     App,
     OrganisationMember,
@@ -29,18 +33,19 @@ from api.models import (
     SecretEvent,
     SecretFolder,
     SecretTag,
-    ServerEnvironmentKey,
     ServiceAccount,
     ServiceAccountHandler,
     ServiceAccountToken,
     ServiceToken,
     UserToken,
+    Identity,
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
 from datetime import datetime
 from api.utils.access.roles import default_roles
 from graphql import GraphQLError
+from itertools import chain
 
 
 class SeatsUsed(ObjectType):
@@ -54,6 +59,7 @@ class OrganisationPlanType(ObjectType):
     max_users = graphene.Int()
     max_apps = graphene.Int()
     max_envs_per_app = graphene.Int()
+    seat_limit = graphene.Int()
     seats_used = graphene.Field(SeatsUsed)
     app_count = graphene.Int()
 
@@ -167,6 +173,10 @@ class OrganisationMemberType(DjangoObjectType):
     avatar_url = graphene.String()
     role = graphene.Field(RoleType)
     self = graphene.Boolean()
+    last_login = graphene.DateTime()
+    app_memberships = graphene.List(graphene.NonNull(lambda: AppMembershipType))
+    tokens = graphene.List(graphene.NonNull(lambda: UserTokenType))
+    network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
 
     class Meta:
         model = OrganisationMember
@@ -206,6 +216,60 @@ class OrganisationMemberType(DjangoObjectType):
     def resolve_self(self, info):
         return self.user == info.context.user
 
+    def resolve_last_login(self, info):
+        return self.user.last_login
+
+    def resolve_app_memberships(self, info):
+        # Find all EnvironmentKeys for this user
+        user_env_keys = EnvironmentKey.objects.filter(
+            user=self, deleted_at=None
+        ).select_related("environment__app")
+
+        # Get unique app IDs the user has access to
+        app_ids = set(key.environment.app.id for key in user_env_keys)
+        apps = App.objects.filter(id__in=app_ids)
+
+        # Create a dictionary to store accessible environments per app
+        app_envs_map = {app_id: set() for app_id in app_ids}
+        for key in user_env_keys:
+            app_envs_map[key.environment.app.id].add(key.environment.id)
+
+        filtered_apps = []
+        for app in apps:
+            # Fetch all environments for the current app
+            all_app_environments = Environment.objects.filter(app=app).order_by("index")
+            # Filter environments to only those the user has access to
+            accessible_environment_ids = app_envs_map.get(app.id, set())
+            app.filtered_environments = [
+                env
+                for env in all_app_environments
+                if env.id in accessible_environment_ids
+            ]
+            filtered_apps.append(app)
+
+        return filtered_apps
+
+    def resolve_tokens(self, info):
+        # Check using the new permission name
+        can_view_tokens = user_has_permission(
+            info.context.user, "read", "MemberPersonalAccessTokens", self.organisation
+        )
+
+        if not can_view_tokens and self.user != info.context.user:
+            return []
+
+        return UserToken.objects.filter(user=self, deleted_at=None).order_by(
+            "-created_at"
+        )
+
+    def resolve_network_policies(self, info):
+        global_policies = NetworkAccessPolicy.objects.filter(
+            organisation=self.organisation, is_global=True
+        )
+        account_policies = self.network_policies.all()
+
+        return list(chain(account_policies, global_policies))
+
 
 class OrganisationMemberInviteType(DjangoObjectType):
     class Meta:
@@ -217,6 +281,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
             "valid",
             "organisation",
             "apps",
+            "role",
             "created_at",
             "updated_at",
             "expires_at",
@@ -240,8 +305,9 @@ class ServiceAccountTokenType(DjangoObjectType):
     def resolve_last_used(self, info):
         event = (
             SecretEvent.objects.filter(service_account_token=self)
-            .order_by("timestamp")
-            .last()
+            .order_by("-timestamp")
+            .only("timestamp")
+            .first()
         )
         if event:
             return event.timestamp
@@ -262,6 +328,14 @@ class ProviderType(graphene.ObjectType):
         graphene.NonNull(graphene.String), required=True
     )
     auth_scheme = graphene.String()
+
+
+class IdentityProviderType(graphene.ObjectType):
+    id = graphene.String(required=True)
+    name = graphene.String(required=True)
+    description = graphene.String(required=True)
+    icon_id = graphene.String(required=True)
+    supported = graphene.Boolean(required=True)
 
 
 class ServiceType(ObjectType):
@@ -326,7 +400,10 @@ class SecretFolderType(DjangoObjectType):
         return SecretFolder.objects.filter(folder=self).count()
 
     def resolve_secret_count(self, info):
-        return Secret.objects.filter(folder=self).count()
+        return (
+            Secret.objects.filter(folder=self).count()
+            + DynamicSecret.objects.filter(folder=self, deleted_at=None).count()
+        )
 
 
 class SecretEventType(DjangoObjectType):
@@ -434,7 +511,12 @@ class SecretType(DjangoObjectType):
 
 class EnvironmentType(DjangoObjectType):
     folders = graphene.NonNull(graphene.List(SecretFolderType))
-    secrets = graphene.NonNull(graphene.List(SecretType))
+    secrets = graphene.NonNull(
+        graphene.List(SecretType), path=graphene.String(required=False)
+    )
+    dynamic_secrets = graphene.NonNull(
+        graphene.List(DynamicSecretType), path=graphene.String(required=False)
+    )
     folder_count = graphene.Int()
     secret_count = graphene.Int()
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
@@ -457,7 +539,7 @@ class EnvironmentType(DjangoObjectType):
             "updated_at",
         )
 
-    def resolve_secrets(self, info, path="/"):
+    def resolve_secrets(self, info, path=None):
 
         org = self.app.organisation
         if not user_has_permission(
@@ -472,10 +554,14 @@ class EnvironmentType(DjangoObjectType):
 
         filter = {"environment": self, "deleted_at": None}
 
-        if path:
+        if path is not None:
             filter["path"] = path
 
         return Secret.objects.filter(**filter).order_by("-created_at")
+
+    def resolve_dynamic_secrets(self, info, path=None):
+        # Reuse the existing resolver from queries.py
+        return resolve_dynamic_secrets(root=None, info=info, env_id=self.id, path=path)
 
     def resolve_folders(self, info, path=None):
         if not user_can_access_environment(info.context.user.userId, self.id):
@@ -492,7 +578,10 @@ class EnvironmentType(DjangoObjectType):
         return SecretFolder.objects.filter(environment=self).count()
 
     def resolve_secret_count(self, info):
-        return Secret.objects.filter(environment=self, deleted_at=None).count()
+        return (
+            Secret.objects.filter(environment=self, deleted_at=None).count()
+            + DynamicSecret.objects.filter(environment=self, deleted_at=None).count()
+        )
 
     def resolve_wrapped_seed(self, info):
         org_member = OrganisationMember.objects.get(
@@ -544,6 +633,7 @@ class AppType(DjangoObjectType):
             "identity_key",
             "wrapped_key_share",
             "created_at",
+            "updated_at",
             "app_token",
             "app_seed",
             "app_version",
@@ -572,16 +662,50 @@ class AppType(DjangoObjectType):
             ).exists()
         ]
 
+    def resolve_updated_at(self, info):
+        app_updated_at = self.updated_at
+
+        # Get the latest updated_at from environments
+        environments = self.environments.all()
+        latest_environment_updated_at = None
+        if environments.exists():
+            latest_environment_updated_at = max(env.updated_at for env in environments)
+
+        # Return the most recent updated_at between app and its environments
+        return (
+            max(app_updated_at, latest_environment_updated_at)
+            if latest_environment_updated_at
+            else app_updated_at
+        )
+
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)
 
 
+class AppMembershipType(DjangoObjectType):
+    environments = graphene.NonNull(graphene.List(EnvironmentType))
+
+    class Meta:
+        model = App
+        fields = (
+            "id",
+            "name",
+            "sse_enabled",
+        )
+
+    def resolve_environments(self, info):
+        # Only return filtered environments if set
+        return getattr(self, "filtered_environments", [])
+
+
 class ServiceAccountType(DjangoObjectType):
 
-    third_party_auth_enabled = graphene.Boolean()
+    server_side_key_management_enabled = graphene.Boolean()
     handlers = graphene.List(ServiceAccountHandlerType)
     tokens = graphene.List(ServiceAccountTokenType)
-    app_memberships = graphene.List(graphene.NonNull(AppType))
+    app_memberships = graphene.List(graphene.NonNull(AppMembershipType))
+    network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
+    identities = graphene.List(graphene.NonNull(lambda: IdentityType))
 
     class Meta:
         model = ServiceAccount
@@ -592,9 +716,10 @@ class ServiceAccountType(DjangoObjectType):
             "identity_key",
             "created_at",
             "updated_at",
+            "deleted_at",
         )
 
-    def resolve_third_party_auth_enabled(self, info):
+    def resolve_server_side_key_management_enabled(self, info):
         return (
             self.server_wrapped_keyring is not None
             and self.server_wrapped_recovery is not None
@@ -604,7 +729,7 @@ class ServiceAccountType(DjangoObjectType):
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
-        return ServiceAccountToken.objects.filter(service_account=self)
+        return ServiceAccountToken.objects.filter(service_account=self, deleted_at=None)
 
     def resolve_app_memberships(self, info):
         # Fetch all apps that this service account is related to
@@ -631,6 +756,17 @@ class ServiceAccountType(DjangoObjectType):
             filtered_apps.append(app)
 
         return filtered_apps
+
+    def resolve_network_policies(self, info):
+        global_policies = NetworkAccessPolicy.objects.filter(
+            organisation=self.organisation, is_global=True
+        )
+        account_policies = self.network_policies.all()
+
+        return list(chain(account_policies, global_policies))
+
+    def resolve_identities(self, info):
+        return self.identities.filter(deleted_at=None)
 
 
 class EnvironmentKeyType(DjangoObjectType):
@@ -704,6 +840,8 @@ class ProviderCredentialsType(DjangoObjectType):
 
 
 class UserTokenType(DjangoObjectType):
+    created_by = graphene.Field(lambda: OrganisationMemberType)
+
     class Meta:
         model = UserToken
         fields = (
@@ -715,7 +853,22 @@ class UserTokenType(DjangoObjectType):
             "created_at",
             "updated_at",
             "expires_at",
+            "created_by",
         )
+
+    def resolve_created_by(self, info):
+        # Check using the new permission name
+        can_view_creator = user_has_permission(
+            info.context.user,
+            "read",
+            "MemberPersonalAccessTokens",
+            self.user.organisation,
+        )
+
+        if not can_view_creator and self.user.user != info.context.user:
+            return None
+
+        return self.user
 
 
 class ServiceTokenType(DjangoObjectType):
@@ -791,9 +944,14 @@ class TimeRange(Enum):
     ALL_TIME = "allTime"
 
 
-class LogsResponseType(ObjectType):
-    kms = graphene.List(KMSLogType)
-    secrets = graphene.List(SecretEventType)
+class KMSLogsResponseType(ObjectType):
+    logs = graphene.List(KMSLogType)
+    count = graphene.Int()
+
+
+class SecretLogsResponseType(ObjectType):
+    logs = graphene.List(SecretEventType)
+    count = graphene.Int()
 
 
 class LockboxType(DjangoObjectType):
@@ -845,3 +1003,59 @@ class ActivatedPhaseLicenseType(DjangoObjectType):
     class Meta:
         model = ActivatedPhaseLicense
         fields = "__all__"
+
+
+class NetworkAccessPolicyType(DjangoObjectType):
+    organisation_members = graphene.List(
+        graphene.NonNull(lambda: OrganisationMemberType)
+    )
+    service_accounts = graphene.List(graphene.NonNull(lambda: ServiceAccountType))
+
+    class Meta:
+        model = NetworkAccessPolicy
+        fields = "__all__"
+
+
+class AWSValidationResultType(graphene.ObjectType):
+    valid = graphene.Boolean(required=True)
+    message = graphene.String(required=True)
+    method = graphene.String()
+    error = graphene.String()
+    assumed_role_arn = graphene.String()
+
+
+class AwsIamConfigType(graphene.ObjectType):
+    trusted_principals = graphene.List(graphene.String)
+    signature_ttl_seconds = graphene.Int()
+    sts_endpoint = graphene.String()
+
+
+class IdentityConfigUnion(graphene.Union):
+    class Meta:
+        types = (AwsIamConfigType,)
+
+
+class IdentityType(DjangoObjectType):
+    config = graphene.Field(IdentityConfigUnion)
+
+    class Meta:
+        model = Identity
+        fields = "__all__"
+
+    def resolve_config(self, info):
+        """Map provider-specific config into typed objects"""
+        provider = (self.provider or '').lower()
+        cfg = self.config or {}
+        
+        if provider == 'aws_iam':
+            try:
+                ttl = int(cfg.get('signatureTtlSeconds', 60))
+            except Exception:
+                ttl = 60
+            return AwsIamConfigType(
+                trusted_principals=self.get_trusted_list(),
+                signature_ttl_seconds=ttl,
+                sts_endpoint=cfg.get('stsEndpoint'),
+            )
+        
+        return None

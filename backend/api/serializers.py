@@ -1,16 +1,23 @@
 from api.utils.crypto import decrypt_asymmetric
 
-from api.utils.secrets import decrypt_secret_value, get_environment_keys
+from api.utils.secrets import (
+    SecretReferenceException,
+    decrypt_secret_value,
+    get_environment_keys,
+)
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 from .models import (
     CustomUser,
     Environment,
     EnvironmentKey,
     Lockbox,
     Organisation,
+    OrganisationMember,
     Secret,
-    ServerEnvironmentKey,
+    ServiceAccount,
     ServiceToken,
+    ServiceAccountToken,
     UserToken,
     PersonalSecret,
 )
@@ -52,6 +59,59 @@ class OrganisationSerializer(serializers.ModelSerializer):
             return Organisation(**validated_data)
 
 
+class OrganisationMemberSerializer(serializers.ModelSerializer):
+
+    username = serializers.CharField(source="user.username", read_only=True)
+    full_name = serializers.SerializerMethodField()
+    email = serializers.EmailField(source="user.email", read_only=True)
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganisationMember
+        fields = [
+            "id",
+            "username",
+            "full_name",
+            "email",
+            "role",
+        ]
+        read_only_fields = fields
+
+    def get_full_name(self, obj):
+        social_acc = obj.user.socialaccount_set.first()
+        if social_acc:
+            return social_acc.extra_data.get("name")
+        return None
+
+    def get_role(self, obj):
+        r = getattr(obj, "role", None)
+        if not r:
+            return None
+        return {"id": r.id, "name": r.name}
+
+
+class ServiceAccountSerializer(serializers.ModelSerializer):
+
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServiceAccount
+        fields = [
+            "id",
+            "name",
+            "role",
+        ]
+        read_only_fields = fields
+
+    def get_role(self, obj):
+        if not obj.role:
+            return None
+        return {
+            "id": obj.role.id,
+            "name": obj.role.name,
+        }
+
+
 class PersonalSecretSerializer(serializers.ModelSerializer):
     value = serializers.SerializerMethodField()
 
@@ -74,6 +134,7 @@ class SecretSerializer(serializers.ModelSerializer):
     comment = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
 
     class Meta:
         model = Secret
@@ -88,8 +149,13 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_value(self, obj):
         if self.context.get("sse"):
-            value = decrypt_secret_value(obj)
-            return value
+            account = self.context.get("account")
+
+            try:
+                value = decrypt_secret_value(obj, False, account)
+                return value
+            except SecretReferenceException as e:
+                raise PermissionDenied(str(e))
         return obj.value
 
     def get_comment(self, obj):
@@ -118,11 +184,14 @@ class SecretSerializer(serializers.ModelSerializer):
                 return None
         return None
 
+    def get_type(self, obj):
+        return "static"
+
 
 class EnvironmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Environment
-        fields = ["id", "name", "env_type"]
+        fields = ["id", "name", "env_type", "index", "created_at", "updated_at"]
 
 
 class EnvironmentKeySerializer(serializers.ModelSerializer):
@@ -239,7 +308,7 @@ class ServiceAccountTokenSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = UserToken
+        model = ServiceAccountToken
         fields = [
             "wrapped_key_share",
             "account_id",
