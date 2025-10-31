@@ -48,7 +48,7 @@
     "react-icons": "^5.5.0",
     "@types/react-icons": "^3.0.0",
     "react-toastify": "^10.0.4",
-    "reaviz": "^15.19.1",
+    "reaviz": "^16.1.0",
     "sass": "^1.70.0",
     "typescript": "5.3.3",
     "zxcvbn": "^4.4.2",
