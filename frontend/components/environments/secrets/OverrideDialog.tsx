@@ -1,9 +1,8 @@
 import { Dialog, Switch, Transition } from '@headlessui/react'
 import { Button } from '../../common/Button'
-import { EnvironmentType, PersonalSecretType } from '@/apollo/graphql'
+import { EnvironmentType, Maybe, PersonalSecretType } from '@/apollo/graphql'
 import { encryptAsymmetric } from '@/utils/crypto'
 import { useMutation } from '@apollo/client'
-import { Maybe } from '@graphql-tools/utils'
 import clsx from 'clsx'
 import { useState, useEffect, Fragment } from 'react'
 import { FaUserEdit, FaTimes, FaTrash } from 'react-icons/fa'
@@ -114,7 +113,9 @@ export const OverrideDialog = (props: {
             activeOverride ? 'A Personal Secret is overriding this value' : 'Override this value'
           }
         >
-          <FaUserEdit className={clsx(activeOverride && 'text-amber-500')} />{' '}
+          <span className="py-1">
+            <FaUserEdit className={clsx('shrink-0', activeOverride && 'text-amber-500')} />
+          </span>
           <span className={clsx('hidden 2xl:block text-xs', activeOverride && 'text-amber-500')}>
             Override
           </span>

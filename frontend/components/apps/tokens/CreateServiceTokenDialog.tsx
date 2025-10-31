@@ -6,15 +6,6 @@ import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { CliCommand } from '@/components/dashboard/CliCommand'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { cryptoUtils } from '@/utils/auth'
-import {
-  newEnvToken,
-  newEnvWrapKey,
-  newServiceTokenKeys,
-  unwrapEnvSecretsForUser,
-  wrapEnvSecretsForServiceToken,
-} from '@/utils/environments'
-import { splitSecret } from '@/utils/keyshares'
 import { useQuery, useLazyQuery, useMutation } from '@apollo/client'
 import { Dialog, Tab, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -28,15 +19,31 @@ import Link from 'next/link'
 import { ExpiryOptionT, humanReadableExpiry, tokenExpiryOptions } from '@/utils/tokens'
 import { getApiHost } from '@/utils/appConfig'
 import { EnableSSEDialog } from '../EnableSSEDialog'
+import {
+  newEnvToken,
+  newEnvWrapKey,
+  newServiceTokenKeys,
+  splitSecret,
+  getWrappedKeyShare,
+  unwrapEnvSecretsForUser,
+  wrapEnvSecretsForServiceToken,
+} from '@/utils/crypto'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
 }
 
 export const CreateServiceTokenDialog = (props: { organisationId: string; appId: string }) => {
-  const { organisationId, appId } = props
+  const { appId } = props
 
+  const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
+
+  const userCanReadEnvironments = organisation
+    ? userHasPermission(organisation.role?.permissions, 'Environments', 'read', true)
+    : false
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')
@@ -51,6 +58,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
     variables: {
       appId,
     },
+    skip: !userCanReadEnvironments,
   })
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
   const [createServiceToken] = useMutation(CreateNewServiceToken)
@@ -97,7 +105,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
 
       const tokenKeys = await newServiceTokenKeys()
       const keyShares = await splitSecret(tokenKeys.privateKey)
-      const wrappedKeyShare = await cryptoUtils.wrappedKeyShare(keyShares[1], wrapKey)
+      const wrappedKeyShare = await getWrappedKeyShare(keyShares[1], wrapKey)
 
       const pssService = `pss_service:v1:${token}:${tokenKeys.publicKey}:${keyShares[0]}:${wrapKey}`
 

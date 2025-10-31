@@ -1,3 +1,5 @@
+import { OrganisationMemberInviteType } from '@/apollo/graphql'
+
 const units: { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
   { unit: 'year', ms: 31536000000 },
   { unit: 'month', ms: 2628000000 },
@@ -66,4 +68,36 @@ export const getUnixTimeStampinFuture = (
 export const dateToUnixTimestamp = (dateString: string): number => {
   const dateObj = new Date(dateString)
   return Math.floor(dateObj.getTime())
+}
+
+export const inviteIsExpired = (invite: OrganisationMemberInviteType) => {
+  return new Date(invite.expiresAt) < new Date()
+}
+
+/**
+ * Returns a human-readable duration string from a duration in seconds.
+ *
+ * @param {number} seconds - duration in seconds
+ * @returns {string} - human-readable duration (e.g., "1d 2h", "3h 15m", "45m", "30s")
+ */
+export const humanReadableDuration = (seconds: number): string => {
+  if (seconds < 60) {
+    return `${seconds}s`
+  }
+
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) {
+    const remainingHours = hours % 24
+    return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`
+  }
+
+  if (hours > 0) {
+    const remainingMinutes = minutes % 60
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+  }
+
+  return `${minutes}m`
 }

@@ -1,5 +1,15 @@
-mutation UpdateEnvScope($memberId: ID!, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {
-  updateMemberEnvironmentScope(memberId: $memberId, appId: $appId, envKeys: $envKeys) {
+mutation UpdateEnvScope(
+  $memberId: ID!
+  $memberType: MemberType
+  $appId: ID!
+  $envKeys: [EnvironmentKeyInput]
+) {
+  updateMemberEnvironmentScope(
+    memberId: $memberId
+    memberType: $memberType
+    appId: $appId
+    envKeys: $envKeys
+  ) {
     app {
       id
     }

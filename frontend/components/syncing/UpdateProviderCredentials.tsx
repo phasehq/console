@@ -10,7 +10,7 @@ import { toast } from 'react-toastify'
 import { Input } from '@/components/common/Input'
 import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/general'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission } from '@/utils/access/permissions'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
@@ -67,9 +67,17 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
     toast.success('Saved credentials')
   }
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const allowEdit = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'update'
+  )
 
-  const allowEdit = activeUserIsAdmin
+  const allowDelete = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'delete'
+  )
 
   return (
     <div className="space-y-4 w-full pt-4">
@@ -90,38 +98,37 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
         disabled={!allowEdit}
       />
 
-      {credential.provider?.expectedCredentials
-        .filter((credential) => credential !== 'region')
-        .map((credential: string) => (
+      {/* Render all expected and optional credential fields (except region which has special handling) */}
+      {credential.provider?.expectedCredentials.concat(credential.provider?.optionalCredentials || []).filter(field => field !== 'region').map((credentialKey: string) => {
+        const isRequired = credential.provider?.expectedCredentials.includes(credentialKey) ?? false
+        const isOptional = credential.provider?.optionalCredentials?.includes(credentialKey) ?? false
+        
+        return (
           <Input
-            key={credential}
-            value={credentials[credential]}
-            setValue={(value) => handleCredentialChange(credential, value)}
-            label={credential.replace(/_/g, ' ').toUpperCase()}
-            required
-            secret={isCredentialSecret(credential)}
+            key={credentialKey}
+            value={credentials[credentialKey] || ''}
+            setValue={(value) => handleCredentialChange(credentialKey, value)}
+            label={`${credentialKey.replace(/_/g, ' ').toUpperCase()}${isOptional ? ' (Optional)' : ''}`}
+            required={isRequired}
+            secret={isCredentialSecret(credentialKey)}
             readOnly={!allowEdit}
             disabled={!allowEdit}
           />
-        ))}
+        )
+      })}
 
-      {credential.provider?.optionalCredentials.map((credential: string) => (
-        <Input
-          key={credential}
-          value={credentials[credential]}
-          setValue={(value) => handleCredentialChange(credential, value)}
-          label={credential.replace(/_/g, ' ').toUpperCase()}
-          secret={true}
-          readOnly={!allowEdit}
-          disabled={!allowEdit}
+      {(credential.provider?.id === 'aws' || credential.provider?.id === 'aws_assume_role') && (
+        <AWSRegionPicker 
+          value={credentials['region']} 
+          onChange={(region) => handleCredentialChange('region', region)} 
         />
-      ))}
-
-      {credential.provider?.id === 'aws' && (
-        <AWSRegionPicker onChange={(region) => handleCredentialChange('region', region)} />
       )}
       <div className="flex justify-between pt-6">
-        <DeleteProviderCredentialDialog credential={credential} orgId={organisation!.id} />
+        <div>
+          {allowDelete && (
+            <DeleteProviderCredentialDialog credential={credential} orgId={organisation!.id} />
+          )}
+        </div>
         <Button
           disabled={!credentialsUpdated}
           variant="primary"

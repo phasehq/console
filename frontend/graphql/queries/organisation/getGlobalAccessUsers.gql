@@ -1,0 +1,11 @@
+query GetGlobalAccessUsers($organisationId: ID!) {
+  organisationGlobalAccessUsers(organisationId: $organisationId) {
+    id
+    role {
+      name
+      permissions
+    }
+    identityKey
+    self
+  }
+}

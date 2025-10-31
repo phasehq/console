@@ -1,0 +1,17 @@
+mutation CreateAccessPolicy(
+  $name: String!
+  $allowedIps: String!
+  $isGlobal: Boolean!
+  $organisationId: ID!
+) {
+  createNetworkAccessPolicy(
+    name: $name
+    allowedIps: $allowedIps
+    isGlobal: $isGlobal
+    organisationId: $organisationId
+  ) {
+    networkAccessPolicy {
+      id
+    }
+  }
+}

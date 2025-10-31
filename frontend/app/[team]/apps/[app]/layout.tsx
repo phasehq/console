@@ -9,9 +9,8 @@ import { AppType } from '@/apollo/graphql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
-import { FaLock, FaServer } from 'react-icons/fa'
-import { FaArrowDownUpLock } from 'react-icons/fa6'
-import { EncryptionModeIndicator } from '@/components/apps/EncryptionModeIndicator'
+import CopyButton from '@/components/common/CopyButton'
+import { ProgrammaticAccessMenu } from '@/components/contextSnippets/ProgrammaticAccessMenu'
 
 export default function AppLayout({
   params,
@@ -39,41 +38,28 @@ export default function AppLayout({
       link: '',
     },
     {
-      name: 'Service tokens',
-      link: 'tokens',
+      name: 'Access',
+      link: 'access/members',
+    },
+    {
+      name: 'Syncing',
+      link: 'syncing',
     },
     {
       name: 'Logs',
       link: 'logs',
     },
     {
-      name: 'Members',
-      link: 'members',
-    },
-    {
-      name: 'Syncing',
-      link: 'syncing',
+      name: 'Settings',
+      link: 'settings',
     },
   ])
-
-  useEffect(() => {
-    if (organisation) {
-      if (organisation.role!.toLowerCase() !== 'dev') {
-        setTabs((prevTabs) =>
-          prevTabs.some((tab) => tab.name === 'Settings')
-            ? prevTabs
-            : [...prevTabs, { name: 'Settings', link: 'settings' }]
-        )
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisation, params.app])
 
   useEffect(() => {
     const activeTabIndex = () => {
       if (app) {
         const currentUrl = path?.split('/')[4] || ''
-        const index = tabs.findIndex((tab) => tab.link === currentUrl)
+        const index = tabs.findIndex((tab) => tab.link.split('/')[0] === currentUrl)
         return index >= 0 ? index : 0
       }
       return 0
@@ -84,17 +70,25 @@ export default function AppLayout({
 
   return (
     <div
-      className="w-full p-8 pb-0 text-black dark:text-white flex flex-col oveflow-y-auto"
+      className="w-full p-8 pb-0 text-black dark:text-white flex flex-col overflow-y-auto"
       style={{ height: 'calc(100vh - 64px)' }}
     >
       {loading && (
         <div className="dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
       {app && (
-        <div className="flex items-center gap-2 pb-8">
-          <h1 className="text-3xl font-bold">{app.name}</h1>
-
-          <EncryptionModeIndicator app={app} />
+        <div className="flex items-baseline justify-between pb-6">
+          <div className="flex items-baseline gap-3 group">
+            <h1 className="text-3xl font-bold">{app.name}</h1>
+            <div className="opacity-0 group-hover:opacity-100 transition ease">
+              <CopyButton value={app.id} buttonVariant="ghost">
+                <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
+              </CopyButton>
+            </div>
+          </div>
+          <div>
+            <ProgrammaticAccessMenu />
+          </div>
         </div>
       )}
 
@@ -106,8 +100,10 @@ export default function AppLayout({
                 <Link
                   href={`/${params.team}/apps/${params.app}/${tab.link}`}
                   className={clsx(
-                    'p-3 font-medium border-b focus:outline-none',
-                    selected ? 'border-emerald-500 font-semibold' : ' border-transparent'
+                    'p-3 font-medium border-b focus:outline-none -mb-px',
+                    selected
+                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                   )}
                 >
                   {tab.name}

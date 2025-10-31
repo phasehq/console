@@ -12,7 +12,7 @@ export default async function Lockbox({ params }: { params: { boxId: string } })
           <div className="space-y-2 my-auto max-w-md">
             <div className="text-4xl font-semibold">Phase Lockbox</div>
             <div className="text-neutral-500 text-lg">
-              You&apos;ve recieved a secret via Phase Lockbox, secured with Zero-Trust encryption.
+              You&apos;ve received a secret via Phase Lockbox, secured with Zero-Trust encryption.
               Click the View button to decrypt and view this secret.
             </div>
           </div>

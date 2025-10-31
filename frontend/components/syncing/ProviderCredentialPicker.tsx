@@ -8,7 +8,6 @@ import Link from 'next/link'
 import { Fragment, useContext, useEffect } from 'react'
 import { FaChevronDown, FaKey, FaPlus } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { usePathname } from 'next/navigation'
 
 export const ProviderCredentialPicker = (props: {
   credential: ProviderCredentialsType | null
@@ -38,17 +37,36 @@ export const ProviderCredentialPicker = (props: {
   const credentials: ProviderCredentialsType[] = credentialsData?.savedCredentials ?? []
 
   const filteredCredentials = providerFilter
-    ? credentials.filter((cred) => cred.provider?.id === providerFilter)
+    ? credentials.filter((cred) => {
+        if (providerFilter === 'aws') {
+          return cred.provider?.id === 'aws' || cred.provider?.id === 'aws_assume_role'
+        }
+        return cred.provider?.id === providerFilter
+      })
     : credentials
 
+  const credentialMatchesFilter =
+    credential && providerFilter
+      ? providerFilter === 'aws'
+        ? credential.provider?.id === 'aws' || credential.provider?.id === 'aws_assume_role'
+        : credential.provider?.id === providerFilter
+      : false // If no credential is selected, it doesn't match the filter
+
   useEffect(() => {
-    if (setDefault && filteredCredentials.length > 0 && !credential)
+    if (
+      setDefault &&
+      filteredCredentials.length > 0 &&
+      (!credential || !credentialMatchesFilter) &&
+      filteredCredentials[0]
+    ) {
       setCredential(filteredCredentials[0])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providerFilter, filteredCredentials, setDefault])
+    }
+  }, [setDefault, filteredCredentials, credential, credentialMatchesFilter, setCredential])
 
   const NewCredentialsLink = () => (
-    <Link href={`/${organisation!.name}/integrations?newCredential=true`}>
+    <Link
+      href={`/${organisation!.name}/integrations/credentials${providerFilter ? `?provider=${providerFilter}` : ''}`}
+    >
       <Button variant="secondary" onClick={newCredentialCallback}>
         <div className="flex items-center gap-2">
           <FaPlus /> Add service credentials
@@ -65,53 +83,56 @@ export const ProviderCredentialPicker = (props: {
     )
 
   return (
-    <Listbox value={credential} onChange={setCredential}>
-      {({ open }) => (
-        <>
-          <label className="block text-gray-700 text-sm font-bold mb-2">Service credentials</label>
-          <Listbox.Button as={Fragment} aria-required aria-disabled={disabled}>
-            <div
-              className={clsx(
-                'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800/60 rounded-md text-zinc-800 dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500',
-                disabled && 'cursor-not-allowed opacity-60'
-              )}
-            >
-              {credential?.name || 'Select credentials'}
-              <FaChevronDown
+    <div className="relative">
+      <Listbox value={credential} onChange={setCredential}>
+        {({ open }) => (
+          <>
+            <label className="block text-neutral-500 text-sm mb-2">Service credentials</label>
+            <Listbox.Button as={Fragment} aria-required aria-disabled={disabled}>
+              <div
                 className={clsx(
-                  'transition-transform ease duration-300 text-neutral-500',
-                  open ? 'rotate-180' : 'rotate-0'
+                  'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800/60  text-zinc-800 dark:text-white border border-neutral-500/20   focus:outline outline-emerald-500',
+                  disabled && 'cursor-not-allowed opacity-60',
+                  open ? 'rounded-t-md' : 'rounded-md'
                 )}
-              />
-            </div>
-          </Listbox.Button>
-          <Listbox.Options>
-            <div className="bg-zinc-100 dark:bg-zinc-800/60 p-2 rounded-b-md shadow-2xl backdrop-blur-md absolute z-10 space-y-2 border border-t-0 dark:border-none border-neutral-500/20">
-              {filteredCredentials.map((cred: ProviderCredentialsType) => (
-                <Listbox.Option key={cred.id} value={cred} as={Fragment}>
-                  {({ active, selected }) => (
-                    <div
-                      className={clsx(
-                        'flex items-center gap-2 p-2 cursor-pointer rounded-lg text-black dark:text-white',
-                        active && 'bg-zinc-200 dark:bg-zinc-700'
-                      )}
-                    >
-                      <FaKey className="shrink-0" />
-                      <div className="flex flex-col gap-2">
-                        <span className=" font-semibold">{cred.name}</span>
-                      </div>
-                    </div>
+              >
+                {credential?.name || 'Select credentials'}
+                <FaChevronDown
+                  className={clsx(
+                    'transition-transform ease duration-300 text-neutral-500',
+                    open ? 'rotate-180' : 'rotate-0'
                   )}
-                </Listbox.Option>
-              ))}
-
-              <div className="pt-2 border-t border-neutral-500/40">
-                <NewCredentialsLink />
+                />
               </div>
-            </div>
-          </Listbox.Options>
-        </>
-      )}
-    </Listbox>
+            </Listbox.Button>
+            <Listbox.Options>
+              <div className="bg-zinc-100 w-full dark:bg-zinc-800/60 p-2 rounded-b-md shadow-2xl backdrop-blur-md absolute z-10 space-y-2 border border-t-0  border-neutral-500/20 ">
+                {filteredCredentials.map((cred: ProviderCredentialsType) => (
+                  <Listbox.Option key={cred.id} value={cred} as={Fragment}>
+                    {({ active, selected }) => (
+                      <div
+                        className={clsx(
+                          'flex items-center gap-2 p-2 cursor-pointer rounded-lg text-black dark:text-white',
+                          active && 'bg-zinc-200 dark:bg-zinc-700'
+                        )}
+                      >
+                        <FaKey className="shrink-0" />
+                        <div className="flex flex-col gap-2">
+                          <span className=" font-semibold">{cred.name}</span>
+                        </div>
+                      </div>
+                    )}
+                  </Listbox.Option>
+                ))}
+
+                <div className="pt-2 border-t border-neutral-500/40">
+                  <NewCredentialsLink />
+                </div>
+              </div>
+            </Listbox.Options>
+          </>
+        )}
+      </Listbox>
+    </div>
   )
 }
