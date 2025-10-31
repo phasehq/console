@@ -35,13 +35,46 @@ services:
     container_name: phase-backend-dev
     restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
     volumes:
       - ./backend/:/app/
     env_file: .env.dev
+    networks:
+      - phase-net-dev
+
+  rqworker:
+    container_name: phase-rqworker-dev
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - redis
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    command: python manage.py rqworker default
+    volumes:
+      - ./backend/:/app/
+    env_file: .env.dev
+    networks:
+      - phase-net-dev
+
+  pgweb:
+    container_name: phase-pgweb-dev
+    image: sosedoff/pgweb
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - phase-net-dev
 
@@ -55,11 +88,15 @@ services:
       POSTGRES_DB: ${DATABASE_NAME}
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_HOST_AUTH_METHOD: "trust"
     volumes:
       - phase-postgres-data-dev:/var/lib/postgresql/data
     networks:
       - phase-net-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     container_name: phase-redis-dev
@@ -69,23 +106,6 @@ services:
       - "6379:6379"
     networks:
       - phase-net-dev
-
-  rqworker:
-    container_name: phase-rqworker-dev
-    restart: unless-stopped
-    depends_on:
-      - backend
-      - redis
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    command: python manage.py rqworker default #overrides CMD in the dockerfile
-    volumes:
-      - ./backend/:/app/
-    env_file: .env.dev
-    networks:
-      - phase-net-dev
-
 
 volumes:
   phase-postgres-data-dev:

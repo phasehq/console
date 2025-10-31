@@ -1,0 +1,19 @@
+query GetOrganisationIdentities($organisationId: ID!) {
+  identities(organisationId: $organisationId) {
+    id
+    provider
+    name
+    description
+    config {
+      ... on AwsIamConfigType {
+        trustedPrincipals
+        signatureTtlSeconds
+        stsEndpoint
+      }
+    }
+    tokenNamePattern
+    defaultTtlSeconds
+    maxTtlSeconds
+    createdAt
+  }
+}

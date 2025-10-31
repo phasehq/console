@@ -4,35 +4,38 @@
   <img height="120" width="450" src="img/phase-lattice-logo.svg" alt="Phase">
   </a>
 
-  <a href="https://phase.dev">Website</a> |
-  <a href="https://docs.phase.dev">Documentation</a> |
-  <a href="https://docs.phase.dev/security">Security</a> |
-    <a href="https://github.com/phasehq/console/blob/main/CONTRIBUTING.md">Contributing</a> |
-  <a href="https://slack.phase.dev">Join Slack</a>
+  <h5>Repos</h5>
+  <p>
+    <a href="https://github.com/phasehq/docs">Docs</a> |
+    <a href="https://github.com/phasehq/cli">CLI</a> |
+    <a href="https://github.com/phasehq/node-sdk">Node SDK</a> |
+    <a href="https://github.com/phasehq/python-sdk">Python SDK</a>
+    <br/>
+    <a href="https://github.com/phasehq/golang-sdk">Golang SDK</a> |
+    <a href="https://github.com/phasehq/kubernetes-secrets-operator/tree/main/phase-console">Helm Chart</a> |
+    <a href="https://github.com/phasehq/kubernetes-secrets-operator">Kubernetes Operator</a> |
+    <a href="https://github.com/phasehq/terraform-provider-phase">Terraform Provider</a>
+  </p>
 </div>
 
 ---
 
-Open source platform for fast-moving engineering teams to secure and deploy application secrets — from development to production.
-
-A developer-friendly alternative to **HashiCorp Vault** and **AWS Secrets Manager** that works with your whole team 🧑‍💻.
-
+#### Open source platform for fast-moving engineering teams to secure and deploy application secrets — from development to production.
 ---
 
-# Phase Console
-https://github.com/user-attachments/assets/160c721d-a941-440a-bc42-afd419c1df18
-
+[Phase Console Demo](https://github.com/user-attachments/assets/cd6b1ffe-6cb4-4a2b-8ae1-9daa61ed3a5a)
 
 |     | **Features**                                                                                                                                                |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 📈  | **[Phase Console](https://console.phase.dev)**: Dashboard for seamlessly creating, managing, rotating secrets, and environment variables                |
-| ⌨️  | **[CLI](https://github.com/phasehq/cli)**: Import existing secrets from `.env` files, encrypt them, and securely inject them in your application at runtime  |
-| 🤫  | **[Secret management](https://docs.phase.dev/console/apps)**: Secret Diffs, version control, and recovery                                                                                    |
-| 🙋  | **[RBAC](https://docs.phase.dev/console/users#user-roles)**: Fine-grained, role-based, and cryptographic access control, per application, per environment.                                                      |
-| 🔌  | **[Integrations](https://docs.phase.dev/#integrate-phase)**: Automatically sync secrets to GitHub, Cloudflare Pages, GitLab CI, Railway, AWS Secrets Manager, etc.                                                        |
-| ![Kubernetes](img/kubernetes.svg)  | **[Kubernetes](https://docs.phase.dev/integrations/platforms/kubernetes)**: Automatically deploy secrets to your Kubernetes Cluster with End-to-End encryption via Phase Secrets Operator   |
-| ⛓️  | **[Secret referencing & overrides](https://docs.phase.dev/console/secrets)**: Create personal secrets. Inherit values from other secrets                                                              |
-| 🌐  | **[REST API](https://docs.phase.dev/public-api/secrets#get-secrets)**: Access and manage secrets programmatically                                                                                      |
+| ⌨️  | **[CLI](https://github.com/phasehq/cli)**: Import existing secrets from `.env` files, and securely inject them in your application at runtime or create virtual shells with secrets |
+| 🤫  | **[Secret management](https://docs.phase.dev/console/apps)**: Manage secrets across environments, view secret diffs, track version history, and restore secret values with a single click                                                                                    |
+| 🙋  | **[Role-based Access Control](https://docs.phase.dev/console/users#user-roles)**: Fine-grained, role-based, and cryptographic access control, per application, per environment.                                                      |
+| 🔁  | **[Secret sync](https://docs.phase.dev/#integrate-phase)**: Automatically sync secrets to GitHub, Cloudflare Pages, Vercel, GitLab CI, Railway, AWS Secrets Manager, etc.                                                        |
+| ![Kubernetes](img/kubernetes.svg)  | **[Kubernetes](https://docs.phase.dev/integrations/platforms/kubernetes)**: Automatically sync secrets to your Kubernetes Cluster and reload deployments via the Phase Secrets Operator   |
+| ![Terraform Provider](img/terraform.svg)    | **[Terraform](https://docs.phase.dev/integrations/platforms/hashicorp-terraform)**: Manage secrets in your HashiCorp Terraform Iac workflows. |
+| ⛓️  | **[Secret referencing & overrides](https://docs.phase.dev/console/secrets)**: Create personal secrets without affecting others on the team. Reference secret values across apps and environments                                                              |
+| 🌐  | **[REST API](https://docs.phase.dev/public-api/secrets#get-secrets)**: Access and manage secrets programmatically with any http client                                                                                      |
 | 📦  | **[SDKs](https://docs.phase.dev/sdks)**: SDKs for integrating Phase with various programming languages and frameworks              
 | 🥡  | **[Self Hosting](https://docs.phase.dev)**: Run Phase on your own infrastructure                                                                            |
 | 🔍  | **[Audit Logs]()**: Complete visibility into every change and access event                                                                                  |                                                                        |                                                                                |
@@ -41,42 +44,33 @@ https://github.com/user-attachments/assets/160c721d-a941-440a-bc42-afd419c1df18
 
 ---
 
-## CLI - Import, Encrypt and Inject secrets
-
-![Phase CI](img/phase-cli-import-run.webp)
+## CLI
 
 ```fish
-λ phase
+λ phase --help
 Securely manage application secrets and environment variables with Phase.
 
-                     @@@             
-              @@@@@@@@@@     
-          @@@@@@@@@@@@@@@@
-       P@@@@@&@@@?&@@&@@@@@P
-     P@@@@#        @&@    @P@@@
-    &@@@#         *@&      #@@@&
-   &@@@5          &@?       5@@@&
-  Y@@@#          ^@@         #@@@J
-  #@@@7          B@5         7@@@#
-  #@@@?         .@@.         ?@@@#
-  @@@@&         5@G          &@@@7
-   #@@@B        @@^         #@@@B
-    B@@@@      .@#        7@@@@B
-     @@@@@@    &.@       P@@@@@7
-       @@@@@@@@@@@@@@@@@@@@@
-          @@@@@@@@@@@@@@@
-             @@@@@@@@
-             @@@   
+           /$$
+          | $$
+  /$$$$$$ | $$$$$$$   /$$$$$$   /$$$$$$$  /$$$$$$
+ /$$__  $$| $$__  $$ |____  $$ /$$_____/ /$$__  $$
+| $$  \ $$| $$  \ $$  /$$$$$$$|  $$$$$$ | $$$$$$$$
+| $$  | $$| $$  | $$ /$$__  $$ \____  $$| $$_____/
+| $$$$$$$/| $$  | $$|  $$$$$$$ /$$$$$$$/|  $$$$$$$
+| $$____/ |__/  |__/ \_______/|_______/  \_______/
+| $$
+|__/
 
 options:
   -h, --help   show this help message and exit
   --version, -v
                show program's version number and exit
-
 Commands:
+
     auth             💻 Authenticate with Phase
     init             🔗 Link your project with your Phase app
     run              🚀 Run and inject secrets to your app
+    shell            🐚 Launch a sub-shell with secrets as environment variables (BETA)
     secrets          🗝️ Manage your secrets
     secrets list     📇 List all the secrets
     secrets get      🔍 Get a specific secret by key
@@ -87,6 +81,7 @@ Commands:
     secrets export   🥡 Export secrets in a dotenv format
     users            👥 Manage users and accounts
     users whoami     🙋 See details of the current user
+    users switch     🪄 Switch between Phase users, orgs and hosts
     users logout     🏃 Logout from phase-cli
     users keyring    🔐 Display information about the Phase keyring
     docs             📖 Open the Phase CLI Docs in your browser
@@ -111,7 +106,9 @@ The quickest and most reliable way to get started is by signing up on the [Phase
 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | **Deploy Phase Console on your infrastructure**                      |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 |![Docker](img/docker.svg) | [Docker Compose](https://docs.phase.dev/self-hosting/docker-compose) |
+|![Kubernetes](img/kubernetes.svg) | [Kubernetes (Helm chart)](https://docs.phase.dev/self-hosting/kubernetes) |
 |![AWS](img/aws.svg)  | [AWS](https://docs.phase.dev/self-hosting/aws)                       |
+|![AWS EKS](img/aws-eks.svg) | [AWS EKS (Helm chart)](https://docs.phase.dev/self-hosting/aws-eks) |
 |![GCP](img/gcp.svg)  | [Google Cloud Platform](https://docs.phase.dev/self-hosting/gcp)     |
 |![Azure](img/azure.svg)  | [Azure](https://docs.phase.dev/self-hosting/azure)                   |
 |![DigitalOcean](img/do.svg) | [DigitalOcean](https://docs.phase.dev/self-hosting/digitalocean)     |

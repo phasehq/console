@@ -1,5 +1,3 @@
-version: "3"
-
 services:
   nginx:
     container_name: phase-nginx-dev
@@ -29,11 +27,29 @@ services:
     env_file: .env
     environment:
       NEXTAUTH_URL: "${HTTP_PROTOCOL}${HOST}"
-      OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
       BACKEND_API_BASE: "http://backend:8000"
       NEXT_PUBLIC_BACKEND_API_BASE: "${HTTP_PROTOCOL}${HOST}/service"
-      NEXT_PUBLIC_NEXTAUTH_PROVIDERS: "${SSO_PROVIDERS}"
       NEXT_PUBLIC_POSTHOG_KEY: "${NEXT_PUBLIC_POSTHOG_KEY}"
+    networks:
+      - phase-net-dev
+
+  migrations:
+    container_name: phase-migrations-staging
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python manage.py migrate
+    env_file: .env
+    environment:
+      ALLOWED_HOSTS: "${HOST},backend"
+      ALLOWED_ORIGINS: "${HTTP_PROTOCOL}${HOST}"
+      SESSION_COOKIE_DOMAIN: "${HOST}"
+      OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - phase-net-dev
 
@@ -41,8 +57,12 @@ services:
     container_name: phase-backend-staging
     restart: unless-stopped
     depends_on:
-      - postgres
-      - redis
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -51,6 +71,8 @@ services:
       ALLOWED_HOSTS: "${HOST},backend"
       ALLOWED_ORIGINS: "${HTTP_PROTOCOL}${HOST}"
       SESSION_COOKIE_DOMAIN: "${HOST}"
+      OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
+      EXTERNAL_MIGRATION: "true"
     networks:
       - phase-net-dev
 
@@ -58,8 +80,12 @@ services:
     container_name: phase-worker-staging
     restart: unless-stopped
     depends_on:
-      - postgres
-      - redis
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -87,6 +113,11 @@ services:
       - phase-postgres-data-dev:/var/lib/postgresql/data
     networks:
       - phase-net-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     container_name: phase-redis

@@ -206,7 +206,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
         <p className="text-lg text-neutral-500">
           You have been invited by{' '}
           <span className="font-medium text-neutral-800 dark:text-neutral-200">
-            {invite.invitedBy.email}
+            {invite.invitedBy.fullName || invite.invitedBy.email}
           </span>{' '}
           to join the{' '}
           <span className="font-medium text-neutral-800 dark:text-neutral-200">
@@ -234,7 +234,8 @@ export default function Invite({ params }: { params: { invite: string } }) {
           <div className="mx-auto pt-8">
             <Button
               variant="primary"
-              arrow="right"
+              iconPosition="right"
+              icon={FaArrowRight}
               onClick={() => (window.location.href = `/${invite.organisation.name}`)}
             >
               Go to Console

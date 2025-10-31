@@ -163,9 +163,7 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
             <div className="space-y-4">
               <RadioGroup value={phaseEnv} onChange={setPhaseEnv}>
                 <RadioGroup.Label as={Fragment}>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Phase Environment
-                  </label>
+                  <label className="block text-neutral-500 text-sm mb-2">Phase Environment</label>
                 </RadioGroup.Label>
                 <div className="flex flex-wrap items-center gap-2">
                   {appEnvsData.appEnvironments.map((env: EnvironmentType) => (
@@ -198,12 +196,12 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
 
             <div className="grid grid-cols-2 gap-8">
               <div className="relative col-span-2">
-                <Combobox value={railwayProject} onChange={setRailwayProject}>
+                <Combobox as="div" value={railwayProject} onChange={setRailwayProject}>
                   {({ open }) => (
                     <>
                       <div className="space-y-2">
                         <Combobox.Label as={Fragment}>
-                          <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
+                          <label className="block text-neutral-500 text-sm" htmlFor="name">
                             Railway Project <span className="text-red-500">*</span>
                           </label>
                         </Combobox.Label>
@@ -235,9 +233,9 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
                         leaveTo="transform scale-95 opacity-0"
                       >
                         <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full">
+                          <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                             {filteredProjects.map((project: RailwayProjectType) => (
-                              <Combobox.Option key={project.id} value={project}>
+                              <Combobox.Option as="div" key={project.id} value={project}>
                                 {({ active, selected }) => (
                                   <div
                                     className={clsx(
@@ -268,7 +266,7 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
                     onChange={setRailwayEnvironment}
                   >
                     <RadioGroup.Label as={Fragment}>
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
+                      <label className="block text-neutral-500 text-sm font-bold mb-2">
                         Project Environment <span className="text-red-500">*</span>
                       </label>
                     </RadioGroup.Label>
@@ -305,7 +303,10 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
                       <>
                         <div className="space-y-2">
                           <Combobox.Label as={Fragment}>
-                            <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
+                            <label
+                              className="block text-neutral-500 text-sm font-bold"
+                              htmlFor="name"
+                            >
                               Railway Service (Optional)
                             </label>
                           </Combobox.Label>

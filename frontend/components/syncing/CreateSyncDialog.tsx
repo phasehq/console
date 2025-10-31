@@ -1,6 +1,6 @@
 import { Dialog, Transition } from '@headlessui/react'
-import { useState, Fragment, ReactNode, ReactElement } from 'react'
-import { FaTimes } from 'react-icons/fa'
+import { useState, Fragment, ReactNode, ReactElement, useContext } from 'react'
+import { FaBan, FaCheckCircle, FaTimes, FaTimesCircle } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { CreateCloudflarePagesSync } from './Cloudflare/CreateCloudflarePagesSync'
 import React from 'react'
@@ -10,6 +10,13 @@ import { CreateVaultSync } from './Vault/CreateVaultSync'
 import { CreateNomadSync } from './Nomad/CreateNomadSync'
 import { CreateGitLabCISync } from './GitLab/CreateGitLabCISync'
 import { CreateRailwaySync } from './Railway/CreateRailwaySync'
+import { CreateVercelSync } from './Vercel/CreateVercelSync'
+import { CreateCloudflareWorkersSync } from './Cloudflare/CreateCloudflareWorkersSync'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userHasPermission } from '@/utils/access/permissions'
+import { EmptyState } from '../common/EmptyState'
+import clsx from 'clsx'
+import { CreateRenderSync } from './Render/CreateRenderSync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -17,6 +24,22 @@ export const CreateSyncDialog = (props: {
 
   service: string
 }) => {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanReadEnvs = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'read',
+    true
+  )
+
+  const userCanCreateIntegrations = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'create',
+    true
+  )
+
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const closeModal = () => {
@@ -43,6 +66,12 @@ export const CreateSyncDialog = (props: {
         return <CreateNomadSync appId={props.appId} closeModal={closeModal} />
       case 'railway':
         return <CreateRailwaySync appId={props.appId} closeModal={closeModal} />
+      case 'vercel':
+        return <CreateVercelSync appId={props.appId} closeModal={closeModal} />
+      case 'cloudflare_workers':
+        return <CreateCloudflareWorkersSync appId={props.appId} closeModal={closeModal} />
+      case 'render':
+        return <CreateRenderSync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null
@@ -86,7 +115,59 @@ export const CreateSyncDialog = (props: {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="py-4">{isOpen && renderSyncPanel(props.service)}</div>
+                  {userCanReadEnvs && userCanCreateIntegrations ? (
+                    <div className="pt-4">{isOpen && renderSyncPanel(props.service)}</div>
+                  ) : (
+                    <EmptyState
+                      title="Access restricted"
+                      subtitle="You don't have the permissions required to set up an Sync"
+                      graphic={
+                        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                          <FaBan />
+                        </div>
+                      }
+                    >
+                      <div className="space-y-2 p-4 ring-1 ring-inset ring-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 rounded-md">
+                        <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                          The following permissions are required:
+                        </div>
+                        <ul className="text-sm">
+                          <li className="flex items-center gap-2">
+                            {userCanReadEnvs ? (
+                              <FaCheckCircle className="text-emerald-500" />
+                            ) : (
+                              <FaTimesCircle className="text-red-500" />
+                            )}
+                            <code
+                              className={clsx(
+                                userCanReadEnvs
+                                  ? 'text-neutral-500'
+                                  : 'text-zinc-900 dark:text-zinc-100 font-medium'
+                              )}
+                            >
+                              Environments:read
+                            </code>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            {userCanCreateIntegrations ? (
+                              <FaCheckCircle className="text-emerald-500" />
+                            ) : (
+                              <FaTimesCircle className="text-red-500" />
+                            )}
+                            <code
+                              className={clsx(
+                                userCanCreateIntegrations
+                                  ? 'text-neutral-500'
+                                  : 'text-zinc-900 dark:text-zinc-100 font-medium'
+                              )}
+                            >
+                              Integrations:create
+                            </code>
+                          </li>
+                        </ul>
+                      </div>
+                    </EmptyState>
+                  )}
                 </Dialog.Panel>
               </Transition.Child>
             </div>

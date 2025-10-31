@@ -8,13 +8,14 @@ import { ViewRecoveryDialog } from '@/components/settings/account/ViewRecoveryDi
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { PlanInfo } from '@/components/settings/organisation/PlanInfo'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaMoon, FaSun } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'
+import { ReleaseInfo } from '@/components/ReleaseInfo'
 
 export default function Settings({ params }: { params: { team: string } }) {
   const searchParams = useSearchParams()
@@ -25,12 +26,16 @@ export default function Settings({ params }: { params: { team: string } }) {
 
   const { data: session } = useSession()
 
-  const activeUserIsAdmin = activeOrganisation ? userIsAdmin(activeOrganisation.role!) : false
+  const userCanManageBilling = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'read') ||
+      userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'update') ||
+      userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'delete')
+    : false
 
   const [tabIndex, setTabIndex] = useState(0)
 
   const tabList = [
-    ...(activeUserIsAdmin ? [{ name: 'Organisation' }] : []),
+    ...(userCanManageBilling ? [{ name: 'Organisation' }] : []),
     { name: 'Account' },
     { name: 'App' },
   ]
@@ -43,7 +48,7 @@ export default function Settings({ params }: { params: { team: string } }) {
 
     if (initialTabIndex !== -1) setTabIndex(initialTabIndex)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeUserIsAdmin, searchParams])
+  }, [userCanManageBilling, searchParams])
 
   const updateTab = (index: number) => {
     const tab = tabList[index]
@@ -60,7 +65,7 @@ export default function Settings({ params }: { params: { team: string } }) {
     )
 
   return (
-    <section className="w-full max-w-screen-lg mx-auto py-8 text-black dark:text-white">
+    <section className="w-full max-w-screen-lg mx-auto py-8 px-4 text-black dark:text-white">
       <h1 className="text-3xl font-semibold">Settings</h1>
 
       <div className="pt-8">
@@ -86,17 +91,14 @@ export default function Settings({ params }: { params: { team: string } }) {
 
           <Tab.Panels>
             <div className="max-h-[80vh] overflow-y-auto px-4">
-              {activeUserIsAdmin && (
+              {userCanManageBilling && (
                 <Tab.Panel>
                   <div className="space-y-10 py-4">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-semibold">Organisation</h2>
                       <p className="text-neutral-500">Organisation info and settings</p>
                     </div>
-
-                    <div>
-                      <PlanInfo />
-                    </div>
+                    <PlanInfo />
                   </div>
                 </Tab.Panel>
               )}
@@ -110,7 +112,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                         <p className="text-neutral-500">Account information and recovery.</p>
                       </div>
                       <div className="py-4 whitespace-nowrap flex items-center gap-2">
-                        <Avatar imagePath={session?.user?.image} size="xl" />
+                        <Avatar user={session?.user} size="xl" />
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-col">
                             <span className="text-lg font-medium">{session?.user?.name}</span>
@@ -128,7 +130,6 @@ export default function Settings({ params }: { params: { team: string } }) {
                         <div className="text-lg font-medium">Recovery</div>
                         <ViewRecoveryDialog />
                       </div>
-
                       <TrustedDeviceManager />
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
@@ -143,22 +144,23 @@ export default function Settings({ params }: { params: { team: string } }) {
               </Tab.Panel>
 
               <Tab.Panel>
-                <div>
-                  <div className="space-y-6 py-4">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-semibold">App</h2>
-                      <p className="text-neutral-500">
-                        Control the behavior and appearance of UI elements.
-                      </p>
+                <div className="space-y-8 h-[50vh]">
+                  <div>
+                    <h2 className="text-2xl font-semibold mb-2">App</h2>
+                    <p className="text-neutral-500">
+                      Control application-wide settings and view app information.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-8">
+                    <div className="font-semibold">Theme</div>
+                    <div className="flex items-center gap-2 text-neutral-500">
+                      <FaSun />
+                      <ModeToggle />
+                      <FaMoon />
                     </div>
-                    <div className="flex items-center gap-8">
-                      <div className="font-semibold">Theme</div>
-                      <div className="flex items-center gap-2 text-neutral-500">
-                        <FaSun />
-                        <ModeToggle />
-                        <FaMoon />
-                      </div>
-                    </div>
+                  </div>
+                  <div>
+                    <ReleaseInfo />
                   </div>
                 </div>
               </Tab.Panel>

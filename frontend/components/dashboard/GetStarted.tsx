@@ -1,6 +1,6 @@
-import { Disclosure, Menu, Transition } from '@headlessui/react'
+import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { Fragment, ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import {
   FaArrowRight,
   FaCheckCircle,
@@ -12,7 +12,6 @@ import {
   FaRegDotCircle,
   FaSlack,
 } from 'react-icons/fa'
-import { TbPackages } from 'react-icons/tb'
 import { PiMonitorDuotone, PiMagicWandFill, PiTerminalWindow } from 'react-icons/pi'
 import { GetDashboard } from '@/graphql/queries/getDashboard.gql'
 import { useQuery } from '@apollo/client'
@@ -22,9 +21,8 @@ import { Button } from '../common/Button'
 import { CliInstallCommands } from './CliInstallCommands'
 import Spinner from '../common/Spinner'
 import { Card } from '../common/Card'
-import { SiGithub, SiSlack, SiX } from 'react-icons/si'
-import { RoleLabel } from '../users/RoleLabel'
 import { CliCommand } from './CliCommand'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const TaskPanel = (props: {
   title: string
@@ -115,8 +113,27 @@ const TaskPanel = (props: {
 export const GetStarted = (props: { organisation: OrganisationType }) => {
   const { organisation } = props
 
+  // Permissions
+  const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
+  const userCanReadMembers = userHasPermission(organisation?.role?.permissions, 'Members', 'read')
+  const userCanReadCredentials = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'read'
+  )
+  const userCanReadSyncs = userHasPermission(
+    organisation?.role?.permissions,
+    'Integrations',
+    'read',
+    true
+  )
+
+  const hasPermissionsForGuide =
+    userCanReadApps && userCanReadMembers && userCanReadCredentials && userCanReadSyncs
+
   const { data, loading } = useQuery(GetDashboard, {
     variables: { organisationId: organisation.id },
+    skip: !hasPermissionsForGuide,
   })
 
   const [showGuide, setShowGuide] = useState(true)
@@ -136,8 +153,9 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     setShowGuide(true)
     clearLocalStorageKey()
   }
-
-  const appCreated = data?.apps.length > 0
+  // Don't count the example app setup during on-boarding
+  const userApps = data?.apps.filter((app: AppType) => app.name !== 'example-app')
+  const appCreated = userApps?.length > 0
 
   const cliSetup = data?.userTokens.length > 0
 
@@ -213,6 +231,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
     },
   ]
 
+  if (!hasPermissionsForGuide) return <></>
+
   if (!showGuide)
     return (
       <div className="flex justify-end">
@@ -227,8 +247,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
       <div className="flex justify-end">
         <DismissButton />
       </div>
-      <div className="flex gap-6">
-        <div className="space-y-6 w-2/3">
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="space-y-6 w-full lg:w-2/3">
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-black dark:text-white font-semibold text-2xl">Getting started</h1>
@@ -266,7 +286,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     )}
                   >
                     {appCreated ? <FaCheckCircle /> : <FaRegCircle />}
-                    Create an App
+                    Create a new App
                   </div>
                   {!appCreated && (
                     <div className="flex gap-4">
@@ -372,8 +392,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       be added to specific Apps to get access to Secrets.
                     </li>
                     <li>
-                      Team members can be given either the <RoleLabel role="dev" /> or{' '}
-                      <RoleLabel role="admin" /> role.
+                      Team members can be given a role based on the actions and resources they
+                      require.
                     </li>
                   </ul>
 
@@ -400,7 +420,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
 
                   {!memberAdded && (
                     <div className="flex gap-4">
-                      <Link href={`/${organisation.name}/members`}>
+                      <Link href={`/${organisation.name}/access/members`}>
                         <Button variant="primary">Go to Members</Button>
                       </Link>
                       <Link
@@ -459,7 +479,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   </div>
 
                   <div className="flex gap-4">
-                    <Link href={`/${organisation.name}/integrations`}>
+                    <Link href={`/${organisation.name}/integrations/syncs`}>
                       <Button variant="primary">Go to Integrations</Button>
                     </Link>
                     <Link
@@ -474,7 +494,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
             </div>
           )}
         </div>
-        <div className="w-1/3 pl-4 border-l border-neutral-500/40 space-y-6">
+        <div className="w-full lg:w-1/3 lg:pl-4 lg:border-l border-neutral-500/40 space-y-6">
           <div>
             <h1 className="text-black dark:text-white font-semibold text-2xl">Resources</h1>
             <p className="text-neutral-500">

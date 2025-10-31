@@ -1,6 +1,13 @@
-from api.emails import send_invite_email, send_user_joined_email, send_welcome_email
-from api.utils.permissions import user_is_admin, user_is_org_member
-
+from api.emails import send_user_joined_email, send_welcome_email
+from api.utils.access.permissions import (
+    role_has_global_access,
+    user_has_permission,
+    user_is_admin,
+    user_is_org_member,
+)
+from api.utils.access.roles import default_roles
+from api.tasks.emails import send_invite_email_job
+from backend.quotas import can_add_account
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -9,13 +16,14 @@ from api.models import (
     CustomUser,
     OrganisationMember,
     OrganisationMemberInvite,
+    Role,
 )
 from backend.graphene.types import (
     OrganisationMemberInviteType,
     OrganisationMemberType,
     OrganisationType,
 )
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
 
@@ -39,10 +47,20 @@ class CreateOrganisationMutation(graphene.Mutation):
 
         user = CustomUser.objects.get(userId=info.context.user.userId)
         org = Organisation.objects.create(id=id, name=name, identity_key=identity_key)
+
+        for role_name, _ in default_roles.items():
+            Role.objects.create(
+                name=role_name,
+                organisation=org,
+                is_default=True,
+            )
+
+        owner_role = Role.objects.get(organisation=org, name__iexact="owner")
+
         owner = OrganisationMember.objects.create(
             user=user,
             organisation=org,
-            role=OrganisationMember.OWNER,
+            role=owner_role,
             identity_key=identity_key,
             wrapped_keyring=wrapped_keyring,
             wrapped_recovery=wrapped_recovery,
@@ -87,26 +105,51 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
 
 
-class InviteOrganisationMemberMutation(graphene.Mutation):
+class InviteInput(graphene.InputObjectType):
+    email = graphene.String(required=True)
+    apps = graphene.List(graphene.String)
+    role_id = graphene.ID(required=True)
+
+
+class BulkInviteOrganisationMembersMutation(graphene.Mutation):
+
     class Arguments:
         org_id = graphene.ID(required=True)
-        email = graphene.String(required=True)
-        apps = graphene.List(graphene.String)
-        role = graphene.String()
+        invites = graphene.List(InviteInput, required=True)
 
-    invite = graphene.Field(OrganisationMemberInviteType)
+    invites = graphene.List(OrganisationMemberInviteType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, email, apps, role):
-
+    def mutate(cls, root, info, org_id, invites):
         org = Organisation.objects.get(id=org_id)
 
-        if user_is_org_member(info.context.user, org_id):
-            user_already_exists = OrganisationMember.objects.filter(
+        if not user_has_permission(info.context.user, "create", "Members", org):
+            raise GraphQLError("You don’t have permission to invite members")
+
+        if not user_is_org_member(info.context.user, org_id):
+            raise GraphQLError("You don’t have permission to perform this action")
+
+        invited_by = OrganisationMember.objects.get(
+            user=info.context.user, organisation_id=org_id, deleted_at=None
+        )
+
+        expiry = timezone.now() + timedelta(days=3)
+        created_invites = []
+
+        if not can_add_account(org, len(invites)):
+            raise GraphQLError(
+                f"You cannot add {len(invites)} more members to this organisation"
+            )
+
+        for invite in invites:
+            email = invite.email.lower().strip()
+            apps = invite.apps or []
+            role_id = invite.role_id
+
+            if OrganisationMember.objects.filter(
                 organisation_id=org_id, user__email=email, deleted_at=None
-            ).exists()
-            if user_already_exists:
-                raise GraphQLError("This user is already a member if your organisation")
+            ).exists():
+                continue  # Skip already existing members
 
             if OrganisationMemberInvite.objects.filter(
                 organisation_id=org_id,
@@ -114,36 +157,27 @@ class InviteOrganisationMemberMutation(graphene.Mutation):
                 valid=True,
                 expires_at__gte=timezone.now(),
             ).exists():
-                raise GraphQLError(
-                    "An active invitiation already exists for this user."
-                )
-
-            invited_by = OrganisationMember.objects.get(
-                user=info.context.user, organisation_id=org_id, deleted_at=None
-            )
-
-            expiry = datetime.now() + timedelta(days=3)
+                continue  # Skip if an active invite already exists
 
             app_scope = App.objects.filter(id__in=apps)
 
-            invite = OrganisationMemberInvite.objects.create(
+            new_invite = OrganisationMemberInvite.objects.create(
                 organisation=org,
+                role_id=role_id,
                 invited_by=invited_by,
-                role=role.lower(),
                 invitee_email=email,
                 expires_at=expiry,
             )
-
-            invite.apps.set(app_scope)
+            new_invite.apps.set(app_scope)
 
             try:
-                send_invite_email(invite)
+                send_invite_email_job(new_invite)
             except Exception as e:
-                print(f"Error sending invite email: {e}")
+                print(f"Error sending invite email to {email}: {e}")
 
-            return InviteOrganisationMemberMutation(invite=invite)
-        else:
-            raise GraphQLError("You don't have permission to perform this action")
+            created_invites.append(new_invite)
+
+        return BulkInviteOrganisationMembersMutation(invites=created_invites)
 
 
 class DeleteInviteMutation(graphene.Mutation):
@@ -155,6 +189,11 @@ class DeleteInviteMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, rooot, info, invite_id):
         invite = OrganisationMemberInvite.objects.get(id=invite_id)
+
+        if not user_has_permission(
+            info.context.user, "delete", "Members", invite.organisation
+        ):
+            raise GraphQLError("You dont have permission to delete invites")
 
         if user_is_org_member(info.context.user, invite.organisation.id):
             invite.delete()
@@ -198,10 +237,16 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
 
             org = Organisation.objects.get(id=org_id)
 
+            role = (
+                invite.role
+                if invite.role is not None
+                else Role.objects.get(organisation=org, name__iexact="developer")
+            )
+
             org_member = OrganisationMember.objects.create(
                 user_id=info.context.user.userId,
                 organisation=org,
-                role=invite.role,
+                role=role,
                 identity_key=identity_key,
                 wrapped_keyring=wrapped_keyring,
                 wrapped_recovery=wrapped_recovery,
@@ -238,40 +283,60 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
     def mutate(cls, root, info, member_id):
         org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
 
+        if not user_has_permission(
+            info.context.user, "delete", "Members", org_member.organisation
+        ):
+            raise GraphQLError("You dont have permission to remove members")
+
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
-        if user_is_admin(info.context.user.userId, org_member.organisation.id):
-            org_member.delete()
+        org_member.delete()
 
-            if settings.APP_HOST == "cloud":
-                from ee.billing.stripe import update_stripe_subscription_seats
+        if settings.APP_HOST == "cloud":
+            from ee.billing.stripe import update_stripe_subscription_seats
 
-                update_stripe_subscription_seats(org_member.organisation)
+            update_stripe_subscription_seats(org_member.organisation)
 
-            return DeleteOrganisationMemberMutation(ok=True)
-        else:
-            raise GraphQLError("You don't have permission to perform that action")
+        return DeleteOrganisationMemberMutation(ok=True)
 
 
 class UpdateOrganisationMemberRole(graphene.Mutation):
     class Arguments:
         member_id = graphene.ID(required=True)
-        role = graphene.String(required=True)
+        role_id = graphene.ID(required=True)
 
     org_member = graphene.Field(OrganisationMemberType)
 
     @classmethod
-    def mutate(cls, root, info, member_id, role):
+    def mutate(cls, root, info, member_id, role_id):
         org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
 
-        if user_is_admin(info.context.user.userId, org_member.organisation.id):
-            if role.lower() == OrganisationMember.OWNER.lower():
-                raise GraphQLError("You cannot set this user as the organisation owner")
+        if not user_has_permission(
+            info.context.user, "update", "Members", org_member.organisation
+        ):
+            raise GraphQLError("You dont have permission to change member roles")
 
-            org_member.role = role.lower()
-            org_member.save()
+        active_user_role = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation=org_member.organisation,
+            deleted_at=None,
+        ).role
 
-            return UpdateOrganisationMemberRole(org_member=org_member)
-        else:
-            raise GraphQLError("You don't have permission to perform this action")
+        active_user_has_global_access = role_has_global_access(active_user_role)
+        current_role_has_global_access = role_has_global_access(org_member.role)
+
+        if current_role_has_global_access and not active_user_has_global_access:
+            raise GraphQLError(
+                "You cannot change this user's role as you don't have global access"
+            )
+
+        new_role = Role.objects.get(organisation=org_member.organisation, id=role_id)
+
+        if new_role.name.lower() == "owner":
+            raise GraphQLError("You cannot set this user as the organisation owner")
+
+        org_member.role = new_role
+        org_member.save()
+
+        return UpdateOrganisationMemberRole(org_member=org_member)

@@ -8,8 +8,6 @@ import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect } from 'react'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
-import { ToastContainer } from 'react-toastify'
-import { ThemeContext } from '@/contexts/themeContext'
 
 export default function RootLayout({
   children,
@@ -20,8 +18,6 @@ export default function RootLayout({
 }) {
   const { activeOrganisation, setActiveOrganisation, organisations, loading } =
     useContext(organisationContext)
-
-  const { theme } = useContext(ThemeContext)
 
   const router = useRouter()
 
@@ -56,7 +52,7 @@ export default function RootLayout({
       )}
     >
       {activeOrganisation && <UnlockKeyringDialog organisation={activeOrganisation} />}
-      {showNav && <NavBar team={params.team} />}
+      {showNav && <NavBar />}
       {showNav && <Sidebar />}
       <div className="grid h-screen">
         <div></div>
@@ -64,20 +60,6 @@ export default function RootLayout({
           {children}
         </div>
       </div>
-      <ToastContainer
-        position="bottom-right"
-        autoClose={4000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme={theme === 'dark' ? 'dark' : 'light'}
-        stacked
-        bodyClassName="text-xs"
-      />
     </div>
   )
 }
