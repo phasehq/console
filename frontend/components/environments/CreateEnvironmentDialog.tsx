@@ -1,6 +1,6 @@
 import { FaPlus } from 'react-icons/fa'
 import GenericDialog from '../common/GenericDialog'
-import { GetOrganisationAdminsAndSelf } from '@/graphql/queries/organisation/getOrganisationAdminsAndSelf.gql'
+import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
 import { ApiEnvironmentEnvTypeChoices, ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { useContext, useRef, useState } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -14,19 +14,19 @@ import { toast } from 'react-toastify'
 import Spinner from '../common/Spinner'
 import { Alert } from '../common/Alert'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
+import { sanitizeInput } from '@/utils/environment'
+import { PlanLabel } from '../settings/organisation/PlanLabel'
+import { isCloudHosted } from '@/utils/appConfig'
 
 export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const { data: orgAdminsData, loading: orgAdminsDataLoading } = useQuery(
-    GetOrganisationAdminsAndSelf,
-    {
-      variables: {
-        organisationId: organisation?.id,
-      },
-      skip: !organisation,
-    }
-  )
+  const { data: orgAdminsData, loading: orgAdminsDataLoading } = useQuery(GetGlobalAccessUsers, {
+    variables: {
+      organisationId: organisation?.id,
+    },
+    skip: !organisation,
+  })
 
   const { data: appData, loading: appDataLoading } = useQuery(GetAppEnvironments, {
     variables: { appId: props.appId },
@@ -57,7 +57,9 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const [createEnvironment, { loading }] = useMutation(CreateEnv)
 
   const [name, setName] = useState('')
+
   const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const inputRef = useRef(null)
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
@@ -65,11 +67,11 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       props.appId,
       name,
       ApiEnvironmentEnvTypeChoices.Custom,
-      orgAdminsData.organisationAdminsAndSelf,
+      orgAdminsData.organisationGlobalAccessUsers,
       appData.sseEnabled ? appData.serverPublicKey : null
     )
 
-    await createEnvironment({
+    const { data } = await createEnvironment({
       variables: {
         envInput: newEnvData.createEnvPayload,
         adminKeys: newEnvData.adminKeysPayload,
@@ -79,14 +81,16 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       refetchQueries: [{ query: GetAppEnvironments, variables: { appId: props.appId } }],
     })
 
+    if (!data) {
+      return
+    }
+
     setName('')
 
     toast.success('Environment created!')
 
     closeModal()
   }
-
-  const sanitizeInput = (value: string) => value.replace(/[^a-zA-Z0-9]/g, '')
 
   const closeModal = () => {
     if (dialogRef.current) {
@@ -104,10 +108,19 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
   if (!allowNewEnv())
     return (
       <UpsellDialog
-        title="Upgrade to Pro to create custom environments"
+        title={`Upgrade to ${isCloudHosted() ? 'Pro' : 'Enterprise'} to create custom environments`}
         buttonLabel={
           <>
-            <FaPlus /> New Environment
+            <FaPlus /> New Environment{' '}
+            <PlanLabel
+              plan={
+                organisation?.plan === ApiOrganisationPlanChoices.Fr
+                  ? isCloudHosted()
+                    ? ApiOrganisationPlanChoices.Pr
+                    : ApiOrganisationPlanChoices.En
+                  : ApiOrganisationPlanChoices.En
+              }
+            />
           </>
         }
         buttonVariant="outline"
@@ -125,6 +138,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
           <FaPlus /> New Environment
         </div>
       }
+      initialFocus={inputRef}
     >
       <form className="space-y-4 py-4" onSubmit={handleSubmit}>
         <div>
@@ -132,17 +146,22 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
         </div>
 
         <Alert variant="info" icon={true} size="sm">
-          All Organisation Admins will have accesss to this Environment.
+          All Organisation Admins will have access to this Environment.
         </Alert>
 
-        <Input
-          value={sanitizeInput(name)}
-          setValue={setName}
-          label="Environment name"
-          required
-          maxLength={32}
-          data-autofocus
-        />
+        <div className="space-y-2">
+          <Input
+            value={sanitizeInput(name)}
+            setValue={setName}
+            label="Environment name"
+            required
+            maxLength={32}
+            ref={inputRef}
+          />
+          <p className="text-xs text-neutral-500">
+            Use up to 32 characters. Only letters, numbers, hyphens and underscores allowed.
+          </p>
+        </div>
 
         <div className="flex justify-end">
           <Button type="submit" variant="primary" isLoading={loading}>

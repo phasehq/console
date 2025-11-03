@@ -5,7 +5,7 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline';
   object-src 'none';
   base-uri 'self';
-  connect-src 'self' data: http://127.0.0.1:* https://*.phase.dev https://phase.statuspage.io/api/v2/status.json https://checkout.stripe.com https://api.stripe.com; 
+  connect-src 'self' data: http://127.0.0.1:* https://*.phase.dev https://phase.statuspage.io/api/v2/status.json https://checkout.stripe.com https://api.stripe.com https://api.github.com; 
   font-src 'self';
   frame-src 'self' https://checkout.stripe.com https://*.js.stripe.com https://js.stripe.com https://hooks.stripe.com;
   img-src 'self' https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://secure.gravatar.com https://gitlab.com https://*.stripe.com; 

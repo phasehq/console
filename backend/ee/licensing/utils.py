@@ -5,6 +5,8 @@ from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
 import logging
+from django.utils import timezone
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,33 @@ def update_existing_org_license(phase_license):
     except Organisation.DoesNotExist:
         logger.info("Existing organisation not found for this license")
         pass
+
+
+def check_existing_licenses():
+    """Check for existing licenses for all orgs and validate them"""
+    Organisation = apps.get_model("api", "Organisation")
+    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
+
+    print("Checking existing licenses...")
+
+    expired_licenses = ActivatedPhaseLicense.objects.filter(
+        expires_at__lt=timezone.now() + timedelta(days=1)
+    )
+
+    orgs_to_check = set(expired_licenses.values_list("organisation_id", flat=True))
+
+    for org_id in orgs_to_check:
+        org = Organisation.objects.get(id=org_id)
+
+        has_valid_license = ActivatedPhaseLicense.objects.filter(
+            organisation=org, expires_at__gte=timezone.now() + timedelta(days=1)
+        ).exists()
+
+        if not has_valid_license and org.plan != Organisation.FREE_PLAN:
+            org.plan = Organisation.FREE_PLAN
+            org.save()
+            logging.info(f"!!! Downgraded organisation {org.name} to free tier. !!!")
+            logging.info(f"!!! Please contact support for a new license. !!!")
 
 
 def activate_license(phase_license):
