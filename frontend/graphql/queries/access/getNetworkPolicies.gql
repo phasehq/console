@@ -1,0 +1,21 @@
+query GetNetworkPolicies($organisationId: ID!) {
+  networkAccessPolicies(organisationId: $organisationId) {
+    id
+    name
+    allowedIps
+    isGlobal
+    createdAt
+    createdBy {
+      fullName
+      avatarUrl
+      self
+    }
+    updatedAt
+    updatedBy {
+      fullName
+      avatarUrl
+      self
+    }
+  }
+  clientIp
+}

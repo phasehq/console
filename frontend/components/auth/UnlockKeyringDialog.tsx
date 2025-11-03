@@ -2,7 +2,7 @@
 
 import { Dialog, Transition } from '@headlessui/react'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
-import { FaEye, FaEyeSlash, FaLock, FaShieldAlt, FaSignOutAlt, FaUnlock } from 'react-icons/fa'
+import { FaEye, FaEyeSlash, FaLock, FaSignOutAlt, FaUnlock } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { useSession } from 'next-auth/react'
@@ -14,11 +14,10 @@ import { Avatar } from '../common/Avatar'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { handleSignout } from '@/apollo/client'
-import { SplitButton } from '../common/SplitButton'
-import { getDevicePassword, setDevicePassword } from '@/utils/localStorage'
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { getKeyring } from '@/utils/crypto'
 import Spinner from '../common/Spinner'
+import { setDevicePassword, getDevicePassword } from '@/utils/localStorage';
 
 export default function UnlockKeyringDialog(props: { organisation: OrganisationType }) {
   const { organisation } = props
@@ -43,7 +42,6 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   const reset = () => {
     setPassword('')
     setShowPw(false)
-    setTrustDevice(false)
   }
 
   const decryptKeyring = (sudoPassword: string) => {
@@ -86,7 +84,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   }, [keyring, pathname])
 
   useEffect(() => {
-    if (organisation) reset()
+    if (organisation.id) reset()
 
     const devicePassword = getDevicePassword(organisation.memberId!)
 
@@ -96,7 +94,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
       decryptKeyring(devicePassword)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisation])
+  }, [organisation.id])
 
   const closeModal = () => {
     setIsOpen(false)
@@ -112,18 +110,17 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
       pending: 'Unlocking...',
       success: {
         render() {
-          return 'Unlocked user keyring!'
+          return 'Keyring unlocked.'
         },
         autoClose: 2000,
       },
       error: {
         render() {
-          return 'Something went wrong! Please check your sudo password and try again.'
+          return 'Unlock failed! Please check your sudo password and try again.'
         },
         autoClose: 2000,
       },
     })
-    decryptKeyring(password)
   }
 
   return (
@@ -156,14 +153,9 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                 <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                   {!devicePasswordExists && (
                     <Dialog.Title as="div" className="flex w-full gap-2 items-center">
-                      <FaLock
-                        className={clsx(
-                          keyring === null ? 'text-red-500' : 'text-emerald-500',
-                          'transition-colors ease'
-                        )}
-                      />
+                      <FaLock className='text-neutral-500'/>
                       <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                        Unlock User Keyring
+                        Enter your <code className="text-neutral-500">sudo</code> password
                       </h3>
                     </Dialog.Title>
                   )}
@@ -176,9 +168,8 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                     </div>
                   ) : (
                     <form onSubmit={handleFormSubmit}>
-                      <div className="py-4">
+                      <div className="pt-2 pb-4">
                         <p className="text-neutral-500">
-                          Please enter your <code>sudo</code> password to unlock the user keyring.
                           This is required for data to be decrypted on this screen.
                         </p>
                       </div>
@@ -188,7 +179,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                           <div className="flex flex-col gap-4">
                             <div className="whitespace-nowrap flex items-start gap-2">
                               <div className="pt-2">
-                                <Avatar imagePath={session?.user?.image!} size="md" />
+                                <Avatar user={session?.user} size="md" />
                               </div>
                               <div className="flex flex-col gap-2">
                                 <div className="flex flex-col">
@@ -221,12 +212,11 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                         </div>
 
                         <div className="flex justify-between items-end gap-4">
-                          <div className="space-y-1 w-full">
+                          <div className="space-y-2 w-full">
                             <label
                               className="block text-gray-700 text-sm font-bold mb-2"
                               htmlFor="password"
                             >
-                              Sudo password
                             </label>
                             <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 roudned-md focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
                               <input
@@ -252,49 +242,34 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                             </div>
                           </div>
                           <div className="pb-1">
-                            <SplitButton
+                            <Button
                               type="submit"
                               variant="primary"
                               isLoading={unlocking}
-                              menuContent={
-                                <div className="space-y-4 w-96 p-2">
-                                  <div>
-                                    <div className="text-black dark:text-white font-semibold">
-                                      Remember password
-                                    </div>
-                                    <div className="text-neutral-500 text-sm">
-                                      Store your sudo password on this device to automatically
-                                      unlock your keyring when you log in.
-                                    </div>
-                                  </div>
-
-                                  <div
-                                    className={clsx(
-                                      'flex items-center gap-2 text-sm pt-2',
-                                      trustDevice ? 'text-emerald-500' : 'text-neutral-500'
-                                    )}
-                                  >
-                                    <ToggleSwitch
-                                      value={trustDevice}
-                                      onToggle={() => setTrustDevice(!trustDevice)}
-                                    />
-                                    Remember password on this device
-                                  </div>
-                                </div>
-                              }
+                              disabled={unlocking}
                             >
-                              {!unlocking &&
-                                (trustDevice ? (
-                                  <FaShieldAlt className="shrink-0" />
-                                ) : (
-                                  <FaUnlock className="shrink-0" />
-                                ))}{' '}
-                              {trustDevice ? 'Remember' : 'Unlock'}
-                            </SplitButton>
+                              <FaUnlock className="shrink-0" />
+                              Unlock
+                            </Button>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-neutral-500/20 pt-2">
+                        <div className="space-y-2">
+                          <div
+                            className={clsx(
+                              'flex items-center gap-2 text-sm',
+                              trustDevice ? 'text-emerald-500' : 'text-neutral-500'
+                            )}
+                          >
+                            <ToggleSwitch
+                              value={trustDevice}
+                              onToggle={() => setTrustDevice(!trustDevice)}
+                            />
+                            Remember password
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-neutral-500/20 pt-4 mt-4">
                           <Link
                             className="text-xs text-neutral-500 hover:text-black dark:hover:text-white transition ease"
                             href={`/${organisation.name}/recovery`}

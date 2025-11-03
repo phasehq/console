@@ -1,0 +1,6 @@
+export { GoogleLogo } from './Google'
+export { GitHubLogo } from './GitHub'
+export { GitLabLogo } from './GitLab'
+export { JumpCloudLogo } from './JumpCloud'
+export { EntraIDLogo } from './EntraID'
+export { AuthentikLogo } from './Authentik'

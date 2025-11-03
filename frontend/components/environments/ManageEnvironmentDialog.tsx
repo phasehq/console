@@ -21,11 +21,21 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
+import { userHasPermission } from '@/utils/access/permissions'
+import { sanitizeInput } from '@/utils/environment'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const allowRename = organisation?.plan !== ApiOrganisationPlanChoices.Fr
+  const userCanUpdateEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'update',
+    true
+  )
+
+  const allowRename =
+    organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
 
   const [name, setName] = useState(props.environment?.name || '')
 
@@ -33,12 +43,16 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
-    await renameEnvironment({
+    const { data } = await renameEnvironment({
       variables: { environmentId: props.environment?.id, name },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
       ],
     })
+
+    if (!data) {
+      return
+    }
     toast.success('Environment renamed!')
   }
 
@@ -51,15 +65,27 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
       <Alert variant="info" size="sm">
         {allowRename
           ? 'Changing the name of this Environment will affect how you construct references to secrets.'
-          : 'Upgrade to Pro to rename Environments'}
+          : organisation?.plan === ApiOrganisationPlanChoices.Fr
+            ? 'Upgrade to Pro to rename Environments'
+            : "You don't have the permissions required to rename this Environment"}
       </Alert>
-      <Input
-        value={name}
-        setValue={setName}
-        label="Environment name"
-        required
-        disabled={!allowRename}
-      />
+
+      <div className="space-y-2">
+        <Input
+          value={sanitizeInput(name)}
+          setValue={setName}
+          label="Environment name"
+          required
+          maxLength={32}
+          disabled={!allowRename}
+        />
+        {allowRename && (
+          <p className="text-xs text-neutral-500">
+            Use up to 32 characters. Only letters, numbers, hyphens and underscores allowed.
+          </p>
+        )}
+      </div>
+
       {allowRename && (
         <div className="flex justify-end">
           <Button type="submit" variant="primary" disabled={name === props.environment.name}>
@@ -73,6 +99,13 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
 
 const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanDeleteEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'delete',
+    true
+  )
 
   const planDisplay = {
     planName: 'Free',
@@ -91,7 +124,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     setIsOpen(true)
   }
 
-  const allowDelete = organisation?.plan !== ApiOrganisationPlanChoices.Fr
+  const allowedByPlan = organisation?.plan !== ApiOrganisationPlanChoices.Fr
 
   const [deleteEnvironment, { loading }] = useMutation(DeleteEnv)
 
@@ -108,7 +141,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     closeModal()
   }
 
-  if (!allowDelete)
+  if (!allowedByPlan)
     return (
       <div className="flex justify-end pt-4">
         <UpsellDialog
@@ -122,6 +155,9 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
         />
       </div>
     )
+
+  if (!userCanDeleteEnvironments) return <></>
+
   return (
     <div className="space-y-4 pt-4">
       <div>
@@ -229,7 +265,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
         {props.environment.members?.map((member) =>
           member ? (
             <div key={member.email} title={member.fullName || member.email || ''}>
-              <Avatar imagePath={member.avatarUrl!} size="lg" />
+              <Avatar member={member} size="lg" />
             </div>
           ) : (
             <></>
@@ -239,7 +275,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
 
       {organisation && (
         <div className="flex justify-end">
-          <Link href={`/${organisation.name}/apps/${props.environment.app.id}/members`}>
+          <Link href={`/${organisation.name}/apps/${props.environment.app.id}/access/members`}>
             <Button variant="primary">
               <FaUserCog /> Manage access
             </Button>

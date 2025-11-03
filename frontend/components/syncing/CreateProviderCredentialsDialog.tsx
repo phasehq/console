@@ -83,7 +83,7 @@ export const CreateProviderCredentialsDialog = (props: {
                     </Button>
                   </Dialog.Title>
 
-                  <div className="space-y-6 p-4">
+                  <div className="space-y-6">
                     <p className="text-neutral-500">
                       Add a new set of credentials for third party integrations.
                     </p>

@@ -1,0 +1,5 @@
+mutation CancelStripeSubscription($organisationId: ID!, $subscriptionId: String!) {
+  cancelSubscription(organisationId: $organisationId, subscriptionId: $subscriptionId) {
+    success
+  }
+}

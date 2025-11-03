@@ -1,10 +1,14 @@
+const { textSecurityUtilities } = require('./utils/typography.js')
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
     './app/**/*.{js,ts,jsx,tsx}',
     './pages/**/*.{js,ts,jsx,tsx}',
     './components/**/*.{js,ts,jsx,tsx}',
+    './ee/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  safelist: ['border-t-neutral-500', 'border-t-amber-500', 'border-t-emerald-500', 'border-t-8'],
   darkMode: 'class',
   theme: {
     fontSize: {
@@ -25,6 +29,9 @@ module.exports = {
     },
     typography: require('./utils/typography'),
     extend: {
+      screens: {
+        '1080p': '1920px',
+      },
       colors: {
         primary: {
           200: '#f7ff73',
@@ -56,7 +63,25 @@ module.exports = {
         sans: ['var(--font-inter)'],
         mono: ['var(--font-jetbrains-mono)'],
       },
+      zIndex: {
+        1: 1,
+        5: 5,
+      },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [
+    require('@tailwindcss/typography'),
+    textSecurityUtilities,
+    function ({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-hide': {
+          '-ms-overflow-style': 'none', // IE/Edge
+          'scrollbar-width': 'none', // Firefox
+        },
+        '.scrollbar-hide::-webkit-scrollbar': {
+          display: 'none', // Chrome/Safari
+        },
+      })
+    },
+  ],
 }

@@ -4,14 +4,19 @@ import { FaRedoAlt, FaUndoAlt } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 import { Tag } from '../Tag'
 
-export const SecretPropertyDiffs = (props: {
+export const SecretPropertyDiffs = ({
+  secret,
+  historyItem,
+  index,
+  handlePropertyChange,
+  onRestore,
+}: {
   secret: SecretType
   historyItem: SecretEventType
   index: number
   handlePropertyChange: Function
+  onRestore: Function
 }) => {
-  const { secret, historyItem, index, handlePropertyChange } = props
-
   const previousItem = secret.history![index - 1]!
 
   const getAddedTags = () => {
@@ -30,6 +35,7 @@ export const SecretPropertyDiffs = (props: {
 
   const handleRestoreValue = (value: string) => {
     handlePropertyChange(secret.id, 'value', value)
+    onRestore()
   }
 
   return (
@@ -51,21 +57,25 @@ export const SecretPropertyDiffs = (props: {
           <div className="flex items-center gap-2">
             <span className="text-neutral-500 mr-2">VALUE:</span>
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col w-full">
             <div className="flex-1 items-end gap-4 justify-between bg-red-200 dark:bg-red-950">
               <div>
-                <s className=" text-red-500 ph-no-capture">{previousItem.value}</s>
+                <s className=" text-red-500 ph-no-capture whitespace-pre-wrap">
+                  {previousItem.value}
+                </s>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => handleRestoreValue(previousItem.value)}
-                title="Restore this value"
-              >
-                <FaRedoAlt className="shrink-0" />
-                <span className="font-sans text-xs">Restore</span>
-              </Button>
+              <div className="flex items-center justify-end p-1">
+                <Button
+                  variant="outline"
+                  onClick={() => handleRestoreValue(previousItem.value)}
+                  title="Restore this value"
+                >
+                  <FaRedoAlt className="shrink-0 text-2xs" />
+                  <span className="font-sans text-2xs">Restore</span>
+                </Button>
+              </div>
             </div>
-            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture">
+            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-500 ph-no-capture whitespace-pre-wrap break word">
               {historyItem!.value}
             </span>
           </div>
@@ -83,7 +93,7 @@ export const SecretPropertyDiffs = (props: {
           </span>
         </div>
       )}
-      
+
       {historyItem!.path !== previousItem.path && (
         <div className="pl-3 font-mono break-all">
           <span className="text-neutral-500 mr-2">PATH:</span>

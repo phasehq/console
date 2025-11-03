@@ -79,6 +79,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
         if (accountKeyRing.publicKey !== org?.identityKey) {
           toast.error('Incorrect account recovery key!')
           reject('Incorrect account recovery key')
+          return
         }
 
         const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
@@ -156,7 +157,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
             {org && (
               <div className="flex items-center justify-between">
                 <div className="whitespace-nowrap flex items-center gap-2">
-                  <Avatar imagePath={session?.user?.image!} size="md" />
+                  <Avatar user={session?.user} size="md" />
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-black dark:text-white">
