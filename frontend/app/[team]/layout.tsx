@@ -52,7 +52,7 @@ export default function RootLayout({
       )}
     >
       {activeOrganisation && <UnlockKeyringDialog organisation={activeOrganisation} />}
-      {showNav && <NavBar team={params.team} />}
+      {showNav && <NavBar />}
       {showNav && <Sidebar />}
       <div className="grid h-screen">
         <div></div>

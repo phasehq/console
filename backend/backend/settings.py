@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.gitlab",
     "allauth.socialaccount.providers.microsoft",
     "api.config.APIConfig",
+    # "ee",
     "logs",
     "graphene_django",
     "django_rq",
@@ -171,6 +172,14 @@ SOCIALACCOUNT_PROVIDERS = {
                 },
             }
         ]
+    },
+    "authentik": {
+        "APP": {
+            "client_id": os.getenv("AUTHENTIK_CLIENT_ID"),
+            "secret": get_secret("AUTHENTIK_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "email", "profile"],
     },
 }
 

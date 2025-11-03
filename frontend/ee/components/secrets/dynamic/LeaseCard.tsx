@@ -1,0 +1,113 @@
+import {
+  ApiDynamicSecretLeaseStatusChoices,
+  DynamicSecretLeaseType,
+  DynamicSecretType,
+} from '@/apollo/graphql'
+import { Avatar } from '@/components/common/Avatar'
+import { relativeTimeFromDates } from '@/utils/time'
+import clsx from 'clsx'
+import { RenewLeaseDialog } from './RenewLeaseDialog'
+import { RevokeLeaseDialog } from './RevokeLeaseDialog'
+import { LeaseHistoryDialog } from './LeaseHistoryDialog'
+import CopyButton from '@/components/common/CopyButton'
+
+export const LeaseCard = ({
+  secret,
+  lease,
+}: {
+  secret: DynamicSecretType
+  lease: DynamicSecretLeaseType
+}) => {
+  const toTitleCase = (str: string) => str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
+
+  const isExpired = new Date(lease.expiresAt) <= new Date()
+  const isRevoked = lease.revokedAt !== null && new Date(lease.revokedAt) <= new Date()
+
+  const leaseStatusBadge = (status: ApiDynamicSecretLeaseStatusChoices) => {
+    // Check if Active lease has actually expired
+    const isActiveButExpired = status === ApiDynamicSecretLeaseStatusChoices.Active && isExpired
+
+    const styles: Record<ApiDynamicSecretLeaseStatusChoices, string> = {
+      [ApiDynamicSecretLeaseStatusChoices.Active]: isActiveButExpired
+        ? 'bg-amber-400/10 text-amber-400 ring-1 ring-inset ring-amber-400/10'
+        : 'bg-emerald-400/10 text-emerald-400 ring-1 ring-inset ring-emerald-400/10',
+      [ApiDynamicSecretLeaseStatusChoices.Created]:
+        'bg-blue-400/10 text-blue-400 ring-1 ring-inset ring-blue-400/10',
+      [ApiDynamicSecretLeaseStatusChoices.Expired]:
+        'bg-gray-400/10 text-gray-400 ring-1 ring-inset ring-gray-400/10',
+      [ApiDynamicSecretLeaseStatusChoices.Renewed]:
+        'bg-emerald-400/10 text-emerald-400 ring-1 ring-inset ring-emerald-400/10',
+      [ApiDynamicSecretLeaseStatusChoices.Revoked]:
+        'bg-red-400/10 text-red-400 ring-1 ring-inset ring-red-400/10',
+    }
+
+    return (
+      <span
+        className={clsx(
+          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium',
+          styles[status] ??
+            'bg-neutral-400/10 text-neutral-700 ring-1 ring-inset ring-neutral-400/20'
+        )}
+      >
+        <span className="size-2 rounded-full bg-current" />
+        {isActiveButExpired ? 'Expiring' : toTitleCase(status)}
+      </span>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-5 text-sm py-2" key={lease.id}>
+      <div className="col-span-2 space-y-2">
+        <div className="flex items-center gap-1">{leaseStatusBadge(lease.status)}</div>
+        <div>
+          {' '}
+          <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{lease.name}</div>
+          <CopyButton buttonVariant="ghost" value={lease.id}>
+            <div className="font-mono text-2xs text-neutral-500">{lease.id}</div>
+          </CopyButton>
+        </div>
+      </div>
+
+      <div className="space-y-1 col-span-2 text-xs">
+        <div className="text-neutral-500 flex items-center gap-1">
+          Created {relativeTimeFromDates(new Date(lease.createdAt))}
+          {(lease.organisationMember || lease.serviceAccount) && (
+            <div className="flex items-center gap-1">
+              <span className="text-neutral-500 w-4">by</span>
+              <Avatar
+                member={lease.organisationMember || undefined}
+                serviceAccount={lease.serviceAccount || undefined}
+                size="sm"
+              />
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                {lease.organisationMember?.self
+                  ? 'You'
+                  : lease.organisationMember?.fullName || lease.serviceAccount?.name}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-start">
+          <LeaseHistoryDialog lease={lease} />
+        </div>
+        <div className="flex justify-between items-center">
+          {isRevoked ? (
+            <div className="text-red-400">
+              {`${lease.status == ApiDynamicSecretLeaseStatusChoices.Expired ? 'Expire' : 'Revoke'}${isRevoked ? 'd' : 's'}`}{' '}
+              {relativeTimeFromDates(new Date(lease.revokedAt))}
+            </div>
+          ) : (
+            <div className="text-neutral-500">
+              {isExpired ? 'Queued for revocation' : 'Expires'}{' '}
+              {relativeTimeFromDates(new Date(lease.expiresAt))}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className={clsx('flex flex-col gap-2 items-end', isRevoked ? 'pt-9' : '')}>
+        {!isRevoked && <RenewLeaseDialog secret={secret} lease={lease} />}
+        {!lease.revokedAt && <RevokeLeaseDialog secret={secret} lease={lease} />}
+      </div>
+    </div>
+  )
+}

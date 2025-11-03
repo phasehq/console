@@ -2,7 +2,7 @@ import { ProviderType } from '@/apollo/graphql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
-import { useState, useEffect, useContext } from 'react'
+import { useState, useEffect, useContext, Fragment } from 'react'
 import { FaArrowRight } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { useMutation, useQuery } from '@apollo/client'
@@ -18,6 +18,8 @@ import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
 import { SetupAWSAuth } from './AWS/SetupAWSAuth'
 import { MdMenuBook } from 'react-icons/md'
+import { Tab } from '@headlessui/react'
+import clsx from 'clsx'
 
 interface CredentialState {
   [key: string]: string
@@ -55,6 +57,7 @@ export const CreateProviderCredentials = (props: {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [provider, setProvider] = useState<ProviderType | null>(props.provider || null)
+  const [authMethod, setAuthMethod] = useState<'oauth' | 'token'>('token')
   const [name, setName] = useState<string>('')
   const [credentials, setCredentials] = useState<CredentialState>({})
 
@@ -75,10 +78,17 @@ export const CreateProviderCredentials = (props: {
           initialCredentials[cred] = ''
         })
       }
-      if (provider.id === 'aws' || provider.id === 'aws_assume_role') initialCredentials['region'] = awsRegions[0].region
+      if (provider.id === 'aws' || provider.id === 'aws_assume_role')
+        initialCredentials['region'] = awsRegions[0].region
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
+
+      if (provider.id === 'github') {
+        setAuthMethod('oauth')
+      } else {
+        setAuthMethod('token')
+      }
     }
     if (provider) handleProviderChange(provider)
   }, [provider])
@@ -148,6 +158,11 @@ export const CreateProviderCredentials = (props: {
     props.onComplete()
   }
 
+  const supportedAuthMethods = provider?.authScheme?.split(',') || []
+
+  const toggleAuthMethod = () =>
+    setAuthMethod((prevAuthMethod) => (prevAuthMethod === 'oauth' ? 'token' : 'oauth'))
+
   if (provider?.id === 'aws' || provider?.id === 'aws_assume_role') {
     return (
       <SetupAWSAuth
@@ -179,15 +194,53 @@ export const CreateProviderCredentials = (props: {
 
         {provider === null && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {providers.filter(provider => provider.id !== 'aws_assume_role').map((provider) => (
-              <button key={provider.id} type="button" onClick={() => setProvider(provider)}>
-                <ProviderCard provider={provider} />
-              </button>
-            ))}
+            {providers
+              .filter((provider) => provider.id !== 'aws_assume_role')
+              .map((provider) => (
+                <button key={provider.id} type="button" onClick={() => setProvider(provider)}>
+                  <ProviderCard provider={provider} />
+                </button>
+              ))}
           </div>
         )}
 
-        {provider?.authScheme === 'token' &&
+        {provider && supportedAuthMethods.length > 1 && (
+          <Tab.Group selectedIndex={authMethod === 'oauth' ? 0 : 1} onChange={toggleAuthMethod}>
+            <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+              <Tab as={Fragment}>
+                {({ selected }) => (
+                  <div
+                    className={clsx(
+                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      selected
+                        ? 'border-emerald-500 font-semibold text-emerald-500'
+                        : ' border-transparent cursor-pointer'
+                    )}
+                  >
+                    OAuth
+                  </div>
+                )}
+              </Tab>
+
+              <Tab as={Fragment}>
+                {({ selected }) => (
+                  <div
+                    className={clsx(
+                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      selected
+                        ? 'border-emerald-500 font-semibold'
+                        : ' border-transparent cursor-pointer'
+                    )}
+                  >
+                    Access Token
+                  </div>
+                )}
+              </Tab>
+            </Tab.List>
+          </Tab.Group>
+        )}
+
+        {authMethod === 'token' &&
           provider?.expectedCredentials
             .filter((credential) => credential !== 'region')
             .map((credential) => (
@@ -201,7 +254,7 @@ export const CreateProviderCredentials = (props: {
               />
             ))}
 
-        {provider?.authScheme === 'token' &&
+        {authMethod === 'token' &&
           provider?.optionalCredentials
             .filter((credential) => credential !== 'region')
             .map((credential) => (
@@ -215,17 +268,17 @@ export const CreateProviderCredentials = (props: {
             ))}
 
         {(provider?.id === 'aws' || provider?.id === 'aws_assume_role') && (
-          <AWSRegionPicker 
-            value={credentials['region']} 
-            onChange={(region) => handleCredentialChange('region', region)} 
+          <AWSRegionPicker
+            value={credentials['region']}
+            onChange={(region) => handleCredentialChange('region', region)}
           />
         )}
 
-        {provider && provider?.authScheme === 'token' && (
+        {provider && authMethod === 'token' && (
           <Input required value={name} setValue={(value) => setName(value)} label="Name" />
         )}
 
-        {provider && provider.authScheme !== 'oauth' && (
+        {authMethod === 'token' && (
           <div className="flex justify-between">
             <Button variant="secondary" type="button" onClick={handleClickBack}>
               Back
@@ -237,7 +290,7 @@ export const CreateProviderCredentials = (props: {
           </div>
         )}
       </form>
-      {provider?.id === 'github' && <SetupGhAuth />}
+      {provider?.id === 'github' && authMethod === 'oauth' && <SetupGhAuth />}
     </>
   )
 }

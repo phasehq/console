@@ -15,7 +15,7 @@ import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useRef, useState } from 'react'
-import { FaCheck, FaCircle, FaCog, FaDotCircle } from 'react-icons/fa'
+import { FaCheck, FaCircle, FaCog } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import clsx from 'clsx'
 
@@ -112,7 +112,7 @@ export const ModifySubscriptionDialog = () => {
       ref={dialogRef}
       buttonContent={
         <>
-          <FaCog /> Modify subscription
+          <FaCog /> Modify
         </>
       }
       buttonVariant="secondary"

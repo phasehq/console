@@ -1,9 +1,12 @@
+const { textSecurityUtilities } = require('./utils/typography.js')
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
     './app/**/*.{js,ts,jsx,tsx}',
     './pages/**/*.{js,ts,jsx,tsx}',
     './components/**/*.{js,ts,jsx,tsx}',
+    './ee/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   safelist: ['border-t-neutral-500', 'border-t-amber-500', 'border-t-emerald-500', 'border-t-8'],
   darkMode: 'class',
@@ -66,5 +69,19 @@ module.exports = {
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [
+    require('@tailwindcss/typography'),
+    textSecurityUtilities,
+    function ({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-hide': {
+          '-ms-overflow-style': 'none', // IE/Edge
+          'scrollbar-width': 'none', // Firefox
+        },
+        '.scrollbar-hide::-webkit-scrollbar': {
+          display: 'none', // Chrome/Safari
+        },
+      })
+    },
+  ],
 }

@@ -4,6 +4,8 @@ import base64
 import os
 from django.shortcuts import redirect
 from api.utils.syncing.auth import store_oauth_token
+
+from api.authentication.providers.authentik.views import AuthentikOpenIDConnectAdapter
 from backend.utils.secrets import get_secret
 from api.serializers import (
     ServiceAccountTokenSerializer,
@@ -102,6 +104,13 @@ class EntraIDLoginView(SocialLoginView):
         return super().post(request, *args, **kwargs)
 
 
+class AuthentikLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = AuthentikOpenIDConnectAdapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
 def logout_view(request):
     logout(request)
     return JsonResponse({"message": "Logged out"})
@@ -111,6 +120,16 @@ def logout_view(request):
 @permission_classes([AllowAny])
 def health_check(request):
     return JsonResponse({"status": "alive", "version": settings.VERSION})
+
+
+@permission_classes([AllowAny])
+def root_endpoint(request):
+    return JsonResponse(
+        {
+            "message": "API is alive. Please see https://docs.phase.dev/public-api for documentation on available endpoints.",
+            "status": "ok",
+        },
+    )
 
 
 def user_token_kms(request):

@@ -1,6 +1,6 @@
 import { FaTrashAlt } from 'react-icons/fa'
 import { DeleteServiceAccountTokenOp } from '@/graphql/mutations/service-accounts/deleteServiceAccountToken.gql'
-import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
+import { GetServiceAccountTokens } from '@/graphql/queries/service-accounts/getServiceAccountTokens.gql'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { useContext, useRef } from 'react'
@@ -33,7 +33,7 @@ export const DeleteServiceAccountTokenDialog = ({
       variables: { id: token.id },
       refetchQueries: [
         {
-          query: GetServiceAccountDetail,
+          query: GetServiceAccountTokens,
           variables: { orgId: organisation!.id, id: serviceAccountId },
         },
       ],
@@ -60,7 +60,7 @@ export const DeleteServiceAccountTokenDialog = ({
       <div className="space-y-4">
         <div className="text-neutral-500 py-4">Are you sure you want to delete this token?</div>
         <div className="flex justify-end">
-          <Button variant="danger" onClick={handleDelete} isLoading={loading} className="flex items-center gap-1">
+          <Button variant="danger" onClick={handleDelete} isLoading={loading}>
             <FaTrashAlt /> Delete
           </Button>
         </div>

@@ -70,8 +70,8 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8081"
-    environment:
-      - DATABASE_URL=postgres://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}?sslmode=disable
+    env_file:
+      - .env.dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,7 +88,6 @@ services:
       POSTGRES_DB: ${DATABASE_NAME}
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_HOST_AUTH_METHOD: "trust"
     volumes:
       - phase-postgres-data-dev:/var/lib/postgresql/data
     networks:

@@ -2,7 +2,7 @@
 # replace-variables.sh
 
 # Define a list of mandatory environment variables to check
-MANDATORY_VARS=("NEXT_PUBLIC_BACKEND_API_BASE" "NEXT_PUBLIC_NEXTAUTH_PROVIDERS")
+MANDATORY_VARS=("NEXT_PUBLIC_BACKEND_API_BASE")
 
 # Define a list of optional environment variables (no check needed)
 OPTIONAL_VARS=("APP_HOST" "NEXT_PUBLIC_POSTHOG_KEY" "NEXT_PUBLIC_POSTHOG_HOST" "NEXT_PUBLIC_STRIPE_PUBLIC_KEY")

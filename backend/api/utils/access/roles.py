@@ -12,6 +12,7 @@ default_roles = {
             "MemberPersonalAccessTokens": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "ServiceAccountTokens": ["create", "read", "update", "delete"],
+            "ExternalIdentities": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
@@ -19,6 +20,7 @@ default_roles = {
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
             "Secrets": ["create", "read", "update", "delete"],
+            "DynamicSecretLeases": ["create", "read", "update", "delete"],
             "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["create", "read", "update", "delete"],
             "Tokens": ["create", "read", "update", "delete"],
@@ -42,6 +44,7 @@ default_roles = {
             "MemberPersonalAccessTokens": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "ServiceAccountTokens": ["create", "read", "update", "delete"],
+            "ExternalIdentities": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
@@ -49,6 +52,7 @@ default_roles = {
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
             "Secrets": ["create", "read", "update", "delete"],
+            "DynamicSecretLeases": ["create", "read", "update", "delete"],
             "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["create", "read", "update", "delete"],
             "Tokens": ["create", "read", "update", "delete"],
@@ -61,16 +65,17 @@ default_roles = {
     },
     "Manager": {
         "meta": {
-            "version": 1,
+            "version": 2,
             "description": "Management users with broad access to environments, secrets, and service accounts at the organisation level. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
             "Organisation": ["read"],
-            "Billing": [],
+            "Billing": ["create", "read", "update", "delete"],
             "Apps": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "ServiceAccountTokens": ["create", "read", "update", "delete"],
+            "ExternalIdentities": ["create", "read", "update", "delete"],
             "Roles": ["create", "read", "update", "delete"],
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
@@ -78,6 +83,7 @@ default_roles = {
         "app_permissions": {
             "Environments": ["read", "create", "update"],
             "Secrets": ["create", "read", "update", "delete"],
+            "DynamicSecretLeases": ["create", "read", "update", "delete"],
             "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["create", "read", "update", "delete"],
             "Tokens": ["create", "read", "update", "delete"],
@@ -100,6 +106,7 @@ default_roles = {
             "Members": ["read"],
             "ServiceAccounts": [],
             "ServiceAccountTokens": [],
+            "ExternalIdentities": [],
             "Roles": ["read"],
             "IntegrationCredentials": [
                 "create",
@@ -111,6 +118,7 @@ default_roles = {
         "app_permissions": {
             "Environments": ["read", "create", "update"],
             "Secrets": ["create", "read", "update", "delete"],
+            "DynamicSecretLeases": ["create", "read"],
             "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["read"],
             "Tokens": ["read", "create"],
@@ -133,6 +141,7 @@ default_roles = {
             "Members": ["read"],
             "ServiceAccounts": ["read"],
             "ServiceAccountTokens": ["read"],
+            "ExternalIdentities": ["read"],
             "Roles": ["read"],
             "IntegrationCredentials": ["read"],
             "NetworkAccessPolicies": ["read"],
@@ -140,6 +149,7 @@ default_roles = {
         "app_permissions": {
             "Environments": ["read", "create", "update", "delete"],
             "Secrets": ["create", "read", "update", "delete"],
+            "DynamicSecretLeases": ["create", "read"],
             "Lockbox": [],
             "Logs": [],
             "Tokens": [],
