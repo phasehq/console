@@ -129,7 +129,7 @@ export const PlanInfo = () => {
                       <div className="whitespace-nowrap">Compare plans</div>
                     </Button>
                   </Link>
-                  {userCanUpdateBilling && <UpsellDialog />}
+                  {userCanUpdateBilling && <UpsellDialog buttonLabel="Upgrade" />}
                 </div>
               )}
             </div>

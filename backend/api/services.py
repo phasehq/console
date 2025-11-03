@@ -28,7 +28,7 @@ class Providers:
         "name": "GitHub",
         "expected_credentials": ["access_token"],
         "optional_credentials": ["host_url", "api_url"],
-        "auth_scheme": "oauth",
+        "auth_scheme": "oauth,token",
     }
 
     GITLAB = {
@@ -74,6 +74,14 @@ class Providers:
         "id": "vercel",
         "name": "Vercel",
         "expected_credentials": ["api_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
+    RENDER = {
+        "id": "render",
+        "name": "Render",
+        "expected_credentials": ["api_key"],
         "optional_credentials": [],
         "auth_scheme": "token",
     }
@@ -155,6 +163,13 @@ class ServiceConfig:
         "name": "Vercel",
         "provider": Providers.VERCEL,
         "resource_type": "environment",
+    }
+
+    RENDER = {
+        "id": "render",
+        "name": "Render",
+        "provider": Providers.RENDER,
+        "resource_type": "service",
     }
 
     @classmethod

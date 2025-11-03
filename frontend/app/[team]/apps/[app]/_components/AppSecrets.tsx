@@ -1,6 +1,5 @@
 'use client'
 
-import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
@@ -10,7 +9,6 @@ import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/ap
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
-
 import {
   FaAngleDoubleDown,
   FaAngleDoubleUp,
@@ -41,9 +39,7 @@ import {
   getUserKxPublicKey,
   arraysEqual,
 } from '@/utils/crypto'
-
 import { EmptyState } from '@/components/common/EmptyState'
-
 import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
@@ -55,6 +51,7 @@ import MultiEnvImportDialog from '@/components/environments/secrets/import/Multi
 import { TbDownload } from 'react-icons/tb'
 import { duplicateKeysExist } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
+import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -107,7 +104,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const [expandedSecrets, setExpandedSecrets] = useState<string[]>([])
 
   const [searchQuery, setSearchQuery] = useState<string>('')
-  const [initAppEnvironments] = useMutation(InitAppEnvironments)
+
   const [bulkProcessSecrets, { loading: bulkUpdatePending }] = useMutation(BulkProcessSecrets)
 
   const [isLoading, setIsLoading] = useState(false)
@@ -128,7 +125,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     setExpandedSecrets(expandedSecrets.filter((id) => id !== secretId))
   }
 
-  const allRowsAreExpanded = clientAppSecrets.every((secret) => expandedSecrets.includes(secret.id))
   const allRowsAreCollapsed = expandedSecrets.length === 0
 
   const unsavedChanges =
@@ -155,10 +151,15 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   useWarnIfUnsavedChanges(unsavedChanges)
 
-  const { appEnvironments, appSecrets, appFolders, fetching, refetch } = useAppSecrets(
-    app,
-    userCanReadSecrets,
-    unsavedChanges ? 0 : 10000 // Poll every 10 seconds
+  const { appEnvironments, appSecrets, appFolders, appDynamicSecrets, fetching, refetch } =
+    useAppSecrets(
+      app,
+      userCanReadSecrets,
+      unsavedChanges ? 0 : 10000 // Poll every 10 seconds
+    )
+
+  const allRowsAreExpanded = [...clientAppSecrets, ...appDynamicSecrets].every((item) =>
+    expandedSecrets.includes(item.id)
   )
 
   useEffect(() => {
@@ -184,6 +185,14 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           return searchRegex.test(folder.name)
         })
 
+  const filteredDynamicSecrets =
+    searchQuery === ''
+      ? appDynamicSecrets
+      : appDynamicSecrets.filter((secret) => {
+          const searchRegex = new RegExp(searchQuery, 'i')
+          return searchRegex.test(secret.name)
+        })
+
   const { data: syncsData } = useQuery(GetAppSyncStatus, {
     variables: {
       appId: app,
@@ -194,7 +203,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   const toggleAllExpanded = (expand: boolean) => {
     expand
-      ? setExpandedSecrets(clientAppSecrets.map((appSecret) => appSecret.id))
+      ? setExpandedSecrets([
+          ...clientAppSecrets.map((appSecret) => appSecret.id),
+          ...appDynamicSecrets.map((appDynamicSecret) => appDynamicSecret.id),
+        ])
       : setExpandedSecrets([])
   }
 
@@ -403,10 +415,63 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     ])
   }
 
-  const bulkAddNewClientSecrets = (newSecrets: AppSecret[]) => {
-    setClientAppSecrets((prevSecrets) => {
-      const updatedSecrets = [...newSecrets, ...prevSecrets]
-      return updatedSecrets
+  /**
+   * Bulk adds or updates client secrets in state from an import.
+   *
+   * For each secret in `newSecrets`:
+   * - If the secret key already exists, update each environment value if it differs.
+   *   - If the environment exists but has no secret yet, initialize it.
+   *   - If it exists and already has a secret, overwrite its value/comment.
+   *   - If the environment does not exist, add it.
+   * - If the secret key does not exist at all, add it as a new secret.
+   *
+   *
+   * @param {AppSecret[]} newSecrets - Secrets being imported into client state
+   */
+  function bulkAddNewClientSecrets(newSecrets: AppSecret[]) {
+    setClientAppSecrets((prev) => {
+      // Clone all existing secrets so we work on new objects,
+      // avoiding in-place mutations of previous state.
+      const existingMap = new Map(prev.map((s) => [s.key, structuredClone(s)]))
+
+      newSecrets.forEach((ns) => {
+        const existing = existingMap.get(ns.key)
+
+        if (existing) {
+          // This secret key already exists, update environments as needed
+          ns.envs.forEach(({ env, secret }) => {
+            // Find matching environment in existing secret
+            const match = existing.envs.find((e) => e.env.id === env.id)
+
+            if (secret && match && !match.secret) {
+              // Environment exists but has no secret yet → initialize it
+              match.secret = {
+                id: `new-${crypto.randomUUID()}`,
+                updatedAt: null,
+                version: 1,
+                key: '',
+                value: secret.value,
+                tags: [],
+                comment: secret.comment,
+                path: '/',
+                environment: env as EnvironmentType,
+              }
+            } else if (match && secret) {
+              // Environment already has a secret → overwrite value and comment
+              match.secret = {
+                ...match.secret,
+                value: secret.value,
+                comment: secret.comment,
+              } as SecretType
+            }
+          })
+        } else {
+          // This secret key does not exist at all → add as new secret
+          existingMap.set(ns.key, structuredClone(ns))
+        }
+      })
+
+      return Array.from(existingMap.values())
     })
   }
 
@@ -802,7 +867,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         />
       )}
 
-      {filteredSecrets.length > 0 && (
+      {(filteredSecrets.length > 0 || filteredDynamicSecrets.length > 0) && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -873,6 +938,16 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 <tbody className="divide-y divide-neutral-500/20 rounded-md">
                   {filteredFolders.map((appFolder) => (
                     <AppFolderRow key={appFolder.name} appFolder={appFolder} />
+                  ))}
+
+                  {filteredDynamicSecrets.map((appDynamicSecret) => (
+                    <AppDynamicSecretRow
+                      key={appDynamicSecret.id}
+                      appDynamicSecret={appDynamicSecret}
+                      isExpanded={expandedSecrets.includes(appDynamicSecret.id)}
+                      expand={handleExpandRow}
+                      collapse={handleCollapseRow}
+                    />
                   ))}
 
                   {filteredSecrets.map((appSecret, index) => (

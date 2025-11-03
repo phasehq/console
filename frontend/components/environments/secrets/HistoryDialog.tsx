@@ -133,10 +133,22 @@ export const HistoryDialog = ({
       )
     else if (log.serviceAccount)
       return (
-        <div className="flex items-center gap-1 text-sm">
+        <div
+          className={clsx(
+            'flex items-center gap-1 text-sm',
+            log.serviceAccount.deletedAt && 'grayscale'
+          )}
+        >
           <Avatar serviceAccount={log.serviceAccount} size="sm" />
-          {log.serviceAccount.name}
-          {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
+          <span className={clsx(log.serviceAccount.deletedAt ? 'line-through' : '')}>
+            {log.serviceAccount.name}
+          </span>{' '}
+          {log.serviceAccount.deletedAt && (
+            <span className="text-neutral-500 font-normal">(Deleted)</span>
+          )}
+          {log.serviceAccountToken &&
+            !log.serviceAccount.deletedAt &&
+            ` (${log.serviceAccountToken.name})`}
         </div>
       )
   }
@@ -147,7 +159,10 @@ export const HistoryDialog = ({
     <>
       <div className="flex items-center justify-center">
         <Button variant="outline" onClick={openModal} title="View secret history" tabIndex={-1}>
-          <FaHistory /> <span className="hidden 2xl:block text-xs">History</span>
+          <span className="py-1">
+            <FaHistory className="shrink-0" />
+          </span>
+          <span className="hidden 2xl:block text-xs">History</span>
         </Button>
       </div>
 

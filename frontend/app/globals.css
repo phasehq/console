@@ -130,7 +130,7 @@ a {
     @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-zinc-800 dark:text-white ring-1 ring-inset ring-neutral-500/40 focus:ring-1 focus:ring-emerald-500 group-focus-within:invalid:ring-red-500 focus:ring-inset;
   }
 
-  textarea {
+  textarea:not(.custom) {
     @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-zinc-800 dark:text-white ring-1 ring-inset ring-neutral-500/40 focus:ring-1 focus:ring-emerald-400/40 group-focus-within:invalid:ring-red-500 focus:ring-inset outline-none focus:outline-none;
   }
 

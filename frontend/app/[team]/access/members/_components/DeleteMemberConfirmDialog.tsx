@@ -21,7 +21,7 @@ export const DeleteMemberConfirmDialog = (props: {
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [removeMember] = useMutation(RemoveMember)
+  const [removeMember, { loading }] = useMutation(RemoveMember)
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
@@ -72,14 +72,22 @@ export const DeleteMemberConfirmDialog = (props: {
       >
         <div className="space-y-6 p-4">
           <p className="text-neutral-500">
-            Are you sure you want to remove {member.fullName || member.email} from this
-            organisation? This action cannot be undone.
+            Are you sure you want to remove{' '}
+            <span className="text-zinc-900 dark:text-zinc-100">
+              {member.fullName || member.email}
+            </span>{' '}
+            from this organisation? This action cannot be undone.
           </p>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between gap-4">
             <Button variant="secondary" type="button" onClick={closeModal}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleRemoveMember}>
+            <Button
+              variant="danger"
+              onClick={handleRemoveMember}
+              isLoading={loading}
+              icon={FaTrashAlt}
+            >
               Remove Member
             </Button>
           </div>

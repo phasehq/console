@@ -83,9 +83,7 @@ class CreateSubscriptionCheckoutSession(Mutation):
         except Organisation.DoesNotExist:
             raise GraphQLError("Organisation not found.")
         except Exception as e:
-            raise GraphQLError(
-                f"Something went wrong during checkout. Please try again."
-            )
+            raise GraphQLError(f"Error creating checkout session: {e}")
 
 
 class DeletePaymentMethodMutation(Mutation):

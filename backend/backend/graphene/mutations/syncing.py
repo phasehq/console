@@ -1,6 +1,7 @@
 from api.tasks.syncing import trigger_sync_tasks
 from api.utils.secrets import normalize_path_string
 
+from api.utils.syncing.render.main import RenderResourceType
 import graphene
 from graphql import GraphQLError
 from api.utils.access.permissions import (
@@ -265,11 +266,14 @@ class CreateGitHubActionsSync(graphene.Mutation):
         credential_id = graphene.ID()
         repo_name = graphene.String()
         owner = graphene.String()
+        environment_name = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(cls, root, info, env_id, path, credential_id, repo_name, owner):
+    def mutate(
+        cls, root, info, env_id, path, credential_id, repo_name, owner, environment_name=None
+    ):
         service_id = "github_actions"
         service_config = ServiceConfig.get_service_config(service_id)
 
@@ -282,6 +286,8 @@ class CreateGitHubActionsSync(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         sync_options = {"repo_name": repo_name, "owner": owner}
+        if environment_name:
+            sync_options["environment_name"] = environment_name
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None
@@ -744,3 +750,67 @@ class CreateCloudflareWorkersSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateCloudflareWorkersSync(sync=sync)
+
+
+class CreateRenderSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        resource_id = graphene.String()
+        resource_name = graphene.String()
+        resource_type = graphene.Argument(RenderResourceType)
+        secret_file_name = graphene.String(required=False)
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        resource_id,
+        resource_name,
+        resource_type,
+        secret_file_name,
+    ):
+        service_type = "render"
+        service_config = ServiceConfig.get_service_config(service_type)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "resource_id": resource_id,
+            "resource_name": resource_name,
+            "resource_type": resource_type.value,
+            "secret_file_name": secret_file_name,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_type, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError("A sync already exists for this Render service!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_type,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateRenderSync(sync=sync)

@@ -234,7 +234,8 @@ export default function Invite({ params }: { params: { invite: string } }) {
           <div className="mx-auto pt-8">
             <Button
               variant="primary"
-              arrow="right"
+              iconPosition="right"
+              icon={FaArrowRight}
               onClick={() => (window.location.href = `/${invite.organisation.name}`)}
             >
               Go to Console

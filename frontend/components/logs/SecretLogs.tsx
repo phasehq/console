@@ -299,12 +299,25 @@ export default function SecretLogs(props: { app: string }) {
         )
       else if (log.serviceAccount)
         return (
-          <div className={clsx('flex items-center gap-1', textStyle)}>
-            <div className="rounded-full flex items-center bg-neutral-500/40 justify-center size-6">
-              <FaRobot className=" text-zinc-900 dark:text-zinc-100" />
-            </div>{' '}
-            {log.serviceAccount.name}
-            {log.serviceAccountToken && ` (${log.serviceAccountToken.name})`}
+          <div
+            className={clsx(
+              'flex items-center gap-1',
+              textStyle,
+              log.serviceAccount.deletedAt && 'grayscale'
+            )}
+          >
+            <Avatar serviceAccount={log.serviceAccount} size="sm" />
+            <span className={clsx(log.serviceAccount.deletedAt ? 'line-through' : '')}>
+              {log.serviceAccount.name}
+            </span>
+            {log.serviceAccount.deletedAt && (
+              <span className="text-neutral-500 font-normal">(Deleted)</span>
+            )}
+            {/* {log.serviceAccountToken && !log.serviceAccount.deletedAt && (
+              <span className={clsx(log.serviceAccountToken.deletedAt ? 'line-through' : '')}>
+                ({log.serviceAccountToken.name})
+              </span>
+            )} */}
           </div>
         )
     }
@@ -401,7 +414,7 @@ export default function SecretLogs(props: { app: string }) {
                     <LogField label="Created by">
                       <div className="flex items-center gap-2">
                         {logCreatedBy(log)}{' '}
-                        {log.serviceAccount && (
+                        {log.serviceAccount && !log.serviceAccount.deletedAt && (
                           <Link
                             href={`/${organisation!.name}/access/service-accounts/${log.serviceAccount.id}`}
                             className="font-sans"
@@ -414,6 +427,35 @@ export default function SecretLogs(props: { app: string }) {
                       </div>
                     </LogField>
 
+                    {log.serviceAccountToken && (
+                      <LogField label="Token">
+                        <div className="flex items-center gap-2">
+                          <FaKey className="text-neutral-500" />
+                          <span
+                            className={clsx(
+                              log.serviceAccountToken.deletedAt ? 'line-through' : ''
+                            )}
+                          >
+                            {log.serviceAccountToken.name}{' '}
+                          </span>
+                          {log.serviceAccountToken.deletedAt && (
+                            <span className="text-neutral-500 font-normal">(Deleted)</span>
+                          )}
+
+                          {!log.serviceAccountToken.deletedAt && (
+                            <Link
+                              href={`/${organisation!.name}/access/service-accounts/${log.serviceAccount?.id}`}
+                              className="font-sans"
+                            >
+                              <Button variant="outline">
+                                Manage tokens <FaArrowRight />
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
+                      </LogField>
+                    )}
+
                     <LogField label="IP address"> {log.ipAddress}</LogField>
 
                     <LogField label="User agent"> {log.userAgent}</LogField>
@@ -422,7 +464,7 @@ export default function SecretLogs(props: { app: string }) {
 
                     <LogField label="Timestamp">{verboseTimeStamp()}</LogField>
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-end md:col-span-3">
                       <Button variant="outline">
                         <Link
                           className="flex items-center gap-2"
@@ -494,8 +536,11 @@ export default function SecretLogs(props: { app: string }) {
   }
 
   const hasActiveFilters =
-    eventTypes.length > 0 || selectedUser !== null || selectedAccount !== null || dateRange !== null
-  selectedEnvironment !== null
+    eventTypes.length > 0 ||
+    selectedUser !== null ||
+    selectedAccount !== null ||
+    dateRange !== null ||
+    selectedEnvironment !== null
 
   const filterCategoryTitleStyle =
     'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
@@ -513,12 +558,15 @@ export default function SecretLogs(props: { app: string }) {
     return `${year}-${month}-${day}T${hours}:${minutes}`
   }
 
+  const COUNT_ACCURACY_THRESHOLD = 10000
+
   return (
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
           <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-200 dark:bg-neutral-900">
             <span className="text-neutral-500 font-light text-lg">
+              {totalCount >= COUNT_ACCURACY_THRESHOLD ? '~' : ''}
               {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
             </span>
 
@@ -656,16 +704,20 @@ export default function SecretLogs(props: { app: string }) {
                                                 )}
                                               >
                                                 <div className="flex items-center gap-1">
-                                                  {'name' in item ? (
-                                                    <div className="size-5 flex items-center justify-center ring-1 ring-inset ring-neutral-500/40  bg-neutral-400/10 rounded-full">
-                                                      <FaRobot className="text-neutral-500" />
-                                                    </div>
-                                                  ) : (
-                                                    <Avatar
-                                                      member={item as OrganisationMemberType}
-                                                      size="sm"
-                                                    />
-                                                  )}
+                                                  <Avatar
+                                                    member={
+                                                      item.__typename === 'OrganisationMemberType'
+                                                        ? (item as OrganisationMemberType)
+                                                        : undefined
+                                                    }
+                                                    serviceAccount={
+                                                      item.__typename === 'ServiceAccountType'
+                                                        ? (item as ServiceAccountType)
+                                                        : undefined
+                                                    }
+                                                    size="sm"
+                                                  />
+
                                                   <span>
                                                     {'name' in item
                                                       ? item.name

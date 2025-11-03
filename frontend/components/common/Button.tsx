@@ -1,7 +1,8 @@
-import Link from 'next/link'
 import clsx from 'clsx'
 import { forwardRef, type ReactNode } from 'react'
 import Spinner from './Spinner'
+import { IconType } from 'react-icons'
+import { LogoProps } from './logos/types'
 
 export type ButtonVariant =
   | 'primary'
@@ -13,28 +14,19 @@ export type ButtonVariant =
   | 'ghost'
   | 'text'
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant: ButtonVariant
+export type ButtonSize = 'md' | 'lg'
+
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant
+  size?: ButtonSize
   classString?: string
-  children: ReactNode
-  arrow?: 'left' | 'right'
+  children?: ReactNode
+  iconPosition?: 'left' | 'right'
   isLoading?: boolean
+  icon?: IconType | (({ className }: LogoProps) => JSX.Element)
 }
 
-function ArrowIcon(props: { className: string }) {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
-      <path
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="m11.5 6.5 3 3.5m0 0-3 3.5m3-3.5h-9"
-      />
-    </svg>
-  )
-}
-
-const variantStyles: Record<string, string> = {
+const variantStyles: Record<ButtonVariant, string> = {
   primary:
     'rounded-full bg-zinc-900 py-1 px-3 text-white hover:bg-zinc-700 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-1 dark:ring-inset dark:ring-emerald-400/20 dark:hover:bg-emerald-400/10 dark:hover:text-emerald-300 dark:hover:ring-emerald-300',
   warning:
@@ -52,28 +44,25 @@ const variantStyles: Record<string, string> = {
   text: 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-500',
 }
 
+const sizeStyles: Record<ButtonSize, { text: string; icon: string; gap: string }> = {
+  md: { text: 'text-sm', icon: 'size-4', gap: 'gap-1' },
+  lg: { text: 'text-base', icon: 'size-6', gap: 'gap-2' },
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant, classString, children, arrow, isLoading, ...rest },
+  {
+    variant = 'primary',
+    size = 'md',
+    classString,
+    children,
+    isLoading,
+    icon,
+    iconPosition = 'left',
+    ...rest
+  },
   ref
 ) {
-  const computedClassName = clsx(
-    'inline-flex gap-1 justify-center items-center overflow-hidden text-sm font-medium transition-all ease-in-out whitespace-nowrap',
-    variantStyles[variant],
-    classString,
-    (rest.disabled || isLoading) && 'opacity-60 pointer-events-none'
-  )
-
-  const arrowIcon = (
-    <ArrowIcon
-      className={clsx(
-        'mt-0.5 h-5 w-5',
-        variant === 'text' && 'relative top-px',
-        arrow === 'left' && '-ml-1 rotate-180',
-        arrow === 'right' && '-mr-1'
-      )}
-    />
-  )
-
+  const Icon = icon
   const spinnerColor = () => {
     switch (variant) {
       case 'primary':
@@ -84,18 +73,33 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         return 'amber'
       case 'secondary':
       case 'outline':
+      case 'ghost':
         return 'neutral'
       default:
         return 'emerald'
     }
   }
 
+  const computedClassName = clsx(
+    'inline-flex justify-center items-center overflow-hidden font-medium transition-all ease-in-out whitespace-nowrap',
+    sizeStyles[size].text,
+    sizeStyles[size].gap,
+    variantStyles[variant],
+    classString,
+    (rest.disabled || isLoading) && 'opacity-60 pointer-events-none'
+  )
+
   return (
     <button ref={ref} className={computedClassName} disabled={rest.disabled || isLoading} {...rest}>
-      {!isLoading && arrow === 'left' && arrowIcon}
+      {!isLoading && Icon && iconPosition === 'left' && (
+        <Icon className={clsx(sizeStyles[size].icon, 'shrink-0')} />
+      )}
+
       {isLoading && <Spinner size="sm" color={spinnerColor()} />}
       {children}
-      {!isLoading && arrow === 'right' && arrowIcon}
+      {!isLoading && Icon && iconPosition === 'right' && (
+        <Icon className={clsx(sizeStyles[size].icon, 'shrink-0')} />
+      )}
     </button>
   )
 })

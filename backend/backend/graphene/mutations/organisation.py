@@ -291,17 +291,14 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
-        if user_is_admin(info.context.user.userId, org_member.organisation.id):
-            org_member.delete()
+        org_member.delete()
 
-            if settings.APP_HOST == "cloud":
-                from ee.billing.stripe import update_stripe_subscription_seats
+        if settings.APP_HOST == "cloud":
+            from ee.billing.stripe import update_stripe_subscription_seats
 
-                update_stripe_subscription_seats(org_member.organisation)
+            update_stripe_subscription_seats(org_member.organisation)
 
-            return DeleteOrganisationMemberMutation(ok=True)
-        else:
-            raise GraphQLError("You don't have permission to perform that action")
+        return DeleteOrganisationMemberMutation(ok=True)
 
 
 class UpdateOrganisationMemberRole(graphene.Mutation):
