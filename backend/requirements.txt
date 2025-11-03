@@ -32,7 +32,7 @@ gunicorn==23.0.0
 hvac==2.1.0
 hyperlink==21.0.0
 idna==3.4
-incremental==22.10.0
+incremental==24.7.2
 iniconfig==2.0.0
 jmespath==1.0.1
 oauthlib==3.2.2
