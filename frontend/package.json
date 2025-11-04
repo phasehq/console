@@ -42,7 +42,7 @@
     "libsodium-wrappers-sumo": "^0.7.13",
     "lodash": "^4.17.21",
     "next": "^14.2.32",
-    "next-auth": "^4.24.11",
+    "next-auth": "^4.24.13",
     "nextjs-toploader": "^3.8.16",
     "posthog-js": "^1.258.3",
     "react": "^18.2.0",
