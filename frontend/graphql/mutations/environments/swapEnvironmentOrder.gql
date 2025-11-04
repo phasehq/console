@@ -1,0 +1,5 @@
+mutation SwapEnvOrder($environment1Id: ID!, $environment2Id: ID!) {
+  swapEnvironmentOrder(environment1Id: $environment1Id, environment2Id: $environment2Id) {
+    ok
+  }
+}

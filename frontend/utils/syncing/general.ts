@@ -1,13 +1,13 @@
 import { ProviderType } from '@/apollo/graphql'
 import { encryptAsymmetric } from '../crypto'
 
-export interface Crdentials {
-  [key: string]: string
+export interface Credentials {
+  [key: string]: string | null | undefined
 }
 
 export const encryptProviderCredentials = async (
   provider: ProviderType,
-  credentials: Crdentials,
+  credentials: Credentials,
   serverKey: string
 ) => {
   if (provider?.expectedCredentials && serverKey) {
@@ -16,14 +16,21 @@ export const encryptProviderCredentials = async (
 
     const providerCredentials = [...provider.expectedCredentials, ...provider.optionalCredentials]
 
-    // Create a list of promises for each credential encryption
+    // Encrypt only defined values
     const encryptionPromises = providerCredentials.map(async (credential) => {
-      credentialsCopy[credential] = await encryptAsymmetric(credentials[credential], serverKey)
+      const value = credentials[credential]
+      if (value != null) {
+        credentialsCopy[credential] = await encryptAsymmetric(value, serverKey)
+      } else {
+        credentialsCopy[credential] = value // preserve null or undefined
+      }
     })
 
-    // Wait for all promises to resolve
     await Promise.all(encryptionPromises)
 
     return credentialsCopy
   }
 }
+
+export const isCredentialSecret = (credential: string) =>
+  !/(?:addr|host|url)/i.test(credential.toLowerCase())

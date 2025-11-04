@@ -1,0 +1,3 @@
+query GetCustomerPortalLink($organisationId: ID!) {
+  stripeCustomerPortalUrl(organisationId: $organisationId)
+}

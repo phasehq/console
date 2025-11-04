@@ -1,0 +1,11 @@
+query GetRenderResources($credentialId: ID!) {
+  renderServices(credentialId: $credentialId) {
+    id
+    name
+    type
+  }
+  renderEnvgroups(credentialId: $credentialId) {
+    id
+    name
+  }
+}

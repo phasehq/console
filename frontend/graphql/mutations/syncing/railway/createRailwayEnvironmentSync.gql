@@ -1,0 +1,33 @@
+mutation CreateNewRailwaySync(
+  $envId: ID!
+  $path: String!
+  $credentialId: ID!
+  $railwayProject: RailwayResourceInput!
+  $railwayEnvironment: RailwayResourceInput!
+  $railwayService: RailwayResourceInput
+) {
+  createRailwaySync(
+    envId: $envId
+    path: $path
+    credentialId: $credentialId
+    railwayProject: $railwayProject
+    railwayEnvironment: $railwayEnvironment
+    railwayService: $railwayService
+  ) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}

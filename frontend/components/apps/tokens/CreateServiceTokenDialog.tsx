@@ -6,15 +6,6 @@ import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { CliCommand } from '@/components/dashboard/CliCommand'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { cryptoUtils } from '@/utils/auth'
-import {
-  newEnvToken,
-  newEnvWrapKey,
-  newServiceTokenKeys,
-  unwrapEnvSecretsForUser,
-  wrapEnvSecretsForServiceToken,
-} from '@/utils/environments'
-import { splitSecret } from '@/utils/keyshares'
 import { useQuery, useLazyQuery, useMutation } from '@apollo/client'
 import { Dialog, Tab, Listbox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -27,15 +18,32 @@ import { CreateNewServiceToken } from '@/graphql/mutations/environments/createSe
 import Link from 'next/link'
 import { ExpiryOptionT, humanReadableExpiry, tokenExpiryOptions } from '@/utils/tokens'
 import { getApiHost } from '@/utils/appConfig'
+import { EnableSSEDialog } from '../EnableSSEDialog'
+import {
+  newEnvToken,
+  newEnvWrapKey,
+  newServiceTokenKeys,
+  splitSecret,
+  getWrappedKeyShare,
+  unwrapEnvSecretsForUser,
+  wrapEnvSecretsForServiceToken,
+} from '@/utils/crypto'
+import { organisationContext } from '@/contexts/organisationContext'
+import { userHasPermission } from '@/utils/access/permissions'
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
 }
 
 export const CreateServiceTokenDialog = (props: { organisationId: string; appId: string }) => {
-  const { organisationId, appId } = props
+  const { appId } = props
 
+  const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
+
+  const userCanReadEnvironments = organisation
+    ? userHasPermission(organisation.role?.permissions, 'Environments', 'read', true)
+    : false
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')
@@ -50,6 +58,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
     variables: {
       appId,
     },
+    skip: !userCanReadEnvironments,
   })
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
   const [createServiceToken] = useMutation(CreateNewServiceToken)
@@ -96,7 +105,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
 
       const tokenKeys = await newServiceTokenKeys()
       const keyShares = await splitSecret(tokenKeys.privateKey)
-      const wrappedKeyShare = await cryptoUtils.wrappedKeyShare(keyShares[1], wrapKey)
+      const wrappedKeyShare = await getWrappedKeyShare(keyShares[1], wrapKey)
 
       const pssService = `pss_service:v1:${token}:${tokenKeys.publicKey}:${keyShares[0]}:${wrapKey}`
 
@@ -287,62 +296,80 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                             </div>
                           </Tab.Panel>
                           <Tab.Panel>
-                            <div className="space-y-6">
-                              <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
-                                <div className="w-full flex items-center justify-between pb-4">
-                                  <span className="uppercase text-xs tracking-widest text-gray-500">
-                                    API token
-                                  </span>
-                                  <div className="flex gap-4 items-center">
-                                    {apiServiceToken && (
-                                      <div className="">
-                                        <CopyButton value={apiServiceToken} />
-                                      </div>
-                                    )}
+                            {data.sseEnabled ? (
+                              <div className="space-y-6">
+                                <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
+                                  <div className="w-full flex items-center justify-between pb-4">
+                                    <span className="uppercase text-xs tracking-widest text-gray-500">
+                                      API token
+                                    </span>
+                                    <div className="flex gap-4 items-center">
+                                      {apiServiceToken && (
+                                        <div className="">
+                                          <CopyButton value={apiServiceToken} />
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
+                                  <code className="text-xs break-all text-emerald-500 ph-no-capture">
+                                    {apiServiceToken}
+                                  </code>
                                 </div>
-                                <code className="text-xs break-all text-emerald-500 ph-no-capture">
-                                  {apiServiceToken}
-                                </code>
-                              </div>
 
-                              <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
-                                <div className="w-full flex items-center justify-between pb-4">
-                                  <span className="uppercase text-xs tracking-widest text-gray-500">
-                                    app id
-                                  </span>
-                                  <div className="flex gap-4 items-center">
-                                    {apiServiceToken && (
-                                      <div className="">
-                                        <CopyButton value={appId} />
-                                      </div>
-                                    )}
+                                <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
+                                  <div className="w-full flex items-center justify-between pb-4">
+                                    <span className="uppercase text-xs tracking-widest text-gray-500">
+                                      app id
+                                    </span>
+                                    <div className="flex gap-4 items-center">
+                                      {apiServiceToken && (
+                                        <div className="">
+                                          <CopyButton value={appId} />
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
+                                  <code className="text-xs break-all text-neutral-500 ph-no-capture">
+                                    {appId}
+                                  </code>
                                 </div>
-                                <code className="text-xs break-all text-neutral-500 ph-no-capture">
-                                  {appId}
-                                </code>
-                              </div>
 
-                              <div className="pt-4 border-t border-neutral-500/20 space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <div className="text-neutral-500 text-sm">
-                                    Example with <code>curl</code>
+                                <div className="pt-4 border-t border-neutral-500/20 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-neutral-500 text-sm">
+                                      Example with <code>curl</code>
+                                    </div>
+                                    <Link
+                                      href="https://docs.phase.dev/public-api"
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <Button variant="secondary">View Docs</Button>
+                                    </Link>
                                   </div>
-                                  <Link
-                                    href="https://docs.phase.dev/public-api"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <Button variant="secondary">View Docs</Button>
-                                  </Link>
+                                  <CliCommand
+                                    prefix="curl"
+                                    command={`--request GET --url '${getApiHost()}/v1/secrets/?app_id=${appId}&env=development' --header 'Authorization: Bearer ${apiServiceToken}'`}
+                                  />
                                 </div>
-                                <CliCommand
-                                  prefix="curl"
-                                  command={`--request GET --url '${getApiHost()}/v1/secrets?app_id=${appId}&env=development' --header 'Authorization: ${apiServiceToken}'`}
-                                />
                               </div>
-                            </div>
+                            ) : (
+                              <div className="space-y-2 p-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg">
+                                <div className="text-center">
+                                  <div className="text-lg font-semibold text-black dark:text-white">
+                                    Server-side encryption (SSE)
+                                  </div>
+                                  <div className="text-neutral-500 text-base">
+                                    SSE is not enabled for this app. SSE is required to use this
+                                    token with the REST API.
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-center">
+                                  <EnableSSEDialog appId={appId} />
+                                </div>
+                              </div>
+                            )}
                           </Tab.Panel>
                         </Tab.Panels>
                       </Tab.Group>

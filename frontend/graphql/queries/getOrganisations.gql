@@ -5,7 +5,24 @@ query GetOrganisations {
     identityKey
     createdAt
     plan
-    role
+    planDetail {
+      name
+      maxUsers
+      maxApps
+      maxEnvsPerApp
+      seatsUsed {
+        users
+        serviceAccounts
+        total
+      }
+      appCount
+    }
+    role {
+      name
+      description
+      color
+      permissions
+    }
     memberId
     keyring
     recovery

@@ -40,7 +40,12 @@
   --card-rgb: 180, 185, 188;
   --card-border-rgb: 131, 134, 135;
 
-  --toastify-color-success: rgb(16 185 129) !important;
+  --toastify-color-info: #0ea5e9!important;
+  --toastify-color-success: #34d399!important;
+  --toastify-color-warning: #f59e0b!important;
+  --toastify-color-error: #ef4444!important;
+  --toastify-color-light: #f4f4f5!important;
+  --toastify-color-dark: #27272a!important;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -125,8 +130,8 @@ a {
     @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-md text-zinc-800 dark:text-white ring-1 ring-inset ring-neutral-500/40 focus:ring-1 focus:ring-emerald-500 group-focus-within:invalid:ring-red-500 focus:ring-inset;
   }
 
-  textarea {
-    @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-zinc-800 dark:text-white border border-zinc-300 dark:border-none focus:outline outline-emerald-500;
+  textarea:not(.custom) {
+    @apply bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 p-2 rounded-md text-zinc-800 dark:text-white ring-1 ring-inset ring-neutral-500/40 focus:ring-1 focus:ring-emerald-400/40 group-focus-within:invalid:ring-red-500 focus:ring-inset outline-none focus:outline-none;
   }
 
   select {

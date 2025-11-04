@@ -1,10 +1,33 @@
+'use client'
+
 import Link from 'next/link'
-import { ModeToggle } from '../common/ModeToggle'
+import { useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import UserMenu from '../UserMenu'
-import { FaSun, FaMoon } from 'react-icons/fa'
 import { LogoWordMark } from '../common/LogoWordMark'
+import { generatePageTitle } from '@/utils/navigation'
 
 const OnboardingNavbar = () => {
+  const pathname = usePathname()
+
+  useEffect(() => {
+    // Parse the current route to determine page title
+    const pathSegments = (pathname ?? '').split('/').filter(Boolean)
+    let route = null
+    let routeParam = null
+
+    if (pathSegments.length > 0) {
+      route = pathSegments[0]
+      if (pathSegments.length > 1) {
+        routeParam = pathSegments[1]
+      }
+    }
+
+    // Set page title based on route
+    const title = generatePageTitle({ route, routeParam })
+    document.title = title
+  }, [pathname])
+
   return (
     <header className="fixed z-20 w-full" data-testid="navbar">
       <nav className="mx-auto flex w-full items-center justify-between p-4">
@@ -14,11 +37,6 @@ const OnboardingNavbar = () => {
           </div>
         </Link>
         <div className="flex gap-4 items-center">
-          <div className="flex gap-2 items-center">
-            <FaSun className="text-neutral-500" />
-            <ModeToggle />
-            <FaMoon className="text-neutral-500" />
-          </div>
           <UserMenu />
         </div>
       </nav>

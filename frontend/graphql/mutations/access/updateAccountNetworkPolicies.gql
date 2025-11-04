@@ -1,0 +1,5 @@
+mutation UpdateAccountNetworkPolicy($accounts: [AccountPolicyInput], $organisationId: ID!) {
+  updateAccountNetworkAccessPolicies(accountInputs: $accounts, organisationId: $organisationId) {
+    ok
+  }
+}

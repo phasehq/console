@@ -2,27 +2,48 @@ import { RevokeServiceToken } from '@/graphql/mutations/environments/deleteServi
 import { GetServiceTokens } from '@/graphql/queries/secrets/getServiceTokens.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { EnvironmentType, ServiceTokenType, UserTokenType } from '@/apollo/graphql'
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { useState, useEffect, useContext, Fragment } from 'react'
+import { useMutation, useQuery } from '@apollo/client'
+import { useState, useContext, Fragment } from 'react'
 import { Button } from '@/components/common/Button'
-import { FaKey, FaTimes, FaTrashAlt } from 'react-icons/fa'
+import { FaExclamationTriangle, FaTimes, FaTrashAlt } from 'react-icons/fa'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
-import clsx from 'clsx'
+import { clsx } from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission } from '@/utils/access/permissions'
 import { Avatar } from '@/components/common/Avatar'
 import { CreateServiceTokenDialog } from './CreateServiceTokenDialog'
 import { MdKey } from 'react-icons/md'
+import { toast } from 'react-toastify'
+import Spinner from '@/components/common/Spinner'
+import { EmptyState } from '@/components/common/EmptyState'
+import Link from 'next/link'
+import { Alert } from '@/components/common/Alert'
 
 export const SecretTokens = (props: { organisationId: string; appId: string }) => {
   const { organisationId, appId } = props
 
-  const [getServiceTokens, { data: serviceTokensData }] = useLazyQuery(GetServiceTokens)
-
   const [deleteServiceToken] = useMutation(RevokeServiceToken)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const userCanReadTokens = userHasPermission(
+    organisation?.role?.permissions,
+    'Tokens',
+    'read',
+    true
+  )
+
+  const usercanCreateTokens =
+    userHasPermission(organisation?.role?.permissions, 'Tokens', 'create', true) &&
+    userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
+
+  const { data: serviceTokensData, loading } = useQuery(GetServiceTokens, {
+    variables: {
+      appId,
+    },
+    skip: !userCanReadTokens,
+  })
 
   const handleDeleteServiceToken = async (tokenId: string) => {
     await deleteServiceToken({
@@ -37,17 +58,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
         },
       ],
     })
+    toast.success('Service token deleted')
   }
-
-  useEffect(() => {
-    if (organisationId && appId) {
-      getServiceTokens({
-        variables: {
-          appId,
-        },
-      })
-    }
-  }, [appId, getServiceTokens, organisationId])
 
   const DeleteConfirmDialog = (props: {
     token: UserTokenType | ServiceTokenType
@@ -142,9 +154,13 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
 
     const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
 
-    const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+    const userCanReadEnvironments = organisation
+      ? userHasPermission(organisation.role?.permissions, 'Environments', 'read', true)
+      : false
 
-    const allowDelete = activeUserIsAdmin || token.createdBy!.self
+    const userCanDeleteTokens = organisation
+      ? userHasPermission(organisation.role?.permissions, 'Tokens', 'delete', true)
+      : false
 
     const identityKeys = token.keys.map((key) => key.identityKey)
 
@@ -152,6 +168,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
       variables: {
         appId,
       },
+      skip: !userCanReadEnvironments,
     })
 
     const tokenEnvironments = data?.appEnvironments.filter((env: EnvironmentType) =>
@@ -170,7 +187,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                 {token.__typename === 'ServiceTokenType' && (
                   <div className="flex items-center gap-2">
                     <span>by</span>
-                    <Avatar imagePath={token.createdBy?.avatarUrl!} size="sm" />
+                    <Avatar member={token.createdBy!} size="sm" />
                     {token.createdBy?.self
                       ? 'You'
                       : token.createdBy?.fullName || token.createdBy?.email}
@@ -179,12 +196,12 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
               </div>
 
               <div className="flex items-center gap-2">
-                {tokenEnvironments?.map(({ envType }: { envType: string }) => (
+                {tokenEnvironments?.map(({ name }: { name: string }) => (
                   <div
-                    key={envType}
-                    className="rounded-full py-0.5 px-2 text-zinc-700 ring-1 ring-inset ring-zinc-900/10 dark:text-zinc-400 dark:ring-white/10 tracking-widest text-xs font-medium"
+                    key={name}
+                    className="rounded-full py-0.5 px-2 text-zinc-700 ring-1 ring-inset ring-zinc-900/10 dark:text-zinc-400 dark:ring-white/10 text-xs font-medium"
                   >
-                    {envType}
+                    {name}
                   </div>
                 ))}
               </div>
@@ -196,7 +213,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
             </div>
           </div>
         </div>
-        {allowDelete && (
+        {userCanDeleteTokens && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ease">
             <DeleteConfirmDialog token={token} onDelete={deleteHandler} />
           </div>
@@ -204,6 +221,38 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
       </div>
     )
   }
+
+  if (loading)
+    return (
+      <div className="w-full h-full flex items-center justify-center p-40">
+        <Spinner size="md" />
+      </div>
+    )
+
+  if (serviceTokensData?.serviceTokens.length === 0)
+    return (
+      <div>
+        <EmptyState
+          title="Deprecated"
+          subtitle="Service tokens are deprecated. Please use a Service Account instead"
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaExclamationTriangle />
+            </div>
+          }
+        >
+          <div className="flex flex-col items-center gap-2">
+            <div className="text-lg text-center">
+              Service Accounts give you better control over access to secrets across apps, and let
+              you manage permissions more easily via defined roles.
+            </div>
+            <Link href={`/${organisation?.name}/apps/${appId}/access/service-accounts`}>
+              <Button variant="primary">Go to Service Accounts</Button>
+            </Link>
+          </div>
+        </EmptyState>
+      </div>
+    )
 
   return (
     <div className="space-y-6 pb-6 divide-y-2 divide-neutral-500/40">
@@ -216,9 +265,26 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           </p>
         </div>
 
-        <div className="flex justify-end py-4 border-b border-neutral-500/40">
-          <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
-        </div>
+        <Alert variant="warning" icon={true}>
+          <div className="flex flex-col gap-2">
+            <p className="text-lg font-semibold">
+              Service Tokens are being deprecated in favour of Service Accounts.
+            </p>
+            <p>
+              Service Accounts give you better control over access to secrets across apps, and let
+              you manage permissions more easily via defined roles.
+            </p>
+            <Link href={`/${organisation?.name}/apps/${appId}/access/service-accounts`}>
+              <Button variant="primary">Go to Service Accounts</Button>
+            </Link>
+          </div>
+        </Alert>
+
+        {usercanCreateTokens && (
+          <div className="flex justify-end py-4 border-b border-neutral-500/40">
+            <CreateServiceTokenDialog organisationId={organisationId} appId={appId} />
+          </div>
+        )}
 
         {serviceTokensData?.serviceTokens.length > 0 ? (
           <div className="space-y-4">

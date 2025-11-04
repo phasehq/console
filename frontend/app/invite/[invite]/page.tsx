@@ -1,6 +1,5 @@
 'use client'
 
-import { cryptoUtils } from '@/utils/auth'
 import VerifyInvite from '@/graphql/queries/organisation/validateOrganisationInvite.gql'
 import AcceptOrganisationInvite from '@/graphql/mutations/organisation/acceptInvite.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
@@ -21,6 +20,14 @@ import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { LogoMark } from '@/components/common/LogoMark'
 import { setDevicePassword } from '@/utils/localStorage'
 import { useRouter } from 'next/navigation'
+import {
+  decodeb64string,
+  organisationSeed,
+  organisationKeyring,
+  deviceVaultKey,
+  encryptAccountKeyring,
+  encryptAccountRecovery,
+} from '@/utils/crypto'
 
 const bip39 = require('bip39')
 
@@ -41,7 +48,7 @@ const InvalidInvite = () => (
 )
 
 export default function Invite({ params }: { params: { invite: string } }) {
-  const [verifyInvite, { data, loading }] = useLazyQuery(VerifyInvite)
+  const [verifyInvite, { data, loading, called }] = useLazyQuery(VerifyInvite)
 
   const [acceptInvite] = useMutation(AcceptOrganisationInvite)
 
@@ -64,7 +71,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
 
   useEffect(() => {
     const handleVerifyInvite = async () => {
-      const inviteId = await cryptoUtils.decodeb64string(params.invite)
+      const inviteId = await decodeb64string(params.invite)
 
       await verifyInvite({
         variables: { inviteId },
@@ -82,7 +89,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
       icon: <MdOutlinePassword />,
       title: 'Set a sudo password',
       description:
-        'This will be used to encrypt your account keys. You will be need to enter this password to perform administrative tasks.',
+        'This will be used to encrypt your account keys. You may need to enter this password to perform administrative tasks.',
     },
     {
       index: 1,
@@ -98,18 +105,15 @@ export default function Invite({ params }: { params: { invite: string } }) {
     return new Promise<{ publicKey: string; encryptedKeyring: string; encryptedMnemonic: string }>(
       (resolve) => {
         setTimeout(async () => {
-          const accountSeed = await cryptoUtils.organisationSeed(mnemonic, invite.organisation.id)
+          const accountSeed = await organisationSeed(mnemonic, invite.organisation.id)
 
-          const accountKeyRing = await cryptoUtils.organisationKeyring(accountSeed)
+          const accountKeyRing = await organisationKeyring(accountSeed)
 
-          const deviceKey = await cryptoUtils.deviceVaultKey(pw, session?.user?.email!)
+          const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
 
-          const encryptedKeyring = await cryptoUtils.encryptAccountKeyring(
-            accountKeyRing,
-            deviceKey
-          )
+          const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
 
-          const encryptedMnemonic = await cryptoUtils.encryptAccountRecovery(mnemonic, deviceKey)
+          const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
           resolve({
             publicKey: accountKeyRing.publicKey,
@@ -202,7 +206,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
         <p className="text-lg text-neutral-500">
           You have been invited by{' '}
           <span className="font-medium text-neutral-800 dark:text-neutral-200">
-            {invite.invitedBy.email}
+            {invite.invitedBy.fullName || invite.invitedBy.email}
           </span>{' '}
           to join the{' '}
           <span className="font-medium text-neutral-800 dark:text-neutral-200">
@@ -230,7 +234,8 @@ export default function Invite({ params }: { params: { invite: string } }) {
           <div className="mx-auto pt-8">
             <Button
               variant="primary"
-              arrow="right"
+              iconPosition="right"
+              icon={FaArrowRight}
               onClick={() => (window.location.href = `/${invite.organisation.name}`)}
             >
               Go to Console
@@ -274,7 +279,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
         <HeroPattern />
 
         <div className="flex w-full h-screen max-w-4xl mx-auto flex-col gap-y-16 py-40">
-          {loading ? (
+          {loading || !called ? (
             <Loading />
           ) : invite ? (
             showWelcome ? (

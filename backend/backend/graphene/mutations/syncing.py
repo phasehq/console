@@ -1,11 +1,13 @@
-from api.tasks import trigger_sync_tasks
+from api.tasks.syncing import trigger_sync_tasks
 from api.utils.secrets import normalize_path_string
 
+from api.utils.syncing.render.main import RenderResourceType
 import graphene
 from graphql import GraphQLError
-from api.utils.permissions import (
+from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_has_permission,
     user_is_org_member,
 )
 from backend.graphene.types import AppType, EnvironmentSyncType, ProviderCredentialsType
@@ -19,6 +21,11 @@ from api.models import (
     ServerEnvironmentKey,
 )
 from api.services import ServiceConfig
+
+
+class RailwayResourceInput(graphene.InputObjectType):
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
 
 
 class InitEnvSync(graphene.Mutation):
@@ -36,7 +43,15 @@ class InitEnvSync(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
+        for env in Environment.objects.filter(app=app):
+            if not user_can_access_environment(info.context.user.userId, env.id):
+                raise GraphQLError(
+                    "You cannot enable SSE as you don't have access to all environments in this App"
+                )
+
         else:
+            app.sse_enabled = True
+            app.save()
             # set new server env keys
             for key in env_keys:
                 ServerEnvironmentKey.objects.create(
@@ -60,10 +75,15 @@ class CreateProviderCredentials(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, org_id, provider, name, credentials):
-        if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError("You don't have permission to perform this action")
 
         org = Organisation.objects.get(id=org_id)
+
+        if not user_has_permission(
+            info.context.user, "create", "IntegrationCredentials", org
+        ):
+            raise GraphQLError(
+                "You dont have permission to create Integration Credentials"
+            )
 
         credential = ProviderCredentials.objects.create(
             organisation=org, name=name, provider=provider, credentials=credentials
@@ -84,8 +104,15 @@ class UpdateProviderCredentials(graphene.Mutation):
     def mutate(cls, root, info, credential_id, name, credentials):
         credential = ProviderCredentials.objects.get(id=credential_id)
 
-        if not user_is_org_member(info.context.user.userId, credential.organisation.id):
-            raise GraphQLError("You don't have permission to perform this action")
+        if not user_has_permission(
+            info.context.user,
+            "update",
+            "IntegrationCredentials",
+            credential.organisation,
+        ):
+            raise GraphQLError(
+                "You dont have permission to update Integration Credentials"
+            )
 
         credential.name = name
         credential.credentials = credentials
@@ -104,8 +131,15 @@ class DeleteProviderCredentials(graphene.Mutation):
     def mutate(cls, root, info, credential_id):
         credential = ProviderCredentials.objects.get(id=credential_id)
 
-        if not user_is_org_member(info.context.user.userId, credential.organisation.id):
-            raise GraphQLError("You don't have permission to perform this action")
+        if not user_has_permission(
+            info.context.user,
+            "delete",
+            "IntegrationCredentials",
+            credential.organisation,
+        ):
+            raise GraphQLError(
+                "You dont have permission to delete Integration Credentials"
+            )
 
         credential.delete()
 
@@ -140,7 +174,7 @@ class CreateCloudflarePagesSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -191,7 +225,7 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -232,23 +266,28 @@ class CreateGitHubActionsSync(graphene.Mutation):
         credential_id = graphene.ID()
         repo_name = graphene.String()
         owner = graphene.String()
+        environment_name = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
-    def mutate(cls, root, info, env_id, path, credential_id, repo_name, owner):
+    def mutate(
+        cls, root, info, env_id, path, credential_id, repo_name, owner, environment_name=None
+    ):
         service_id = "github_actions"
         service_config = ServiceConfig.get_service_config(service_id)
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
         sync_options = {"repo_name": repo_name, "owner": owner}
+        if environment_name:
+            sync_options["environment_name"] = environment_name
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None
@@ -288,7 +327,7 @@ class CreateVaultSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -336,7 +375,7 @@ class CreateNomadSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not ServerEnvironmentKey.objects.filter(environment=env).exists():
+        if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
@@ -363,6 +402,213 @@ class CreateNomadSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateNomadSync(sync=sync)
+
+
+class CreateGitLabCISync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        resource_path = graphene.String()
+        resource_id = graphene.String()
+        is_group = graphene.Boolean()
+        masked = graphene.Boolean()
+        protected = graphene.Boolean()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        resource_path,
+        resource_id,
+        is_group,
+        masked,
+        protected,
+    ):
+        service_id = "gitlab_ci"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "resource_path": resource_path,
+            "resource_id": resource_id,
+            "is_group": is_group,
+            "masked": masked,
+            "protected": protected,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError(
+                    f"A sync already exists for this GitLab {'group' if is_group else 'project'}!"
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateGitLabCISync(sync=sync)
+
+
+class CreateRailwaySync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        railway_project = graphene.Argument(RailwayResourceInput)
+        railway_environment = graphene.Argument(RailwayResourceInput)
+        railway_service = graphene.Argument(RailwayResourceInput, required=False)
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        railway_project,
+        railway_environment,
+        railway_service=None,
+    ):
+        service_id = "railway"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "project": {"id": railway_project.id, "name": railway_project.name},
+            "environment": {
+                "id": railway_environment.id,
+                "name": railway_environment.name,
+            },
+        }
+
+        if railway_service:
+            sync_options["service"] = {
+                "id": railway_service.id,
+                "name": railway_service.name,
+            }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError(
+                    f"A sync already exists for this Railway environment!"
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateRailwaySync(sync=sync)
+
+
+class CreateVercelSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        team_id = graphene.String()
+        team_name = graphene.String()
+        project_id = graphene.String()
+        project_name = graphene.String()
+        environment = graphene.String()
+        secret_type = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        team_id,
+        team_name,
+        project_id,
+        project_name,
+        environment="production",
+        secret_type="encrypted",
+    ):
+        service_id = "vercel"
+
+        env = Environment.objects.get(id=env_id)
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "project": {"id": project_id, "name": project_name},
+            "team": {"id": team_id, "name": team_name},
+            "environment": environment,
+            "secret_type": secret_type,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError("A sync already exists for this Vercel project!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateVercelSync(sync=sync)
 
 
 class DeleteSync(graphene.Mutation):
@@ -449,3 +695,122 @@ class UpdateSyncAuthentication(graphene.Mutation):
         env_sync.save()
 
         return UpdateSyncAuthentication(sync=env_sync)
+
+
+class CreateCloudflareWorkersSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        worker_name = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        worker_name,
+    ):
+        service_id = "cloudflare_workers"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "worker_name": worker_name,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError("A sync already exists for this Cloudflare Worker!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateCloudflareWorkersSync(sync=sync)
+
+
+class CreateRenderSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        resource_id = graphene.String()
+        resource_name = graphene.String()
+        resource_type = graphene.Argument(RenderResourceType)
+        secret_file_name = graphene.String(required=False)
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        resource_id,
+        resource_name,
+        resource_type,
+        secret_file_name,
+    ):
+        service_type = "render"
+        service_config = ServiceConfig.get_service_config(service_type)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        sync_options = {
+            "resource_id": resource_id,
+            "resource_name": resource_name,
+            "resource_type": resource_type.value,
+            "secret_file_name": secret_file_name,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_type, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError("A sync already exists for this Render service!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_type,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateRenderSync(sync=sync)

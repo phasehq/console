@@ -1,13 +1,14 @@
 'use client'
 
 import { LockboxType } from '@/apollo/graphql'
-import { boxExpiryString, decryptBox, updateBoxViewCount } from '@/utils/lockbox'
+import { boxExpiryString, updateBoxViewCount } from '@/utils/lockbox'
 import { useEffect, useState } from 'react'
 import { Button } from '../common/Button'
 import CopyButton from '../common/CopyButton'
 import { Alert } from '../common/Alert'
 import { Card } from '../common/Card'
 import { toast } from 'react-toastify'
+import { decryptBox } from '@/utils/crypto'
 
 export const LockboxViewer = (props: { box: LockboxType }) => {
   const { box } = props

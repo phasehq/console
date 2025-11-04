@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useState } from 'react'
+import React, { useState, forwardRef } from 'react'
 import { FaEyeSlash, FaEye } from 'react-icons/fa'
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -8,17 +8,22 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string
   placeholder?: string
   secret?: boolean
+  labelClassName?: string
 }
 
-export const Input = (props: InputProps) => {
-  const { value, setValue, label, secret } = props
+// Use forwardRef to allow refs to be passed to the component
+export const Input = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
+  const { value, setValue, label, secret, labelClassName } = props
 
   const [showValue, setShowValue] = useState<boolean>(false)
 
   return (
     <div className="space-y-2 w-full">
       {label && (
-        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="accountId">
+        <label
+          className={clsx('block text-neutral-500 text-sm mb-2', labelClassName)}
+          htmlFor={props.id}
+        >
           {label}
           {props.required && <span className="text-red-500 ml-1">*</span>}
         </label>
@@ -26,13 +31,15 @@ export const Input = (props: InputProps) => {
       <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40  focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
         <input
           {...props}
+          ref={ref} // Attach the forwarded ref here
           type={showValue || !secret ? props.type || 'text' : 'password'}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           className={clsx(
             'custom w-full text-zinc-800 dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md',
             secret ? 'ph-no-capture' : '',
-            props.readOnly || props.disabled ? 'opacity-60' : ''
+            props.readOnly || props.disabled ? 'opacity-60 cursor-not-allowed' : '',
+            props.className
           )}
         />
         {secret && (
@@ -48,4 +55,7 @@ export const Input = (props: InputProps) => {
       </div>
     </div>
   )
-}
+})
+
+// Provide a display name for better debugging in React DevTools
+Input.displayName = 'Input'
