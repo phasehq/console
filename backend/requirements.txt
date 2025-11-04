@@ -20,6 +20,7 @@ Django==4.2.25
 django-allauth==65.4.1
 django-cors-headers==3.14.0
 django-filter==23.1
+django-rq==3.0.0
 djangorestframework==3.15.2
 djangorestframework-camel-case==1.4.2
 freezegun==1.5.1
