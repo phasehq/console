@@ -1,0 +1,12 @@
+query GetOrgLicense($organisationId: ID!) {
+  organisationLicense(organisationId: $organisationId) {
+    id
+    customerName
+    issuedAt
+    expiresAt
+    activatedAt
+    plan
+    seats
+    tokens
+  }
+}

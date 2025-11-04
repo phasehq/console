@@ -1,0 +1,9 @@
+query GetIdentityProviders {
+  identityProviders {
+    id
+    name
+    description
+    iconId
+    supported
+  }
+}

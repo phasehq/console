@@ -1,18 +1,25 @@
 type Query {
+  clientIp: String
   organisations: [OrganisationType]
+  roles(orgId: ID): [RoleType]
+  networkAccessPolicies(organisationId: ID): [NetworkAccessPolicyType]
+  identities(organisationId: ID): [IdentityType]
+  organisationNameAvailable(name: String): Boolean
+  license: PhaseLicenseType
+  organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
   organisationPlan(organisationId: ID): OrganisationPlanType
-  organisationMembers(organisationId: ID, userId: ID, role: [String]): [OrganisationMemberType]
-  organisationAdminsAndSelf(organisationId: ID): [OrganisationMemberType]
+  organisationMembers(organisationId: ID, memberId: ID, role: [String]): [OrganisationMemberType]
+  organisationGlobalAccessUsers(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
-  logs(appId: ID, start: BigInt, end: BigInt): LogsResponseType
-  kmsLogsCount(appId: ID, thisMonth: Boolean): Int
-  secretsLogsCount(appId: ID): Int
+  kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
+  secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
-  appEnvironments(appId: ID, environmentId: ID, memberId: ID): [EnvironmentType]
+  appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
-  secrets(envId: ID, path: String): [SecretType]
+  appServiceAccounts(appId: ID): [ServiceAccountType]
+  secrets(envId: ID, path: String, id: ID): [SecretType]
   folders(envId: ID, path: String): [SecretFolderType]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
@@ -20,17 +27,38 @@ type Query {
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
+  serviceAccounts(orgId: ID, serviceAccountId: ID): [ServiceAccountType]
+  serviceAccountHandlers(orgId: ID): [OrganisationMemberType]
   serverPublicKey: String
   sseEnabled(appId: ID): Boolean
   providers: [ProviderType]
   services: [ServiceType]
+  awsStsEndpoints: [JSONString]
+  identityProviders: [IdentityProviderType]
   savedCredentials(orgId: ID): [ProviderCredentialsType]
   syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
   envSyncs(envId: ID): [EnvironmentSyncType]
   cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
+  cloudflareWorkers(credentialId: ID): [CloudflareWorkerType]
   awsSecrets(credentialId: ID): [AWSSecretType]
   githubRepos(credentialId: ID): [GitHubRepoType]
+  githubEnvironments(credentialId: ID, owner: String, repoName: String): [String]
+  gitlabProjects(credentialId: ID): [GitLabProjectType]
+  gitlabGroups(credentialId: ID): [GitLabGroupType]
+  railwayProjects(credentialId: ID): [RailwayProjectType]
+  vercelProjects(credentialId: ID): [VercelTeamProjectsType]
+  renderServices(credentialId: ID): [RenderServiceType]
+  renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
+  testVercelCreds(credentialId: ID): Boolean
   testVaultCreds(credentialId: ID): Boolean
+  testNomadCreds(credentialId: ID): Boolean
+  validateAwsAssumeRoleAuth: AWSValidationResultType
+  validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
+  stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
+  stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
+  stripeCustomerPortalUrl(organisationId: ID!): String
+  dynamicSecretProviders: [DynamicSecretProviderType]
+  dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]
 }
 
 type OrganisationType {
@@ -39,10 +67,11 @@ type OrganisationType {
   identityKey: String!
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
-  role: String
+  role: RoleType
   memberId: ID
   keyring: String
   recovery: String
+  planDetail: OrganisationPlanType
 }
 
 """
@@ -52,7 +81,6 @@ value as specified by
 """
 scalar DateTime
 
-"""An enumeration."""
 enum ApiOrganisationPlanChoices {
   """Free"""
   FR
@@ -64,18 +92,61 @@ enum ApiOrganisationPlanChoices {
   EN
 }
 
+type RoleType {
+  id: String!
+  name: String
+  description: String
+  color: String
+  permissions: JSONString
+  isDefault: Boolean
+}
+
+"""
+Allows use of a JSON String for input / output from the GraphQL schema.
+
+Use of this type is *not recommended* as you lose the benefits of having a defined, static
+schema (one of the key benefits of GraphQL).
+"""
+scalar JSONString
+
 type OrganisationPlanType {
   name: String
   maxUsers: Int
   maxApps: Int
   maxEnvsPerApp: Int
-  userCount: Int
+  seatLimit: Int
+  seatsUsed: SeatsUsed
   appCount: Int
+}
+
+type SeatsUsed {
+  users: Int
+  serviceAccounts: Int
+  total: Int
+}
+
+type NetworkAccessPolicyType {
+  id: String!
+  name: String!
+  organisation: OrganisationType!
+
+  """
+  Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
+  """
+  allowedIps: String!
+  isGlobal: Boolean!
+  createdAt: DateTime!
+  createdBy: OrganisationMemberType
+  updatedAt: DateTime!
+  updatedBy: OrganisationMemberType
+  members: [OrganisationMemberType!]!
+  serviceAccounts: [ServiceAccountType!]
+  organisationMembers: [OrganisationMemberType!]
 }
 
 type OrganisationMemberType {
   id: String!
-  role: ApiOrganisationMemberRoleChoices!
+  role: RoleType
   identityKey: String
   wrappedKeyring: String!
   createdAt: DateTime
@@ -85,25 +156,498 @@ type OrganisationMemberType {
   fullName: String
   avatarUrl: String
   self: Boolean
+  lastLogin: DateTime
+  appMemberships: [AppMembershipType!]
+  tokens: [UserTokenType!]
+  networkPolicies: [NetworkAccessPolicyType!]
 }
 
-"""An enumeration."""
-enum ApiOrganisationMemberRoleChoices {
-  """Owner"""
-  OWNER
+type AppMembershipType {
+  id: String!
+  name: String!
+  sseEnabled: Boolean!
+  environments: [EnvironmentType]!
+}
 
-  """Admin"""
-  ADMIN
+type EnvironmentType {
+  id: String!
+  app: AppMembershipType!
+  name: String!
+  envType: ApiEnvironmentEnvTypeChoices!
+  index: Int!
+  identityKey: String!
+  wrappedSeed: String
+  wrappedSalt: String
+  createdAt: DateTime
+  updatedAt: DateTime!
+  folders: [SecretFolderType]!
+  secrets(path: String): [SecretType]!
+  dynamicSecrets(path: String): [DynamicSecretType]!
+  folderCount: Int
+  secretCount: Int
+  members: [OrganisationMemberType]!
+  syncs: [EnvironmentSyncType]!
+}
 
-  """Developer"""
+enum ApiEnvironmentEnvTypeChoices {
+  """Development"""
   DEV
+
+  """Staging"""
+  STAGING
+
+  """Production"""
+  PROD
+
+  """Custom"""
+  CUSTOM
+}
+
+type SecretFolderType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  name: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  folderCount: Int
+  secretCount: Int
+}
+
+type SecretType {
+  id: String!
+  environment: EnvironmentType!
+  folder: SecretFolderType
+  path: String!
+  key: String!
+  value: String!
+  version: Int!
+  tags: [SecretTagType!]!
+  comment: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  history: [SecretEventType]
+  override: PersonalSecretType
+}
+
+type SecretTagType {
+  id: String!
+  name: String!
+  color: String!
+}
+
+type SecretEventType {
+  id: String!
+  secret: SecretType!
+  environment: EnvironmentType!
+  path: String!
+  user: OrganisationMemberType
+  serviceToken: ServiceTokenType
+  serviceAccount: ServiceAccountType
+  serviceAccountToken: ServiceAccountTokenType
+  key: String!
+  value: String!
+  version: Int!
+  tags: [SecretTagType!]!
+  comment: String!
+  eventType: ApiSecretEventEventTypeChoices!
+  timestamp: DateTime!
+  ipAddress: String
+  userAgent: String
+}
+
+type ServiceTokenType {
+  id: String!
+  keys: [ServerEnvironmentKeyType!]!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  name: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime
+}
+
+type ServerEnvironmentKeyType {
+  id: String!
+  environment: EnvironmentType!
+  identityKey: String!
+  wrappedSeed: String!
+  wrappedSalt: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type ServiceAccountType {
+  id: String!
+  name: String!
+  role: RoleType
+  identityKey: String
+  createdAt: DateTime
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  serverSideKeyManagementEnabled: Boolean
+  handlers: [ServiceAccountHandlerType]
+  tokens: [ServiceAccountTokenType]
+  appMemberships: [AppMembershipType!]
+  networkPolicies: [NetworkAccessPolicyType!]
+  identities: [IdentityType!]
+}
+
+type ServiceAccountHandlerType {
+  id: String!
+  serviceAccount: ServiceAccountType!
+  user: OrganisationMemberType!
+  wrappedKeyring: String!
+  wrappedRecovery: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type ServiceAccountTokenType {
+  id: String!
+  serviceAccount: ServiceAccountType!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdBy: OrganisationMemberType
+  createdByServiceAccount: ServiceAccountType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  expiresAt: DateTime
+  secreteventSet: [SecretEventType!]!
+  lastUsed: DateTime
+}
+
+type IdentityType {
+  id: String!
+  organisation: OrganisationType!
+  provider: String!
+  name: String!
+  description: String
+  config: IdentityConfigUnion
+  tokenNamePattern: String
+  defaultTtlSeconds: Int!
+  maxTtlSeconds: Int!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  serviceAccounts: [ServiceAccountType!]!
+}
+
+union IdentityConfigUnion = AwsIamConfigType
+
+type AwsIamConfigType {
+  trustedPrincipals: [String]
+  signatureTtlSeconds: Int
+  stsEndpoint: String
+}
+
+enum ApiSecretEventEventTypeChoices {
+  """Create"""
+  C
+
+  """Read"""
+  R
+
+  """Update"""
+  U
+
+  """Delete"""
+  D
+}
+
+type PersonalSecretType {
+  id: String!
+  secret: SecretType!
+  user: OrganisationMemberType!
+  value: String
+  isActive: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime!
+}
+
+type DynamicSecretType {
+  id: String!
+  name: String!
+  description: String!
+  environment: EnvironmentType!
+  folder: SecretFolderType
+  path: String!
+  authentication: ProviderCredentialsType
+
+  """Which provider this secret is associated with."""
+  provider: ApiDynamicSecretProviderChoices!
+  config: DynamicSecretConfigUnion
+  keyMap: [KeyMap]
+  createdAt: DateTime
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  leases: [DynamicSecretLeaseType!]!
+  defaultTtlSeconds: Int
+  maxTtlSeconds: Int
+}
+
+type ProviderCredentialsType {
+  id: String!
+  name: String!
+  provider: ProviderType
+  credentials: JSONString!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  syncCount: Int
+}
+
+type ProviderType {
+  id: String!
+  name: String!
+  expectedCredentials: [String!]!
+  optionalCredentials: [String!]!
+  authScheme: String
+}
+
+enum ApiDynamicSecretProviderChoices {
+  """AWS"""
+  AWS
+}
+
+union DynamicSecretConfigUnion = AWSConfigType
+
+type AWSConfigType {
+  usernameTemplate: String!
+  iamPath: String
+  permissionBoundaryArn: String
+  groups: String
+  policyArns: String
+  policyDocument: GenericScalar
+}
+
+"""
+The `GenericScalar` scalar type represents a generic
+GraphQL scalar value that could be:
+String, Boolean, Int, Float, List or Object.
+"""
+scalar GenericScalar
+
+type KeyMap {
+  id: String
+  keyName: String
+  masked: Boolean
+}
+
+type DynamicSecretLeaseType {
+  id: String!
+  name: String!
+  secret: DynamicSecretType!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ttl: Int
+
+  """Current status of the lease"""
+  status: ApiDynamicSecretLeaseStatusChoices!
+  credentials: LeaseCredentialsUnion
+  createdAt: DateTime
+  expiresAt: DateTime
+  revokedAt: DateTime
+  deletedAt: DateTime
+  events: [DynamicSecretLeaseEventType]
+}
+
+enum ApiDynamicSecretLeaseStatusChoices {
+  """Created"""
+  CREATED
+
+  """Active"""
+  ACTIVE
+
+  """Renewed"""
+  RENEWED
+
+  """Revoked"""
+  REVOKED
+
+  """Expired"""
+  EXPIRED
+}
+
+union LeaseCredentialsUnion = AwsCredentialsType
+
+type AwsCredentialsType {
+  accessKeyId: String
+  secretAccessKey: String
+  username: String
+}
+
+type DynamicSecretLeaseEventType {
+  id: ID!
+  lease: DynamicSecretLeaseType!
+  eventType: ApiDynamicSecretLeaseEventEventTypeChoices!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ipAddress: String
+  userAgent: String
+  metadata: JSONString!
+  createdAt: DateTime!
+}
+
+enum ApiDynamicSecretLeaseEventEventTypeChoices {
+  """Created"""
+  CREATED
+
+  """Active"""
+  ACTIVE
+
+  """Renewed"""
+  RENEWED
+
+  """Revoked"""
+  REVOKED
+
+  """Expired"""
+  EXPIRED
+}
+
+type EnvironmentSyncType {
+  id: String!
+  environment: EnvironmentType!
+  path: String!
+  options: JSONString!
+  authentication: ProviderCredentialsType
+  isActive: Boolean!
+  createdAt: DateTime
+  lastSync: DateTime
+  status: ApiEnvironmentSyncStatusChoices!
+  serviceInfo: ServiceType
+  history: [EnvironmentSyncEventType!]!
+}
+
+enum ApiEnvironmentSyncStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """cancelled"""
+  CANCELLED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
+}
+
+type ServiceType {
+  id: String
+  name: String
+  resourceType: String
+  provider: ProviderType
+}
+
+type EnvironmentSyncEventType {
+  meta: JSONString
+  id: String!
+  envSync: EnvironmentSyncType!
+  status: ApiEnvironmentSyncEventStatusChoices!
+  createdAt: DateTime
+  completedAt: DateTime
+}
+
+enum ApiEnvironmentSyncEventStatusChoices {
+  """In progress"""
+  IN_PROGRESS
+
+  """Completed"""
+  COMPLETED
+
+  """cancelled"""
+  CANCELLED
+
+  """Timed out"""
+  TIMED_OUT
+
+  """Failed"""
+  FAILED
+}
+
+type UserTokenType {
+  id: String!
+  name: String!
+  identityKey: String!
+  token: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  expiresAt: DateTime
+  createdBy: OrganisationMemberType
+}
+
+type PhaseLicenseType {
+  id: String
+  customerName: String
+  organisationName: String
+  plan: PlanTier
+  seats: Int
+  tokens: Int
+  issuedAt: Date
+  expiresAt: Date
+  environment: String
+  licenseType: String
+  signatureDate: String
+  issuingAuthority: String
+  isActivated: Boolean
+  organisationOwner: OrganisationMemberType
+}
+
+enum PlanTier {
+  PRO_PLAN
+  ENTERPRISE_PLAN
+}
+
+"""
+The `Date` scalar type represents a Date
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar Date
+
+type ActivatedPhaseLicenseType {
+  id: String!
+  customerName: String!
+  organisation: OrganisationType!
+  plan: ApiActivatedPhaseLicensePlanChoices!
+  seats: Int
+  tokens: Int
+  metadata: JSONString!
+  environment: String!
+  licenseType: String!
+  signatureDate: Date!
+  issuingAuthority: String!
+  issuedAt: DateTime!
+  expiresAt: DateTime!
+  activatedAt: DateTime!
+}
+
+enum ApiActivatedPhaseLicensePlanChoices {
+  """Free"""
+  FR
+
+  """Pro"""
+  PR
+
+  """Enterprise"""
+  EN
 }
 
 type OrganisationMemberInviteType {
   id: String!
   organisation: OrganisationType!
-  apps: [AppType!]!
-  role: ApiOrganisationMemberInviteRoleChoices!
+  apps: [AppMembershipType!]!
+  role: RoleType
   invitedBy: OrganisationMemberType!
   inviteeEmail: String!
   valid: Boolean!
@@ -121,24 +665,16 @@ type AppType {
   appSeed: String!
   wrappedKeyShare: String!
   createdAt: DateTime
-  sseEnabled: Boolean
+  updatedAt: DateTime!
+  sseEnabled: Boolean!
+  serviceAccounts: [ServiceAccountType!]!
+  environments: [EnvironmentType]!
+  members: [OrganisationMemberType]!
 }
 
-"""An enumeration."""
-enum ApiOrganisationMemberInviteRoleChoices {
-  """Owner"""
-  OWNER
-
-  """Admin"""
-  ADMIN
-
-  """Developer"""
-  DEV
-}
-
-type LogsResponseType {
-  kms: [KMSLogType]
-  secrets: [SecretEventType]
+type KMSLogsResponseType {
+  logs: [KMSLogType]
+  count: Int
 }
 
 type KMSLogType implements Node {
@@ -171,129 +707,14 @@ compatible type.
 """
 scalar BigInt
 
-type SecretEventType {
-  id: String!
-  secret: SecretType!
-  environment: EnvironmentType!
-  path: String!
-  user: OrganisationMemberType
-  serviceToken: ServiceTokenType
-  key: String!
-  value: String!
-  version: Int!
-  tags: [SecretTagType!]!
-  comment: String!
-  eventType: ApiSecretEventEventTypeChoices!
-  timestamp: DateTime!
-  ipAddress: String
-  userAgent: String
+type SecretLogsResponseType {
+  logs: [SecretEventType]
+  count: Int
 }
 
-type SecretType {
-  id: String!
-  environment: EnvironmentType!
-  folder: SecretFolderType
-  path: String!
-  key: String!
-  value: String!
-  version: Int!
-  tags: [SecretTagType!]!
-  comment: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  history: [SecretEventType]
-  override: PersonalSecretType
-}
-
-type EnvironmentType {
-  id: String!
-  app: AppType!
-  name: String!
-  envType: ApiEnvironmentEnvTypeChoices!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  folderCount: Int
-  secretCount: Int
-}
-
-"""An enumeration."""
-enum ApiEnvironmentEnvTypeChoices {
-  """Development"""
-  DEV
-
-  """Staging"""
-  STAGING
-
-  """Production"""
-  PROD
-}
-
-type SecretFolderType {
-  id: String!
-  environment: EnvironmentType!
-  path: String!
-  name: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  folderCount: Int
-  secretCount: Int
-}
-
-type SecretTagType {
-  id: String!
-  name: String!
-  color: String!
-}
-
-type PersonalSecretType {
-  id: String!
-  secret: SecretType!
-  user: OrganisationMemberType!
-  value: String
-  isActive: Boolean!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-type ServiceTokenType {
-  id: String!
-  keys: [ServerEnvironmentKeyType!]!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  name: String!
-  createdBy: OrganisationMemberType
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
-}
-
-type ServerEnvironmentKeyType {
-  id: String!
-  environment: EnvironmentType!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-}
-
-"""An enumeration."""
-enum ApiSecretEventEventTypeChoices {
-  """Create"""
-  C
-
-  """Read"""
-  R
-
-  """Update"""
-  U
-
-  """Delete"""
-  D
+enum MemberType {
+  USER
+  SERVICE
 }
 
 type ChartDataPointType {
@@ -302,7 +723,6 @@ type ChartDataPointType {
   data: Int
 }
 
-"""An enumeration."""
 enum TimeRange {
   HOUR
   DAY
@@ -332,113 +752,23 @@ type EnvironmentTokenType {
   updatedAt: DateTime!
 }
 
-type UserTokenType {
+type IdentityProviderType {
   id: String!
   name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
-}
-
-type ProviderType {
-  id: String!
-  name: String!
-  expectedCredentials: [String!]!
-  optionalCredentials: [String!]!
-  authScheme: String
-}
-
-type ServiceType {
-  id: String
-  name: String
-  resourceType: String
-  provider: ProviderType
-}
-
-type ProviderCredentialsType {
-  id: String!
-  name: String!
-  provider: ProviderType
-  credentials: JSONString!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  syncCount: Int
-}
-
-"""
-Allows use of a JSON String for input / output from the GraphQL schema.
-
-Use of this type is *not recommended* as you lose the benefits of having a defined, static
-schema (one of the key benefits of GraphQL).
-"""
-scalar JSONString
-
-type EnvironmentSyncType {
-  id: String!
-  environment: EnvironmentType!
-  path: String!
-  options: JSONString!
-  authentication: ProviderCredentialsType
-  isActive: Boolean!
-  createdAt: DateTime
-  lastSync: DateTime
-  status: ApiEnvironmentSyncStatusChoices!
-  serviceInfo: ServiceType
-  history: [EnvironmentSyncEventType!]!
-}
-
-"""An enumeration."""
-enum ApiEnvironmentSyncStatusChoices {
-  """In progress"""
-  IN_PROGRESS
-
-  """Completed"""
-  COMPLETED
-
-  """cancelled"""
-  CANCELLED
-
-  """Timed out"""
-  TIMED_OUT
-
-  """Failed"""
-  FAILED
-}
-
-type EnvironmentSyncEventType {
-  meta: JSONString
-  id: String!
-  envSync: EnvironmentSyncType!
-  status: ApiEnvironmentSyncEventStatusChoices!
-  createdAt: DateTime
-  completedAt: DateTime
-}
-
-"""An enumeration."""
-enum ApiEnvironmentSyncEventStatusChoices {
-  """In progress"""
-  IN_PROGRESS
-
-  """Completed"""
-  COMPLETED
-
-  """cancelled"""
-  CANCELLED
-
-  """Timed out"""
-  TIMED_OUT
-
-  """Failed"""
-  FAILED
+  description: String!
+  iconId: String!
+  supported: Boolean!
 }
 
 type CloudFlarePagesType {
   name: String
   deploymentId: String
   environments: [String]
+}
+
+type CloudflareWorkerType {
+  name: String
+  scriptId: String
 }
 
 type AWSSecretType {
@@ -452,23 +782,213 @@ type GitHubRepoType {
   type: String
 }
 
+type GitLabProjectType {
+  id: ID
+  name: String
+  nameWithNamespace: String
+  path: String
+  pathWithNamespace: String
+  createdAt: DateTime
+  defaultBranch: String
+  tagList: [String]
+  topics: [String]
+  sshUrlToRepo: String
+  httpUrlToRepo: String
+  webUrl: String
+  avatarUrl: String
+  starCount: Int
+  lastActivityAt: DateTime
+  namespace: NamespaceType
+}
+
+type NamespaceType {
+  id: ID
+  name: String
+  path: String
+  fullPath: String
+}
+
+type GitLabGroupType {
+  id: ID
+  name: String
+  path: String
+  description: String
+  visibility: String
+  shareWithGroupLock: Boolean
+  requireTwoFactorAuthentication: Boolean
+  twoFactorGracePeriod: Int
+  projectCreationLevel: String
+  autoDevopsEnabled: Boolean
+  subgroupCreationLevel: String
+  emailsDisabled: Boolean
+  emailsEnabled: Boolean
+  mentionsDisabled: Boolean
+  lfsEnabled: Boolean
+  defaultBranch: String
+  defaultBranchProtection: Int
+  avatarUrl: String
+  webUrl: String
+  requestAccessEnabled: Boolean
+  repositoryStorage: String
+  fullName: String
+  fullPath: String
+  fileTemplateProjectId: ID
+  parentId: ID
+  createdAt: DateTime
+}
+
+type RailwayProjectType {
+  id: ID!
+  name: String!
+  environments: [RailwayEnvironmentType!]!
+  services: [RailwayServiceType!]!
+}
+
+type RailwayEnvironmentType {
+  id: ID!
+  name: String!
+  projectId: ID!
+}
+
+type RailwayServiceType {
+  id: ID!
+  name: String!
+}
+
+type VercelTeamProjectsType {
+  id: String!
+  teamName: String!
+  projects: [VercelProjectType]
+}
+
+type VercelProjectType {
+  id: ID!
+  name: String!
+  environments: [VercelEnvironmentType]
+}
+
+type VercelEnvironmentType {
+  id: ID!
+  name: String!
+  description: String
+  slug: String!
+  type: String
+}
+
+type RenderServiceType {
+  id: ID!
+  name: String!
+  type: String
+  region: String
+  repo: String
+  branch: String
+  createdAt: String
+  updatedAt: String
+}
+
+type RenderEnvGroupType {
+  id: ID!
+  name: String!
+}
+
+type AWSValidationResultType {
+  valid: Boolean!
+  message: String!
+  method: String
+  error: String
+  assumedRoleArn: String
+}
+
+type StripeCheckoutDetails {
+  paymentStatus: String
+  customerEmail: String
+  billingStartDate: String
+  billingEndDate: String
+  subscriptionId: String
+  planName: String
+}
+
+type StripeSubscriptionDetails {
+  subscriptionId: String
+  planName: String
+  status: String
+  nextPaymentAmount: Float
+  currentPeriodStart: Int
+  currentPeriodEnd: Int
+  renewalDate: Int
+  cancelAt: Int
+  cancelAtPeriodEnd: Boolean
+  paymentMethods: [PaymentMethodDetails]
+  billingPeriod: BillingPeriodEnum
+  planType: PlanTypeEnum
+}
+
+type PaymentMethodDetails {
+  id: String
+  brand: String
+  last4: String
+  expMonth: Int
+  expYear: Int
+  isDefault: Boolean
+}
+
+enum BillingPeriodEnum {
+  MONTHLY
+  YEARLY
+}
+
+enum PlanTypeEnum {
+  PRO
+  ENTERPRISE
+}
+
+type DynamicSecretProviderType {
+  id: String!
+  name: String!
+  credentials: GenericScalar!
+  configMap: GenericScalar!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
-  inviteOrganisationMember(apps: [String], email: String!, orgId: ID!, role: String): InviteOrganisationMemberMutation
+  bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
-  updateOrganisationMemberRole(memberId: ID!, role: String!): UpdateOrganisationMemberRole
+  updateOrganisationMemberRole(memberId: ID!, roleId: ID!): UpdateOrganisationMemberRole
   updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
-  addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): AddAppMemberMutation
-  removeAppMember(appId: ID, memberId: ID): RemoveAppMemberMutation
-  updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID): UpdateMemberEnvScopeMutation
-  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!): CreateEnvironmentMutation
+  updateAppName(id: ID!, name: String!): UpdateAppNameMutation
+  addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
+  bulkAddAppMembers(appId: ID!, members: [AppMemberInputType]!): BulkAddAppMembersMutation
+  removeAppMember(appId: ID, memberId: ID, memberType: MemberType): RemoveAppMemberMutation
+  updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): UpdateMemberEnvScopeMutation
+  createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
+  deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
+  renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
+  swapEnvironmentOrder(environment1Id: ID!, environment2Id: ID!): SwapEnvironmentOrderMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
+  createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
+  updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
+  deleteCustomRole(id: ID!): DeleteCustomRoleMutation
+  createNetworkAccessPolicy(allowedIps: String!, isGlobal: Boolean!, name: String, organisationId: ID!): CreateNetworkAccessPolicyMutation
+  updateNetworkAccessPolicy(policyInputs: [UpdatePolicyInput]): UpdateNetworkAccessPolicyMutation
+  deleteNetworkAccessPolicy(id: ID!): DeleteNetworkAccessPolicyMutation
+  updateAccountNetworkAccessPolicies(accountInputs: [AccountPolicyInput], organisationId: ID!): UpdateAccountNetworkAccessPolicies
+  createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
+  updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
+  deleteIdentity(id: ID!): DeleteIdentityMutation
+  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
+  enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
+  enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
+  updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
+  updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
+  deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
+  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+  deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
@@ -478,9 +998,15 @@ type Mutation {
   updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
   deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
   createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
+  createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
   createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, path: String, secretName: String): CreateAWSSecretsManagerSync
-  createGhActionsSync(credentialId: ID, envId: ID, owner: String, path: String, repoName: String): CreateGitHubActionsSync
+  createGhActionsSync(credentialId: ID, envId: ID, environmentName: String, owner: String, path: String, repoName: String): CreateGitHubActionsSync
   createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
+  createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
+  createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
+  createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
+  createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
+  createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -491,18 +1017,45 @@ type Mutation {
   createSecret(secretData: SecretInput): CreateSecretMutation
   editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
   deleteSecret(id: ID!): DeleteSecretMutation
-  readSecret(id: ID!): ReadSecretMutation
+  readSecret(ids: [ID]): ReadSecretMutation
+  createSecrets(secretsData: [SecretInput]!): BulkCreateSecretMutation
+  editSecrets(secretsData: [SecretInput]!): BulkEditSecretMutation
+  deleteSecrets(ids: [ID]!): BulkDeleteSecretMutation
   createOverride(overrideData: PersonalSecretInput): CreatePersonalSecretMutation
   removeOverride(secretId: ID): DeletePersonalSecretMutation
   createLockbox(input: LockboxInput): CreateLockboxMutation
+  createSubscriptionCheckoutSession(billingPeriod: BillingPeriodEnum, organisationId: ID!, planType: PlanTypeEnum): CreateSubscriptionCheckoutSession
+  deletePaymentMethod(organisationId: ID, paymentMethodId: String): DeletePaymentMethodMutation
+  cancelSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
+  resumeSubscription(organisationId: ID, subscriptionId: String!): UpdateSubscriptionResponse
+  modifySubscription(billingPeriod: BillingPeriodEnum, organisationId: ID!, planType: PlanTypeEnum, subscriptionId: String!): UpdateSubscriptionResponse
+  createSetupIntent(organisationId: ID): CreateSetupIntentMutation
+  setDefaultPaymentMethod(
+    organisationId: ID
+
+    """Payment Method ID to set as default"""
+    paymentMethodId: String!
+  ): SetDefaultPaymentMethodMutation
+  createAwsDynamicSecret(authenticationId: ID, config: AWSConfigInput!, defaultTtl: Int, description: String, environmentId: ID!, keyMap: [KeyMapInput]!, maxTtl: Int, name: String!, organisationId: ID!, path: String): CreateAWSDynamicSecretMutation
+  updateAwsDynamicSecret(authenticationId: ID, config: AWSConfigInput!, defaultTtl: Int, description: String, dynamicSecretId: ID!, keyMap: [KeyMapInput]!, maxTtl: Int, name: String!, organisationId: ID!, path: String): UpdateAWSDynamicSecretMutation
+  deleteDynamicSecret(secretId: ID!): DeleteDynamicSecretMutation
+  createDynamicSecretLease(name: String, secretId: ID!, ttl: Int): LeaseDynamicSecret
+  renewDynamicSecretLease(leaseId: ID!, ttl: Int): RenewLeaseMutation
+  revokeDynamicSecretLease(leaseId: ID!): RevokeLeaseMutation
 }
 
 type CreateOrganisationMutation {
   organisation: OrganisationType
 }
 
-type InviteOrganisationMemberMutation {
-  invite: OrganisationMemberInviteType
+type BulkInviteOrganisationMembersMutation {
+  invites: [OrganisationMemberInviteType]
+}
+
+input InviteInput {
+  email: String!
+  apps: [String]
+  roleId: ID!
 }
 
 type CreateOrganisationMemberMutation {
@@ -537,6 +1090,10 @@ type DeleteAppMutation {
   ok: Boolean
 }
 
+type UpdateAppNameMutation {
+  app: AppType
+}
+
 type AddAppMemberMutation {
   app: AppType
 }
@@ -547,6 +1104,16 @@ input EnvironmentKeyInput {
   identityKey: String!
   wrappedSeed: String!
   wrappedSalt: String!
+}
+
+type BulkAddAppMembersMutation {
+  app: AppType
+}
+
+input AppMemberInputType {
+  memberId: ID!
+  memberType: MemberType = USER
+  envKeys: [EnvironmentKeyInput]!
 }
 
 type RemoveAppMemberMutation {
@@ -570,12 +1137,121 @@ input EnvironmentInput {
   identityKey: String!
 }
 
+type DeleteEnvironmentMutation {
+  ok: Boolean
+}
+
+type RenameEnvironmentMutation {
+  environment: EnvironmentType
+}
+
+type SwapEnvironmentOrderMutation {
+  ok: Boolean
+}
+
 type CreateEnvironmentKeyMutation {
   environmentKey: EnvironmentKeyType
 }
 
 type CreateEnvironmentTokenMutation {
   environmentToken: EnvironmentTokenType
+}
+
+type CreateCustomRoleMutation {
+  role: RoleType
+}
+
+type UpdateCustomRoleMutation {
+  role: RoleType
+}
+
+type DeleteCustomRoleMutation {
+  ok: Boolean
+}
+
+type CreateNetworkAccessPolicyMutation {
+  networkAccessPolicy: NetworkAccessPolicyType
+}
+
+type UpdateNetworkAccessPolicyMutation {
+  networkAccessPolicy: NetworkAccessPolicyType
+}
+
+input UpdatePolicyInput {
+  id: ID!
+  name: String
+  allowedIps: String
+  isGlobal: Boolean
+}
+
+type DeleteNetworkAccessPolicyMutation {
+  ok: Boolean
+}
+
+type UpdateAccountNetworkAccessPolicies {
+  ok: Boolean
+}
+
+input AccountPolicyInput {
+  accountType: AccountTypeEnum!
+  accountId: ID!
+  policyIds: [ID]
+}
+
+enum AccountTypeEnum {
+  USER
+  SERVICE
+}
+
+type CreateIdentityMutation {
+  identity: IdentityType
+}
+
+type UpdateIdentityMutation {
+  identity: IdentityType
+}
+
+type DeleteIdentityMutation {
+  ok: Boolean
+}
+
+type CreateServiceAccountMutation {
+  serviceAccount: ServiceAccountType
+}
+
+input ServiceAccountHandlerInput {
+  serviceAccountId: ID
+  memberId: ID
+  wrappedKeyring: String!
+  wrappedRecovery: String!
+}
+
+type EnableServiceAccountServerSideKeyManagementMutation {
+  serviceAccount: ServiceAccountType
+}
+
+type EnableServiceAccountClientSideKeyManagementMutation {
+  serviceAccount: ServiceAccountType
+}
+
+type UpdateServiceAccountHandlersMutation {
+  ok: Boolean
+}
+
+type UpdateServiceAccountMutation {
+  serviceAccount: ServiceAccountType
+}
+
+type DeleteServiceAccountMutation {
+  ok: Boolean
+}
+
+type CreateServiceAccountTokenMutation {
+  token: ServiceAccountTokenType
+}
+
+type DeleteServiceAccountTokenMutation {
+  ok: Boolean
 }
 
 type InitEnvSync {
@@ -614,6 +1290,10 @@ type CreateCloudflarePagesSync {
   sync: EnvironmentSyncType
 }
 
+type CreateCloudflareWorkersSync {
+  sync: EnvironmentSyncType
+}
+
 type CreateAWSSecretsManagerSync {
   sync: EnvironmentSyncType
 }
@@ -624,6 +1304,36 @@ type CreateGitHubActionsSync {
 
 type CreateVaultSync {
   sync: EnvironmentSyncType
+}
+
+type CreateNomadSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateGitLabCISync {
+  sync: EnvironmentSyncType
+}
+
+type CreateRailwaySync {
+  sync: EnvironmentSyncType
+}
+
+input RailwayResourceInput {
+  id: ID!
+  name: String!
+}
+
+type CreateVercelSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateRenderSync {
+  sync: EnvironmentSyncType
+}
+
+enum RenderResourceType {
+  ENVIRONMENT_GROUP
+  SERVICE
 }
 
 type CreateUserTokenMutation {
@@ -660,6 +1370,7 @@ type CreateSecretMutation {
 }
 
 input SecretInput {
+  id: ID
   envId: ID
   path: String
   key: String!
@@ -679,6 +1390,18 @@ type DeleteSecretMutation {
 
 type ReadSecretMutation {
   ok: Boolean
+}
+
+type BulkCreateSecretMutation {
+  secrets: [SecretType]
+}
+
+type BulkEditSecretMutation {
+  secrets: [SecretType]
+}
+
+type BulkDeleteSecretMutation {
+  secrets: [SecretType]
 }
 
 type CreatePersonalSecretMutation {
@@ -712,4 +1435,65 @@ input LockboxInput {
   data: JSONString
   allowedViews: Int
   expiry: BigInt
+}
+
+type CreateSubscriptionCheckoutSession {
+  clientSecret: String
+}
+
+type DeletePaymentMethodMutation {
+  ok: Boolean
+}
+
+type UpdateSubscriptionResponse {
+  success: Boolean
+  message: String
+  cancelledAt: String
+  status: String
+}
+
+type CreateSetupIntentMutation {
+  clientSecret: String
+}
+
+type SetDefaultPaymentMethodMutation {
+  ok: Boolean
+}
+
+type CreateAWSDynamicSecretMutation {
+  dynamicSecret: DynamicSecretType
+}
+
+input AWSConfigInput {
+  usernameTemplate: String!
+  iamPath: String = "/"
+  permissionBoundaryArn: String
+  groups: String
+  policyArns: String
+  policyDocument: GenericScalar
+}
+
+input KeyMapInput {
+  id: String!
+  keyName: String!
+}
+
+type UpdateAWSDynamicSecretMutation {
+  dynamicSecret: DynamicSecretType
+}
+
+type DeleteDynamicSecretMutation {
+  ok: Boolean
+}
+
+type LeaseDynamicSecret {
+  lease: DynamicSecretLeaseType
+}
+
+type RenewLeaseMutation {
+  lease: DynamicSecretLeaseType
+}
+
+type RevokeLeaseMutation {
+  lease: DynamicSecretLeaseType
 }

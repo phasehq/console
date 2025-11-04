@@ -23,27 +23,44 @@ const httpLink = new HttpLink({
   fetch: crossFetch,
 })
 
-const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) => {
+const errorLink = onError(({ graphQLErrors, networkError }) => {
   if (graphQLErrors) {
-    graphQLErrors.forEach(({ message, locations, path, extensions }) =>
-      console.log(
-        `[GraphQL error]: Code: ${extensions?.code},  Message: ${message}, Location: ${locations}, Path: ${path}`
-      )
-    )
     for (let err of graphQLErrors) {
+      const code = err.extensions?.code
+
+      if (code === 'IP_RESTRICTED') {
+        const org = err.extensions?.organisation_name
+
+        window.location.href = `/ip-restricted?org=${org}`
+        return
+      }
+
+      // Default error handling (toast)
       toast.error(err.message)
+      console.log(
+        `[GraphQL error]: Code: ${code},  Message: ${err.message}, Location: ${err.locations}, Path: ${err.path}`
+      )
     }
   }
 
-  // Log network error
   if (networkError) {
     console.log(`[Network error]: ${networkError}`)
-    // Client-side logout when recieving a 403 from the backend
     if (networkError.message.includes('403')) handleSignout()
   }
 })
 
 export const graphQlClient = new ApolloClient({
   link: from([errorLink, httpLink]),
-  cache: new InMemoryCache(),
+  cache: new InMemoryCache({
+  typePolicies: {
+    KeyMap: {
+      keyFields: ["id", "keyName"], // composite key
+    },
+  },
+}),
+  defaultOptions: {
+    watchQuery: {
+      skipPollAttempt: () => document.hidden,
+    },
+  },
 })

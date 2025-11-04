@@ -1,5 +1,4 @@
 import clsx from 'clsx'
-import { color } from 'framer-motion'
 
 const SIZES = {
   xs: 'border-[2px] h-[14px] w-[14px]',
@@ -13,11 +12,12 @@ const COLORS = {
   emerald: 'border-emerald-500',
   red: 'border-red-400',
   amber: 'border-amber-500',
+  neutral: 'border-neutral-500',
 }
 
 interface SpinnerProps {
   size: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
-  color?: 'emerald' | 'red' | 'amber'
+  color?: 'emerald' | 'red' | 'amber' | 'neutral'
 }
 
 export default function Spinner(props: SpinnerProps = { size: 'lg', color: 'emerald' }) {

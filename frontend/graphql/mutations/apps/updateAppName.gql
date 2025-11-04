@@ -1,0 +1,8 @@
+mutation UpdateAppNameOp($id: ID!, $name: String!) {
+  updateAppName(id: $id, name: $name) {
+    app {
+      id
+      name
+    }
+  }
+} 

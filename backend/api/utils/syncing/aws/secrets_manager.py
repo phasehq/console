@@ -1,7 +1,5 @@
-from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from botocore.exceptions import ClientError
-from .auth import get_client
-import boto3
+from .auth import get_client, get_aws_sts_session
 import json
 import os
 import graphene
@@ -13,14 +11,28 @@ class AWSSecretType(ObjectType):
     arn = graphene.String()
 
 
-def list_aws_secrets(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region):
+def get_secrets_client_from_session(session):
+    """Get secrets manager client from a boto3 session."""
+    return session.client("secretsmanager")
+
+
+def list_aws_secrets(region, AWS_ACCESS_KEY_ID=None, AWS_SECRET_ACCESS_KEY=None, role_arn=None, external_id=None):
     """
-    List available secrets in AWS Secrets Manager.
+    List available secrets in AWS Secrets Manager using either access keys or assume role.
     This function uses a paginator to handle the possible scenario of having more secrets than what can be returned in a single API call.
     It lists all secrets along with their names and ARNs, which are crucial identifiers in AWS.
     """
     try:
-        secrets_client = get_client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region)
+        # Initialize the AWS Secrets Manager client based on authentication method
+        if role_arn:
+            # Use assume role authentication
+            session = get_aws_sts_session(role_arn, region, external_id)
+            secrets_client = get_secrets_client_from_session(session)
+        elif AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+            # Use access key authentication
+            secrets_client = get_client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region)
+        else:
+            raise Exception("Please provide either assume role parameters or access keys.")
 
         secrets_list = []
         paginator = secrets_client.get_paginator("list_secrets")
@@ -28,44 +40,50 @@ def list_aws_secrets(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region):
             for secret in page["SecretList"]:
                 secrets_list.append({"name": secret["Name"], "arn": secret["ARN"]})
         return secrets_list
-    except ClientError:
-        raise Exception("Failed to list AWS Secrets")
+    except ClientError as e:
+        raise Exception(f"Failed to list AWS Secrets: {str(e)}")
 
 
 def sync_aws_secrets(
     secrets,
-    AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY,
     region,
     secret_name,
     arn,
     kms_id=None,
+    AWS_ACCESS_KEY_ID=None,
+    AWS_SECRET_ACCESS_KEY=None,
+    role_arn=None,
+    external_id=None,
 ):
     """
-    Sync secrets to AWS Secrets Manager.
+    Sync secrets to AWS Secrets Manager using either access keys or assume role.
     Args:
         secrets (list of tuple): List of key-value pairs to sync.
-        AWS_ACCESS_KEY_ID (str): AWS access key ID.
-        AWS_SECRET_ACCESS_KEY (str): AWS secret access key.
         region (str): AWS region.
         secret_name (str): The name of the secret.
         arn (str): The ARN of the secret.
-        path (str, optional): Path to prepend to the secret name.
         kms_id (str, optional): KMS key ID for encryption.
+        AWS_ACCESS_KEY_ID (str, optional): AWS access key ID.
+        AWS_SECRET_ACCESS_KEY (str, optional): AWS secret access key.
+        role_arn (str, optional): The ARN of the role to assume.
+        external_id (str, optional): External ID for cross-account access.
     Returns:
         tuple: (bool, dict) indicating success or failure and a message.
     """
     try:
         # Convert list of tuples into a dictionary
-        secrets_dict = dict(secrets)
+        secrets_dict = {k: v for k, v, _ in secrets}
 
-        # Initialize the AWS Secrets Manager client
-        secrets_client = boto3.client(
-            "secretsmanager",
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-            region_name=region,
-        )
+        # Initialize the AWS Secrets Manager client based on authentication method
+        if role_arn:
+            # Use assume role authentication
+            session = get_aws_sts_session(role_arn, region, external_id)
+            secrets_client = get_secrets_client_from_session(session)
+        elif AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+            # Use access key authentication
+            secrets_client = get_client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region)
+        else:
+            return False, {"message": "Please provide either assume role parameters or access keys."}
 
         # Format the secrets into a JSON string
         secret_string = json.dumps(secrets_dict)

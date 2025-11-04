@@ -28,10 +28,8 @@ const ServiceCard = (props: { service: Service }) => {
             <div className="text-black dark:text-white text-lg font-semibold">{service.name}</div>
             <div className="text-neutral-500 text-sm">Sync an environment with {service.name}.</div>
           </div>
-          <div className="text-emerald-500">
-            <Button variant="link">
-              Sync <FaArrowRight />
-            </Button>
+          <div className="text-emerald-500 flex items-center gap-2">
+            Sync <FaArrowRight />
           </div>
         </div>
       </div>
@@ -47,7 +45,7 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
   const syncOptions =
     data?.services.map((service: ServiceType) => ({
       ...service,
-      ...{ icon: <ProviderIcon providerId={service.provider!.id} /> },
+      ...{ icon: <ProviderIcon providerId={service.id ?? ''} /> },
     })) ?? []
 
   return (

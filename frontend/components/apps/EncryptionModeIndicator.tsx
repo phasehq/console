@@ -7,26 +7,42 @@ import { FaCog, FaServer } from 'react-icons/fa'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { Button } from '../common/Button'
 import clsx from 'clsx'
+import app from 'next/app'
+import { userHasPermission } from '@/utils/access/permissions'
 
-export const EncryptionModeIndicator = (props: { app: AppType }) => {
-  const { app } = props
+export const SseLabel = ({ sseEnabled }: { sseEnabled: boolean }) => (
+  <div
+    title={sseEnabled ? 'Server-side encryption enabled' : 'End-to-end encryption enabled'}
+    className={clsx(
+      'rounded-md px-2 text-2xs font-semibold flex items-center justify-center gap-1 w-16',
+      sseEnabled ? 'text-sky-500 bg-sky-400/10' : 'text-emerald-500 bg-emerald-400/10'
+    )}
+  >
+    {sseEnabled ? <FaServer /> : <FaArrowDownUpLock />}
+    {sseEnabled ? 'SSE' : 'E2EE'}
+  </div>
+)
+
+export const EncryptionModeIndicator = (props: { app: AppType; asMenu?: boolean }) => {
+  const { app, asMenu } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  const userCanReadEncMode = userHasPermission(
+    organisation?.role?.permissions,
+    'EncryptionMode',
+    'read',
+    true
+  )
+
+  if (!asMenu) return <SseLabel sseEnabled={app.sseEnabled!} />
+
+  if (!userCanReadEncMode) return <></>
+
   return (
     <Menu as="div" className="relative inline-block text-left">
-      <Menu.Button as="div" className="cursor-pointer" title="App encryption mode">
-        {app.sseEnabled ? (
-          <div className="rounded-full px-2 text-xs font-semibold flex items-center gap-2 ring-1 ring-inset ring-sky-400/40 text-sky-500 bg-sky-400/10">
-            <FaServer />
-            SSE
-          </div>
-        ) : (
-          <div className="rounded-full px-2 text-xs font-semibold flex items-center gap-2 ring-1 ring-inset ring-emerald-400/40 text-emerald-500 bg-emerald-400/10">
-            <FaArrowDownUpLock />
-            E2EE
-          </div>
-        )}
+      <Menu.Button as="div" className="cursor-pointer">
+        <SseLabel sseEnabled={app.sseEnabled!} />
       </Menu.Button>
       <Transition
         as={Fragment}
@@ -46,15 +62,7 @@ export const EncryptionModeIndicator = (props: { app: AppType }) => {
                     <div className="uppercase text-xs tracking-widest text-neutral-500">
                       App encryption mode
                     </div>
-                    {app.sseEnabled ? (
-                      <div className="rounded-full px-2 text-xs font-semibold flex items-center gap-2 ring-1 ring-inset ring-sky-400/40 text-sky-500 bg-sky-400/10">
-                        <div>SSE</div>
-                      </div>
-                    ) : (
-                      <div className="rounded-full px-2 text-xs font-semibold flex items-center gap-2 ring-1 ring-inset ring-emerald-400/40 text-emerald-500 bg-emerald-400/10">
-                        <div>E2EE</div>
-                      </div>
-                    )}
+                    <SseLabel sseEnabled={app.sseEnabled!} />
                   </div>
 
                   <div className="text-black dark:text-white">

@@ -2,14 +2,18 @@
 
 import { Button } from '@/components/common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { getUserKxPublicKey, getUserKxPrivateKey } from '@/utils/crypto'
-import { generateUserToken } from '@/utils/environments'
-import { ExpiryOptionT, humanReadableExpiry, tokenExpiryOptions } from '@/utils/tokens'
+
+import {
+  compareExpiryOptions,
+  ExpiryOptionT,
+  humanReadableExpiry,
+  tokenExpiryOptions,
+} from '@/utils/tokens'
 import { useMutation } from '@apollo/client'
 import { Dialog, RadioGroup, Tab, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { useContext, useState, Fragment } from 'react'
-import { FaPlus, FaTimes, FaCircle, FaCheckCircle } from 'react-icons/fa'
+import { FaPlus, FaTimes, FaCircle, FaCheckCircle, FaExternalLinkSquareAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
@@ -18,10 +22,7 @@ import CopyButton from '@/components/common/CopyButton'
 import { CliCommand } from '@/components/dashboard/CliCommand'
 import Link from 'next/link'
 import { getApiHost } from '@/utils/appConfig'
-
-const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
-  return a.getExpiry() === b.getExpiry()
-}
+import { getUserKxPublicKey, getUserKxPrivateKey, generateUserToken } from '@/utils/crypto'
 
 export const CreateUserTokenDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
@@ -212,6 +213,22 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                           </Tab.Panel>
                           <Tab.Panel>
                             <div className="space-y-6">
+                              <Alert variant="info" size="sm">
+                                <div>
+                                  You will need to enable server-side encryption (SSE) for any Apps
+                                  that you want to manage secrets with via the Public API.
+                                  <Link
+                                    href="https://docs.phase.dev/console/apps#settings"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <div className="flex items-center gap-1 underline">
+                                      Docs <FaExternalLinkSquareAlt />
+                                    </div>
+                                  </Link>
+                                </div>
+                              </Alert>
+
                               <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
                                 <div className="w-full flex items-center justify-between pb-4">
                                   <span className="uppercase text-xs tracking-widest text-gray-500">
@@ -245,7 +262,7 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
                                 </div>
                                 <CliCommand
                                   prefix="curl"
-                                  command={`--request GET --url '${getApiHost()}/v1/secrets?app_id=\${appId}&env=development' --header 'Authorization: ${apiUserToken}'`}
+                                  command={`--request GET --url '${getApiHost()}/v1/secrets/?app_id=\${appId}&env=development' --header 'Authorization: Bearer ${apiUserToken}'`}
                                 />
                               </div>
                             </div>

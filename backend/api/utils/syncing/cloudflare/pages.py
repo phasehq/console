@@ -84,12 +84,12 @@ def sync_cloudflare_secrets(
         )
 
         new_vars = {}
-        for key, value in secrets:
+        for key, value, _ in secrets:
             new_vars[key] = {"type": "secret_text", "value": value}
 
         if existing_vars is not None:
             for existing_key in existing_vars:
-                if not any(key == existing_key for key, value in secrets):
+                if not any(key == existing_key for key, _, _ in secrets):
                     new_vars[existing_key] = None
 
         payload = {

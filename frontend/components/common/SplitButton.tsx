@@ -114,7 +114,7 @@ export function SplitButton(buttonProps: ButtonProps) {
             >
               <Menu.Items as={Fragment}>
                 <div className="p-2 ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md z-20 shadow-xl">
-                  {menuContent}
+                  <Menu.Item>{menuContent}</Menu.Item>
                 </div>
               </Menu.Items>
             </Transition>

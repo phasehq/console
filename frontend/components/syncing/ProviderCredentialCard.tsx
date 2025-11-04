@@ -7,7 +7,7 @@ import { Button } from '../common/Button'
 import { relativeTimeFromDates } from '@/utils/time'
 import { organisationContext } from '@/contexts/organisationContext'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
-import { userIsAdmin } from '@/utils/permissions'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
 import { ProviderIcon } from './ProviderIcon'
 
 export const ProviderCredentialCard = (props: { credential: ProviderCredentialsType }) => {
@@ -25,7 +25,19 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
     setIsOpen(true)
   }
 
-  const activeUserIsAdmin = organisation ? userIsAdmin(organisation.role!) : false
+  const userCanUpdateCredentials = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'update'
+  )
+  const userCanDeleteCredentials = userHasPermission(
+    organisation?.role?.permissions,
+    'IntegrationCredentials',
+    'delete'
+  )
+  const userCanManageCredentials = organisation
+    ? userCanUpdateCredentials || userCanDeleteCredentials
+    : false
 
   return (
     <div className="grid grid-cols-5 gap-4 justify-between p-2 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium">
@@ -45,21 +57,22 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
         Created {relativeTimeFromDates(new Date(credential.createdAt))}
       </div>
 
-      <div className="flex items-center justify-end">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={openModal}
-          title={
-            activeUserIsAdmin
-              ? 'Manage credential'
-              : "You don't have permission to manage credentials"
-          }
-          disabled={!activeUserIsAdmin}
-        >
-          <FaCog /> Manage
-        </Button>
-      </div>
+      {userCanManageCredentials && (
+        <div className="flex items-center justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={openModal}
+            title={
+              userCanManageCredentials
+                ? 'Manage credential'
+                : "You don't have permission to manage credentials"
+            }
+          >
+            <FaCog /> Manage
+          </Button>
+        </div>
+      )}
 
       <Transition appear show={isOpen} as={Fragment}>
         <Dialog as="div" className="relative z-10" onClose={closeModal}>
@@ -99,12 +112,12 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
 
                   <UpdateProviderCredentials credential={credential} />
 
-                  <div className="flex justify-end">
+                  {/* <div className="flex justify-end">
                     <DeleteProviderCredentialDialog
                       credential={credential}
                       orgId={organisation!.id}
                     />
-                  </div>
+                  </div> */}
                 </Dialog.Panel>
               </Transition.Child>
             </div>
