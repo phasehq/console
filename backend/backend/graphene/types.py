@@ -42,7 +42,6 @@ from api.models import (
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
-from datetime import datetime
 from api.utils.access.roles import default_roles
 from graphql import GraphQLError
 from itertools import chain
@@ -303,14 +302,14 @@ class ServiceAccountTokenType(DjangoObjectType):
         fields = "__all__"
 
     def resolve_last_used(self, info):
-        event = (
+        latest_event = (
             SecretEvent.objects.filter(service_account_token=self)
-            .order_by("-timestamp")
             .only("timestamp")
+            .order_by("-timestamp")
             .first()
         )
-        if event:
-            return event.timestamp
+
+        return latest_event.timestamp if latest_event else None
 
 
 class MemberType(graphene.Enum):
@@ -430,25 +429,17 @@ class SecretEventType(DjangoObjectType):
         )
 
     def resolve_user(self, info):
-        # Resolve if the user has either Org or App member read permissions
-        if user_has_permission(
-            info.context.user,
-            "read",
-            "Members",
-            self.secret.environment.app.organisation,
-            True,
-        ) or user_has_permission(
-            info.context.user,
-            "read",
-            "Members",
-            self.secret.environment.app.organisation,
-            False,
-        ):
+        # use the precomputed permission flag; return None if not allowed
+        if getattr(info.context, "can_view_members", False):
             return self.user
+        return None
 
     def resolve_service_account(self, info):
-        if self.service_account_token:
+        if self.service_account_token_id and getattr(
+            self, "service_account_token", None
+        ):
             return self.service_account_token.service_account
+        return self.service_account
 
 
 class PersonalSecretType(DjangoObjectType):
@@ -489,9 +480,21 @@ class SecretType(DjangoObjectType):
         # interfaces = (relay.Node, )
 
     def resolve_history(self, info):
-        return SecretEvent.objects.filter(
-            secret_id=self.id, event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE]
+        user = info.context.user
+
+        # Compute can_view_members only once per request
+        organisation = self.environment.app.organisation
+        can_view_members = user_has_permission(
+            user, "read", "Members", organisation, True
+        ) or user_has_permission(user, "read", "Members", organisation, False)
+        setattr(info.context, "can_view_members", can_view_members)
+
+        qs = SecretEvent.objects.filter(
+            secret_id=self.id,
+            event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
         ).order_by("timestamp")
+
+        return qs
 
     def resolve_override(self, info):
         if info.context.user:
@@ -1044,18 +1047,18 @@ class IdentityType(DjangoObjectType):
 
     def resolve_config(self, info):
         """Map provider-specific config into typed objects"""
-        provider = (self.provider or '').lower()
+        provider = (self.provider or "").lower()
         cfg = self.config or {}
-        
-        if provider == 'aws_iam':
+
+        if provider == "aws_iam":
             try:
-                ttl = int(cfg.get('signatureTtlSeconds', 60))
+                ttl = int(cfg.get("signatureTtlSeconds", 60))
             except Exception:
                 ttl = 60
             return AwsIamConfigType(
                 trusted_principals=self.get_trusted_list(),
                 signature_ttl_seconds=ttl,
-                sts_endpoint=cfg.get('stsEndpoint'),
+                sts_endpoint=cfg.get("stsEndpoint"),
             )
-        
+
         return None

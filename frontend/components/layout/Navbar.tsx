@@ -76,11 +76,11 @@ export const NavBar = () => {
                 href={crumb.href}
                 className="capitalize overflow-hidden text-ellipsis whitespace-nowrap text-zinc-500"
               >
-                {startCase(crumb.label)}
+                {crumb.label}
               </Link>
             ) : (
               <span className="capitalize text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap">
-                {startCase(crumb.label)}
+                {crumb.label}
               </span>
             )}
           </div>
