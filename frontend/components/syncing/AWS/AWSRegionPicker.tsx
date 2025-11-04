@@ -4,10 +4,12 @@ import clsx from 'clsx'
 import { Fragment, useState } from 'react'
 import { FaChevronDown } from 'react-icons/fa'
 
-export const AWSRegionPicker = (props: { onChange: (region: string) => void }) => {
-  const { onChange } = props
+export const AWSRegionPicker = (props: { onChange: (region: string) => void; value?: string }) => {
+  const { onChange, value } = props
 
-  const [region, setRegion] = useState<AwsRegion>(awsRegions[0])
+  const [region, setRegion] = useState<AwsRegion>(
+    value ? awsRegions.find((r) => r.region === value) || awsRegions[0] : awsRegions[0]
+  )
   const [query, setQuery] = useState('')
 
   const handleSetRegion = (selectedRegion: AwsRegion) => {
@@ -25,12 +27,12 @@ export const AWSRegionPicker = (props: { onChange: (region: string) => void }) =
   return (
     <div className="space-y-2">
       <div className="relative">
-        <Combobox value={region} onChange={handleSetRegion}>
+        <Combobox as="div" value={region} onChange={handleSetRegion}>
           {({ open }) => (
             <>
               <div className="space-y-2">
                 <Combobox.Label as={Fragment}>
-                  <label className="block text-gray-700 text-sm font-bold" htmlFor="name">
+                  <label className="block text-sm text-neutral-500" htmlFor="name">
                     AWS Region
                   </label>
                 </Combobox.Label>
@@ -62,13 +64,13 @@ export const AWSRegionPicker = (props: { onChange: (region: string) => void }) =
                 leaveTo="transform scale-95 opacity-0"
               >
                 <Combobox.Options as={Fragment}>
-                  <div className="bg-zinc-300 dark:bg-zinc-800 p-2 rounded-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto">
+                  <div className="bg-zinc-300 dark:bg-zinc-800 rounded-b-md shadow-2xl z-20 absolute max-h-80 overflow-y-auto w-full border border-t-none border-neutral-500/20 divide-y divide-neutral-500/20">
                     {filteredRegions.map((region: AwsRegion) => (
-                      <Combobox.Option key={region.region} value={region}>
+                      <Combobox.Option as="div" key={region.region} value={region}>
                         {({ active, selected }) => (
                           <div
                             className={clsx(
-                              'flex flex-col gap-1 p-2 cursor-pointer rounded-md w-full',
+                              'flex flex-col p-2 cursor-pointer rounded-md w-full',
                               active && 'bg-zinc-400 dark:bg-zinc-700'
                             )}
                           >

@@ -1,9 +1,8 @@
 import { EnvironmentType } from '@/apollo/graphql'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/environments'
 import { useMutation, useLazyQuery, useQuery } from '@apollo/client'
 import { Dialog, Transition } from '@headlessui/react'
 import { useState, Fragment, useContext } from 'react'
-import { FaTimes } from 'react-icons/fa'
+import { FaTimes, FaUsers } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Alert } from '../common/Alert'
 import { Button } from '../common/Button'
@@ -16,6 +15,9 @@ import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { FaServer } from 'react-icons/fa6'
 import { organisationContext } from '@/contexts/organisationContext'
+import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/crypto'
+import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
+import Link from 'next/link'
 
 export const EnableSSEDialog = (props: { appId: string }) => {
   const { appId } = props
@@ -26,6 +28,10 @@ export const EnableSSEDialog = (props: { appId: string }) => {
   const { data } = useQuery(GetServerKey)
   const [enableSse, { loading }] = useMutation(InitAppSyncing)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
+
+  const userCanEnableSSE = organisation
+    ? userHasPermission(organisation.role?.permissions, 'EncryptionMode', 'update', true)
+    : false
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
@@ -148,29 +154,47 @@ export const EnableSSEDialog = (props: { appId: string }) => {
                     </Button>
                   </Dialog.Title>
 
-                  <form className="space-y-6 py-4" onSubmit={handleEnableSse}>
-                    <p className="text-neutral-500">
-                      Enable server-side encryption (SSE) for this App if you want to:
-                    </p>
-                    <ul className="text-neutral-500 list-disc list-inside">
-                      <li>Set up automatic syncing of secrets via third-party integrations</li>
-                      <li>Access and update secrets over the API</li>
-                    </ul>
+                  {userCanEnableSSE ? (
+                    <form className="space-y-6 py-4" onSubmit={handleEnableSse}>
+                      <p className="text-neutral-500">
+                        Enable server-side encryption (SSE) for this App if you want to:
+                      </p>
+                      <ul className="text-neutral-500 list-disc list-inside">
+                        <li>Set up automatic syncing of secrets via third-party integrations</li>
+                        <li>Create and manage dynamic secrets</li>
+                        <li>Access and update secrets over the API</li>
+                      </ul>
 
-                    <Alert variant="info" icon={true}>
-                      Enabling server-side encryption for this App will allow the server to access
-                      secrets in all environments.
-                    </Alert>
+                      <Alert variant="info" icon={true}>
+                        Enabling server-side encryption for this App will allow the server to access
+                        secrets in all environments.
+                      </Alert>
 
-                    <div className="flex items-center gap-4 justify-between">
-                      <Button variant="secondary" type="button" onClick={closeModal}>
-                        Cancel
-                      </Button>
-                      <Button variant="primary" type="submit" isLoading={loading}>
-                        Enable
-                      </Button>
+                      <div className="flex items-center gap-4 justify-between">
+                        <Button variant="secondary" type="button" onClick={closeModal}>
+                          Cancel
+                        </Button>
+                        <Button variant="primary" type="submit" isLoading={loading}>
+                          Enable
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="py-4 space-y-4">
+                      <Alert variant="info" icon={true}>
+                        Only Organisation Owners and Admins can enable SSE for this App. Please
+                        contact the Organisation Owner or Admins to enable SSE.
+                      </Alert>
+
+                      <div className="flex items-center justify-end">
+                        <Link href={`/${organisation?.name}/apps/${appId}/members`}>
+                          <Button variant="secondary">
+                            <FaUsers /> View App Members
+                          </Button>
+                        </Link>
+                      </div>
                     </div>
-                  </form>
+                  )}
                 </Dialog.Panel>
               </Transition.Child>
             </div>

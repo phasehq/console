@@ -14,7 +14,6 @@ import { humanFileSize } from '@/utils/dataUnits'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
-import Spinner from '@/components/common/Spinner'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
@@ -51,10 +50,10 @@ export default function KMSLogs(props: { app: string }) {
       },
       fetchPolicy: 'network-only',
     }).then((result) => {
-      if (result.data?.logs.kms.length) {
-        setLogList(logList.concat(result.data.logs.kms))
+      if (result.data?.kmsLogs.logs.length) {
+        setLogList(logList.concat(result.data.kmsLogs.logs))
       }
-      if (result.data?.logs.length < DEFAULT_PAGE_SIZE) setEndofList(true)
+      if (result.data?.kmsLogs.logs.length < DEFAULT_PAGE_SIZE) setEndofList(true)
     })
   }
 
@@ -91,7 +90,7 @@ export default function KMSLogs(props: { app: string }) {
    * Hook to update the log count once its available
    */
   useEffect(() => {
-    if (data?.kmsLogsCount) setTotalCount(data.kmsLogsCount)
+    if (data?.kmsLogs.count) setTotalCount(data.kmsLogs.count)
   }, [data])
 
   // useEffect(() => {

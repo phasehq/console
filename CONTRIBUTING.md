@@ -1,60 +1,159 @@
-# Contributing to Phase
+# Contributing to Phase 🫡
 
-Thanks for taking the time to contribute! ❤️
+Thanks for taking the time to contribute!
 
 We welcome any contributions to Phase, big or small.
 
-## Community
+## Minimum System Requirements 🦕
 
-It's the early days of Phase and we're working hard to build an awesome, inclusive community.
+To run Phase locally, ensure your system meets the following minimum requirements:
+- **System** !=🥔
+- **RAM:** >= 8GB (preferably 16GB)
 
-## Bugs and issues
 
-Bug reports help make Phase a better experience for everyone. When you report a bug, a template will be created automatically containing information we'd like to know.
+## Prerequisites 🛠️
+
+Before setting up your development environment, ensure you have the following prerequisites installed 🐳:
+- Docker
+- Docker Compose
+- Git
+
+## Bugs and Issues 🧶
+
+Bug reports help make Phase a better experience for everyone. When you report a bug, a template will be created automatically containing the information we'd like to know.
 
 Before raising a new issue, please search existing ones to make sure you're not creating a duplicate.
 
-**If the issue is related to security, please email us directly at security@phase.dev**
+**If the issue is related to security, please email us directly at `security@phase.dev`**
 
-For more information see: [SECURITY.md](/SECURITY.md)
+For more information, see: [SECURITY.md](/SECURITY.md)
 
-## Deciding what to work on
+## Deciding What to Work On 🏋️
 
-You can start by browsing through our list of issues or adding your own that improves on the platform experience. Once you've decided on an issue, leave a comment and wait to get approved; this helps avoid multiple people working on the same issue.
+You can start by browsing through our list of issues or adding your own that suggests a new feature or improves the platform experience. Once you've decided on an issue, leave a comment and wait to get approved; this helps avoid multiple people working on the same issue.
 
 If you're ever in doubt about whether or not a proposed feature aligns with Phase as a whole, feel free to raise an issue about it and we'll get back to you promptly.
 
-## Writing and submitting code
+## Writing and Submitting Code 🏗️
 
-Anyone can contribute code to Phase. To get started, check out the local development guide, make your changes, and submit a pull request to the main repository. When committing code, please try and use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/).
+Anyone can contribute code to Phase. To get started, check out the local development guide, make your changes, and submit a pull request to the main repository. When committing code, please try to use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
-## Licensing
+## Licensing ⚖️
 
-Most of Phase's code is under the MIT license, though some paid feature restrictions are covered by a proprietary license.
+Most of Phase's code is under the MIT license, though some paid feature restrictions may be covered by a proprietary license.
 
-Any third party components incorporated into our code are licensed under the original license provided by the applicable component owner.
+Any third-party components incorporated into our code are licensed under the original license provided by the applicable component owner.
 
-## Setup local development environment
-### Dev server with hot reload
-1. Create a **.env.dev** file using
-    ```
+## Get Phase running locally 👩‍💻
+
+### Dev Server with Hot Reload
+
+1. Create a **.env.dev** file using:
+    ```bash
     cp .env.dev.example .env.dev
     ```
-2. Add atleast one OAuth provider in your **.env.dev**. Follow the [docs](https://docs.phase.dev/self-hosting/configuration/envars)
-3. Verify that **dev-docker-compose.yml** file is populated with the correct environment variables by running
-    ```
-    docker compose -f dev-docker-compose.yml --env-file .env.dev config
-    ```
-4. Start the containers using 
-    ```
-    docker-compose -f dev-docker-compose.yml --env-file .env.dev up
-    ```
-5. The Console is now running at <https://localhost> with [HMR(Hot Module Replacement)](https://webpack.js.org/concepts/hot-module-replacement) and a self-signed certificate.
-   >**Note : Your browser might warn you about the self-signed certificate. You can safely accept the certificate and proceed. 
 
-### Staging env to test production builds
+2. Add at least one of the available OAuth provider credentials in your **.env.dev**. Follow the [Phase Docs](https://docs.phase.dev/self-hosting/configuration/envars#single-sign-on-sso).
 
-1. Set up a `.env` file with `cp .env.example` and add atleast one OAuth provider. View the [docs](https://docs.phase.dev/self-hosting/configuration/envars) for more info.
-2. Build the image locally with `docker-compose -f staging-docker-compose.yml build`
-3. Bring docker compose up with `docker-compose -f staging-docker-compose.yml up`
-4. The Console is now running at `https://localhost`.
+3. Install the dependencies:
+    ```bash
+    docker compose --env-file .env.dev  -f dev-docker-compose.yml build
+    ```
+
+4. Start the containers in dev mode using:
+    ```bash
+    docker compose --env-file .env.dev -f dev-docker-compose.yml up -d
+    ```
+
+5. The Console is now running at <https://localhost> with [HMR (Hot Module Replacement)](https://webpack.js.org/concepts/hot-module-replacement) and a self-signed certificate.
+   
+   >**Note:** Your browser might warn you about the self-signed certificate. You can safely accept the certificate and proceed.
+
+### Set Up a Staging Environment
+
+1. Create a **.env** file using:
+    ```bash
+    cp .env.example .env
+    ```
+
+2. Add at least one of the available OAuth provider credentials in your **.env**. Follow the [Phase Docs](https://docs.phase.dev/self-hosting/configuration/envars#single-sign-on-sso).
+
+3. Build the image locally with:
+    ```bash
+    docker compose -f staging-docker-compose.yml build
+    ```
+
+4. Start the Phase Console with:
+    ```bash
+    docker compose -f staging-docker-compose.yml up -d
+    ```
+
+5. The Console is now running at <https://localhost> with a self-signed certificate.
+
+   >**Note:** Your browser might warn you about the self-signed certificate. You can safely accept the certificate and proceed.
+
+### Set Up the Phase CLI
+
+1. Install the CLI:
+   - Option 1: Install via the official documentation: https://docs.phase.dev/cli/install
+   - Option 2: Set up the Phase CLI dev environment: https://github.com/phasehq/cli?tab=readme-ov-file#development
+
+2. Create a personal access token in the Phase Console:
+   - Follow the instructions at: https://docs.phase.dev/console/tokens#personal-access-tokens-pats
+
+3. Log in via the CLI:
+   - Run the following command:
+     ```
+     phase auth --mode token
+     ```
+   - Select "🛠️ Self Hosted" from the dropdown
+   - For the Phase Console host URL, enter: `http://localhost`
+     (Note: Use `http` instead of `https` to avoid SSL certificate errors with self-signed certificates)
+   - Enter your email
+   - Copy and paste your Phase personal access token you created in the Phase Console
+
+For more information on `phase auth`, see: https://docs.phase.dev/cli/commands#auth
+
+### Common Problems / Issues 🗿
+
+1. **Certificate Errors**
+   - Caused by a self-signed certificate.
+   - Solved by adding a valid certificate to the NGINX config in `nginx/default.conf`.
+   - Use a reverse proxy that will add a valid certificate like `cloudflared` or `tailscale serve`.
+
+2. **NGINX 503 / Timeouts / Hot Reloading Not Working**
+   - Caused by a slow system.
+   - Please check how much leftover RAM you have after starting all the containers.
+   - Additionally, for slower systems facing timeout issues, try increasing NGINX proxy timeouts by adding the following code snippet:
+
+    ```nginx
+    server {
+        listen 80;
+        listen 443 ssl http2;
+
+        ssl_certificate /etc/nginx/ssl/nginx.crt;
+        ssl_certificate_key /etc/nginx/ssl/nginx.key;
+        
+        # Increase the timeout to 3 minutes
+        proxy_connect_timeout 180s;
+        proxy_send_timeout 180s;
+        proxy_read_timeout 180s;
+    }
+
+    # Rest of your config
+    # ...
+    ```
+
+3. **Having Issues Signing In (Redirected Back to the Phase Console Log-In Screen Even After OAuth Authentication)**
+   - Please make sure the OAuth credentials and the callback URL are correct and as described in the docs: [Phase Docs](https://docs.phase.dev/self-hosting/configuration/envars#single-sign-on-sso)
+
+4. **CLI Errors**
+   - If you encounter any CLI errors, run the CLI in debug mode to get more information:
+     ```
+     PHASE_DEBUG=True phase <your sub-command>
+     ```
+
+Need help?
+[Join our Slack](https://slack.phase.dev)
+
+Thank you for contributing to Phase!

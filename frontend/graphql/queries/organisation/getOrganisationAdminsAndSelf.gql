@@ -1,8 +1,0 @@
-query GetOrganisationAdminsAndSelf($organisationId: ID!) {
-  organisationAdminsAndSelf(organisationId: $organisationId) {
-    id
-    role
-    identityKey
-    self
-  }
-}

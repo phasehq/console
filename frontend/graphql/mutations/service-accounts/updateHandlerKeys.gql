@@ -1,0 +1,5 @@
+mutation UpdateServiceAccountHandlerKeys($orgId: ID!, $handlers: [ServiceAccountHandlerInput]) {
+  updateServiceAccountHandlers(organisationId: $orgId, handlers: $handlers) {
+    ok
+  }
+}

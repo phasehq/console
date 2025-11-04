@@ -26,7 +26,7 @@ export default function UserMenu() {
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button as="div">
           <Button variant="secondary">
-            <Avatar imagePath={session?.user?.image} size="sm" />
+            <Avatar user={session?.user} size="sm" />
             <div className="flex flex-col">{firstName}</div>
           </Button>
         </Menu.Button>
@@ -39,26 +39,25 @@ export default function UserMenu() {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute z-10 -right-2 top-12 mt-2 w-56 origin-bottom-left divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+          <Menu.Items className="absolute z-20 -right-2 top-12 mt-2 w-72 origin-bottom-left divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
             <Menu.Item>
-              <div className="py-4 flex items-start gap-2 p-2 ">
+              <div className="py-4 flex items-start gap-2 p-2">
                 <div className="py-1.5">
-                  <Avatar imagePath={session?.user?.image!} size="md" />
+                  <Avatar user={session?.user} size="md" />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate w-40">
+                <div className="flex flex-col flex-grow min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                       {session?.user?.name}
                     </span>
-                    <span className="text-neutral-500 text-2xs truncate w-40">
-                      {session?.user?.email}
-                    </span>
                   </div>
-
+                  <span className="text-neutral-500 text-2xs truncate">{session?.user?.email}</span>
                   {activeOrganisation && (
-                    <div className="flex items-center gap-2 text-2xs">
-                      <RoleLabel role={activeOrganisation?.role!} />
-                      <span>at {activeOrganisation?.name}</span>
+                    <div className="flex items-center gap-1 text-2xs pt-1">
+                      {activeOrganisation && <RoleLabel role={activeOrganisation?.role!} />} @{' '}
+                      <span className="text-zinc-900 dark:text-zinc-100  truncate">
+                        {activeOrganisation?.name}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -80,7 +79,7 @@ export default function UserMenu() {
               <div className="flex items-center justify-between p-2">
                 <div>
                   {activeOrganisation && (
-                    <Link href={`/${activeOrganisation.name}/settings`}>
+                    <Link href={`/${activeOrganisation.name}/settings?tab=account`}>
                       <Button variant="outline">
                         <div className="flex items-center gap-1 text-xs">
                           <FaCog />

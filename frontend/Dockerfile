@@ -1,5 +1,5 @@
 # ---- Base Node ----
-FROM node:lts-alpine3.19@sha256:2f46fd49c767554c089a5eb219115313b72748d8f62f5eccb58ef52bc36db4ad AS base
+FROM node:22-alpine3.20@sha256:2289fb1fba0f4633b08ec47b94a89c7e20b829fc5679f9b7b298eaa2f1ed8b7e AS base
 
 # Set working directory
 WORKDIR /app
@@ -22,6 +22,9 @@ FROM base AS dependencies
 # Set NODE_ENV to production
 ENV NODE_ENV production
 
+# Disable Nextjs telemetry
+ENV NEXT_TELEMETRY_DISABLED 1
+
 # Install node packages
 RUN yarn install --production --frozen-lockfile --no-cache && yarn cache clean
 # Copy production node_modules aside
@@ -31,21 +34,22 @@ RUN cp -R node_modules /tmp/node_modules
 FROM dependencies AS build
 COPY --chown=app:app . .
 
-# Set environment variables
+# Set public environment variable placeholders
 ARG NEXT_PUBLIC_BACKEND_API_BASE=BAKED_NEXT_PUBLIC_BACKEND_API_BASE
-ARG NEXT_PUBLIC_NEXTAUTH_PROVIDERS=BAKED_NEXT_PUBLIC_NEXTAUTH_PROVIDERS
 ARG NEXT_PUBLIC_APP_HOST=BAKED_NEXT_PUBLIC_APP_HOST
 ARG NEXT_PUBLIC_POSTHOG_KEY=BAKED_NEXT_PUBLIC_POSTHOG_KEY
 ARG NEXT_PUBLIC_POSTHOG_HOST=BAKED_NEXT_PUBLIC_POSTHOG_HOST
 ARG NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID=BAKED_NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
+ARG NEXT_PUBLIC_GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID=BAKED_NEXT_PUBLIC_GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
+ARG NEXT_PUBLIC_STRIPE_PUBLIC_KEY=BAKED_NEXT_PUBLIC_STRIPE_PUBLIC_KEY
 RUN yarn build
 
 # ---- Release ----
 FROM base AS release
-# Copy production node_modules
-COPY --from=dependencies /tmp/node_modules ./node_modules
-# Copy app sources
-COPY --from=build /app/.next ./.next
+# Copy standalone output
+COPY --from=build /app/.next/standalone ./
+# Copy static files
+COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 # Copy scripts directory
 COPY --chown=app:app scripts ./scripts

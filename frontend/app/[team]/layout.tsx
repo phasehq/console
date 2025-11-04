@@ -7,7 +7,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect } from 'react'
-
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
 export default function RootLayout({
@@ -53,9 +52,14 @@ export default function RootLayout({
       )}
     >
       {activeOrganisation && <UnlockKeyringDialog organisation={activeOrganisation} />}
-      {showNav && <NavBar team={params.team} />}
+      {showNav && <NavBar />}
       {showNav && <Sidebar />}
-      <div className={clsx('min-h-screen overflow-auto', showNav && 'pt-16')}>{children}</div>
+      <div className="grid h-screen">
+        <div></div>
+        <div className={clsx('overflow-auto', showNav && 'mt-16 min-h-[calc(100vh-64px)]')}>
+          {children}
+        </div>
+      </div>
     </div>
   )
 }

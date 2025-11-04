@@ -1,8 +1,10 @@
-mutation UpdateMemberRole($memberId: ID!, $role: String!) {
-  updateOrganisationMemberRole(memberId: $memberId, role: $role) {
+mutation UpdateMemberRole($memberId: ID!, $roleId: ID!) {
+  updateOrganisationMemberRole(memberId: $memberId, roleId: $roleId) {
     orgMember {
       id
-      role
+      role {
+        name
+      }
     }
   }
 }

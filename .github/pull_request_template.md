@@ -38,8 +38,7 @@
 
 - [ ] Ensure linting passes (code style checks)?
 - [ ] Update dependencies and lockfiles (if required)
+- [ ] Update migrations (if required)
+- [ ] Regenerate graphql schema and types (if required)
 - [ ] Verify the app builds locally?
 - [ ] Manually test the changes on different browsers/devices?
-
-
-

@@ -2,17 +2,25 @@
 
 import { OrganisationType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
-import { HeroPattern } from '@/components/common/HeroPattern'
 import { Input } from '@/components/common/Input'
 import Spinner from '@/components/common/Spinner'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
-import { OrganisationKeyring, cryptoUtils } from '@/utils/auth'
+import { CliCommand } from '@/components/dashboard/CliCommand'
 import { copyToClipBoard } from '@/utils/clipboard'
-import { getUserKxPublicKey, getUserKxPrivateKey, encryptAsymmetric } from '@/utils/crypto'
-import { generateUserToken } from '@/utils/environments'
+import { isCloudHosted, getHostname } from '@/utils/appConfig'
+import {
+  OrganisationKeyring,
+  getUserKxPublicKey,
+  getUserKxPrivateKey,
+  generateUserToken,
+  encryptAsymmetric,
+  decodeb64string,
+  getKeyring,
+} from '@/utils/crypto'
+
 import { getDevicePassword } from '@/utils/localStorage'
 import { useMutation } from '@apollo/client'
 import { Disclosure, Transition } from '@headlessui/react'
@@ -22,7 +30,6 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
 import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaShieldAlt } from 'react-icons/fa'
-import { MdContentCopy } from 'react-icons/md'
 import { SiGithub, SiGnometerminal, SiSlack } from 'react-icons/si'
 import { toast } from 'react-toastify'
 
@@ -93,11 +100,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
   const validateKeyring = async (password: string, organisation: OrganisationType) => {
     return new Promise<OrganisationKeyring>(async (resolve) => {
-      const decryptedKeyring = await cryptoUtils.getKeyring(
-        session?.user?.email!,
-        organisation,
-        password
-      )
+      const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, password)
 
       resolve(decryptedKeyring)
     })
@@ -142,9 +145,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
   useEffect(() => {
     const validateWebAuthRequest = async () => {
-      const decodedWebAuthReq = await cryptoUtils.decodeb64string(
-        decodeURIComponent(params.requestCode)
-      )
+      const decodedWebAuthReq = await decodeb64string(decodeURIComponent(params.requestCode))
       const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
 
       if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName)
@@ -319,55 +320,121 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
               <FaExclamationTriangle className="text-amber-500" size="40" />
             </div>
             <h1 className="text-black dark:text-white text-4xl font-semibold">
-              CLI Authentication error
+              CLI Authentication failed
             </h1>
             <p className="text-neutral-500 text-base">
-              Something went wrong authenticating with the CLI. Please try the following steps:
+              CLI authentication could not be completed from this page. Please follow these steps to
+              retry the authentication:
             </p>
           </div>
 
-          <ol className="text-left list-decimal list-inside text-black dark:text-white space-y-2">
-            <li>
-              Retry authentication with{' '}
-              <code
-                className="text-emerald-500 cursor-pointer"
-                onClick={() => handleCopy('phase auth --mode token')}
-              >
-                phase auth --mode token
-              </code>
-              .
-            </li>
-            <li>Paste the following token into your terminal when prompted:</li>
-          </ol>
-          <div className="py-0">
-            <div className="bg-blue-200 dark:bg-blue-400/10 shadow-inner p-3 rounded-lg">
-              <div className="w-full flex items-center justify-between pb-4">
-                <span className="uppercase text-xs tracking-widest text-gray-500">user token</span>
-                <div className="flex gap-4">
-                  {userToken && (
-                    <Button variant="outline" onClick={() => handleCopy(userToken)}>
-                      <MdContentCopy /> Copy
-                    </Button>
-                  )}
-                </div>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
+                  1
+                </span>
+                <p className="text-black dark:text-white">
+                  Exit out of the CLI by pressing{' '}
+                  <code className="font-mono font-bold">Ctrl+C</code>
+                </p>
               </div>
-              <code className="text-xs break-all text-blue-500 ph-no-capture">{userToken}</code>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
+                  2
+                </span>
+                <p className="text-black dark:text-white">
+                  Retry authentication manually via the{' '}
+                  <code className="font-mono font-bold">token</code> mode:
+                </p>
+              </div>
+              <CliCommand command="auth --mode token" />
+              <div className="pl-8 text-neutral-500 text-sm space-y-2">
+                {isCloudHosted() ? (
+                  <ul className="list-disc list-inside space-y-2">
+                    <li>
+                      Choose your Phase instance type as: <b>☁️ Phase Cloud</b>
+                    </li>
+                    <li>
+                      Enter your email address:{' '}
+                      <code
+                        className="text-emerald-500 cursor-pointer font-mono"
+                        onClick={() => handleCopy(session?.user?.email || '')}
+                      >
+                        {session?.user?.email}
+                      </code>
+                    </li>
+                  </ul>
+                ) : (
+                  <ul className="list-disc list-inside space-y-2">
+                    <li>
+                      Choose your Phase instance type as: <b>🛠️ Self Hosted</b>
+                    </li>
+                    <li>
+                      Enter the host:{' '}
+                      <code
+                        className="text-emerald-500 cursor-pointer font-mono"
+                        onClick={() => handleCopy(getHostname() || '')}
+                      >
+                        {getHostname()}
+                      </code>
+                    </li>
+                    <li>
+                      Enter your email address:{' '}
+                      <code
+                        className="text-emerald-500 cursor-pointer font-mono"
+                        onClick={() => handleCopy(session?.user?.email || '')}
+                      >
+                        {session?.user?.email}
+                      </code>
+                    </li>
+                  </ul>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-500/20 text-sm font-medium">
+                  3
+                </span>
+                <p className="text-black dark:text-white">
+                  When prompted, paste your Personal Access Token (PAT):
+                </p>
+              </div>
+              <div className="ph-no-capture">
+                <CliCommand command={userToken} prefix="" wrap={true} />
+              </div>
             </div>
           </div>
 
-          <div className="space-y-2 pt-20 text-center">
-            <div className="text-neutral-500 text-sm">Still having issues? Get in touch.</div>
-            <div className="flex items-center gap-2 justify-center">
-              <a href="https://slack.phase.dev" target="_blank" rel="noreferrer">
-                <Button variant="secondary">
-                  <SiSlack /> Slack
-                </Button>
+          <div className="space-y-4 pt-16">
+            <div className="text-center">
+              <a
+                href="https://docs.phase.dev/cli/commands#auth"
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm text-emerald-500 hover:text-emerald-400 transition ease"
+              >
+                Phase CLI authentication documentation
               </a>
-              <a href="https://github.com/phasehq" target="_blank" rel="noreferrer">
-                <Button variant="secondary">
-                  <SiGithub /> GitHub
-                </Button>
-              </a>
+            </div>
+            <div className="text-center">
+              <div className="text-neutral-500 text-sm">Still having issues? Get in touch.</div>
+              <div className="flex items-center gap-2 justify-center mt-2">
+                <a href="https://slack.phase.dev" target="_blank" rel="noreferrer">
+                  <Button variant="secondary">
+                    <SiSlack /> Slack
+                  </Button>
+                </a>
+                <a href="https://github.com/phasehq" target="_blank" rel="noreferrer">
+                  <Button variant="secondary">
+                    <SiGithub /> GitHub
+                  </Button>
+                </a>
+              </div>
             </div>
           </div>
         </div>
