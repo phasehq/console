@@ -1,9 +1,7 @@
 import os
 from pathlib import Path
-from datetime import timedelta
 import logging.config
 from backend.utils.secrets import get_secret
-
 from ee.licensing.verifier import check_license
 
 # Clear prev config
@@ -97,6 +95,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.gitlab",
     "allauth.socialaccount.providers.microsoft",
     "api.config.APIConfig",
+    # "ee",
     "logs",
     "graphene_django",
     "django_rq",
@@ -120,6 +119,16 @@ SOCIALACCOUNT_PROVIDERS = {
             "client_id": os.getenv("GITHUB_CLIENT_ID"),
             "secret": get_secret("GITHUB_CLIENT_SECRET"),
         },
+    },
+    "github-enterprise": {
+        "SCOPE": [
+            "user read:user user:email",
+        ],
+        "APP": {
+            "client_id": os.getenv("GITHUB_ENTERPRISE_CLIENT_ID"),
+            "secret": get_secret("GITHUB_ENTERPRISE_CLIENT_SECRET"),
+        },
+        "GITHUB_URL": os.getenv("GITHUB_ENTERPRISE_BASE_URL"),
     },
     "gitlab": {
         "SCOPE": [
@@ -163,6 +172,14 @@ SOCIALACCOUNT_PROVIDERS = {
                 },
             }
         ]
+    },
+    "authentik": {
+        "APP": {
+            "client_id": os.getenv("AUTHENTIK_CLIENT_ID"),
+            "secret": get_secret("AUTHENTIK_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "email", "profile"],
     },
 }
 

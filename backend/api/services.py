@@ -15,12 +15,20 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    AWS_ASSUME_ROLE = {
+        "id": "aws_assume_role",
+        "name": "AWS Assume Role",
+        "expected_credentials": ["role_arn", "region"],
+        "optional_credentials": ["external_id"],
+        "auth_scheme": "token",
+    }
+
     GITHUB = {
         "id": "github",
         "name": "GitHub",
         "expected_credentials": ["access_token"],
-        "optional_credentials": [],
-        "auth_scheme": "oauth",
+        "optional_credentials": ["host_url", "api_url"],
+        "auth_scheme": "oauth,token",
     }
 
     GITLAB = {
@@ -66,6 +74,14 @@ class Providers:
         "id": "vercel",
         "name": "Vercel",
         "expected_credentials": ["api_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
+    RENDER = {
+        "id": "render",
+        "name": "Render",
+        "expected_credentials": ["api_key"],
         "optional_credentials": [],
         "auth_scheme": "token",
     }
@@ -147,6 +163,13 @@ class ServiceConfig:
         "name": "Vercel",
         "provider": Providers.VERCEL,
         "resource_type": "environment",
+    }
+
+    RENDER = {
+        "id": "render",
+        "name": "Render",
+        "provider": Providers.RENDER,
+        "resource_type": "service",
     }
 
     @classmethod

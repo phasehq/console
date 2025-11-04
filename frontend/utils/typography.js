@@ -355,3 +355,15 @@ module.exports = ({ theme }) => ({
     },
   },
 })
+
+module.exports.textSecurityUtilities = function ({ addUtilities }) {
+  addUtilities(
+    {
+      '.text-security-none': { '-webkit-text-security': 'none' },
+      '.text-security-disc': { '-webkit-text-security': 'disc' },
+    },
+    {
+      variants: ['responsive'],
+    }
+  )
+}

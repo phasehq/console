@@ -268,7 +268,9 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
         <div className="flex items-center gap-1 text-emerald-500 font-medium pt-4 justify-end">
           <Button variant="primary" onClick={handleCheckout}>
             <FaCartShopping />{' '}
-            {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr ? 'Upgrade' : 'Checkout'}
+            {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr
+              ? 'Upgrade'
+              : 'Start 14-day trial'}
           </Button>
         </div>
       </div>

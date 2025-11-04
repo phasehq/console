@@ -144,7 +144,8 @@ def normalize_path_string(path):
 
 def check_for_duplicates_blind(secrets, environment):
     """
-    Checks if a list of secrets contains any duplicates internally or in the target env + path by checking each secret's key_digest
+    Checks if a list of secrets contains any duplicates internally or in the target env + path by checking each secret's key_digest.
+    Also checks key_map key_digest for DynamicSecret objects at the environment and path.
 
     Args:
         secrets (List[Dict]): The list of encrypted secrets to check for duplicates.
@@ -154,38 +155,59 @@ def check_for_duplicates_blind(secrets, environment):
         bool: True if a duplicate is found, False otherwise.
     """
     Secret = apps.get_model("api", "Secret")
+    DynamicSecret = apps.get_model("api", "DynamicSecret")
 
     processed_secrets = set()  # Set to store processed secrets
 
+    # --- Collect digests from input secrets ---
     for secret in secrets:
         if "keyDigest" in secret:
             try:
                 path = normalize_path_string(secret["path"])
             except:
                 path = "/"
+            processed_secrets.add((path, secret["keyDigest"]))
 
-            # Check if the secret is already processed
-            if (path, secret["keyDigest"]) in processed_secrets:
-                return True  # Found a duplicate within the list
-
-            # Check if the secret already exists in the database
+    # --- Check static secrets in DB ---
+    for secret in secrets:
+        if "keyDigest" in secret:
+            try:
+                path = normalize_path_string(secret["path"])
+            except:
+                path = "/"
             query_duplicates = Secret.objects.filter(
                 environment=environment,
                 path=path,
                 key_digest=secret["keyDigest"],
                 deleted_at=None,
             )
-
             if "id" in secret:
                 query_duplicates = query_duplicates.exclude(id=secret["id"])
-
             if query_duplicates.exists():
-                return True  # Found a duplicate in the database
+                return True
 
-            # Add the processed secret to the set
-            processed_secrets.add((path, secret["keyDigest"]))
+    # --- Check dynamic secrets key_map in DB ---
+    for secret in secrets:
+        try:
+            path = normalize_path_string(secret.get("path", "/"))
+        except:
+            path = "/"
+        dynamic_secrets_qs = DynamicSecret.objects.filter(
+            environment=environment,
+            path=path,
+            deleted_at=None,
+        )
+        exclude_id = secret.get("dynamic_secret_id")
+        if exclude_id:
+            dynamic_secrets_qs = dynamic_secrets_qs.exclude(id=exclude_id)
+        for dyn_secret in dynamic_secrets_qs:
+            key_map = dyn_secret.key_map or []
+            for entry in key_map:
+                key_digest = entry.get("key_digest")
+                if key_digest and (path, key_digest) in processed_secrets:
+                    return True
 
-    return False  # No duplicates found
+    return False
 
 
 def decompose_path_and_key(composed_key):
@@ -377,7 +399,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             )
         except:
             unresolved_local_references.append(
-                f"The referenced environment or key either does not exist or the server does not have access to it."
+                f"The referenced key {ref_key} does not exist in the {secret.environment.name} environment."
             )
 
     if require_resolved_references and unresolved_local_references:

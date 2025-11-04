@@ -8,11 +8,12 @@ import {
 } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { FaTimes } from 'react-icons/fa'
-import { Button, ButtonVariant } from './Button'
+import { Button, ButtonProps, ButtonVariant } from './Button'
 import clsx from 'clsx'
 
 interface GenericDialogProps {
   title: string
+  dialogTitle?: ReactNode
   onClose?: () => void
   onOpen?: () => void
   children: ReactNode
@@ -20,12 +21,15 @@ interface GenericDialogProps {
   buttonContent?: ReactNode
   size?: 'lg' | 'md' | 'sm'
   initialFocus?: MutableRefObject<null>
+  isStatic?: boolean
+  buttonProps?: ButtonProps
 }
 
 const GenericDialog = forwardRef(
   (
     {
       title,
+      dialogTitle,
       onClose,
       onOpen,
       children,
@@ -33,6 +37,8 @@ const GenericDialog = forwardRef(
       buttonContent,
       size,
       initialFocus,
+      isStatic = false,
+      buttonProps,
     }: GenericDialogProps,
     ref
   ) => {
@@ -49,6 +55,7 @@ const GenericDialog = forwardRef(
     }
 
     useImperativeHandle(ref, () => ({
+      isOpen,
       openModal,
       closeModal,
     }))
@@ -65,7 +72,13 @@ const GenericDialog = forwardRef(
       <>
         {buttonContent && (
           <div className="flex items-center justify-center">
-            <Button variant={buttonVariant} onClick={openModal} title={title}>
+            <Button
+              variant={buttonVariant}
+              onClick={openModal}
+              title={title}
+              type="button"
+              {...buttonProps}
+            >
               {buttonContent}
             </Button>
           </div>
@@ -77,6 +90,7 @@ const GenericDialog = forwardRef(
             className="relative z-10"
             onClose={closeModal}
             initialFocus={initialFocus}
+            static={isStatic}
           >
             <Transition.Child
               as={Fragment}
@@ -107,10 +121,15 @@ const GenericDialog = forwardRef(
                       sizeClass
                     )}
                   >
-                    <Dialog.Title as="div" className="flex w-full justify-between">
-                      <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200">
-                        {title}
-                      </h3>
+                    <Dialog.Title
+                      as="div"
+                      className="flex w-full justify-between gap-2 items-start"
+                    >
+                      {dialogTitle || (
+                        <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-all">
+                          {title}
+                        </h3>
+                      )}
                       <Button variant="text" onClick={closeModal}>
                         <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                       </Button>

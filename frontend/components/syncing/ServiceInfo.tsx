@@ -14,22 +14,21 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
       </div>
     )
   } else if (sync.serviceInfo?.id?.includes('cloudflare_workers')) {
-    return (
-      <div className="flex gap-2">
-        {JSON.parse(sync.options)['worker_name']}
-      </div>
-    )
+    return <div className="flex gap-2">{JSON.parse(sync.options)['worker_name']}</div>
   } else if (sync.serviceInfo?.id?.includes('aws')) {
     const secretName = JSON.parse(sync.options)['secret_name']
 
     return <div className="flex gap-2 text-neutral-500">{secretName}</div>
   } else if (sync.serviceInfo?.id?.includes('github')) {
-    const repoName = JSON.parse(sync.options)['repo_name']
-    const owner = JSON.parse(sync.options)['owner']
+    const ghSyncMeta = JSON.parse(sync.options)
+    const repoName = ghSyncMeta['repo_name']
+    const owner = ghSyncMeta['owner']
+    const ghEnv = ghSyncMeta['environment_name']
 
     return (
       <div className="flex gap-2 text-neutral-500">
         {owner}/{repoName}
+        {ghEnv && <span className="font-normal">({ghEnv})</span>}
       </div>
     )
   } else if (sync.serviceInfo?.id?.includes('hashicorp_vault')) {
@@ -85,5 +84,8 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
         {secretType === 'sensitive' && <FaEyeSlash title="Sensitive" />}
       </div>
     )
+  } else if (sync.serviceInfo?.id?.includes('render')) {
+    const resourceName: string = JSON.parse(sync.options)['resource_name']
+    return <div className="flex gap-2 text-xs text-neutral-500">{resourceName}</div>
   } else return <>{sync.serviceInfo?.id}</>
 }

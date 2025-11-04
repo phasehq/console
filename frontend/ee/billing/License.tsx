@@ -43,7 +43,9 @@ export const License = (props: {
         {showExpiry && (
           <div className={clsx('text-xs', isExpired() && 'text-red-400')}>
             {isExpired() ? 'Expired' : 'Expires'}{' '}
-            {relativeTimeFromDates(new Date(license.expiresAt))}
+            <span title={new Date(license.expiresAt).toString()}>
+              {relativeTimeFromDates(new Date(license.expiresAt))}
+            </span>
           </div>
         )}
       </div>
