@@ -1,23 +1,27 @@
 from collections import Counter
-from django.conf import settings
 from graphql import GraphQLError
 from graphql.language.ast import FieldNode
 from graphql.validation import ValidationRule
 
-MAX_DUPLICATE_FIELDS = getattr(settings, "GRAPHQL_MAX_DUPLICATE_FIELDS", 50)
-MAX_ALIAS_FIELDS = getattr(settings, "GRAPHQL_MAX_ALIAS_FIELDS", 50)
-
 
 class DuplicateFieldLimitRule(ValidationRule):
+    """Limits how many times the same response field (name or alias) can appear
+    in a single selection set. Uses a Counter stack to track counts per nested
+    selection set and reports an error if any exceeds MAX_DUPLICATE_FIELDS."""
+
+    MAX_DUPLICATE_FIELDS = 20
+
     def __init__(self, context):
         super().__init__(context)
-        self.max_duplicates = MAX_DUPLICATE_FIELDS
-        self._stack = []
+        self.max_duplicates = self.MAX_DUPLICATE_FIELDS
+        self._stack = []  # Stack of Counters for nested selection sets
 
     def enter_selection_set(self, *_):
+        """Push a new Counter for a nested selection set."""
         self._stack.append(Counter())
 
     def leave_selection_set(self, node, *_):
+        """Pop Counter, emit an error for any response name exceeding limit."""
         counts = self._stack.pop()
         for response_name, hits in counts.items():
             if hits > self.max_duplicates:
@@ -40,6 +44,7 @@ class DuplicateFieldLimitRule(ValidationRule):
                 )
 
     def enter_field(self, node, *_):
+        """Increment count for this field’s response name (alias or original)."""
         response_name = node.alias.value if node.alias else node.name.value
         if not self._stack:
             self._stack.append(Counter())
@@ -47,18 +52,29 @@ class DuplicateFieldLimitRule(ValidationRule):
 
 
 class AliasUsageLimitRule(ValidationRule):
+    """Caps the number of aliases used within a single operation definition.
+    Tracks alias count per operation; reports an error when exceeding
+    MAX_ALIAS_FIELDS."""
+
+    MAX_ALIAS_FIELDS = 20
+
     def __init__(self, context):
         super().__init__(context)
-        self.max_aliases = MAX_ALIAS_FIELDS
-        self._operation_alias_counts = []
+        self.max_aliases = self.MAX_ALIAS_FIELDS
+        self._operation_alias_counts = (
+            []
+        )  # Stack for nested operations (fragments not counted)
 
     def enter_operation_definition(self, *_):
+        """Start alias count for a new operation."""
         self._operation_alias_counts.append(0)
 
     def leave_operation_definition(self, *_):
+        """End alias count scope for the operation."""
         self._operation_alias_counts.pop()
 
     def enter_field(self, node, *_):
+        """Increment alias counter when a field has an alias; error if limit exceeded."""
         if node.alias:
             if not self._operation_alias_counts:
                 self._operation_alias_counts.append(0)
