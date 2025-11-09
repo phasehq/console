@@ -784,6 +784,9 @@ class BulkCreateSecretMutation(graphene.Mutation):
                     "You don't have permission to create secrets in this organisation"
                 )
 
+            if not user_can_access_environment(info.context.user.userId, env.id):
+                raise GraphQLError("You don't have access to this environment")
+
             tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
             path = (
@@ -846,6 +849,9 @@ class EditSecretMutation(graphene.Mutation):
                 "You don't have permission to update secrets in this organisation"
             )
 
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
         tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
         path = (
@@ -904,6 +910,9 @@ class BulkEditSecretMutation(graphene.Mutation):
                 raise GraphQLError(
                     "You don't have permission to update secrets in this organisation"
                 )
+
+            if not user_can_access_environment(info.context.user.userId, env.id):
+                raise GraphQLError("You don't have access to this environment")
 
             tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
