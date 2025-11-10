@@ -1,11 +1,9 @@
 from datetime import datetime
-
+from api.utils.access.ip import get_client_ip
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from django.http import JsonResponse, HttpResponse
-from api.utils.rest import (
-    get_client_ip,
-)
+
 from logs.models import KMSDBLog
 from api.models import (
     App,

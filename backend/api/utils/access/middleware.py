@@ -1,6 +1,7 @@
 # permissions.py
 
 from api.models import NetworkAccessPolicy, Organisation
+from api.utils.access.ip import get_client_ip
 from rest_framework.permissions import BasePermission
 from itertools import chain
 
@@ -15,10 +16,7 @@ class IsIPAllowed(BasePermission):
     )
 
     def get_client_ip(self, request):
-        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-        if x_forwarded_for:
-            return x_forwarded_for.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        return get_client_ip(request)
 
     def has_permission(self, request, view):
         ip = self.get_client_ip(request)
