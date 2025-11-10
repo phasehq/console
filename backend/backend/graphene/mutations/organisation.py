@@ -161,6 +161,14 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
 
             app_scope = App.objects.filter(id__in=apps)
 
+            # Restrict roles that can be assigned via invites
+            allowed_invite_roles = ["developer", "service"]
+            role = Role.objects.get(organisation=org, id=role_id)
+            if role.name.lower() not in allowed_invite_roles:
+                raise GraphQLError(
+                    f"You can only invite members with the following roles: {', '.join(allowed_invite_roles)}"
+                )
+
             new_invite = OrganisationMemberInvite.objects.create(
                 organisation=org,
                 role_id=role_id,
@@ -316,6 +324,9 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
             info.context.user, "update", "Members", org_member.organisation
         ):
             raise GraphQLError("You dont have permission to change member roles")
+
+        if org_member.user == info.context.user:
+            raise GraphQLError("You can't change your own role in an organisation")
 
         active_user_role = OrganisationMember.objects.get(
             user=info.context.user,

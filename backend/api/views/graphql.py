@@ -1,7 +1,15 @@
 from graphene_django.views import GraphQLView
 from django.contrib.auth.mixins import LoginRequiredMixin
+from graphql import specified_rules
+from backend.graphene.validation import DuplicateFieldLimitRule, AliasUsageLimitRule
+
+
+CUSTOM_RULES = tuple(specified_rules) + (
+    DuplicateFieldLimitRule,
+    AliasUsageLimitRule,
+)
 
 
 class PrivateGraphQLView(LoginRequiredMixin, GraphQLView):
     raise_exception = True
-    pass
+    validation_rules = CUSTOM_RULES
