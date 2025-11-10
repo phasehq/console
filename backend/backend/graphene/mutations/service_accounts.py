@@ -9,7 +9,11 @@ from api.models import (
     ServiceAccountToken,
     Identity,
 )
-from api.utils.access.permissions import user_has_permission, user_is_org_member
+from api.utils.access.permissions import (
+    role_has_global_access,
+    user_has_permission,
+    user_is_org_member,
+)
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
 from datetime import datetime
 from django.conf import settings
@@ -58,10 +62,17 @@ class CreateServiceAccountMutation(graphene.Mutation):
         if handlers is None or len(handlers) == 0:
             raise GraphQLError("At least one service account handler must be provided")
 
+        role = Role.objects.get(id=role_id, organisation=org)
+
+        if role_has_global_access(role):
+            raise GraphQLError(
+                f"Service Accounts cannot be assigned the '{role.name}' role."
+            )
+
         service_account = ServiceAccount.objects.create(
             name=name,
             organisation=org,
-            role=Role.objects.get(id=role_id),
+            role=role,
             identity_key=identity_key,
             server_wrapped_keyring=server_wrapped_keyring,
             server_wrapped_recovery=server_wrapped_recovery,
@@ -168,7 +179,12 @@ class UpdateServiceAccountMutation(graphene.Mutation):
                 "You don't have the permissions required to update Service Accounts in this organisation"
             )
 
-        role = Role.objects.get(id=role_id)
+        role = Role.objects.get(id=role_id, organisation=service_account.organisation)
+
+        if role_has_global_access(role):
+            raise GraphQLError(
+                f"Service Accounts cannot be assigned the '{role.name}' role."
+            )
         service_account.name = name
         service_account.role = role
         if identity_ids is not None:
