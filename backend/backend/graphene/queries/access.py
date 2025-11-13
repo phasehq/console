@@ -6,6 +6,7 @@ from api.models import (
     Role,
     Identity,
 )
+from api.utils.access.ip import get_client_ip
 from graphql import GraphQLError
 from django.db import transaction
 from api.utils.access.roles import default_roles
@@ -96,12 +97,7 @@ def resolve_network_access_policies(root, info, organisation_id):
 
 def resolve_client_ip(root, info):
     request = info.context
-    # Use common headers to support reverse proxies
-    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(",")[0].strip()
-    else:
-        ip = request.META.get("REMOTE_ADDR")
+    ip = get_client_ip(request)
     return ip
 
 

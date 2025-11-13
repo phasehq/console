@@ -4,10 +4,12 @@ from django.template.loader import render_to_string
 from datetime import datetime
 import os
 import logging
-from api.utils.rest import encode_string_to_base64, get_client_ip
+from api.utils.rest import encode_string_to_base64
 from api.models import OrganisationMember
 from django.utils import timezone
 from smtplib import SMTPException
+
+from api.utils.access.ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
