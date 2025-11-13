@@ -11,7 +11,7 @@ def get_client_ip(request):
     Returns:
         str | None: The client IP address (IPv4 or IPv6)
     """
-    raw_ip = request.META.get("HTTP_X_REAL_IP").split(",")[0].strip()
+    raw_ip = (request.META.get("HTTP_X_REAL_IP") or "").strip()
     if not raw_ip:
         return None
     try:
