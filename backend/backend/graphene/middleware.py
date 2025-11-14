@@ -3,6 +3,7 @@ from graphql import GraphQLError
 from api.models import NetworkAccessPolicy, Organisation, OrganisationMember
 
 from itertools import chain
+from api.utils.access.ip import get_client_ip
 
 
 class IPRestrictedError(GraphQLError):
@@ -51,7 +52,7 @@ class IPWhitelistMiddleware:
             except OrganisationMember.DoesNotExist:
                 raise GraphQLError("You are not a member of this organisation")
 
-            ip = self.get_client_ip(request)
+            ip = get_client_ip(request)
 
             account_policies = org_member.network_policies.all()
             global_policies = (
@@ -70,7 +71,4 @@ class IPWhitelistMiddleware:
             raise IPRestrictedError(org_member.organisation.name)
 
     def get_client_ip(self, request):
-        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-        if x_forwarded_for:
-            return x_forwarded_for.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        return get_client_ip(request)
