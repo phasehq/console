@@ -510,38 +510,60 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
    * @param {EnvironmentType} environment
    */
   const stageEnvValueForDelete = (appSecretId: string, environment: EnvironmentType) => {
-    const clientSecret = clientAppSecrets.find((s) => s.id === appSecretId)
-    const serverSecretForKey = serverAppSecrets.find((s) => s.id === appSecretId)
-    const serverEnvValue = serverSecretForKey?.envs.find((e) => e.env.id === environment.id)?.secret
+    setClientAppSecrets((prev) => {
+      const idx = prev.findIndex((s) => s.id === appSecretId)
+      if (idx === -1) return prev
+      const secret = prev[idx]
 
-    // If value NOT on server (client-only), just null it locally (immutably)
-    if (!serverEnvValue || serverEnvValue.value === null || serverEnvValue.value === undefined) {
-      setClientAppSecrets((prev) =>
-        prev.map((appSecret) => {
-          if (appSecret.id !== appSecretId) return appSecret
-          const nextEnvs = appSecret.envs.map((envEntry) =>
-            envEntry.env.id === environment.id ? { ...envEntry, secret: null } : envEntry
-          )
-          const hasAnyValue = nextEnvs.some((e) => e.secret !== null)
-          // If no envs retain a value, stage whole key for delete
-          if (!hasAnyValue) {
-            // Defer to ensure env nulling applies first
-            setTimeout(() => handleStageClientSecretForDelete(appSecretId), 0)
-          }
-          return { ...appSecret, envs: nextEnvs }
-        })
+      const serverSecretForKey = serverAppSecrets.find((s) => s.id === appSecretId)
+      const serverEnvValue = serverSecretForKey?.envs.find(
+        (e) => e.env.id === environment.id
+      )?.secret
+      const clientEnvEntry = secret.envs.find((e) => e.env.id === environment.id)
+
+      // Client-only value → null it locally
+      if (!serverEnvValue || serverEnvValue.value == null) {
+        if (!clientEnvEntry || clientEnvEntry.secret === null) return prev
+        const newEnvs = secret.envs.map((envEntry) =>
+          envEntry.env.id === environment.id ? { ...envEntry, secret: null } : envEntry
+        )
+        const hasAnyValue = newEnvs.some((e) => e.secret !== null)
+        const updatedSecret: AppSecret = { ...secret, envs: newEnvs }
+        const next = prev.slice()
+        next[idx] = updatedSecret
+        if (!hasAnyValue) {
+          setTimeout(() => handleStageClientSecretForDelete(appSecretId), 0)
+        }
+        return next
+      }
+
+      // Server value exists → toggle staged flag and maintain secretsToDelete for persistence
+      if (!clientEnvEntry || !clientEnvEntry.secret) return prev
+      const targetId = clientEnvEntry.secret.id
+      const willStage = !secretsToDelete.includes(targetId)
+
+      // Update deletion ids (server persistence list)
+      setSecretsToDelete((prevIds) =>
+        willStage ? [...prevIds, targetId] : prevIds.filter((x) => x !== targetId)
       )
-      return
-    }
 
-    // Value exists on server → toggle staging its secret id
-    const targetEnvSecret = clientSecret?.envs.find((e) => e.env.id === environment.id)?.secret
-    if (!targetEnvSecret) return
+      // Mutate only the one env secret object (immutably)
+      const newEnvs = secret.envs.map((envEntry) =>
+        envEntry.env.id === environment.id
+          ? {
+              ...envEntry,
+              secret: {
+                ...envEntry.secret!,
+                stagedForDelete: willStage,
+              },
+            }
+          : envEntry
+      )
 
-    const alreadyStaged = secretsToDelete.includes(targetEnvSecret.id)
-    setSecretsToDelete((prev) =>
-      alreadyStaged ? prev.filter((id) => id !== targetEnvSecret.id) : [...prev, targetEnvSecret.id]
-    )
+      const next = prev.slice()
+      next[idx] = { ...secret, envs: newEnvs }
+      return next
+    })
   }
 
   /**
@@ -551,79 +573,56 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
    * @returns {void}
    */
   const handleStageClientSecretForDelete = (id: string) => {
-    const toggleDelete = (appSecret: AppSecret | undefined): AppSecret | null => {
-      if (!appSecret) return null
+    setClientAppSecrets((prev) => {
+      const idx = prev.findIndex((s) => s.id === id)
+      if (idx === -1) return prev
+      const secret = prev[idx]
+      const isMarked = appSecretsToDelete.includes(id)
 
-      const isMarkedForDelete = appSecretsToDelete.includes(id)
-
-      if (isMarkedForDelete) {
-        // Restore secret by rehydrating from server state
-        const serverSecret = serverAppSecrets.find((s) => s.id === id)
-        return serverSecret ? { ...appSecret, envs: serverSecret.envs } : appSecret
+      if (isMarked) {
+        // Restore from server
+        const server = serverAppSecrets.find((s) => s.id === id)
+        if (!server) return prev
+        const restored: AppSecret = {
+          ...secret,
+          envs: server.envs.map((e) => ({ ...e })), // clone env entries
+        }
+        const next = prev.slice()
+        next[idx] = restored
+        setAppSecretsToDelete((list) => list.filter((x) => x !== id))
+        setSecretsToDelete((ids) =>
+          ids.filter((sid) => !server.envs.some((e) => e.secret?.id === sid))
+        )
+        return next
       } else {
-        // Filter out client-only secrets
-        const updatedEnvs = appSecret.envs.filter((env) => !env.secret?.id?.includes('new'))
-
-        // Remove the appSecret if no envs remain
-        return updatedEnvs.length > 0 ? { ...appSecret, envs: updatedEnvs } : null
+        // Remove client-only env secrets (new-*)
+        const keptEnvs = secret.envs.filter((e) => !e.secret?.id?.startsWith('new-'))
+        if (keptEnvs.length === 0) {
+          // Remove entire secret
+          const next = prev.slice()
+          next.splice(idx, 1)
+          setAppSecretsToDelete((list) => [...list, id])
+          setSecretsToDelete((ids) => [
+            ...ids,
+            ...secret.envs
+              .map((e) => e.secret?.id)
+              .filter((sid): sid is string => !!sid && !sid.startsWith('new-')),
+          ])
+          return next
+        }
+        const updated: AppSecret = { ...secret, envs: keptEnvs.map((e) => ({ ...e })) }
+        const next = prev.slice()
+        next[idx] = updated
+        setAppSecretsToDelete((list) => [...list, id])
+        setSecretsToDelete((ids) => [
+          ...ids,
+          ...secret.envs
+            .map((e) => e.secret?.id)
+            .filter((sid): sid is string => !!sid && !sid.startsWith('new-')),
+        ])
+        return next
       }
-    }
-
-    const updateSecretsToDelete = (): string[] => {
-      const isMarkedForDelete = appSecretsToDelete.includes(id)
-      if (isMarkedForDelete) {
-        // Remove secret IDs from deletion list
-        const serverSecretIds = getServerSecretIds(id)
-        return secretsToDelete.filter((secretId) => !serverSecretIds.includes(secretId))
-      } else {
-        // Add server-secret IDs to deletion list
-        const appSecret = clientAppSecrets.find((s) => s.id === id)
-        if (!appSecret) return secretsToDelete
-        const serverSecretIds = getServerSecretIdsFromAppSecret(appSecret)
-        return [...secretsToDelete, ...serverSecretIds]
-      }
-    }
-
-    const updateAppSecretsToDelete = (): string[] => {
-      const isMarkedForDelete = appSecretsToDelete.includes(id)
-      return isMarkedForDelete
-        ? appSecretsToDelete.filter((secretId) => secretId !== id)
-        : [...appSecretsToDelete, id]
-    }
-
-    const getServerSecretIds = (id: string): string[] => {
-      const serverSecret = serverAppSecrets.find((s) => s.id === id)
-      return serverSecret
-        ? serverSecret.envs
-            .map((env) => env.secret?.id)
-            .filter((id): id is string => id !== undefined)
-        : []
-    }
-
-    const getServerSecretIdsFromAppSecret = (appSecret: AppSecret): string[] => {
-      return appSecret.envs
-        .map((env) => env.secret?.id)
-        .filter((id) => id && !id.includes('new')) as string[]
-    }
-
-    // Update state
-    setClientAppSecrets(
-      (prevSecrets) =>
-        prevSecrets
-          .map((appSecret) => {
-            if (appSecret.id !== id) return appSecret
-            const updated = toggleDelete(appSecret)
-            if (!updated) return null
-            return {
-              ...updated,
-              envs: updated.envs.map((e) => ({ ...e })), // ensure new env objects
-            }
-          })
-          .filter(Boolean) as AppSecret[]
-    )
-
-    setSecretsToDelete(updateSecretsToDelete())
-    setAppSecretsToDelete(updateAppSecretsToDelete())
+    })
   }
 
   const handleDiscardChanges = () => {
@@ -846,7 +845,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       updateValue={handleUpdateSecretValue}
                       deleteKey={handleStageClientSecretForDelete}
                       stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
-                      secretsStagedForDelete={secretsToDelete}
                     />
                   ))}
                 </tbody>
