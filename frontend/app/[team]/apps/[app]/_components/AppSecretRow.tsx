@@ -218,7 +218,7 @@ const EnvSecretComponent = ({
               />
             </div>
             {clientEnvSecret.secret !== null && (
-              <div className="flex items-start pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
+              <div className="flex items-center pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
                 <Button variant="outline" onClick={toggleShowValue}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
@@ -226,7 +226,7 @@ const EnvSecretComponent = ({
                 <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
                 {userCanDeleteSecrets && (
                   <Button variant="danger" onClick={handleDeleteValue}>
-                    {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+                    <span className="py-1">{stagedForDelete ? <FaUndo /> : <FaTrashAlt />}</span>
                   </Button>
                 )}
               </div>
