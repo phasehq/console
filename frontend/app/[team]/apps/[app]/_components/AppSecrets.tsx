@@ -510,69 +510,38 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
    * @param {EnvironmentType} environment
    */
   const stageEnvValueForDelete = (appSecretId: string, environment: EnvironmentType) => {
-    //Find the app secret and env value in local state
-    const appSecret = clientAppSecrets.find((appSecret) => appSecret.id === appSecretId)
-    const secretToDelete = appSecret?.envs.find((env) => env.env.id === environment.id)
+    const clientSecret = clientAppSecrets.find((s) => s.id === appSecretId)
+    const serverSecretForKey = serverAppSecrets.find((s) => s.id === appSecretId)
+    const serverEnvValue = serverSecretForKey?.envs.find((e) => e.env.id === environment.id)?.secret
 
-    if (secretToDelete) {
-      // Try and find the correspding values on the server
-      const serverAppSecret = serverAppSecrets.find((appSecret) => appSecret.id === appSecretId)
-      const envValueOnServer = serverAppSecret?.envs.find((env) => env.env.id === environment.id)
-
-      // Check if the value is null or undefined, which means that the value is not on server, and has been created client-side but not yet saved.
-      if (
-        envValueOnServer?.secret?.value === null ||
-        envValueOnServer?.secret?.value === undefined
-      ) {
-        // Update the local state to for this appSecret by setting the env value to null
-        setClientAppSecrets((prevSecrets) =>
-          prevSecrets.map((prevSecret) => {
-            if (prevSecret.id === appSecretId) {
-              const { id, key, envs } = prevSecret
-
-              const updatedEnvs = envs.filter((env) => {
-                if (env.env.id === environment.id) {
-                  env!.secret = null
-                }
-
-                return env
-              })
-
-              const hasNonNullValue = updatedEnvs.some((env) => env?.secret !== null)
-
-              if (!hasNonNullValue) {
-                handleStageClientSecretForDelete(appSecretId)
-              }
-
-              return {
-                id,
-                key,
-                envs: envs.filter((env) => {
-                  if (env.env.id === environment.id) {
-                    env!.secret = null
-                  }
-
-                  return env
-                }),
-              }
-            }
-
-            return prevSecret
-          })
-        )
-      }
-      // The value exists on the server, and must be qeued for a server delete
-      else {
-        // if already staged for delete, remove it from the list
-        if (secretsToDelete.includes(secretToDelete.secret!.id)) {
-          setSecretsToDelete((prevSecretsToDelete) =>
-            prevSecretsToDelete.filter((secretId) => secretId !== secretToDelete.secret!.id)
+    // If value NOT on server (client-only), just null it locally (immutably)
+    if (!serverEnvValue || serverEnvValue.value === null || serverEnvValue.value === undefined) {
+      setClientAppSecrets((prev) =>
+        prev.map((appSecret) => {
+          if (appSecret.id !== appSecretId) return appSecret
+          const nextEnvs = appSecret.envs.map((envEntry) =>
+            envEntry.env.id === environment.id ? { ...envEntry, secret: null } : envEntry
           )
-        } else {
-          setSecretsToDelete([...secretsToDelete, secretToDelete.secret!.id])
-        }
-      }
+          const hasAnyValue = nextEnvs.some((e) => e.secret !== null)
+          // If no envs retain a value, stage whole key for delete
+          if (!hasAnyValue) {
+            // Defer to ensure env nulling applies first
+            setTimeout(() => handleStageClientSecretForDelete(appSecretId), 0)
+          }
+          return { ...appSecret, envs: nextEnvs }
+        })
+      )
+      return
     }
+
+    // Value exists on server → toggle staging its secret id
+    const targetEnvSecret = clientSecret?.envs.find((e) => e.env.id === environment.id)?.secret
+    if (!targetEnvSecret) return
+
+    const alreadyStaged = secretsToDelete.includes(targetEnvSecret.id)
+    setSecretsToDelete((prev) =>
+      alreadyStaged ? prev.filter((id) => id !== targetEnvSecret.id) : [...prev, targetEnvSecret.id]
+    )
   }
 
   /**
@@ -641,7 +610,15 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     setClientAppSecrets(
       (prevSecrets) =>
         prevSecrets
-          .map((appSecret) => (appSecret.id === id ? toggleDelete(appSecret) : appSecret))
+          .map((appSecret) => {
+            if (appSecret.id !== id) return appSecret
+            const updated = toggleDelete(appSecret)
+            if (!updated) return null
+            return {
+              ...updated,
+              envs: updated.envs.map((e) => ({ ...e })), // ensure new env objects
+            }
+          })
           .filter(Boolean) as AppSecret[]
     )
 
