@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fa'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
 import { Button } from '@/components/common/Button'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
@@ -30,7 +30,7 @@ import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 const INPUT_BASE_STYLE =
   'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
 
-const EnvSecret = ({
+const EnvSecretComponent = ({
   appSecretId,
   keyIsStagedForDelete,
   clientEnvSecret,
@@ -238,6 +238,26 @@ const EnvSecret = ({
   )
 }
 
+const areEnvSecretEqual = (
+  prev: React.ComponentProps<typeof EnvSecretComponent>,
+  next: React.ComponentProps<typeof EnvSecretComponent>
+) => {
+  const p = prev.clientEnvSecret.secret
+  const n = next.clientEnvSecret.secret
+  return (
+    prev.appSecretId === next.appSecretId &&
+    prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
+    prev.sameAsProd === next.sameAsProd &&
+    prev.stagedForDelete === next.stagedForDelete &&
+    prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
+    (p?.id ?? null) === (n?.id ?? null) &&
+    (p?.value ?? '') === (n?.value ?? '') &&
+    prev.serverEnvSecret?.secret?.value === next.serverEnvSecret?.secret?.value
+  )
+}
+
+const EnvSecret = memo(EnvSecretComponent, areEnvSecretEqual)
+
 interface AppSecretRowProps {
   index: number
   isExpanded: boolean
@@ -254,7 +274,7 @@ interface AppSecretRowProps {
   deleteKey: (id: string) => void
 }
 
-export const AppSecretRow = ({
+const AppSecretRowComponent = ({
   index,
   isExpanded,
   expand,
@@ -375,7 +395,10 @@ export const AppSecretRow = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretIsNew])
 
-  const envs = clientAppSecret.envs.sort((a, b) => a.env.index! - b.env.index!)
+  const envs = useMemo(
+    () => [...clientAppSecret.envs].sort((a, b) => a.env.index! - b.env.index!),
+    [clientAppSecret.envs]
+  )
 
   return (
     <Disclosure>
@@ -531,3 +554,29 @@ export const AppSecretRow = ({
     </Disclosure>
   )
 }
+
+const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) => {
+  if (
+    prev.isExpanded !== next.isExpanded ||
+    prev.stagedForDelete !== next.stagedForDelete ||
+    prev.clientAppSecret.id !== next.clientAppSecret.id ||
+    prev.clientAppSecret.key !== next.clientAppSecret.key ||
+    prev.secretsStagedForDelete !== next.secretsStagedForDelete
+  )
+    return false
+
+  // Compare env secret ids + values quickly
+  const prevEnv = prev.clientAppSecret.envs
+  const nextEnv = next.clientAppSecret.envs
+  if (prevEnv.length !== nextEnv.length) return false
+  for (let i = 0; i < prevEnv.length; i++) {
+    const p = prevEnv[i].secret
+    const n = nextEnv[i].secret
+    if ((p?.id ?? null) !== (n?.id ?? null)) return false
+    if ((p?.value ?? '') !== (n?.value ?? '')) return false
+  }
+
+  return true
+}
+
+export const AppSecretRow = memo(AppSecretRowComponent, areAppSecretRowEqual)

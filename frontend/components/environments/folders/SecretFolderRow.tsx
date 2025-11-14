@@ -4,10 +4,10 @@ import { usePathname } from 'next/navigation'
 import { FaFolder, FaKey } from 'react-icons/fa'
 import { DeleteFolderConfirmDialog } from './DeleteDialog'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext } from 'react'
+import { useContext, memo } from 'react'
 import { userHasPermission } from '@/utils/access/permissions'
 
-export const SecretFolderRow = (props: { folder: SecretFolderType; handleDelete: Function }) => {
+const SecretFolderRowComponent = (props: { folder: SecretFolderType; handleDelete: Function }) => {
   const { folder, handleDelete } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -49,3 +49,22 @@ export const SecretFolderRow = (props: { folder: SecretFolderType; handleDelete:
     </div>
   )
 }
+
+// Only re-render if folder fields or handler reference change.
+// Tip: wrap handleDelete in useCallback in the parent.
+const areEqual = (
+  prev: { folder: SecretFolderType; handleDelete: Function },
+  next: { folder: SecretFolderType; handleDelete: Function }
+) => {
+  const pf = prev.folder
+  const nf = next.folder
+  return (
+    pf.id === nf.id &&
+    pf.name === nf.name &&
+    pf.folderCount === nf.folderCount &&
+    pf.secretCount === nf.secretCount &&
+    prev.handleDelete === next.handleDelete
+  )
+}
+
+export const SecretFolderRow = memo(SecretFolderRowComponent, areEqual)
