@@ -1,5 +1,5 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState, memo } from 'react'
 import {
   FaEyeSlash,
   FaEye,
@@ -9,12 +9,10 @@ import {
   FaExpandArrowsAlt,
 } from 'react-icons/fa'
 import { Button } from '../../common/Button'
-
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import clsx from 'clsx'
 import { useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
-
 import { CommentDialog } from './CommentDialog'
 import { HistoryDialog } from './HistoryDialog'
 import { OverrideDialog } from './OverrideDialog'
@@ -27,7 +25,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
 
-export default function SecretRow(props: {
+function SecretRow(props: {
   orgId: string
   secret: SecretType & { isImported?: boolean }
   environment: EnvironmentType
@@ -335,3 +333,15 @@ export default function SecretRow(props: {
     </div>
   )
 }
+
+export default memo(SecretRow, (prev, next) => {
+  // Re-render only when the row's relevant props change
+  return (
+    prev.secret === next.secret &&
+    prev.cannonicalSecret === next.cannonicalSecret &&
+    prev.globallyRevealed === next.globallyRevealed &&
+    prev.stagedForDelete === next.stagedForDelete &&
+    prev.orgId === next.orgId &&
+    prev.environment === next.environment
+  )
+})
