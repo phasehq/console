@@ -528,26 +528,37 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           envEntry.env.id === environment.id ? { ...envEntry, secret: null } : envEntry
         )
         const hasAnyValue = newEnvs.some((e) => e.secret !== null)
-        const updatedSecret: AppSecret = { ...secret, envs: newEnvs }
         const next = prev.slice()
-        next[idx] = updatedSecret
         if (!hasAnyValue) {
-          setTimeout(() => handleStageClientSecretForDelete(appSecretId), 0)
+          // Directly stage whole secret for delete here
+          setAppSecretsToDelete((list) =>
+            list.includes(appSecretId) ? list : [...list, appSecretId]
+          )
+          // Add all server-side env secret ids (excluding new-)
+          setSecretsToDelete((ids) => [
+            ...ids,
+            ...secret.envs
+              .map((e) => e.secret?.id)
+              .filter((sid): sid is string => !!sid && !sid.startsWith('new-')),
+          ])
+          // Remove entire secret from client list
+          next.splice(idx, 1)
+          return next
+        } else {
+          next[idx] = { ...secret, envs: newEnvs }
+          return next
         }
-        return next
       }
 
-      // Server value exists → toggle staged flag and maintain secretsToDelete for persistence
+      // Server value exists → toggle staged flag
       if (!clientEnvEntry || !clientEnvEntry.secret) return prev
       const targetId = clientEnvEntry.secret.id
       const willStage = !secretsToDelete.includes(targetId)
 
-      // Update deletion ids (server persistence list)
       setSecretsToDelete((prevIds) =>
         willStage ? [...prevIds, targetId] : prevIds.filter((x) => x !== targetId)
       )
 
-      // Mutate only the one env secret object (immutably)
       const newEnvs = secret.envs.map((envEntry) =>
         envEntry.env.id === environment.id
           ? {
