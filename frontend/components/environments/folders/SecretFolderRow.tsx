@@ -51,7 +51,6 @@ const SecretFolderRowComponent = (props: { folder: SecretFolderType; handleDelet
 }
 
 // Only re-render if folder fields or handler reference change.
-// Tip: wrap handleDelete in useCallback in the parent.
 const areEqual = (
   prev: { folder: SecretFolderType; handleDelete: Function },
   next: { folder: SecretFolderType; handleDelete: Function }

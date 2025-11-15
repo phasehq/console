@@ -29,7 +29,7 @@ function SecretRow(props: {
   orgId: string
   secret: SecretType & { isImported?: boolean }
   environment: EnvironmentType
-  cannonicalSecret: SecretType | undefined
+  canonicalSecret: SecretType | undefined
   secretNames: Array<Partial<SecretType>>
   handlePropertyChange: Function
   handleDelete: Function
@@ -39,7 +39,7 @@ function SecretRow(props: {
   const {
     orgId,
     secret,
-    cannonicalSecret,
+    canonicalSecret,
     secretNames,
     handlePropertyChange,
     handleDelete,
@@ -52,16 +52,16 @@ function SecretRow(props: {
   // Permissions
   const userCanUpdateSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
-    !cannonicalSecret
+    !canonicalSecret
   const userCanDeleteSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
-    !cannonicalSecret
+    !canonicalSecret
 
   const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
 
   const booleanValue = secret.value.toLowerCase() === 'true'
 
-  const [isRevealed, setIsRevealed] = useState<boolean>(cannonicalSecret === undefined)
+  const [isRevealed, setIsRevealed] = useState<boolean>(canonicalSecret === undefined)
   const [expanded, setExpanded] = useState(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
@@ -70,7 +70,7 @@ function SecretRow(props: {
 
   const handleRevealSecret = async () => {
     setIsRevealed(true)
-    if (cannonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
+    if (canonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
   }
 
   const toggleExpanded = () => setExpanded((currentExpanded) => !currentExpanded)
@@ -87,13 +87,13 @@ function SecretRow(props: {
   // Focus and reveal newly created secrets
   // The setTimeout is a hack to override the initial state change based on the value of  globallyRevealed
   useEffect(() => {
-    if (cannonicalSecret === undefined) {
+    if (canonicalSecret === undefined) {
       setTimeout(() => setIsRevealed(true), 100)
       if (keyInputRef.current && !secret.isImported) {
         keyInputRef.current.focus()
       }
     }
-  }, [cannonicalSecret, secret.isImported])
+  }, [canonicalSecret, secret.isImported])
 
   // Handle global reveal
   useEffect(() => {
@@ -119,23 +119,23 @@ function SecretRow(props: {
     secretNames.findIndex((s) => s.key === secret.key && s.id !== secret.id) > -1
 
   const secretHasBeenModified = () => {
-    if (cannonicalSecret === undefined) return true
+    if (canonicalSecret === undefined) return true
     return (
-      secret.key !== cannonicalSecret.key ||
-      secret.value !== cannonicalSecret.value ||
-      secret.comment !== cannonicalSecret.comment ||
-      !areTagsAreSame(secret.tags, cannonicalSecret.tags)
+      secret.key !== canonicalSecret.key ||
+      secret.value !== canonicalSecret.value ||
+      secret.comment !== canonicalSecret.comment ||
+      !areTagsAreSame(secret.tags, canonicalSecret.tags)
     )
   }
 
   const rowBgColor = () => {
-    if (!cannonicalSecret) return 'bg-emerald-400/20 dark:bg-emerald-400/10'
+    if (!canonicalSecret) return 'bg-emerald-400/20 dark:bg-emerald-400/10'
     else if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
     else if (secretHasBeenModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
   }
 
   const inputTextColor = () => {
-    if (!cannonicalSecret) return 'text-emerald-700 dark:text-emerald-200'
+    if (!canonicalSecret) return 'text-emerald-700 dark:text-emerald-200'
     else if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
     else if (secretHasBeenModified()) return 'text-amber-700 dark:text-amber-300'
     else return 'text-zinc-900 dark:text-zinc-100'
@@ -238,7 +238,7 @@ function SecretRow(props: {
         </div>
       )}
 
-      {cannonicalSecret && !stagedForDelete && (
+      {canonicalSecret && !stagedForDelete && (
         <div className={clsx((!secret.override || !secret.override.isActive) && '')}>
           <OverrideDialog
             secretName={secret.key}
@@ -249,7 +249,7 @@ function SecretRow(props: {
         </div>
       )}
 
-      {cannonicalSecret && (
+      {canonicalSecret && (
         <div className="">
           <ShareSecretDialog secret={secret} />
         </div>
@@ -338,7 +338,7 @@ export default memo(SecretRow, (prev, next) => {
   // Re-render only when the row's relevant props change
   return (
     prev.secret === next.secret &&
-    prev.cannonicalSecret === next.cannonicalSecret &&
+    prev.canonicalSecret === next.canonicalSecret &&
     prev.globallyRevealed === next.globallyRevealed &&
     prev.stagedForDelete === next.stagedForDelete &&
     prev.orgId === next.orgId &&

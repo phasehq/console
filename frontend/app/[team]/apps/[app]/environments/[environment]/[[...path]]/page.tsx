@@ -566,7 +566,7 @@ export default function EnvironmentPath({
     [serverSecrets]
   )
 
-  const cannonicalSecret = useCallback(
+  const canonicalSecret = useCallback(
     (id: string) => serverSecretsById.get(id),
     [serverSecretsById]
   )
@@ -1129,7 +1129,7 @@ export default function EnvironmentPath({
                     orgId={organisation.id}
                     secret={secret as SecretType}
                     environment={environment}
-                    cannonicalSecret={cannonicalSecret(secret.id)}
+                    canonicalSecret={canonicalSecret(secret.id)}
                     secretNames={secretNames}
                     handlePropertyChange={handleUpdateSecretProperty}
                     handleDelete={stageSecretForDelete}
