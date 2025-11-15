@@ -33,7 +33,13 @@ const INPUT_BASE_STYLE =
 // Allow client-side flags on secrets (not part of the GraphQL type)
 type SecretWithFlags = SecretType & { stagedForDelete?: boolean }
 
-// Update EnvSecret: derive env-level staged flag locally
+type AppSecretWithFlags = Omit<AppSecret, 'envs'> & {
+  envs: Array<{
+    env: Partial<EnvironmentType>
+    secret: SecretWithFlags | null
+  }>
+}
+
 const EnvSecretComponent = ({
   appSecretId,
   keyIsStagedForDelete,
@@ -269,7 +275,7 @@ interface AppSecretRowProps {
   isExpanded: boolean
   expand: (id: string) => void
   collapse: (id: string) => void
-  clientAppSecret: AppSecret
+  clientAppSecret: AppSecretWithFlags // changed
   serverAppSecret?: AppSecret
   stagedForDelete?: boolean // key-level delete
   updateKey: (id: string, v: string) => void
@@ -568,7 +574,7 @@ const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) 
     const n = nextEnv[i].secret
     if ((p?.id ?? null) !== (n?.id ?? null)) return false
     if ((p?.value ?? '') !== (n?.value ?? '')) return false
-    if ((p as any)?.stagedForDelete !== (n as any)?.stagedForDelete) return false
+    if ((p?.stagedForDelete ?? false) !== (n?.stagedForDelete ?? false)) return false
   }
   return true
 }
