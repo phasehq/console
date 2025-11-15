@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fa'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
 import { Button } from '@/components/common/Button'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
@@ -30,20 +30,29 @@ import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 const INPUT_BASE_STYLE =
   'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
 
-const EnvSecret = ({
+// Allow client-side flags on secrets (not part of the GraphQL type)
+type SecretWithFlags = SecretType & { stagedForDelete?: boolean }
+
+type AppSecretWithFlags = Omit<AppSecret, 'envs'> & {
+  envs: Array<{
+    env: Partial<EnvironmentType>
+    secret: SecretWithFlags | null
+  }>
+}
+
+const EnvSecretComponent = ({
   appSecretId,
   keyIsStagedForDelete,
   clientEnvSecret,
   serverEnvSecret,
   sameAsProd,
-  stagedForDelete,
   updateEnvValue,
   addEnvValue,
   deleteEnvValue,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
-    secret: SecretType | null
+    secret: SecretWithFlags | null
   }
   serverEnvSecret?: {
     env: Partial<EnvironmentType>
@@ -52,7 +61,6 @@ const EnvSecret = ({
   appSecretId: string
   keyIsStagedForDelete?: boolean
   sameAsProd: boolean
-  stagedForDelete?: boolean
   updateEnvValue: (id: string, envId: string, value: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
@@ -119,6 +127,10 @@ const EnvSecret = ({
 
     return false
   }
+
+  const envStagedForDelete = !!clientEnvSecret.secret?.stagedForDelete
+
+  const stagedForDelete = envStagedForDelete || keyIsStagedForDelete
 
   const inputTextColor = () => {
     if (valueIsNew) return 'text-emerald-700 dark:text-emerald-200'
@@ -218,7 +230,7 @@ const EnvSecret = ({
               />
             </div>
             {clientEnvSecret.secret !== null && (
-              <div className="flex items-start pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
+              <div className="flex items-center pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
                 <Button variant="outline" onClick={toggleShowValue}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
@@ -226,7 +238,7 @@ const EnvSecret = ({
                 <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
                 {userCanDeleteSecrets && (
                   <Button variant="danger" onClick={handleDeleteValue}>
-                    {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+                    <span className="py-1">{envStagedForDelete ? <FaUndo /> : <FaTrashAlt />}</span>
                   </Button>
                 )}
               </div>
@@ -238,15 +250,34 @@ const EnvSecret = ({
   )
 }
 
+const areEnvSecretEqual = (
+  prev: React.ComponentProps<typeof EnvSecretComponent>,
+  next: React.ComponentProps<typeof EnvSecretComponent>
+) => {
+  const p = prev.clientEnvSecret.secret
+  const n = next.clientEnvSecret.secret
+  return (
+    prev.appSecretId === next.appSecretId &&
+    prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
+    prev.sameAsProd === next.sameAsProd &&
+    prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
+    (p?.id ?? null) === (n?.id ?? null) &&
+    (p?.value ?? '') === (n?.value ?? '') &&
+    (p?.stagedForDelete ?? false) === (n?.stagedForDelete ?? false) &&
+    prev.serverEnvSecret?.secret?.value === next.serverEnvSecret?.secret?.value
+  )
+}
+
+const EnvSecret = memo(EnvSecretComponent, areEnvSecretEqual)
+
 interface AppSecretRowProps {
   index: number
   isExpanded: boolean
   expand: (id: string) => void
   collapse: (id: string) => void
-  clientAppSecret: AppSecret
+  clientAppSecret: AppSecretWithFlags // changed
   serverAppSecret?: AppSecret
-  stagedForDelete?: boolean
-  secretsStagedForDelete: string[]
+  stagedForDelete?: boolean // key-level delete
   updateKey: (id: string, v: string) => void
   updateValue: (id: string, envId: string, v: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
@@ -254,7 +285,7 @@ interface AppSecretRowProps {
   deleteKey: (id: string) => void
 }
 
-export const AppSecretRow = ({
+const AppSecretRowComponent = ({
   index,
   isExpanded,
   expand,
@@ -262,7 +293,6 @@ export const AppSecretRow = ({
   clientAppSecret,
   serverAppSecret,
   stagedForDelete,
-  secretsStagedForDelete,
   updateKey,
   updateValue,
   addEnvValue,
@@ -313,8 +343,8 @@ export const AppSecretRow = ({
   }
 
   const envValuesAreStagedForDelete = () => {
-    const envSecretIds = clientAppSecret.envs.map((env) => env.secret?.id)
-    return envSecretIds.some((id) => (id ? secretsStagedForDelete.includes(id) : false))
+    // Check each env secret for a stagedForDelete flag (some secrets may attach this flag at runtime)
+    return clientAppSecret.envs.some((env) => (env.secret as any)?.stagedForDelete)
   }
 
   const secretIsModified = () => {
@@ -375,7 +405,10 @@ export const AppSecretRow = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretIsNew])
 
-  const envs = clientAppSecret.envs.sort((a, b) => a.env.index! - b.env.index!)
+  const envs = useMemo(
+    () => [...clientAppSecret.envs].sort((a, b) => a.env.index! - b.env.index!),
+    [clientAppSecret.envs]
+  )
 
   return (
     <Disclosure>
@@ -512,11 +545,6 @@ export const AppSecretRow = ({
                         sameAsProd={secretIsSameAsProd(envSecret)}
                         appSecretId={clientAppSecret.id}
                         updateEnvValue={updateValue}
-                        stagedForDelete={
-                          envSecret.secret
-                            ? secretsStagedForDelete.includes(envSecret.secret?.id)
-                            : false
-                        }
                         addEnvValue={addEnvValue}
                         deleteEnvValue={deleteEnvValue}
                       />
@@ -531,3 +559,24 @@ export const AppSecretRow = ({
     </Disclosure>
   )
 }
+
+const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) => {
+  if (prev.isExpanded !== next.isExpanded) return false
+  if (prev.stagedForDelete !== next.stagedForDelete) return false
+  if (prev.clientAppSecret.id !== next.clientAppSecret.id) return false
+  if (prev.clientAppSecret.key !== next.clientAppSecret.key) return false
+
+  const prevEnv = prev.clientAppSecret.envs
+  const nextEnv = next.clientAppSecret.envs
+  if (prevEnv.length !== nextEnv.length) return false
+  for (let i = 0; i < prevEnv.length; i++) {
+    const p = prevEnv[i].secret
+    const n = nextEnv[i].secret
+    if ((p?.id ?? null) !== (n?.id ?? null)) return false
+    if ((p?.value ?? '') !== (n?.value ?? '')) return false
+    if ((p?.stagedForDelete ?? false) !== (n?.stagedForDelete ?? false)) return false
+  }
+  return true
+}
+
+export const AppSecretRow = memo(AppSecretRowComponent, areAppSecretRowEqual)

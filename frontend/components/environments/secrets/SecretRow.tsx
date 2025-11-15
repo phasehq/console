@@ -1,5 +1,5 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState, memo } from 'react'
 import {
   FaEyeSlash,
   FaEye,
@@ -9,12 +9,10 @@ import {
   FaExpandArrowsAlt,
 } from 'react-icons/fa'
 import { Button } from '../../common/Button'
-
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import clsx from 'clsx'
 import { useMutation } from '@apollo/client'
 import { areTagsAreSame } from '@/utils/tags'
-
 import { CommentDialog } from './CommentDialog'
 import { HistoryDialog } from './HistoryDialog'
 import { OverrideDialog } from './OverrideDialog'
@@ -27,11 +25,11 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
 
-export default function SecretRow(props: {
+function SecretRow(props: {
   orgId: string
   secret: SecretType & { isImported?: boolean }
   environment: EnvironmentType
-  cannonicalSecret: SecretType | undefined
+  canonicalSecret: SecretType | undefined
   secretNames: Array<Partial<SecretType>>
   handlePropertyChange: Function
   handleDelete: Function
@@ -41,7 +39,7 @@ export default function SecretRow(props: {
   const {
     orgId,
     secret,
-    cannonicalSecret,
+    canonicalSecret,
     secretNames,
     handlePropertyChange,
     handleDelete,
@@ -54,16 +52,16 @@ export default function SecretRow(props: {
   // Permissions
   const userCanUpdateSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
-    !cannonicalSecret
+    !canonicalSecret
   const userCanDeleteSecrets =
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
-    !cannonicalSecret
+    !canonicalSecret
 
   const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
 
   const booleanValue = secret.value.toLowerCase() === 'true'
 
-  const [isRevealed, setIsRevealed] = useState<boolean>(cannonicalSecret === undefined)
+  const [isRevealed, setIsRevealed] = useState<boolean>(canonicalSecret === undefined)
   const [expanded, setExpanded] = useState(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
@@ -72,7 +70,7 @@ export default function SecretRow(props: {
 
   const handleRevealSecret = async () => {
     setIsRevealed(true)
-    if (cannonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
+    if (canonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
   }
 
   const toggleExpanded = () => setExpanded((currentExpanded) => !currentExpanded)
@@ -89,13 +87,13 @@ export default function SecretRow(props: {
   // Focus and reveal newly created secrets
   // The setTimeout is a hack to override the initial state change based on the value of  globallyRevealed
   useEffect(() => {
-    if (cannonicalSecret === undefined) {
+    if (canonicalSecret === undefined) {
       setTimeout(() => setIsRevealed(true), 100)
       if (keyInputRef.current && !secret.isImported) {
         keyInputRef.current.focus()
       }
     }
-  }, [cannonicalSecret, secret.isImported])
+  }, [canonicalSecret, secret.isImported])
 
   // Handle global reveal
   useEffect(() => {
@@ -121,23 +119,23 @@ export default function SecretRow(props: {
     secretNames.findIndex((s) => s.key === secret.key && s.id !== secret.id) > -1
 
   const secretHasBeenModified = () => {
-    if (cannonicalSecret === undefined) return true
+    if (canonicalSecret === undefined) return true
     return (
-      secret.key !== cannonicalSecret.key ||
-      secret.value !== cannonicalSecret.value ||
-      secret.comment !== cannonicalSecret.comment ||
-      !areTagsAreSame(secret.tags, cannonicalSecret.tags)
+      secret.key !== canonicalSecret.key ||
+      secret.value !== canonicalSecret.value ||
+      secret.comment !== canonicalSecret.comment ||
+      !areTagsAreSame(secret.tags, canonicalSecret.tags)
     )
   }
 
   const rowBgColor = () => {
-    if (!cannonicalSecret) return 'bg-emerald-400/20 dark:bg-emerald-400/10'
+    if (!canonicalSecret) return 'bg-emerald-400/20 dark:bg-emerald-400/10'
     else if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
     else if (secretHasBeenModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
   }
 
   const inputTextColor = () => {
-    if (!cannonicalSecret) return 'text-emerald-700 dark:text-emerald-200'
+    if (!canonicalSecret) return 'text-emerald-700 dark:text-emerald-200'
     else if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
     else if (secretHasBeenModified()) return 'text-amber-700 dark:text-amber-300'
     else return 'text-zinc-900 dark:text-zinc-100'
@@ -240,7 +238,7 @@ export default function SecretRow(props: {
         </div>
       )}
 
-      {cannonicalSecret && !stagedForDelete && (
+      {canonicalSecret && !stagedForDelete && (
         <div className={clsx((!secret.override || !secret.override.isActive) && '')}>
           <OverrideDialog
             secretName={secret.key}
@@ -251,7 +249,7 @@ export default function SecretRow(props: {
         </div>
       )}
 
-      {cannonicalSecret && (
+      {canonicalSecret && (
         <div className="">
           <ShareSecretDialog secret={secret} />
         </div>
@@ -335,3 +333,15 @@ export default function SecretRow(props: {
     </div>
   )
 }
+
+export default memo(SecretRow, (prev, next) => {
+  // Re-render only when the row's relevant props change
+  return (
+    prev.secret === next.secret &&
+    prev.canonicalSecret === next.canonicalSecret &&
+    prev.globallyRevealed === next.globallyRevealed &&
+    prev.stagedForDelete === next.stagedForDelete &&
+    prev.orgId === next.orgId &&
+    prev.environment === next.environment
+  )
+})

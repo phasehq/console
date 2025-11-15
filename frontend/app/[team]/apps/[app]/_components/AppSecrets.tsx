@@ -4,7 +4,7 @@ import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcess
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useMutation, useQuery } from '@apollo/client'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
@@ -15,7 +15,6 @@ import {
   FaArrowRight,
   FaBan,
   FaCheckCircle,
-  FaChevronRight,
   FaCloudUploadAlt,
   FaFolder,
   FaPlus,
@@ -28,7 +27,6 @@ import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import clsx from 'clsx'
-import { Disclosure, Transition } from '@headlessui/react'
 import { userHasPermission } from '@/utils/access/permissions'
 import Spinner from '@/components/common/Spinner'
 import {
@@ -43,7 +41,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
-import { AppSecret, AppFolder } from '../types'
+import { AppSecret } from '../types'
 import { AppSecretRow } from './AppSecretRow'
 import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
@@ -52,6 +50,7 @@ import { TbDownload } from 'react-icons/tb'
 import { duplicateKeysExist } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
+import { AppFolderRow } from './AppFolderRow'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -117,16 +116,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   const normalizeValues = (values: (string | undefined)[]) => values.map((value) => value ?? null) // Replace undefined with null for consistent comparison
 
-  const handleExpandRow = (secretId: string) => {
-    if (!expandedSecrets.includes(secretId)) setExpandedSecrets([...expandedSecrets, secretId])
-  }
-
-  const handleCollapseRow = (secretId: string) => {
-    setExpandedSecrets(expandedSecrets.filter((id) => id !== secretId))
-  }
-
-  const allRowsAreCollapsed = expandedSecrets.length === 0
-
   const unsavedChanges =
     // Check if any secrets are staged for delete
     secretsToDelete.length > 0 ||
@@ -158,6 +147,43 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       unsavedChanges ? 0 : 10000 // Poll every 10 seconds
     )
 
+  const filteredFolders = useMemo(() => {
+    if (searchQuery === '') return appFolders
+    const re = new RegExp(searchQuery, 'i')
+    return appFolders.filter((folder) => re.test(folder.name))
+  }, [appFolders, searchQuery])
+
+  const handleExpandRow = useCallback((secretId: string) => {
+    setExpandedSecrets((prev) => (prev.includes(secretId) ? prev : [...prev, secretId]))
+  }, [])
+
+  const handleCollapseRow = useCallback((secretId: string) => {
+    setExpandedSecrets((prev) => prev.filter((id) => id !== secretId))
+  }, [])
+
+  const handleUpdateSecretKey = useCallback((id: string, key: string) => {
+    setClientAppSecrets((prev) => prev.map((s) => (s.id === id ? { ...s, key } : s)))
+  }, [])
+
+  const handleUpdateSecretValue = useCallback(
+    (id: string, envId: string, value: string | undefined) => {
+      setClientAppSecrets((prev) =>
+        prev.map((secret) => {
+          if (secret.id !== id) return secret
+          const envs = secret.envs.map((env) => {
+            if (env.env.id !== envId || !env.secret) return env
+            if (value === null || value === undefined) return env
+            return { ...env, secret: { ...env.secret, value } }
+          })
+          return { ...secret, envs }
+        })
+      )
+    },
+    []
+  )
+
+  const allRowsAreCollapsed = expandedSecrets.length === 0
+
   const allRowsAreExpanded = [...clientAppSecrets, ...appDynamicSecrets].every((item) =>
     expandedSecrets.includes(item.id)
   )
@@ -175,14 +201,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       : clientAppSecrets.filter((secret) => {
           const searchRegex = new RegExp(searchQuery, 'i')
           return searchRegex.test(secret.key)
-        })
-
-  const filteredFolders =
-    searchQuery === ''
-      ? appFolders
-      : appFolders.filter((folder) => {
-          const searchRegex = new RegExp(searchQuery, 'i')
-          return searchRegex.test(folder.name)
         })
 
   const filteredDynamicSecrets =
@@ -360,33 +378,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const handleUpdateSecretKey = (id: string, key: string) => {
-    setClientAppSecrets((prevSecrets) =>
-      prevSecrets.map((secret) => (secret.id === id ? { ...secret, key } : secret))
-    )
-  }
-
-  const handleUpdateSecretValue = (id: string, envId: string, value: string | undefined) => {
-    const clonedSecrets = structuredClone(clientAppSecrets)
-
-    const secretToUpdate = clonedSecrets.find((secret) => secret.id === id)
-
-    if (!secretToUpdate) return
-
-    secretToUpdate.envs = secretToUpdate.envs.filter((env) => {
-      const appSecretEnvValue = env
-
-      if (appSecretEnvValue.env.id === envId) {
-        if (value === null || value === undefined) return null
-
-        appSecretEnvValue!.secret!.value = value
-      }
-      return appSecretEnvValue
-    })
-
-    setClientAppSecrets(clonedSecrets)
-  }
-
   const handleAddNewClientSecret = () => {
     const envs: EnvironmentType[] = appEnvironments
 
@@ -519,69 +510,71 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
    * @param {EnvironmentType} environment
    */
   const stageEnvValueForDelete = (appSecretId: string, environment: EnvironmentType) => {
-    //Find the app secret and env value in local state
-    const appSecret = clientAppSecrets.find((appSecret) => appSecret.id === appSecretId)
-    const secretToDelete = appSecret?.envs.find((env) => env.env.id === environment.id)
+    setClientAppSecrets((prev) => {
+      const idx = prev.findIndex((s) => s.id === appSecretId)
+      if (idx === -1) return prev
+      const secret = prev[idx]
 
-    if (secretToDelete) {
-      // Try and find the correspding values on the server
-      const serverAppSecret = serverAppSecrets.find((appSecret) => appSecret.id === appSecretId)
-      const envValueOnServer = serverAppSecret?.envs.find((env) => env.env.id === environment.id)
+      const serverSecretForKey = serverAppSecrets.find((s) => s.id === appSecretId)
+      const serverEnvValue = serverSecretForKey?.envs.find(
+        (e) => e.env.id === environment.id
+      )?.secret
+      const clientEnvEntry = secret.envs.find((e) => e.env.id === environment.id)
 
-      // Check if the value is null or undefined, which means that the value is not on server, and has been created client-side but not yet saved.
-      if (
-        envValueOnServer?.secret?.value === null ||
-        envValueOnServer?.secret?.value === undefined
-      ) {
-        // Update the local state to for this appSecret by setting the env value to null
-        setClientAppSecrets((prevSecrets) =>
-          prevSecrets.map((prevSecret) => {
-            if (prevSecret.id === appSecretId) {
-              const { id, key, envs } = prevSecret
-
-              const updatedEnvs = envs.filter((env) => {
-                if (env.env.id === environment.id) {
-                  env!.secret = null
-                }
-
-                return env
-              })
-
-              const hasNonNullValue = updatedEnvs.some((env) => env?.secret !== null)
-
-              if (!hasNonNullValue) {
-                handleStageClientSecretForDelete(appSecretId)
-              }
-
-              return {
-                id,
-                key,
-                envs: envs.filter((env) => {
-                  if (env.env.id === environment.id) {
-                    env!.secret = null
-                  }
-
-                  return env
-                }),
-              }
-            }
-
-            return prevSecret
-          })
+      // Client-only value → null it locally
+      if (!serverEnvValue || serverEnvValue.value == null) {
+        if (!clientEnvEntry || clientEnvEntry.secret === null) return prev
+        const newEnvs = secret.envs.map((envEntry) =>
+          envEntry.env.id === environment.id ? { ...envEntry, secret: null } : envEntry
         )
-      }
-      // The value exists on the server, and must be qeued for a server delete
-      else {
-        // if already staged for delete, remove it from the list
-        if (secretsToDelete.includes(secretToDelete.secret!.id)) {
-          setSecretsToDelete((prevSecretsToDelete) =>
-            prevSecretsToDelete.filter((secretId) => secretId !== secretToDelete.secret!.id)
+        const hasAnyValue = newEnvs.some((e) => e.secret !== null)
+        const next = prev.slice()
+        if (!hasAnyValue) {
+          // Directly stage whole secret for delete here
+          setAppSecretsToDelete((list) =>
+            list.includes(appSecretId) ? list : [...list, appSecretId]
           )
+          // Add all server-side env secret ids (excluding new-)
+          setSecretsToDelete((ids) => [
+            ...ids,
+            ...secret.envs
+              .map((e) => e.secret?.id)
+              .filter((sid): sid is string => !!sid && !sid.startsWith('new-')),
+          ])
+          // Remove entire secret from client list
+          next.splice(idx, 1)
+          return next
         } else {
-          setSecretsToDelete([...secretsToDelete, secretToDelete.secret!.id])
+          next[idx] = { ...secret, envs: newEnvs }
+          return next
         }
       }
-    }
+
+      // Server value exists → toggle staged flag
+      if (!clientEnvEntry || !clientEnvEntry.secret) return prev
+      const targetId = clientEnvEntry.secret.id
+      const willStage = !secretsToDelete.includes(targetId)
+
+      setSecretsToDelete((prevIds) =>
+        willStage ? [...prevIds, targetId] : prevIds.filter((x) => x !== targetId)
+      )
+
+      const newEnvs = secret.envs.map((envEntry) =>
+        envEntry.env.id === environment.id
+          ? {
+              ...envEntry,
+              secret: {
+                ...envEntry.secret!,
+                stagedForDelete: willStage,
+              },
+            }
+          : envEntry
+      )
+
+      const next = prev.slice()
+      next[idx] = { ...secret, envs: newEnvs }
+      return next
+    })
   }
 
   /**
@@ -591,71 +584,56 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
    * @returns {void}
    */
   const handleStageClientSecretForDelete = (id: string) => {
-    const toggleDelete = (appSecret: AppSecret | undefined): AppSecret | null => {
-      if (!appSecret) return null
+    setClientAppSecrets((prev) => {
+      const idx = prev.findIndex((s) => s.id === id)
+      if (idx === -1) return prev
+      const secret = prev[idx]
+      const isMarked = appSecretsToDelete.includes(id)
 
-      const isMarkedForDelete = appSecretsToDelete.includes(id)
-
-      if (isMarkedForDelete) {
-        // Restore secret by rehydrating from server state
-        const serverSecret = serverAppSecrets.find((s) => s.id === id)
-        return serverSecret ? { ...appSecret, envs: serverSecret.envs } : appSecret
+      if (isMarked) {
+        // Restore from server
+        const server = serverAppSecrets.find((s) => s.id === id)
+        if (!server) return prev
+        const restored: AppSecret = {
+          ...secret,
+          envs: server.envs.map((e) => ({ ...e })), // clone env entries
+        }
+        const next = prev.slice()
+        next[idx] = restored
+        setAppSecretsToDelete((list) => list.filter((x) => x !== id))
+        setSecretsToDelete((ids) =>
+          ids.filter((sid) => !server.envs.some((e) => e.secret?.id === sid))
+        )
+        return next
       } else {
-        // Filter out client-only secrets
-        const updatedEnvs = appSecret.envs.filter((env) => !env.secret?.id?.includes('new'))
-
-        // Remove the appSecret if no envs remain
-        return updatedEnvs.length > 0 ? { ...appSecret, envs: updatedEnvs } : null
+        // Remove client-only env secrets (new-*)
+        const keptEnvs = secret.envs.filter((e) => !e.secret?.id?.startsWith('new-'))
+        if (keptEnvs.length === 0) {
+          // Remove entire secret
+          const next = prev.slice()
+          next.splice(idx, 1)
+          setAppSecretsToDelete((list) => [...list, id])
+          setSecretsToDelete((ids) => [
+            ...ids,
+            ...secret.envs
+              .map((e) => e.secret?.id)
+              .filter((sid): sid is string => !!sid && !sid.startsWith('new-')),
+          ])
+          return next
+        }
+        const updated: AppSecret = { ...secret, envs: keptEnvs.map((e) => ({ ...e })) }
+        const next = prev.slice()
+        next[idx] = updated
+        setAppSecretsToDelete((list) => [...list, id])
+        setSecretsToDelete((ids) => [
+          ...ids,
+          ...secret.envs
+            .map((e) => e.secret?.id)
+            .filter((sid): sid is string => !!sid && !sid.startsWith('new-')),
+        ])
+        return next
       }
-    }
-
-    const updateSecretsToDelete = (): string[] => {
-      const isMarkedForDelete = appSecretsToDelete.includes(id)
-      if (isMarkedForDelete) {
-        // Remove secret IDs from deletion list
-        const serverSecretIds = getServerSecretIds(id)
-        return secretsToDelete.filter((secretId) => !serverSecretIds.includes(secretId))
-      } else {
-        // Add server-secret IDs to deletion list
-        const appSecret = clientAppSecrets.find((s) => s.id === id)
-        if (!appSecret) return secretsToDelete
-        const serverSecretIds = getServerSecretIdsFromAppSecret(appSecret)
-        return [...secretsToDelete, ...serverSecretIds]
-      }
-    }
-
-    const updateAppSecretsToDelete = (): string[] => {
-      const isMarkedForDelete = appSecretsToDelete.includes(id)
-      return isMarkedForDelete
-        ? appSecretsToDelete.filter((secretId) => secretId !== id)
-        : [...appSecretsToDelete, id]
-    }
-
-    const getServerSecretIds = (id: string): string[] => {
-      const serverSecret = serverAppSecrets.find((s) => s.id === id)
-      return serverSecret
-        ? serverSecret.envs
-            .map((env) => env.secret?.id)
-            .filter((id): id is string => id !== undefined)
-        : []
-    }
-
-    const getServerSecretIdsFromAppSecret = (appSecret: AppSecret): string[] => {
-      return appSecret.envs
-        .map((env) => env.secret?.id)
-        .filter((id) => id && !id.includes('new')) as string[]
-    }
-
-    // Update state
-    setClientAppSecrets(
-      (prevSecrets) =>
-        prevSecrets
-          .map((appSecret) => (appSecret.id === id ? toggleDelete(appSecret) : appSecret))
-          .filter(Boolean) as AppSecret[]
-    )
-
-    setSecretsToDelete(updateSecretsToDelete())
-    setAppSecretsToDelete(updateAppSecretsToDelete())
+    })
   }
 
   const handleDiscardChanges = () => {
@@ -664,16 +642,13 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     setAppSecretsToDelete([])
   }
 
-  const EnvFolder = (props: {
-    envFolder: {
-      env: Partial<EnvironmentType>
-      folder: SecretFolderType | null
-    }
-  }) => {
-    const { envFolder } = props
+  type EnvFolderProp = {
+    envFolder: { env: Partial<EnvironmentType>; folder: SecretFolderType | null }
+    pathname: string
+  }
 
+  const EnvFolderBase = ({ envFolder, pathname }: EnvFolderProp) => {
     const fullPath = `${envFolder.folder?.path}/${envFolder.folder?.name}`.replace(/^\/+/, '')
-
     return (
       <div className="py-2 px-4">
         {envFolder.folder === null ? (
@@ -681,9 +656,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         ) : (
           <Link
             className="flex items-center gap-2  group font-medium text-sm tracking-wider"
-            href={`${pathname}/environments/${envFolder.env.id}${
-              envFolder.folder ? `/${fullPath}` : ``
-            }`}
+            href={`${pathname}/environments/${envFolder.env.id}${envFolder.folder ? `/${fullPath}` : ``}`}
             title={
               envFolder.folder
                 ? `View this folder in ${envFolder.env.name}`
@@ -691,7 +664,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             }
           >
             <div>
-              <div className="text-gray-500">{envFolder.env.name}</div>{' '}
+              <div className="text-gray-500">{envFolder.env.name}</div>
               <div className="text-emerald-500 group-hover:text-emerald-600 transition ease flex items-center gap-2">
                 <FaFolder />
                 {fullPath}
@@ -700,92 +673,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           </Link>
         )}
       </div>
-    )
-  }
-
-  const AppFolderRow = (props: { appFolder: AppFolder }) => {
-    const { appFolder } = props
-
-    const tooltipText = (env: {
-      env: Partial<EnvironmentType>
-      folder: SecretFolderType | null
-    }) => {
-      if (env.folder === null) return `This folder is missing in ${env.env.name}`
-      else return 'This folder is present'
-    }
-
-    const fullPath = `${appFolder.path}/${appFolder.name}`.replace(/^\/+/, '')
-
-    return (
-      <Disclosure>
-        {({ open }) => (
-          <>
-            <Disclosure.Button
-              as="tr"
-              className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 group divide-x divide-neutral-500/40 border-x transition ease duration-100 cursor-pointer',
-                open ? ' !border-l-emerald-500 !border-r-neutral-500/20' : '  border-neutral-500/20'
-              )}
-            >
-              <td
-                className={clsx(
-                  'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 ph-no-capture',
-                  open ? 'font-bold' : 'font-medium'
-                )}
-              >
-                <FaFolder className="text-emerald-500" />
-
-                {fullPath}
-                <FaChevronRight
-                  className={clsx(
-                    'transform transition ease font-light',
-                    open ? 'opacity-100 rotate-90' : 'opacity-0 group-hover:opacity-100 rotate-0'
-                  )}
-                />
-              </td>
-              {appFolder.envs.map((env) => (
-                <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
-                  <div className="flex items-center justify-center" title={tooltipText(env)}>
-                    {env.folder !== null ? (
-                      <FaCheckCircle className="text-emerald-500 shrink-0" />
-                    ) : (
-                      <FaTimesCircle className="text-red-500 shrink-0" />
-                    )}
-                  </div>
-                </td>
-              ))}
-            </Disclosure.Button>
-            <Transition
-              as="tr"
-              enter="transition duration-100 ease-out"
-              enterFrom="transform scale-95 opacity-0"
-              enterTo="transform scale-100 opacity-100"
-              leave="transition duration-75 ease-out"
-              leaveFrom="transform scale-100 opacity-100"
-              leaveTo="transform scale-95 opacity-0"
-              className={clsx(
-                'border-x',
-                open
-                  ? ' !border-l-emerald-500 !border-r-neutral-500/40 shadow-xl '
-                  : 'border-neutral-500/40'
-              )}
-            >
-              <td
-                colSpan={appFolder.envs.length + 1}
-                className={clsx('p-2 space-y-6 bg-zinc-100 dark:bg-zinc-800')}
-              >
-                <Disclosure.Panel>
-                  <div className="grid gap-2 divide-y divide-neutral-500/20">
-                    {appFolder.envs.map((envFolder) => (
-                      <EnvFolder key={envFolder.env.id} envFolder={envFolder} />
-                    ))}
-                  </div>
-                </Disclosure.Panel>
-              </td>
-            </Transition>
-          </>
-        )}
-      </Disclosure>
     )
   }
 
@@ -937,7 +824,11 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 </thead>
                 <tbody className="divide-y divide-neutral-500/20 rounded-md">
                   {filteredFolders.map((appFolder) => (
-                    <AppFolderRow key={appFolder.name} appFolder={appFolder} />
+                    <AppFolderRow
+                      key={`${appFolder.path}/${appFolder.name}`}
+                      appFolder={appFolder}
+                      pathname={pathname || ''}
+                    />
                   ))}
 
                   {filteredDynamicSecrets.map((appDynamicSecret) => (
@@ -965,7 +856,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       updateValue={handleUpdateSecretValue}
                       deleteKey={handleStageClientSecretForDelete}
                       stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
-                      secretsStagedForDelete={secretsToDelete}
                     />
                   ))}
                 </tbody>
