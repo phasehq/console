@@ -14,7 +14,7 @@ def resolve_service_account(account_id):
 
 
 def resolve_attached_identity(service_account, provider: str):
-    """Return the first non-deleted identity for the service account and provider."""
+    """Return the first available identity for the service account and provider."""
     return service_account.identities.filter(provider=provider, deleted_at=None).first()
 
 
