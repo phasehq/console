@@ -89,7 +89,7 @@ def aws_iam_auth(request):
                 if not endpoint.startswith("http"):
                     endpoint = f"https://{endpoint}"
                 cfg_host = urlparse(endpoint).netloc.lower()
-                if cfg_host in (req_host, header_host):
+                if cfg_host == req_host and (not header_host or header_host == cfg_host):
                     identity = candidate
                     break
 
