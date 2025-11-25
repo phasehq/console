@@ -12,7 +12,6 @@ from rest_framework.permissions import AllowAny
 
 from api.utils.identity.common import (
     resolve_service_account,
-    resolve_attached_identity,
     mint_service_account_token,
 )
 
@@ -69,11 +68,30 @@ def aws_iam_auth(request):
             {"error": "Server-side key management must be enabled"}, status=403
         )
 
-    identity = resolve_attached_identity(service_account, "aws_iam")
-    if not identity:
+    # Select identity: if multiple aws_iam identities exist, match by STS endpoint
+    identities = list(
+        service_account.identities.filter(provider="aws_iam", deleted_at=None)
+    )
+    if not identities:
         return JsonResponse(
             {"error": "No AWS IAM identity attached to this account"}, status=404
         )
+
+    identity = identities[0]
+    if len(identities) > 1:
+        request_url = url if url.startswith("http") else f"https://{url}"
+        req_host = urlparse(request_url).netloc.lower()
+        header_host = (headers.get("Host") or headers.get("host") or "").lower()
+
+        for candidate in identities:
+            endpoint = candidate.config.get("stsEndpoint", "")
+            if endpoint:
+                if not endpoint.startswith("http"):
+                    endpoint = f"https://{endpoint}"
+                cfg_host = urlparse(endpoint).netloc.lower()
+                if cfg_host in (req_host, header_host):
+                    identity = candidate
+                    break
 
     try:
         max_skew = int(identity.config.get("signatureTtlSeconds", 60))
