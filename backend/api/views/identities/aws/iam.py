@@ -16,6 +16,15 @@ from api.utils.identity.common import (
 )
 
 
+def get_normalized_host(uri):
+    """Extracts lowercase hostname from a URL, handling missing schemes."""
+    if not uri:
+        return None
+    if "://" not in uri:
+        uri = f"https://{uri}"
+    return urlparse(uri).netloc.lower()
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def aws_iam_auth(request):
@@ -78,20 +87,20 @@ def aws_iam_auth(request):
         )
 
     identity = identities[0]
-    if len(identities) > 1:
-        request_url = url if url.startswith("http") else f"https://{url}"
-        req_host = urlparse(request_url).netloc.lower()
-        header_host = (headers.get("Host") or headers.get("host") or "").lower()
 
-        for candidate in identities:
-            endpoint = candidate.config.get("stsEndpoint", "")
-            if endpoint:
-                if not endpoint.startswith("http"):
-                    endpoint = f"https://{endpoint}"
-                cfg_host = urlparse(endpoint).netloc.lower()
-                if cfg_host == req_host and (not header_host or header_host == cfg_host):
-                    identity = candidate
-                    break
+    if len(identities) > 1:
+        req_host = get_normalized_host(url)
+
+        # Find the first candidate where the endpoint matches the request host
+        # Defaults to identities[0] if no match is found
+        identity = next(
+            (
+                candidate
+                for candidate in identities
+                if get_normalized_host(candidate.config.get("stsEndpoint")) == req_host
+            ),
+            identities[0],
+        )
 
     try:
         max_skew = int(identity.config.get("signatureTtlSeconds", 60))
