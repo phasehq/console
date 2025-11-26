@@ -181,6 +181,14 @@ SOCIALACCOUNT_PROVIDERS = {
         },
         "SCOPE": ["openid", "email", "profile"],
     },
+    "okta-oidc": {
+        "APP": {
+            "client_id": os.getenv("OKTA_OIDC_CLIENT_ID"),
+            "secret": get_secret("OKTA_OIDC_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "profile", "email", "offline_access"],
+    },
 }
 
 
