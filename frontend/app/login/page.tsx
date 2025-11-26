@@ -44,7 +44,7 @@ export default async function Login() {
         <SignInButtons providers={providers} loginMessage={loginBannerText} />
 
         <div className="absolute bottom-4 px-4 md:px-8 md:bottom-8 w-full flex justify-between">
-          <div className="text-neutral-500 text-sm font-medium">Phi Security Inc.</div>
+          <div className="text-neutral-500 text-sm font-medium">PHI SECURITY INC.</div>
           <VersionLabel />
         </div>
       </div>
