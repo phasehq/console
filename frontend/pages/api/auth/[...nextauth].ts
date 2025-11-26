@@ -11,6 +11,7 @@ import { getSecret } from '@/utils/secretConfig'
 import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvider'
 import { EntraIDProvider } from '@/ee/authentication/sso/oidc/util/entraidProvider'
 import GitHubEnterpriseProvider from '@/ee/authentication/sso/oidc/util/githubEnterpriseProvider'
+import { OktaProvider } from '@/ee/authentication/sso/oidc/util/oktaProvider'
 import { custom } from 'openid-client'
 
 type AccessTokenResponse = {
@@ -181,6 +182,21 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     }
   }
 
+  if (process.env.OKTA_OIDC_CLIENT_ID) {
+    const clientSecret = getSecret('OKTA_OIDC_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        OktaProvider({
+          id: 'okta-oidc',
+          name: 'Okta',
+          clientId: process.env.OKTA_OIDC_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: process.env.OKTA_OIDC_ISSUER!,
+        })
+      )
+    }
+  }
+
   return {
     secret: process.env.NEXTAUTH_SECRET,
     session: {
@@ -233,7 +249,8 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               account.provider === 'google-oidc' ||
               account.provider === 'jumpcloud-oidc' ||
               account.provider === 'entra-id-oidc' ||
-              account.provider === 'authentik'
+              account.provider === 'authentik' ||
+              account.provider === 'okta-oidc'
             ) {
               const { access_token, id_token } = account
               if (!id_token) {
