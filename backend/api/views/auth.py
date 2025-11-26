@@ -39,6 +39,9 @@ from ee.authentication.sso.oidc.entraid.views import CustomMicrosoftGraphOAuth2A
 from ee.authentication.sso.oauth.github_enterprise.views import (
     GitHubEnterpriseOAuth2Adapter,
 )
+from ee.authentication.sso.oidc.okta.views import (
+    OktaOpenIDConnectAdapter,
+)
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -107,6 +110,13 @@ class EntraIDLoginView(SocialLoginView):
 class AuthentikLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = AuthentikOpenIDConnectAdapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
+class OktaLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = OktaOpenIDConnectAdapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
 
