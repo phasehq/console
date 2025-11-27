@@ -182,7 +182,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     }
   }
 
-  if (process.env.OKTA_OIDC_CLIENT_ID) {
+  if (process.env.OKTA_OIDC_CLIENT_ID && process.env.OKTA_OIDC_ISSUER) {
     const clientSecret = getSecret('OKTA_OIDC_CLIENT_SECRET')
     if (clientSecret) {
       providers.push(
@@ -191,7 +191,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
           name: 'Okta',
           clientId: process.env.OKTA_OIDC_CLIENT_ID,
           clientSecret: clientSecret,
-          issuer: process.env.OKTA_OIDC_ISSUER!,
+          issuer: process.env.OKTA_OIDC_ISSUER,
         })
       )
     }
