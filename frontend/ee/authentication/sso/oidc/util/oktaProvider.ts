@@ -37,7 +37,7 @@ export function OktaProvider(options: OktaProviderConfig): OAuthConfig<OktaProfi
     clientSecret: options.clientSecret,
     wellKnown: `${issuer}/.well-known/openid-configuration`,
     authorization: {
-      params: { scope: 'openid email profile' },
+      params: { scope: 'openid email profile offline_access' },
     },
     idToken: true,
     checks: ['pkce', 'state', 'nonce'],
