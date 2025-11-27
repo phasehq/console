@@ -34,7 +34,7 @@ class OktaOpenIDConnectAdapter(GenericOpenIDConnectAdapter):
 
     @property
     def default_config(self):
-        issuer = os.getenv("OKTA_OIDC_ISSUER", "")
+        issuer = os.getenv("OKTA_OIDC_ISSUER")
         if not issuer:
             raise ValueError("OKTA_OIDC_ISSUER must be set")
         return {
