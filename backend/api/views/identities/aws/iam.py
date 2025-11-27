@@ -87,10 +87,9 @@ def aws_iam_auth(request):
         )
 
     identity = identities[0]
+    req_host = get_normalized_host(url)
 
     if len(identities) > 1:
-        req_host = get_normalized_host(url)
-
         # Find the first candidate where the endpoint matches the request host
         # Defaults to identities[0] if no match is found
         identity = next(
@@ -113,14 +112,7 @@ def aws_iam_auth(request):
     # Enforce that the signed request targets the identity's configured STS endpoint
     try:
         configured = identity.config.get("stsEndpoint")
-        if not configured.startswith("http"):
-            configured = f"https://{configured}"
-        request_url = url
-        if not request_url.startswith("http"):
-            request_url = f"https://{request_url}"
-
-        cfg_host = urlparse(configured).netloc.lower()
-        req_host = urlparse(request_url).netloc.lower()
+        cfg_host = get_normalized_host(configured)
         header_host = (headers.get("Host") or headers.get("host") or "").lower()
 
         if req_host != cfg_host or (header_host and header_host != cfg_host):
@@ -128,7 +120,7 @@ def aws_iam_auth(request):
                 {
                     "error": "STS endpoint mismatch. Please sign the request for the configured STS endpoint.",
                     "expectedEndpoint": configured,
-                    "receivedEndpoint": request_url,
+                    "receivedEndpoint": url,
                 },
                 status=400,
             )
