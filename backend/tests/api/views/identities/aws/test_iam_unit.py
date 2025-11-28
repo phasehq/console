@@ -1,4 +1,3 @@
-import os
 import django
 from django.conf import settings
 
@@ -207,13 +206,15 @@ class TestAwsIamAuth(unittest.TestCase):
     def test_multiple_identities_selection(
         self, mock_mint, mock_requests, mock_now, mock_resolve
     ):
-        # Identity 1: Wrong endpoint, would fail trusted check if picked
+        # Identity 1: Wrong endpoint.
+        # We use a valid but non-matching pattern to ensure we don't hit the wildcard validation error (400)
+        # if this identity were incorrectly selected.
         id1 = MagicMock()
         id1.config = {
             "signatureTtlSeconds": 300,
             "stsEndpoint": "https://sts.us-east-1.amazonaws.com",
         }
-        id1.get_trusted_list.return_value = ["*"]
+        id1.get_trusted_list.return_value = ["arn:aws:iam::111111111111:user/*"]
 
         # Identity 2: Correct endpoint
         id2 = MagicMock()
@@ -244,3 +245,4 @@ class TestAwsIamAuth(unittest.TestCase):
         response = aws_iam_auth(request)
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("authentication", json.loads(response.content))
