@@ -8,6 +8,7 @@ from .views.auth import (
     OIDCLoginView,
     JumpCloudLoginView,
     EntraIDLoginView,
+    OktaLoginView,
 )
 
 urlpatterns = [
@@ -23,4 +24,5 @@ urlpatterns = [
     path("jumpcloud-oidc/", JumpCloudLoginView.as_view(), name="jumpcloud-oidc"),
     path("entra-id-oidc/", EntraIDLoginView.as_view(), name="microsoft"),
     path("authentik/", AuthentikLoginView.as_view(), name="authentik"),
+    path("okta-oidc/", OktaLoginView.as_view(), name="okta-oidc"),
 ]
