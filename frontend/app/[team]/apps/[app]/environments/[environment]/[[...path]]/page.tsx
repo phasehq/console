@@ -18,7 +18,7 @@ import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFo
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { TbDownload } from 'react-icons/tb'
 import { useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/common/Button'
 import {
   FaCheckCircle,
@@ -155,20 +155,26 @@ export default function EnvironmentPath({
     }
   }, [secretToHighlight, serverSecrets])
 
-  const unsavedChanges =
-    serverSecrets.length !== clientSecrets.length ||
-    secretsToDelete.length > 0 ||
-    serverSecrets.some((secret, index) => {
-      const updatedSecret = clientSecrets[index]
+  const unsavedChanges = useMemo(() => {
+    if (serverSecrets.length !== clientSecrets.length) return true
+    if (secretsToDelete.length > 0) return true
 
-      // Compare secret properties (comment, key, tags, value)
-      return (
-        secret.comment !== updatedSecret.comment ||
-        secret.key !== updatedSecret.key ||
-        !arraysEqual(secret.tags, updatedSecret.tags) ||
-        secret.value !== updatedSecret.value
-      )
-    })
+    // Faster lookup than index-pairing
+    const mapById = new Map(clientSecrets.map((s) => [s.id, s]))
+    for (const secret of serverSecrets) {
+      const updated = mapById.get(secret.id)
+      if (!updated) return true
+      if (
+        secret.comment !== updated.comment ||
+        secret.key !== updated.key ||
+        !arraysEqual(secret.tags, updated.tags) ||
+        secret.value !== updated.value
+      ) {
+        return true
+      }
+    }
+    return false
+  }, [serverSecrets, clientSecrets, secretsToDelete])
 
   useWarnIfUnsavedChanges(unsavedChanges)
 
@@ -189,7 +195,9 @@ export default function EnvironmentPath({
     pollInterval: unsavedChanges ? 0 : 5000,
   })
 
-  const folders: SecretFolderType[] = data?.folders ?? []
+  const folders: SecretFolderType[] = useMemo(() => {
+    return data?.folders ?? []
+  }, [data?.folders])
 
   const savingAndFetching = isLoading || loading
 
@@ -337,36 +345,29 @@ export default function EnvironmentPath({
     }
   }
 
-  const stageSecretForDelete = async (id: string) => {
-    if (id.split('-')[0] !== 'new') {
-      if (secretsToDelete.includes(id))
-        setSecretsToDelete(secretsToDelete.filter((secretId) => secretId !== id))
-      else {
-        const secretToDelete = clientSecrets.find((secret) => secret.id === id)
-        if (secretToDelete) setSecretsToDelete([...secretsToDelete, ...[secretToDelete.id]])
-      }
-    } else {
-      setClientSecrets(clientSecrets.filter((secret) => secret.id !== id))
-    }
-  }
-
-  const handleDeleteFolder = async (id: string) => {
-    await deleteFolder({
-      variables: {
-        folderId: id,
-      },
-      refetchQueries: [
-        {
-          query: GetFolders,
-          variables: {
-            envId: params.environment,
-            path: secretPath,
-          },
-        },
-      ],
+  const stageSecretForDelete = useCallback((id: string) => {
+    setClientSecrets((prev) => {
+      if (id.startsWith('new-')) return prev.filter((s) => s.id !== id)
+      return prev
     })
-    toast.success('Folder deleted.')
-  }
+    setSecretsToDelete((prev) => {
+      if (id.startsWith('new-')) return prev
+      return prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    })
+  }, [])
+
+  const handleDeleteFolder = useCallback(
+    async (id: string) => {
+      await deleteFolder({
+        variables: { folderId: id },
+        refetchQueries: [
+          { query: GetFolders, variables: { envId: params.environment, path: secretPath } },
+        ],
+      })
+      toast.success('Folder deleted.')
+    },
+    [deleteFolder, params.environment, secretPath]
+  )
 
   useEffect(() => {
     const initEnvKeys = async () => {
@@ -500,16 +501,9 @@ export default function EnvironmentPath({
     }
   }, [envKeys, data])
 
-  const handleUpdateSecretProperty = (id: string, property: string, value: any) => {
-    const updatedSecretList = clientSecrets.map((secret) => {
-      if (secret.id === id) {
-        return { ...secret, [property]: value }
-      }
-      return secret
-    })
-
-    setClientSecrets(updatedSecretList)
-  }
+  const handleUpdateSecretProperty = useCallback((id: string, property: string, value: any) => {
+    setClientSecrets((prev) => prev.map((s) => (s.id === id ? { ...s, [property]: value } : s)))
+  }, [])
 
   const getUpdatedSecrets = () => {
     const changedElements = []
@@ -561,42 +555,48 @@ export default function EnvironmentPath({
     setSecretsToDelete([])
   }
 
-  const secretNames = serverSecrets.map((secret) => {
-    const { id, key } = secret
-    return {
-      id,
-      key,
-    }
-  })
+  const secretNames = useMemo(
+    () => serverSecrets.map(({ id, key }) => ({ id, key })),
+    [serverSecrets]
+  )
 
-  const filteredFolders =
-    searchQuery === ''
-      ? folders
-      : folders.filter((folder) => {
-          const searchRegex = new RegExp(searchQuery, 'i')
-          return searchRegex.test(folder.name)
-        })
+  // Fast lookup for canonical secrets by id
+  const serverSecretsById = useMemo(
+    () => new Map(serverSecrets.map((s) => [s.id, s] as const)),
+    [serverSecrets]
+  )
 
-  const filteredSecrets =
-    searchQuery === ''
-      ? clientSecrets
-      : clientSecrets.filter((secret) => {
-          const searchRegex = new RegExp(searchQuery, 'i')
-          return searchRegex.test(secret.key)
-        })
+  const canonicalSecret = useCallback(
+    (id: string) => serverSecretsById.get(id),
+    [serverSecretsById]
+  )
 
-  const cannonicalSecret = (id: string) => serverSecrets.find((secret) => secret.id === id)
+  const filteredFolders = useMemo(() => {
+    if (searchQuery === '') return folders
+    const re = new RegExp(searchQuery, 'i')
+    return folders.filter((f) => re.test(f.name))
+  }, [folders, searchQuery])
 
-  const filteredAndSortedSecrets = sortSecrets(filteredSecrets, sort)
+  const filteredSecrets = useMemo(() => {
+    if (searchQuery === '') return clientSecrets
+    const re = new RegExp(searchQuery, 'i')
+    return clientSecrets.filter((s) => re.test(s.key))
+  }, [clientSecrets, searchQuery])
 
-  const filteredDynamicSecrets =
-    searchQuery === ''
-      ? dynamicSecrets
-      : dynamicSecrets.filter((secret) => {
-          const searchRegex = new RegExp(searchQuery, 'i')
-          return searchRegex.test(`${secret.name}${secret.keyMap?.map((k) => k!.keyName).join('')}`)
-        })
+  const filteredAndSortedSecrets = useMemo(
+    () => sortSecrets(filteredSecrets, sort),
+    [filteredSecrets, sort]
+  )
 
+  const filteredDynamicSecrets = useMemo(() => {
+    if (searchQuery === '') return dynamicSecrets
+    const re = new RegExp(searchQuery, 'i')
+    return dynamicSecrets.filter((s) =>
+      re.test(`${s.name}${(s.keyMap ?? []).map((k) => k?.keyName).join('')}`)
+    )
+  }, [dynamicSecrets, searchQuery])
+
+  // Add this (was missing -> ReferenceError: noSecrets is not defined)
   const noSecrets =
     filteredAndSortedSecrets.length === 0 &&
     filteredFolders.length === 0 &&
@@ -1129,7 +1129,7 @@ export default function EnvironmentPath({
                     orgId={organisation.id}
                     secret={secret as SecretType}
                     environment={environment}
-                    cannonicalSecret={cannonicalSecret(secret.id)}
+                    canonicalSecret={canonicalSecret(secret.id)}
                     secretNames={secretNames}
                     handlePropertyChange={handleUpdateSecretProperty}
                     handleDelete={stageSecretForDelete}
