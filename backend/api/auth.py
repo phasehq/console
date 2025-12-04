@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class ServiceAccountUser:
     """Mock ServiceAccount user"""
-    
+
     def __init__(self, service_account):
         self.userId = service_account.id
         self.id = service_account.id
@@ -63,14 +63,20 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         if secret_id:
             found = False
             try:
-                secret = Secret.objects.get(id=secret_id)
+                # Pre-fetch environment, app, and organisation
+                secret = Secret.objects.select_related(
+                    "environment__app__organisation"
+                ).get(id=secret_id)
                 env = secret.environment
                 found = True
             except Secret.DoesNotExist:
                 pass
             if not found:
                 try:
-                    dyn_secret = DynamicSecret.objects.get(id=secret_id)
+                    # Pre-fetch environment, app, and organisation
+                    dyn_secret = DynamicSecret.objects.select_related(
+                        "environment__app__organisation"
+                    ).get(id=secret_id)
                     env = dyn_secret.environment
                     found = True
                 except DynamicSecret.DoesNotExist:
@@ -84,7 +90,10 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             # Try resolving env from header
             if env_id:
                 try:
-                    env = Environment.objects.get(id=env_id)
+                    # Pre-fetch app and organisation
+                    env = Environment.objects.select_related("app__organisation").get(
+                        id=env_id
+                    )
                 except Environment.DoesNotExist:
                     raise exceptions.AuthenticationFailed("Environment not found")
 
@@ -99,7 +108,10 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                         )
                     if not env_name:
                         raise exceptions.AuthenticationFailed("Missing env parameter")
-                    env = Environment.objects.get(app_id=app_id, name__iexact=env_name)
+                    # Pre-fetch app and organisation
+                    env = Environment.objects.select_related("app__organisation").get(
+                        app_id=app_id, name__iexact=env_name
+                    )
                 except Environment.DoesNotExist:
                     # Check if the app exists to give a more specific error
                     App = apps.get_model("api", "App")
@@ -134,14 +146,14 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
             try:
                 service_token = get_service_token(auth_token)
-                service_account = get_service_account_from_token(auth_token)          
-                
+                service_account = get_service_account_from_token(auth_token)
+
                 creator = getattr(service_token, "created_by", None)
                 if creator:
                     user = creator.user
                 else:
                     user = ServiceAccountUser(service_account)
-                    
+
                 auth["service_account"] = service_account
                 auth["service_account_token"] = service_token
 

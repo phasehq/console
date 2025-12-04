@@ -241,6 +241,14 @@ REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "api.serializers.CustomUserSerializer"
 }
 
+# Define rate limits per plan (keys match Organisation model constants: FR, PR, EN)
+PLAN_RATE_LIMITS = {
+    "FR": os.getenv("RATE_LIMIT_FREE", "120/min"),
+    "PR": os.getenv("RATE_LIMIT_PRO", "240/min"),
+    "EN": os.getenv("RATE_LIMIT_ENTERPRISE", "1000/min"),
+    "DEFAULT": os.getenv("RATE_LIMIT_DEFAULT", "120/min"),
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -248,6 +256,12 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.SessionAuthentication",
     ),
+    "DEFAULT_THROTTLE_CLASSES": [
+        "api.throttling.PlanBasedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "plan_based": PLAN_RATE_LIMITS["DEFAULT"],
+    },
     "EXCEPTION_HANDLER": "backend.exceptions.custom_exception_handler",
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -292,6 +306,27 @@ DATABASES = {
         "HOST": os.getenv("DATABASE_HOST"),
         "PORT": os.getenv("DATABASE_PORT"),
     },
+}
+
+REDIS_HOST = os.getenv("REDIS_HOST")
+REDIS_PORT = os.getenv("REDIS_PORT")
+REDIS_PASSWORD = get_secret("REDIS_PASSWORD")
+REDIS_SSL = os.getenv("REDIS_SSL", "False").lower() == "true"
+REDIS_PROTOCOL = "rediss" if REDIS_SSL else "redis"
+REDIS_AUTH = f":{REDIS_PASSWORD}@" if REDIS_PASSWORD else ""
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"{REDIS_PROTOCOL}://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/1",
+        "OPTIONS": (
+            {
+                "ssl_cert_reqs": None,
+            }
+            if REDIS_SSL
+            else {}
+        ),
+    }
 }
 
 DYNAMODB = {
