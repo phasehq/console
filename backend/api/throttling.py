@@ -13,15 +13,16 @@ class PlanBasedRateThrottle(SimpleRateThrottle):
     scope = "plan_based"
 
     def get_cache_key(self, request, view):
-        if not request.user.is_authenticated or not request.auth:
-            return None
-
         # Identify the user or service account
         ident = self.get_ident(request)
-        if request.auth.get("org_member"):
-            ident = f"user_{request.auth['org_member'].id}"
-        elif request.auth.get("service_account"):
-            ident = f"sa_{request.auth['service_account'].id}"
+
+        if request.user.is_authenticated and request.auth:
+            if request.auth.get("org_member"):
+                ident = f"user_{request.auth['org_member'].id}"
+            elif request.auth.get("service_account"):
+                ident = f"sa_{request.auth['service_account'].id}"
+        else:
+            ident = f"anon_{ident}"
 
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
