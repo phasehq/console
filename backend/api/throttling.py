@@ -1,6 +1,7 @@
 from rest_framework.throttling import SimpleRateThrottle
 from django.conf import settings
-from api.models import Organisation
+
+CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 class PlanBasedRateThrottle(SimpleRateThrottle):
@@ -48,4 +49,7 @@ class PlanBasedRateThrottle(SimpleRateThrottle):
 
     @staticmethod
     def get_rate_for_plan(plan):
+        # If self-hosted return the default rate limit. If not set, this will disable throttling
+        if not CLOUD_HOSTED:
+            return settings.PLAN_RATE_LIMITS["DEFAULT"]
         return settings.PLAN_RATE_LIMITS.get(plan, settings.PLAN_RATE_LIMITS["DEFAULT"])

@@ -246,7 +246,7 @@ PLAN_RATE_LIMITS = {
     "FR": os.getenv("RATE_LIMIT_FREE", "120/min"),
     "PR": os.getenv("RATE_LIMIT_PRO", "240/min"),
     "EN": os.getenv("RATE_LIMIT_ENTERPRISE", "1000/min"),
-    "DEFAULT": os.getenv("RATE_LIMIT_DEFAULT", "120/min"),
+    "DEFAULT": os.getenv("RATE_LIMIT_DEFAULT"),
 }
 
 REST_FRAMEWORK = {
