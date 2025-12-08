@@ -32,6 +32,7 @@ import logging
 import json
 from api.content_negotiation import CamelCaseContentNegotiation
 from api.utils.access.middleware import IsIPAllowed
+from api.throttling import PlanBasedRateThrottle
 from ee.integrations.secrets.dynamic.exceptions import (
     DynamicSecretError,
     PlanRestrictionError,
@@ -59,6 +60,7 @@ logger = logging.getLogger(__name__)
 class E2EESecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
+    throttle_classes = [PlanBasedRateThrottle]
     content_negotiation_class = CamelCaseContentNegotiation
 
     def initial(self, request, *args, **kwargs):
@@ -488,6 +490,7 @@ class E2EESecretsView(APIView):
 class PublicSecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
+    throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [
         CamelCaseJSONRenderer,
     ]

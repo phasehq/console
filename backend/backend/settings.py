@@ -256,9 +256,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.SessionAuthentication",
     ),
-    "DEFAULT_THROTTLE_CLASSES": [
-        "api.throttling.PlanBasedRateThrottle",
-    ],
+    "DEFAULT_THROTTLE_CLASSES": [],
     "DEFAULT_THROTTLE_RATES": {
         "plan_based": PLAN_RATE_LIMITS["DEFAULT"],
     },
