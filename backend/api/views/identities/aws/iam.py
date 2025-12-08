@@ -12,9 +12,17 @@ from rest_framework.permissions import AllowAny
 
 from api.utils.identity.common import (
     resolve_service_account,
-    resolve_attached_identity,
     mint_service_account_token,
 )
+
+
+def get_normalized_host(uri):
+    """Extracts lowercase hostname from a URL, handling missing schemes."""
+    if not uri:
+        return None
+    if "://" not in uri:
+        uri = f"https://{uri}"
+    return urlparse(uri).netloc.lower()
 
 
 @api_view(["POST"])
@@ -69,10 +77,28 @@ def aws_iam_auth(request):
             {"error": "Server-side key management must be enabled"}, status=403
         )
 
-    identity = resolve_attached_identity(service_account, "aws_iam")
-    if not identity:
+    # Select identity: if multiple aws_iam identities exist, match by STS endpoint
+    identities = list(
+        service_account.identities.filter(provider="aws_iam", deleted_at=None)
+    )
+    if not identities:
         return JsonResponse(
             {"error": "No AWS IAM identity attached to this account"}, status=404
+        )
+
+    identity = identities[0]
+    req_host = get_normalized_host(url)
+
+    if len(identities) > 1:
+        # Find the first candidate where the endpoint matches the request host
+        # Defaults to identities[0] if no match is found
+        identity = next(
+            (
+                candidate
+                for candidate in identities
+                if get_normalized_host(candidate.config.get("stsEndpoint")) == req_host
+            ),
+            identities[0],
         )
 
     try:
@@ -86,14 +112,10 @@ def aws_iam_auth(request):
     # Enforce that the signed request targets the identity's configured STS endpoint
     try:
         configured = identity.config.get("stsEndpoint")
-        if not configured.startswith("http"):
+        if configured and "://" not in configured:
             configured = f"https://{configured}"
-        request_url = url
-        if not request_url.startswith("http"):
-            request_url = f"https://{request_url}"
 
-        cfg_host = urlparse(configured).netloc.lower()
-        req_host = urlparse(request_url).netloc.lower()
+        cfg_host = get_normalized_host(configured)
         header_host = (headers.get("Host") or headers.get("host") or "").lower()
 
         if req_host != cfg_host or (header_host and header_host != cfg_host):
@@ -101,7 +123,7 @@ def aws_iam_auth(request):
                 {
                     "error": "STS endpoint mismatch. Please sign the request for the configured STS endpoint.",
                     "expectedEndpoint": configured,
-                    "receivedEndpoint": request_url,
+                    "receivedEndpoint": url,
                 },
                 status=400,
             )
