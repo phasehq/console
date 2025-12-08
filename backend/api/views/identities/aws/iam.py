@@ -112,6 +112,9 @@ def aws_iam_auth(request):
     # Enforce that the signed request targets the identity's configured STS endpoint
     try:
         configured = identity.config.get("stsEndpoint")
+        if configured and "://" not in configured:
+            configured = f"https://{configured}"
+
         cfg_host = get_normalized_host(configured)
         header_host = (headers.get("Host") or headers.get("host") or "").lower()
 
