@@ -16,7 +16,7 @@ crontab==1.0.1
 cryptography==44.0.1
 defusedxml==0.7.1
 dj-rest-auth==7.0.1
-Django==4.2.26
+Django==4.2.27
 django-allauth==65.4.1
 django-cors-headers==3.14.0
 django-filter==23.1
@@ -66,5 +66,5 @@ tomli==2.0.1
 Twisted==24.7.0
 txaio==23.1.1
 typing_extensions==4.6.0
-urllib3==2.5.0
+urllib3==2.6.0
 zope.interface==5.5.2
