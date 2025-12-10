@@ -6,7 +6,6 @@ os.environ.setdefault("ALLOWED_HOSTS", "localhost")
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost")
 
 # Set dummy Redis values so settings.py generates a valid URL (e.g. redis://localhost:6379/1)
-# instead of crashing with "Port could not be cast to integer value as 'None'"
 os.environ.setdefault("REDIS_HOST", "localhost")
 os.environ.setdefault("REDIS_PORT", "6379")
 
