@@ -145,14 +145,20 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
   useEffect(() => {
     const validateWebAuthRequest = async () => {
-      const decodedWebAuthReq = await decodeb64string(decodeURIComponent(params.requestCode))
-      const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
+      try {
+        const decodedWebAuthReq = await decodeb64string(decodeURIComponent(params.requestCode))
+        const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
 
-      if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName)
+        if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName) {
+          setStatus('invalid')
+        } else {
+          setStatus('in progress')
+          setRequestParams(authRequestParams)
+        }
+      } catch (error) {
+        // Happens when the URL is truncated/corrupted (e.g. terminal wrapped the link)
+        toast.error('Malformed webauth link. Please open the link in a new tab.')
         setStatus('invalid')
-      else {
-        setStatus('in progress')
-        setRequestParams(authRequestParams)
       }
     }
 
