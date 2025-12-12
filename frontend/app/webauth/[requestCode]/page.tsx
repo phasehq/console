@@ -108,9 +108,14 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
       throw new Error('Invalid webauth request')
     }
 
+    let keyring: OrganisationKeyring
     try {
-      const keyring = await validateKeyring(password, organisation)
+      keyring = await validateKeyring(password, organisation)
+    } catch (error) {
+      throw new Error('Incorrect sudo password')
+    }
 
+    try {
       const pssUser = await handleCreatePat(
         requestParams.requestedTokenName,
         organisation.id,
@@ -130,10 +135,13 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
         setStatus('success')
       } else {
         setStatus('error')
-        throw new Error()
+        throw new Error('CLI authentication failed')
       }
     } catch (error) {
-      setStatus('error')
+      // Only set error status for non-password errors (fatal errors)
+      if (error instanceof Error && error.message !== 'Incorrect sudo password') {
+        setStatus('error')
+      }
       throw error
     }
   }
@@ -183,7 +191,9 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
         await toast.promise(authenticate(organisation, password), {
           pending: 'Authenticating...',
           success: 'CLI authentication complete',
-          error: 'Authentication failed',
+          error: {
+            render: ({ data }) => (data as Error)?.message || 'Authentication failed',
+          },
         })
       } catch (e) {
         // Error handled by toast
