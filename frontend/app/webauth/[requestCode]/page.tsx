@@ -182,8 +182,11 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
     const handleSubmit = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
       setIsLoading(true)
-      await authenticate(organisation, password)
-      setIsLoading(false)
+      try {
+        await authenticate(organisation, password)
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     useEffect(() => {
