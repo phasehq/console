@@ -99,18 +99,13 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
   }
 
   const validateKeyring = async (password: string, organisation: OrganisationType) => {
-    return new Promise<OrganisationKeyring>(async (resolve) => {
-      const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, password)
-
-      resolve(decryptedKeyring)
-    })
+    return await getKeyring(session?.user?.email!, organisation, password)
   }
 
   const authenticate = async (organisation: OrganisationType, password: string) => {
     if (!requestParams) {
-      toast.error('Invalid webauth request')
       setStatus('error')
-      return false
+      throw new Error('Invalid webauth request')
     }
 
     try {
@@ -132,14 +127,14 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
       })
 
       if (cliResponse.status === 200) {
-        toast.success('CLI authentication complete')
         setStatus('success')
       } else {
-        toast.error('Something went wrong.')
         setStatus('error')
+        throw new Error()
       }
     } catch (error) {
       setStatus('error')
+      throw error
     }
   }
 
@@ -182,8 +177,16 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
     const handleSubmit = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
       setIsLoading(true)
+      // Yield to allow UI to update
+      await new Promise((resolve) => setTimeout(resolve, 0))
       try {
-        await authenticate(organisation, password)
+        await toast.promise(authenticate(organisation, password), {
+          pending: 'Authenticating...',
+          success: 'CLI authentication complete',
+          error: 'Authentication failed',
+        })
+      } catch (e) {
+        // Error handled by toast
       } finally {
         setIsLoading(false)
       }
