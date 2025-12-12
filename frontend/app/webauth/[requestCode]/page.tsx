@@ -177,10 +177,13 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
     const [password, setPassword] = useState<string>('')
     const [deviceIsTrusted, setDeviceIsTrusted] = useState(false)
+    const [isLoading, setIsLoading] = useState(false)
 
     const handleSubmit = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
+      setIsLoading(true)
       await authenticate(organisation, password)
+      setIsLoading(false)
     }
 
     useEffect(() => {
@@ -255,7 +258,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                     </div>
                   </div>
                   <div className="py-1">
-                    <Button variant="primary" type="submit">
+                    <Button variant="primary" type="submit" isLoading={isLoading}>
                       Login
                     </Button>
                   </div>
