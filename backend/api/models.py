@@ -81,6 +81,9 @@ class Organisation(models.Model):
         (ENTERPRISE_PLAN, "Enterprise"),
     ]
 
+    PRICING_V1 = 1
+    PRICING_V2 = 2
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=64, unique=True)
     identity_key = models.CharField(max_length=256)
@@ -93,7 +96,18 @@ class Organisation(models.Model):
     )
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True)
+    pricing_version = models.IntegerField(default=1)
     list_display = ("name", "identity_key", "id")
+
+    def get_seats(self):
+        if self.pricing_version == self.PRICING_V2:
+            return self.users.count()
+        return self.users.count() + self.service_accounts.count()
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            self.pricing_version = self.PRICING_V2
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
