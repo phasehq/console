@@ -226,7 +226,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                     <RoleLabel role={organisation.role!} />
                   </span>
                   {deviceIsTrusted && (
-                    <FaShieldAlt className="text-emerald-500" title="Trusted device" />
+                    <FaShieldAlt className="text-emerald-500" title="Trusted device. Sudo password is stored locally on device" />
                   )}
                 </div>
                 <FaChevronRight
