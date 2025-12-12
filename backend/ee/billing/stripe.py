@@ -1,6 +1,5 @@
 from api.models import Organisation
 from backend.api.notifier import notify_slack
-from api.utils.organisations import get_organisation_seats
 import stripe
 from django.conf import settings
 
@@ -8,18 +7,23 @@ from django.conf import settings
 def create_stripe_customer(organisation, email):
     stripe.api_key = settings.STRIPE["secret_key"]
 
-    seats = get_organisation_seats(organisation)
+    seats = organisation.get_seats()
 
     stripe_customer = stripe.Customer.create(
         name=organisation.name,
         email=email,
     )
     organisation.stripe_customer_id = stripe_customer.id
+
+    # Use the latest free price (index 0)
+    free_prices = settings.STRIPE["prices"]["free"]
+    price_id = free_prices[0] if free_prices else None
+
     subscription = stripe.Subscription.create(
         customer=stripe_customer.id,
         items=[
             {
-                "price": settings.STRIPE["prices"]["free"],
+                "price": price_id,
                 "quantity": seats,
             }
         ],
@@ -35,7 +39,7 @@ def update_stripe_subscription_seats(organisation):
         raise ValueError("Organisation must have a Stripe subscription ID.")
 
     try:
-        new_seat_count = get_organisation_seats(organisation)
+        new_seat_count = organisation.get_seats()
 
         # Retrieve the subscription
         subscription = stripe.Subscription.retrieve(organisation.stripe_subscription_id)
@@ -72,14 +76,24 @@ def update_stripe_subscription_seats(organisation):
 
 def map_stripe_plan_to_tier(stripe_plan_id):
     if (
-        stripe_plan_id == settings.STRIPE["prices"]["pro_monthly"]
-        or stripe_plan_id == settings.STRIPE["prices"]["pro_yearly"]
+        stripe_plan_id in settings.STRIPE["prices"]["pro_monthly"]
+        or stripe_plan_id in settings.STRIPE["prices"]["pro_yearly"]
     ):
         return Organisation.PRO_PLAN
     if (
-        stripe_plan_id == settings.STRIPE["prices"]["enterprise_monthly"]
-        or stripe_plan_id == settings.STRIPE["prices"]["enterprise_yearly"]
+        stripe_plan_id in settings.STRIPE["prices"]["enterprise_monthly"]
+        or stripe_plan_id in settings.STRIPE["prices"]["enterprise_yearly"]
     ):
         return Organisation.ENTERPRISE_PLAN
-    elif stripe_plan_id == settings.STRIPE["prices"]["free"]:
+    elif stripe_plan_id in settings.STRIPE["prices"]["free"]:
         return Organisation.FREE_PLAN
+
+
+def migrate_organisation_to_v2_pricing(organisation):
+    """
+    Helper to migrate an organisation to the new pricing model.
+    Should be called when an organisation changes plans.
+    """
+    if organisation.pricing_version == Organisation.PRICING_V1:
+        organisation.pricing_version = Organisation.PRICING_V2
+        organisation.save()
