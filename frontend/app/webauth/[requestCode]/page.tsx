@@ -257,7 +257,6 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                         value={password}
                         setValue={setPassword}
                         label="Sudo password"
-                        disabled={deviceIsTrusted}
                         secret={true}
                         autoFocus
                       />
