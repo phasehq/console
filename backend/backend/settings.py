@@ -327,6 +327,23 @@ CACHES = {
     }
 }
 
+RQ_QUEUES = {
+    "default": {
+        "HOST": REDIS_HOST,
+        "PORT": REDIS_PORT,
+        "PASSWORD": REDIS_PASSWORD,
+        "SSL": REDIS_SSL,
+        "DB": 0,
+    },
+    "scheduled-jobs": {
+        "HOST": REDIS_HOST,
+        "PORT": REDIS_PORT,
+        "PASSWORD": REDIS_PASSWORD,
+        "SSL": REDIS_SSL,
+        "DB": 0,
+    },
+}
+
 DYNAMODB = {
     "TABLE": os.getenv("DYNAMODB_LOGS_TABLE"),
     "INDEX": os.getenv("DYNAMODB_LOGS_TIMESTAMP_INDEX"),
@@ -391,22 +408,6 @@ try:
 except:
     APP_HOST = "self"
 
-RQ_QUEUES = {
-    "default": {
-        "HOST": os.getenv("REDIS_HOST"),
-        "PORT": os.getenv("REDIS_PORT"),
-        "PASSWORD": get_secret("REDIS_PASSWORD"),
-        "SSL": os.getenv("REDIS_SSL", None),
-        "DB": 0,
-    },
-    "scheduled-jobs": {
-        "HOST": os.getenv("REDIS_HOST"),
-        "PORT": os.getenv("REDIS_PORT"),
-        "PASSWORD": get_secret("REDIS_PASSWORD"),
-        "SSL": os.getenv("REDIS_SSL", None),
-        "DB": 0,
-    },
-}
 
 PHASE_LICENSE = check_license(get_secret("PHASE_LICENSE_OFFLINE"))
 
