@@ -91,9 +91,9 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
         })
 
         if (data) resolve(pssUser)
-        else reject('Failed to create user token')
+        else reject(new Error('Failed to create user token'))
       } else {
-        reject('Keyring is locked')
+        reject(new Error('Keyring is locked'))
       }
     })
   }
