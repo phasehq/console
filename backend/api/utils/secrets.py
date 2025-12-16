@@ -251,6 +251,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
 
     # Regex patterns to detect references
     cross_app_env_pattern = re.compile(r"\$\{(.+?)::(.+?)\.(.+?)\}")
+    cross_env_pattern = re.compile(r"\$\{(?![^{]*::)([^.]+?)\.(.+?)\}")
     local_ref_pattern = re.compile(r"\$\{([^.]+?)\}")
 
     pk, sk = get_server_keypair()
@@ -280,6 +281,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
     for ref_app, ref_env, ref_key in cross_app_env_matches:
         try:
             path, key_name = decompose_path_and_key(ref_key)
+            print("-------->", path, key_name)
 
             referenced_app = App.objects.get(name__iexact=ref_app, organisation=org)
 
@@ -363,6 +365,81 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
         except Secret.DoesNotExist:
             unresolved_references.append(
                 f"The referenced secret does not exist in '{ref_app}::{ref_env}' at the requested path"
+            )
+        except Exception as ex:
+            unresolved_references.append(str(ex))
+
+    # Resolve cross-env references (same app)
+    cross_env_matches = re.findall(cross_env_pattern, value)
+
+    for ref_env, ref_key in cross_env_matches:
+        try:
+            path, key_name = decompose_path_and_key(ref_key)
+
+            referenced_environment = Environment.objects.get(
+                name__iexact=ref_env, app=app
+            )
+
+            if account:
+                is_service_account = isinstance(account, ServiceAccount)
+
+                if is_service_account:
+                    if not service_account_can_access_environment(
+                        account.id, referenced_environment.id
+                    ):
+                        if require_resolved_references:
+                            raise SecretReferenceException(
+                                "This service account doesn't have permission to read secrets in one or more referenced environments."
+                            )
+                        else:
+                            return value
+
+                else:
+                    if not user_can_access_environment(
+                        account.userId, referenced_environment.id
+                    ):
+                        if require_resolved_references:
+                            raise SecretReferenceException(
+                                "You don't have permission to read secrets in one or more referenced environments."
+                            )
+                        else:
+                            return value
+
+            referenced_environment_key = ServerEnvironmentKey.objects.get(
+                environment_id=referenced_environment.id
+            )
+            seed = decrypt_asymmetric(
+                referenced_environment_key.wrapped_seed, sk.hex(), pk.hex()
+            )
+            salt = decrypt_asymmetric(
+                referenced_environment_key.wrapped_salt, sk.hex(), pk.hex()
+            )
+
+            key_digest = blake2b_digest(key_name, salt)
+
+            referenced_env_pubkey, referenced_env_privkey = env_keypair(seed)
+
+            referenced_secret = Secret.objects.get(
+                environment=referenced_environment,
+                path=path,
+                key_digest=key_digest,
+                deleted_at=None,
+            )
+
+            referenced_secret_value = decrypt_asymmetric(
+                referenced_secret.value,
+                referenced_env_privkey,
+                referenced_env_pubkey,
+            )
+
+            value = value.replace(f"${{{ref_env}.{ref_key}}}", referenced_secret_value)
+        except Environment.DoesNotExist:
+            unresolved_references.append(
+                f"The referenced environment '{ref_env}' does not exist"
+            )
+        except Secret.DoesNotExist:
+            unresolved_references.append(
+                f"The referenced secret does not exist in '{ref_env}' at the requested path"
             )
         except Exception as ex:
             unresolved_references.append(str(ex))
