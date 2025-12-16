@@ -281,7 +281,6 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
     for ref_app, ref_env, ref_key in cross_app_env_matches:
         try:
             path, key_name = decompose_path_and_key(ref_key)
-            print("-------->", path, key_name)
 
             referenced_app = App.objects.get(name__iexact=ref_app, organisation=org)
 
