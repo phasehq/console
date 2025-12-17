@@ -231,6 +231,70 @@ def decompose_path_and_key(composed_key):
     return normalize_path_string(path), key_name
 
 
+def get_environment_crypto_context(environment):
+    """
+    Retrieves the crypto context (salt, public key, private key) for a given environment.
+    """
+    ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+    pk, sk = get_server_keypair()
+
+    server_env_key = ServerEnvironmentKey.objects.get(environment_id=environment.id)
+
+    seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
+    salt = decrypt_asymmetric(server_env_key.wrapped_salt, sk.hex(), pk.hex())
+
+    env_pubkey, env_privkey = env_keypair(seed)
+    return salt, env_pubkey, env_privkey
+
+
+def check_environment_access(account, environment, require_resolved_references):
+    """
+    Checks if the account has access to the environment.
+    Raises SecretReferenceException if no access and require_resolved_references is True.
+    Returns True if access is granted, False otherwise.
+    """
+    ServiceAccount = apps.get_model("api", "ServiceAccount")
+
+    if not account:
+        return True
+
+    if isinstance(account, ServiceAccount):
+        has_access = service_account_can_access_environment(account.id, environment.id)
+        error_msg = "This service account doesn't have permission to read secrets in one or more referenced environments."
+    else:
+        has_access = user_can_access_environment(account.userId, environment.id)
+        error_msg = "You don't have permission to read secrets in one or more referenced environments."
+
+    if not has_access:
+        if require_resolved_references:
+            raise SecretReferenceException(error_msg)
+        return False
+    return True
+
+
+def resolve_secret_value(environment, path, key_name, crypto_context=None):
+    """
+    Resolves a secret value from a given environment, path, and key name.
+    """
+    Secret = apps.get_model("api", "Secret")
+
+    if crypto_context:
+        salt, pubkey, privkey = crypto_context
+    else:
+        salt, pubkey, privkey = get_environment_crypto_context(environment)
+
+    key_digest = blake2b_digest(key_name, salt)
+
+    secret = Secret.objects.get(
+        environment=environment,
+        path=path,
+        key_digest=key_digest,
+        deleted_at=None,
+    )
+
+    return decrypt_asymmetric(secret.value, privkey, pubkey)
+
+
 def decrypt_secret_value(secret, require_resolved_references=False, account=None):
     """
     Decrypts the given secret's value and resolves all references.
@@ -247,29 +311,15 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
     Environment = apps.get_model("api", "Environment")
     App = apps.get_model("api", "App")
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
-    ServiceAccount = apps.get_model("api", "ServiceAccount")
 
     # Regex patterns to detect references
     cross_app_env_pattern = re.compile(r"\$\{(.+?)::(.+?)\.(.+?)\}")
     cross_env_pattern = re.compile(r"\$\{(?![^{]*::)([^.]+?)\.(.+?)\}")
     local_ref_pattern = re.compile(r"\$\{([^.]+?)\}")
 
-    pk, sk = get_server_keypair()
-
-    server_env_key = ServerEnvironmentKey.objects.get(
-        environment_id=secret.environment.id
-    )
-
-    org = secret.environment.app.organisation
-
-    app = server_env_key.environment.app
-
-    # Decrypt environment seed and salt
-    env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
-    env_salt = decrypt_asymmetric(server_env_key.wrapped_salt, sk.hex(), pk.hex())
-
-    # Compute environment keypair
-    env_pubkey, env_privkey = env_keypair(env_seed)
+    # Pre-compute current env context
+    current_env_crypto_context = get_environment_crypto_context(secret.environment)
+    env_salt, env_pubkey, env_privkey = current_env_crypto_context
 
     # Decrypt secret value
     value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
@@ -282,64 +332,21 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
         try:
             path, key_name = decompose_path_and_key(ref_key)
 
-            referenced_app = App.objects.get(name__iexact=ref_app, organisation=org)
+            referenced_app = App.objects.get(
+                name__iexact=ref_app, organisation=secret.environment.app.organisation
+            )
 
             referenced_environment = Environment.objects.get(
                 name__iexact=ref_env, app=referenced_app
             )
 
-            if account:
-                is_service_account = isinstance(account, ServiceAccount)
+            if not check_environment_access(
+                account, referenced_environment, require_resolved_references
+            ):
+                return value
 
-                if is_service_account:
-                    if not service_account_can_access_environment(
-                        account.id, referenced_environment.id
-                    ):
-                        if require_resolved_references:
-                            raise SecretReferenceException(
-                                "This service account doesn't have permission to read secrets in one or more referenced environments."
-                            )
-                        else:
-
-                            return value
-
-                else:
-                    if not user_can_access_environment(
-                        account.userId, referenced_environment.id
-                    ):
-                        if require_resolved_references:
-                            raise SecretReferenceException(
-                                "You don't have permission to read secrets in one or more referenced environments."
-                            )
-                        else:
-
-                            return value
-
-            referenced_environment_key = ServerEnvironmentKey.objects.get(
-                environment_id=referenced_environment.id
-            )
-            seed = decrypt_asymmetric(
-                referenced_environment_key.wrapped_seed, sk.hex(), pk.hex()
-            )
-            salt = decrypt_asymmetric(
-                referenced_environment_key.wrapped_salt, sk.hex(), pk.hex()
-            )
-
-            key_digest = blake2b_digest(key_name, salt)
-
-            referenced_env_pubkey, referenced_env_privkey = env_keypair(seed)
-
-            referenced_secret = Secret.objects.get(
-                environment=referenced_environment,
-                path=path,
-                key_digest=key_digest,
-                deleted_at=None,
-            )
-
-            referenced_secret_value = decrypt_asymmetric(
-                referenced_secret.value,
-                referenced_env_privkey,
-                referenced_env_pubkey,
+            referenced_secret_value = resolve_secret_value(
+                referenced_environment, path, key_name
             )
 
             value = value.replace(
@@ -376,59 +383,16 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             path, key_name = decompose_path_and_key(ref_key)
 
             referenced_environment = Environment.objects.get(
-                name__iexact=ref_env, app=app
+                name__iexact=ref_env, app=secret.environment.app
             )
 
-            if account:
-                is_service_account = isinstance(account, ServiceAccount)
+            if not check_environment_access(
+                account, referenced_environment, require_resolved_references
+            ):
+                return value
 
-                if is_service_account:
-                    if not service_account_can_access_environment(
-                        account.id, referenced_environment.id
-                    ):
-                        if require_resolved_references:
-                            raise SecretReferenceException(
-                                "This service account doesn't have permission to read secrets in one or more referenced environments."
-                            )
-                        else:
-                            return value
-
-                else:
-                    if not user_can_access_environment(
-                        account.userId, referenced_environment.id
-                    ):
-                        if require_resolved_references:
-                            raise SecretReferenceException(
-                                "You don't have permission to read secrets in one or more referenced environments."
-                            )
-                        else:
-                            return value
-
-            referenced_environment_key = ServerEnvironmentKey.objects.get(
-                environment_id=referenced_environment.id
-            )
-            seed = decrypt_asymmetric(
-                referenced_environment_key.wrapped_seed, sk.hex(), pk.hex()
-            )
-            salt = decrypt_asymmetric(
-                referenced_environment_key.wrapped_salt, sk.hex(), pk.hex()
-            )
-
-            key_digest = blake2b_digest(key_name, salt)
-
-            referenced_env_pubkey, referenced_env_privkey = env_keypair(seed)
-
-            referenced_secret = Secret.objects.get(
-                environment=referenced_environment,
-                path=path,
-                key_digest=key_digest,
-                deleted_at=None,
-            )
-
-            referenced_secret_value = decrypt_asymmetric(
-                referenced_secret.value,
-                referenced_env_privkey,
-                referenced_env_pubkey,
+            referenced_secret_value = resolve_secret_value(
+                referenced_environment, path, key_name
             )
 
             value = value.replace(f"${{{ref_env}.{ref_key}}}", referenced_secret_value)
@@ -454,19 +418,11 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
         try:
             path, key_name = decompose_path_and_key(ref_key)
 
-            key_digest = blake2b_digest(key_name, env_salt)
-
-            referenced_secret = Secret.objects.get(
-                environment=secret.environment,
-                path=path,
-                key_digest=key_digest,
-                deleted_at=None,
-            )
-
-            referenced_secret_value = decrypt_asymmetric(
-                referenced_secret.value,
-                env_privkey,
-                env_pubkey,
+            referenced_secret_value = resolve_secret_value(
+                secret.environment,
+                path,
+                key_name,
+                crypto_context=current_env_crypto_context,
             )
 
             value = value.replace(
