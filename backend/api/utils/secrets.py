@@ -136,7 +136,7 @@ def normalize_path_string(path):
         path = "/" + path
 
     # Remove trailing slash if present
-    if path.endswith("/"):
+    if path.endswith("/") and path != "/":
         path = path[:-1]
 
     return path
