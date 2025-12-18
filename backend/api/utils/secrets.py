@@ -16,6 +16,12 @@ from api.utils.access.permissions import (
 logger = logging.getLogger(__name__)
 
 
+# Regex patterns to detect references
+CROSS_APP_ENV_PATTERN = re.compile(r"\$\{(.+?)::(.+?)\.(.+?)\}")
+CROSS_ENV_PATTERN = re.compile(r"\$\{(?![^{]*::)([^.]+?)\.(.+?)\}")
+LOCAL_REF_PATTERN = re.compile(r"\$\{([^.]+?)\}")
+
+
 class SecretReferenceException(Exception):
     pass
 
@@ -312,11 +318,6 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
     App = apps.get_model("api", "App")
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
 
-    # Regex patterns to detect references
-    cross_app_env_pattern = re.compile(r"\$\{(.+?)::(.+?)\.(.+?)\}")
-    cross_env_pattern = re.compile(r"\$\{(?![^{]*::)([^.]+?)\.(.+?)\}")
-    local_ref_pattern = re.compile(r"\$\{([^.]+?)\}")
-
     # Pre-compute current env context
     current_env_crypto_context = get_environment_crypto_context(secret.environment)
     env_salt, env_pubkey, env_privkey = current_env_crypto_context
@@ -325,7 +326,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
     value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
 
     # Resolve cross-app and cross-env references
-    cross_app_env_matches = re.findall(cross_app_env_pattern, value)
+    cross_app_env_matches = re.findall(CROSS_APP_ENV_PATTERN, value)
     unresolved_references = []
 
     for ref_app, ref_env, ref_key in cross_app_env_matches:
@@ -376,7 +377,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             unresolved_references.append(str(ex))
 
     # Resolve cross-env references (same app)
-    cross_env_matches = re.findall(cross_env_pattern, value)
+    cross_env_matches = re.findall(CROSS_ENV_PATTERN, value)
 
     for ref_env, ref_key in cross_env_matches:
         try:
@@ -411,7 +412,7 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
         raise SecretReferenceException("\n".join(unresolved_references))
 
     # Resolve local references
-    local_ref_matches = re.findall(local_ref_pattern, value)
+    local_ref_matches = re.findall(LOCAL_REF_PATTERN, value)
     unresolved_local_references = []
 
     for ref_key in local_ref_matches:
