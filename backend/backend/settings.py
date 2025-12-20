@@ -241,11 +241,13 @@ REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "api.serializers.CustomUserSerializer"
 }
 
-# Define rate limits per plan (keys match Organisation model constants: FR, PR, EN)
+# Global rate limit
 PLAN_RATE_LIMITS = {
-    "FR": os.getenv("RATE_LIMIT_FREE", "120/min"),
-    "PR": os.getenv("RATE_LIMIT_PRO", "240/min"),
-    "EN": os.getenv("RATE_LIMIT_ENTERPRISE", "1000/min"),
+    # PHASE CLOUD
+    "FR": os.getenv("RATE_LIMIT_FREE"),
+    "PR": os.getenv("RATE_LIMIT_PRO"),
+    "EN": os.getenv("RATE_LIMIT_ENTERPRISE"),
+    # PHASE SELF-HOSTED
     "DEFAULT": os.getenv("RATE_LIMIT_DEFAULT"),
 }
 
