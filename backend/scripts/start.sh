@@ -14,7 +14,6 @@ echo "Starting gunicorn server..."
 # Calculate optimal workers: (2 * CPUs) + 1
 # nproc = linux, sysctl = mac. Default to 2 if detection fails.
 CORES=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
-echo "Detected $CORES cores."
 AUTO_WORKERS=$(( CORES * 2 + 1 ))
 
 # Use GUNICORN_WORKERS env var if set, otherwise use calculated value
