@@ -10,4 +10,15 @@ else
 fi
 
 echo "Starting gunicorn server..."
-exec gunicorn -b '[::]:8000' --workers 3 backend.wsgi:application
+
+# Calculate optimal workers: (2 * CPUs) + 1
+# nproc = linux, sysctl = mac. Default to 2 if detection fails.
+CORES=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+echo "Detected $CORES cores."
+AUTO_WORKERS=$(( CORES * 2 + 1 ))
+
+# Use GUNICORN_WORKERS env var if set, otherwise use calculated value
+WORKERS=${GUNICORN_WORKERS:-$AUTO_WORKERS}
+
+echo "Detected $CORES system cores. Starting $WORKERS gunicorn workers."
+exec gunicorn -b '[::]:8000' --workers "$WORKERS" backend.wsgi:application
