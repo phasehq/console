@@ -123,7 +123,13 @@ class PersonalSecretSerializer(serializers.ModelSerializer):
         if self.context.get("sse"):
             secret_obj = obj.secret
             secret_obj.value = obj.value
-            value = decrypt_secret_value(secret_obj)
+
+            crypto_context = self.context.get("crypto_context")
+            context_cache = self.context.get("context_cache")
+
+            value = decrypt_secret_value(
+                secret_obj, crypto_context=crypto_context, context_cache=context_cache
+            )
             return value
         return obj.value
 
@@ -142,7 +148,12 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_key(self, obj):
         if self.context.get("sse"):
-            env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+            crypto_context = self.context.get("crypto_context")
+            if crypto_context:
+                _, env_pubkey, env_privkey = crypto_context
+            else:
+                env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+
             key = decrypt_asymmetric(obj.key, env_privkey, env_pubkey)
             return key
         return obj.key
@@ -150,9 +161,13 @@ class SecretSerializer(serializers.ModelSerializer):
     def get_value(self, obj):
         if self.context.get("sse"):
             account = self.context.get("account")
+            crypto_context = self.context.get("crypto_context")
+            context_cache = self.context.get("context_cache")
 
             try:
-                value = decrypt_secret_value(obj, False, account)
+                value = decrypt_secret_value(
+                    obj, False, account, crypto_context, context_cache
+                )
                 return value
             except SecretReferenceException as e:
                 raise PermissionDenied(str(e))
@@ -160,7 +175,12 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_comment(self, obj):
         if self.context.get("sse"):
-            env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+            crypto_context = self.context.get("crypto_context")
+            if crypto_context:
+                _, env_pubkey, env_privkey = crypto_context
+            else:
+                env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+
             if obj.comment:
                 comment = decrypt_asymmetric(obj.comment, env_privkey, env_pubkey)
                 return comment
@@ -178,7 +198,12 @@ class SecretSerializer(serializers.ModelSerializer):
                     secret=obj, user=org_member
                 )
                 return PersonalSecretSerializer(
-                    personal_secret, context={"sse": self.context.get("sse")}
+                    personal_secret,
+                    context={
+                        "sse": self.context.get("sse"),
+                        "crypto_context": self.context.get("crypto_context"),
+                        "context_cache": self.context.get("context_cache"),
+                    },
                 ).data
             except PersonalSecret.DoesNotExist:
                 return None

@@ -17,6 +17,7 @@ from api.utils.secrets import (
     normalize_path_string,
     compute_key_digest,
     get_environment_keys,
+    get_environment_crypto_context,
 )
 from api.utils.access.permissions import (
     user_has_permission,
@@ -576,6 +577,10 @@ class PublicSecretsView(APIView):
                 user_agent,
             )
 
+        # Pre-compute crypto context for N+1 optimization
+        crypto_context = get_environment_crypto_context(env)
+        context_cache = {}
+
         serializer = SecretSerializer(
             secrets,
             many=True,
@@ -583,6 +588,8 @@ class PublicSecretsView(APIView):
                 "org_member": request.auth["org_member"],
                 "account": account,
                 "sse": True,
+                "crypto_context": crypto_context,
+                "context_cache": context_cache,
             },
         )
 
@@ -807,10 +814,19 @@ class PublicSecretsView(APIView):
 
             created_secrets.append(secret_obj)
 
+        # Pre-compute crypto context for N+1 optimization
+        crypto_context = get_environment_crypto_context(env)
+        context_cache = {}
+
         serializer = SecretSerializer(
             created_secrets,
             many=True,
-            context={"org_member": request.auth["org_member"], "sse": True},
+            context={
+                "org_member": request.auth["org_member"],
+                "sse": True,
+                "crypto_context": crypto_context,
+                "context_cache": context_cache,
+            },
         )
 
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -928,10 +944,19 @@ class PublicSecretsView(APIView):
 
             updated_secrets.append(secret_obj)
 
+        # Pre-compute crypto context for N+1 optimization
+        crypto_context = get_environment_crypto_context(env)
+        context_cache = {}
+
         serializer = SecretSerializer(
             updated_secrets,
             many=True,
-            context={"org_member": request.auth["org_member"], "sse": True},
+            context={
+                "org_member": request.auth["org_member"],
+                "sse": True,
+                "crypto_context": crypto_context,
+                "context_cache": context_cache,
+            },
         )
 
         return Response(serializer.data, status=status.HTTP_200_OK)

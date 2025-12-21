@@ -301,7 +301,13 @@ def resolve_secret_value(environment, path, key_name, crypto_context=None):
     return decrypt_asymmetric(secret.value, privkey, pubkey)
 
 
-def decrypt_secret_value(secret, require_resolved_references=False, account=None):
+def decrypt_secret_value(
+    secret,
+    require_resolved_references=False,
+    account=None,
+    crypto_context=None,
+    context_cache=None,
+):
     """
     Decrypts the given secret's value and resolves all references.
 
@@ -309,6 +315,8 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
         secret (Secret): The secret instance to decrypt.
         require_resolved_references (bool): If True, raise an exception if any reference cannot be resolved.
         account: (OrganisationMember | ServiceAccount): The account attempting to decrypt the secret value.
+        crypto_context (tuple): Optional pre-computed (salt, pubkey, privkey) for the environment.
+        context_cache (dict): Optional dictionary to cache crypto contexts for referenced environments.
 
     Returns:
         value (str): Decrypted secret value, with all local and cross env/app references replaced inline.
@@ -319,7 +327,16 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
 
     # Pre-compute current env context
-    current_env_crypto_context = get_environment_crypto_context(secret.environment)
+    if crypto_context:
+        current_env_crypto_context = crypto_context
+    elif context_cache is not None and secret.environment.id in context_cache:
+        current_env_crypto_context = context_cache[secret.environment.id]
+    else:
+        current_env_crypto_context = get_environment_crypto_context(secret.environment)
+
+    if context_cache is not None:
+        context_cache[secret.environment.id] = current_env_crypto_context
+
     env_salt, env_pubkey, env_privkey = current_env_crypto_context
 
     # Decrypt secret value
@@ -346,8 +363,21 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             ):
                 return value
 
+            ref_crypto_context = None
+            if context_cache is not None:
+                if referenced_environment.id in context_cache:
+                    ref_crypto_context = context_cache[referenced_environment.id]
+                else:
+                    ref_crypto_context = get_environment_crypto_context(
+                        referenced_environment
+                    )
+                    context_cache[referenced_environment.id] = ref_crypto_context
+
             referenced_secret_value = resolve_secret_value(
-                referenced_environment, path, key_name
+                referenced_environment,
+                path,
+                key_name,
+                crypto_context=ref_crypto_context,
             )
 
             value = value.replace(
@@ -392,8 +422,21 @@ def decrypt_secret_value(secret, require_resolved_references=False, account=None
             ):
                 return value
 
+            ref_crypto_context = None
+            if context_cache is not None:
+                if referenced_environment.id in context_cache:
+                    ref_crypto_context = context_cache[referenced_environment.id]
+                else:
+                    ref_crypto_context = get_environment_crypto_context(
+                        referenced_environment
+                    )
+                    context_cache[referenced_environment.id] = ref_crypto_context
+
             referenced_secret_value = resolve_secret_value(
-                referenced_environment, path, key_name
+                referenced_environment,
+                path,
+                key_name,
+                crypto_context=ref_crypto_context,
             )
 
             value = value.replace(f"${{{ref_env}.{ref_key}}}", referenced_secret_value)
