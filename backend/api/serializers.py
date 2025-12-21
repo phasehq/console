@@ -166,7 +166,11 @@ class SecretSerializer(serializers.ModelSerializer):
 
             try:
                 value = decrypt_secret_value(
-                    obj, False, account, crypto_context, context_cache
+                    obj,
+                    require_resolved_references=False,
+                    account=account,
+                    crypto_context=crypto_context,
+                    context_cache=context_cache,
                 )
                 return value
             except SecretReferenceException as e:
