@@ -253,6 +253,21 @@ def get_environment_crypto_context(environment):
     return salt, env_pubkey, env_privkey
 
 
+def get_or_compute_crypto_context(environment, context_cache):
+    """
+    Retrieves the crypto context from the cache if available, otherwise computes it.
+    """
+    if context_cache is None:
+        return None
+
+    if environment.id in context_cache:
+        return context_cache[environment.id]
+
+    crypto_context = get_environment_crypto_context(environment)
+    context_cache[environment.id] = crypto_context
+    return crypto_context
+
+
 def check_environment_access(account, environment, require_resolved_references):
     """
     Checks if the account has access to the environment.
@@ -363,15 +378,9 @@ def decrypt_secret_value(
             ):
                 return value
 
-            ref_crypto_context = None
-            if context_cache is not None:
-                if referenced_environment.id in context_cache:
-                    ref_crypto_context = context_cache[referenced_environment.id]
-                else:
-                    ref_crypto_context = get_environment_crypto_context(
-                        referenced_environment
-                    )
-                    context_cache[referenced_environment.id] = ref_crypto_context
+            ref_crypto_context = get_or_compute_crypto_context(
+                referenced_environment, context_cache
+            )
 
             referenced_secret_value = resolve_secret_value(
                 referenced_environment,
@@ -422,15 +431,9 @@ def decrypt_secret_value(
             ):
                 return value
 
-            ref_crypto_context = None
-            if context_cache is not None:
-                if referenced_environment.id in context_cache:
-                    ref_crypto_context = context_cache[referenced_environment.id]
-                else:
-                    ref_crypto_context = get_environment_crypto_context(
-                        referenced_environment
-                    )
-                    context_cache[referenced_environment.id] = ref_crypto_context
+            ref_crypto_context = get_or_compute_crypto_context(
+                referenced_environment, context_cache
+            )
 
             referenced_secret_value = resolve_secret_value(
                 referenced_environment,
