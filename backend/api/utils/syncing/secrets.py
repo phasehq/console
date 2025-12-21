@@ -52,7 +52,10 @@ def get_environment_secrets(environment, path):
     for secret in secrets:
         key = decrypt_asymmetric(secret.key, env_privkey, env_pubkey)
         value = decrypt_secret_value(
-            secret, True, crypto_context=crypto_context, context_cache=context_cache
+            secret,
+            require_resolved_references=True,
+            crypto_context=crypto_context,
+            context_cache=context_cache,
         )
         comment = (
             decrypt_asymmetric(secret.comment, env_privkey, env_pubkey)
