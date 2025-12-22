@@ -250,7 +250,7 @@ def test_decrypt_secret_value_with_cross_env_ref(
     result = decrypt_secret_value(secret)
 
     assert result == "Value is secret_api_key"
-    mock_resolve.assert_called_with(mock_env, "/", "API_KEY")
+    mock_resolve.assert_called_with(mock_env, "/", "API_KEY", crypto_context=None)
 
 
 @patch("api.utils.secrets.apps.get_model")
@@ -288,4 +288,6 @@ def test_decrypt_secret_value_with_cross_env_ref_in_folder(
     result = decrypt_secret_value(secret)
 
     assert result == "Value is secret_api_key"
-    mock_resolve.assert_called_with(mock_env, "/backend", "API_KEY")
+    mock_resolve.assert_called_with(
+        mock_env, "/backend", "API_KEY", crypto_context=None
+    )
