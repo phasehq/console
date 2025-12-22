@@ -26,14 +26,23 @@ if [ "$AUTO_WORKERS" -gt "$MAX_WORKERS_DEFAULT" ]; then
     AUTO_WORKERS=$MAX_WORKERS_DEFAULT
 fi
 
-# Use GUNICORN_WORKERS env var if set, else set the worker count dynamically.
-WORKERS=${GUNICORN_WORKERS:-$AUTO_WORKERS}
+# Use GUNICORN_WORKERS env var if set and valid, else set the worker count dynamically.
+WORKERS=$AUTO_WORKERS
 
-# Start gunicorn server.
+# Validate GUNICORN_WORKERS as a positive integer if it is set.
 if [ -n "$GUNICORN_WORKERS" ]; then
-    echo "GUNICORN_WORKERS is set to '$GUNICORN_WORKERS'. Using override."
+    case "$GUNICORN_WORKERS" in
+        *[!0-9]* | '' | 0)
+            echo "Warning: GUNICORN_WORKERS='$GUNICORN_WORKERS' is not a positive integer. Falling back to AUTO_WORKERS=$AUTO_WORKERS."
+            ;;
+        *)
+            WORKERS=$GUNICORN_WORKERS
+            echo "GUNICORN_WORKERS is set to '$GUNICORN_WORKERS'. Using override."
+            ;;
+    esac
 fi
 
+# Start gunicorn server.
 echo "Detected $CORES system cores. Starting $WORKERS gunicorn workers."
 # Listen for connections on IPv4 and IPv6 - Dualstack
 exec gunicorn -b '[::]:8000' --workers "$WORKERS" backend.wsgi:application
