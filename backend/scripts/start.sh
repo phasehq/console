@@ -30,6 +30,10 @@ fi
 WORKERS=${GUNICORN_WORKERS:-$AUTO_WORKERS}
 
 # Start gunicorn server.
+if [ -n "$GUNICORN_WORKERS" ]; then
+    echo "GUNICORN_WORKERS is set to '$GUNICORN_WORKERS'. Using override."
+fi
+
 echo "Detected $CORES system cores. Starting $WORKERS gunicorn workers."
 # Listen for connections on IPv4 and IPv6 - Dualstack
 exec gunicorn -b '[::]:8000' --workers "$WORKERS" backend.wsgi:application
