@@ -22,7 +22,6 @@ AUTO_WORKERS=$(( CORES * 2 + 1 ))
 MAX_WORKERS_DEFAULT=8
 
 if [ "$AUTO_WORKERS" -gt "$MAX_WORKERS_DEFAULT" ]; then
-    echo "Auto-detected $AUTO_WORKERS workers, but capping at $MAX_WORKERS_DEFAULT to prevent database connection exhaustion."
     AUTO_WORKERS=$MAX_WORKERS_DEFAULT
 fi
 
