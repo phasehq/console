@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 # Regex patterns to detect references
-CROSS_APP_ENV_PATTERN = re.compile(r"\$\{(.+?)::(.+?)\.(.+?)\}")
-CROSS_ENV_PATTERN = re.compile(r"\$\{(?![^{]*::)([^.]+?)\.(.+?)\}")
-LOCAL_REF_PATTERN = re.compile(r"\$\{([^.]+?)\}")
+CROSS_APP_ENV_PATTERN = re.compile(r"\$\{(?!\{)(.+?)::(.+?)\.(.+?)\}")
+CROSS_ENV_PATTERN = re.compile(r"\$\{(?!\{)(?![^{]*::)([^.]+?)\.(.+?)\}")
+LOCAL_REF_PATTERN = re.compile(r"\$\{(?!\{)([^.]+?)\}")
 
 
 class SecretReferenceException(Exception):
