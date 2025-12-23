@@ -16,7 +16,10 @@ from api.utils.access.permissions import (
 logger = logging.getLogger(__name__)
 
 
-# Regex patterns to detect references
+# Regex patterns to detect references.
+# Note: The `(?!\{)` negative lookahead intentionally excludes double-brace syntax
+# (for example, `${{...}}`) to avoid conflicting with Railway and similar third-party
+# service variable references that use that format.
 CROSS_APP_ENV_PATTERN = re.compile(r"\$\{(?!\{)(.+?)::(.+?)\.(.+?)\}")
 CROSS_ENV_PATTERN = re.compile(r"\$\{(?!\{)(?![^{]*::)([^.]+?)\.(.+?)\}")
 LOCAL_REF_PATTERN = re.compile(r"\$\{(?!\{)([^.]+?)\}")
