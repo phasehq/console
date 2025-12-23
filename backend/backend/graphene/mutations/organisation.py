@@ -141,6 +141,16 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
                 f"You cannot add {len(invites)} more members to this organisation"
             )
 
+        # Restrict roles that can be assigned via invites
+        org_roles = Role.objects.filter(organisation=org)
+
+        allowed_invite_roles = [
+            r
+            for r in org_roles
+            if not role_has_global_access(r)
+            and not role_has_permission(r, "create", "ServiceAccountTokens")
+        ]
+
         for invite in invites:
             email = invite.email.lower().strip()
             apps = invite.apps or []
@@ -160,16 +170,6 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
                 continue  # Skip if an active invite already exists
 
             app_scope = App.objects.filter(id__in=apps)
-
-            # Restrict roles that can be assigned via invites
-            org_roles = Role.objects.filter(organisation=org)
-
-            allowed_invite_roles = [
-                r
-                for r in org_roles
-                if not role_has_global_access(r)
-                and not role_has_permission(r, "create", "ServiceAccountTokens")
-            ]
 
             role = Role.objects.get(organisation=org, id=role_id)
             if role not in allowed_invite_roles:
