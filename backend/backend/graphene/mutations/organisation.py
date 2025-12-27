@@ -1,8 +1,8 @@
 from api.emails import send_user_joined_email, send_welcome_email
 from api.utils.access.permissions import (
     role_has_global_access,
+    role_has_permission,
     user_has_permission,
-    user_is_admin,
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
@@ -141,6 +141,16 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
                 f"You cannot add {len(invites)} more members to this organisation"
             )
 
+        # Restrict roles that can be assigned via invites
+        org_roles = Role.objects.filter(organisation=org)
+
+        allowed_invite_roles = [
+            r
+            for r in org_roles
+            if not role_has_global_access(r)
+            and not role_has_permission(r, "create", "ServiceAccountTokens")
+        ]
+
         for invite in invites:
             email = invite.email.lower().strip()
             apps = invite.apps or []
@@ -161,12 +171,11 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
 
             app_scope = App.objects.filter(id__in=apps)
 
-            # Restrict roles that can be assigned via invites
-            allowed_invite_roles = ["developer", "service"]
             role = Role.objects.get(organisation=org, id=role_id)
-            if role.name.lower() not in allowed_invite_roles:
+            if role not in allowed_invite_roles:
+                allowed_role_names = [r.name for r in allowed_invite_roles]
                 raise GraphQLError(
-                    f"You can only invite members with the following roles: {', '.join(allowed_invite_roles)}"
+                    f"You can only invite members with the following roles: {', '.join(allowed_role_names)}"
                 )
 
             new_invite = OrganisationMemberInvite.objects.create(
