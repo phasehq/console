@@ -291,3 +291,28 @@ def test_decrypt_secret_value_with_cross_env_ref_in_folder(
     mock_resolve.assert_called_with(
         mock_env, "/backend", "API_KEY", crypto_context=None
     )
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_ignores_railway_syntax(
+    mock_get_context, mock_decrypt, mock_get_model
+):
+    """Test that decrypt_secret_value ignores Railway-style references ${{...}}"""
+    mock_secret = MagicMock()
+    mock_secret.value = "encrypted_value"
+    mock_secret.environment.id = 1
+    mock_secret.environment.app.organisation.id = 1
+
+    # Mock decrypt_asymmetric to return a value containing Railway syntax
+    mock_decrypt.return_value = "Some value with ${{RAILWAY_REF}}"
+
+    # Mock get_environment_crypto_context
+    with patch("api.utils.secrets.get_environment_crypto_context") as mock_context:
+        mock_context.return_value = (b"salt", b"pub", b"priv")
+
+        # Should return the value as-is without trying to resolve ${{RAILWAY_REF}}
+        result = decrypt_secret_value(mock_secret)
+
+        assert result == "Some value with ${{RAILWAY_REF}}"
