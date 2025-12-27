@@ -6,7 +6,15 @@ from api.utils.syncing.github.actions import (
     list_repos,
 )
 import base64
+import pytest
 from unittest.mock import patch, Mock, call
+
+
+@pytest.fixture(autouse=True)
+def mock_settings():
+    with patch("api.utils.syncing.github.actions.settings") as mock_settings:
+        mock_settings.APP_HOST = "cloud"
+        yield mock_settings
 
 
 def get_mocked_response(url, *args, **kwargs):
