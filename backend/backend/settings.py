@@ -345,7 +345,7 @@ CACHES = {
 RQ_SSL_OPTIONS = (
     {
         "ssl_cert_reqs": "required",
-        "ssl_ca_certs": os.getenv("REDIS_CA_CERTS_PATH"),
+        "ssl_ca_certs": os.getenv("REDIS_SSL_CA_PATH"),
     }
     if REDIS_SSL
     else None
