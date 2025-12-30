@@ -29,11 +29,15 @@ def get_environment_secrets(environment, path):
 
     server_env_key = ServerEnvironmentKey.objects.get(environment_id=environment.id)
 
-    # Decrypt environment seed
+    # Decrypt environment seed and salt
     env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
+    env_salt = decrypt_asymmetric(server_env_key.wrapped_salt, sk.hex(), pk.hex())
 
     # Compute environment keypair
     env_pubkey, env_privkey = env_keypair(env_seed)
+
+    crypto_context = (env_salt, env_pubkey, env_privkey)
+    context_cache = {}
 
     # Get Secrets from DB
     secrets = Secret.objects.filter(
@@ -47,7 +51,12 @@ def get_environment_secrets(environment, path):
     # Decrypt key and value for each secret
     for secret in secrets:
         key = decrypt_asymmetric(secret.key, env_privkey, env_pubkey)
-        value = decrypt_secret_value(secret, True)
+        value = decrypt_secret_value(
+            secret,
+            require_resolved_references=True,
+            crypto_context=crypto_context,
+            context_cache=context_cache,
+        )
         comment = (
             decrypt_asymmetric(secret.comment, env_privkey, env_pubkey)
             if secret.comment

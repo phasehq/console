@@ -66,6 +66,28 @@ def member_can_access_org(member_id, org_id):
     ).exists()
 
 
+def role_has_permission(role, action, resource, is_app_resource=False):
+    """Check if a role has the specified permission for a resource."""
+    if not role:
+        return False  # No role assigned, hence no permissions
+
+    # Check if the role is a default role
+    if role.is_default:
+        # Get permissions from the default_roles dictionary
+        role_name = role.name.capitalize()
+        permissions = default_roles.get(role_name, {})
+    else:
+        # Use the permissions stored in the role object
+        permissions = role.permissions
+
+    # Determine the correct key to check
+    permission_key = "app_permissions" if is_app_resource else "permissions"
+
+    # Check if the resource exists and if the action is permitted
+    resource_permissions = permissions.get(permission_key, {}).get(resource, [])
+    return action in resource_permissions
+
+
 def user_has_permission(
     account,
     action,
@@ -85,25 +107,8 @@ def user_has_permission(
             org_member = OrganisationMember.objects.get(
                 user=account, organisation=organisation, deleted_at=None
             )
-        role = org_member.role
-        if not role:
-            return False  # No role assigned, hence no permissions
 
-        # Check if the role is a default role
-        if role.is_default:
-            # Get permissions from the default_roles dictionary
-            role_name = role.name.capitalize()
-            permissions = default_roles.get(role_name, {})
-        else:
-            # Use the permissions stored in the role object
-            permissions = role.permissions
-
-        # Determine the correct key to check
-        permission_key = "app_permissions" if is_app_resource else "permissions"
-
-        # Check if the resource exists and if the action is permitted
-        resource_permissions = permissions.get(permission_key, {}).get(resource, [])
-        return action in resource_permissions
+        return role_has_permission(org_member.role, action, resource, is_app_resource)
 
     except OrganisationMember.DoesNotExist:
         return False  # User is not a member of the organization
