@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import quote as urlquote
 import logging.config
 from backend.utils.secrets import get_secret
 from ee.licensing.verifier import check_license
@@ -313,7 +314,10 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_PASSWORD = get_secret("REDIS_PASSWORD")
 REDIS_SSL = os.getenv("REDIS_SSL", "False").lower() == "true"
 REDIS_PROTOCOL = "rediss" if REDIS_SSL else "redis"
-REDIS_AUTH = f":{REDIS_PASSWORD}@" if REDIS_PASSWORD else ""
+REDIS_AUTH = f":{urlquote(REDIS_PASSWORD, safe='')}@" if REDIS_PASSWORD else ""
+
+if REDIS_SSL and not os.getenv("REDIS_CA_CERTS_PATH"):
+    raise RuntimeError("REDIS_CA_CERTS_PATH must be set when REDIS_SSL=true")
 
 CACHES = {
     "default": {
@@ -321,7 +325,8 @@ CACHES = {
         "LOCATION": f"{REDIS_PROTOCOL}://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/1",
         "OPTIONS": (
             {
-                "ssl_cert_reqs": None,
+                "ssl_cert_reqs": "required",
+                "ssl_ca_certs": os.getenv("REDIS_CA_CERTS_PATH"),
             }
             if REDIS_SSL
             else {}
@@ -329,12 +334,22 @@ CACHES = {
     }
 }
 
+RQ_SSL_OPTIONS = (
+    {
+        "ssl_cert_reqs": "required",
+        "ssl_ca_certs": os.getenv("REDIS_CA_CERTS_PATH"),
+    }
+    if REDIS_SSL
+    else None
+)
+
 RQ_QUEUES = {
     "default": {
         "HOST": REDIS_HOST,
         "PORT": REDIS_PORT,
         "PASSWORD": REDIS_PASSWORD,
         "SSL": REDIS_SSL,
+        "SSL_OPTIONS": RQ_SSL_OPTIONS,
         "DB": 0,
     },
     "scheduled-jobs": {
@@ -342,6 +357,7 @@ RQ_QUEUES = {
         "PORT": REDIS_PORT,
         "PASSWORD": REDIS_PASSWORD,
         "SSL": REDIS_SSL,
+        "SSL_OPTIONS": RQ_SSL_OPTIONS,
         "DB": 0,
     },
 }
