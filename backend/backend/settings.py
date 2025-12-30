@@ -309,7 +309,7 @@ DATABASES = {
 }
 
 REDIS_HOST = os.getenv("REDIS_HOST")
-REDIS_PORT = os.getenv("REDIS_PORT")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_PASSWORD = get_secret("REDIS_PASSWORD")
 REDIS_SSL = os.getenv("REDIS_SSL", "False").lower() == "true"
 REDIS_PROTOCOL = "rediss" if REDIS_SSL else "redis"
