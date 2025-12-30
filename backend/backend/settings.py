@@ -327,9 +327,6 @@ elif REDIS_PASSWORD:
 else:
     REDIS_AUTH = ""
 
-if REDIS_SSL and not os.getenv("REDIS_CA_CERTS_PATH"):
-    raise RuntimeError("REDIS_CA_CERTS_PATH must be set when REDIS_SSL=true")
-
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
