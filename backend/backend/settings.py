@@ -304,7 +304,7 @@ DATABASES = {
         "PASSWORD": get_secret("DATABASE_PASSWORD"),
         "NAME": os.getenv("DATABASE_NAME"),
         "HOST": os.getenv("DATABASE_HOST"),
-        "PORT": os.getenv("DATABASE_PORT"),
+        "PORT": int(os.getenv("DATABASE_PORT", "5432")),
     },
 }
 
