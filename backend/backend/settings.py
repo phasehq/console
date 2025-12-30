@@ -306,6 +306,18 @@ DATABASES = {
         "NAME": os.getenv("DATABASE_NAME"),
         "HOST": os.getenv("DATABASE_HOST"),
         "PORT": int(os.getenv("DATABASE_PORT", "5432")),
+        "OPTIONS": (
+            {
+                "sslmode": "require",
+                **(
+                    {"sslrootcert": os.getenv("DATABASE_SSL_ROOT_CERT")}
+                    if os.getenv("DATABASE_SSL_ROOT_CERT")
+                    else {}
+                ),
+            }
+            if os.getenv("DATABASE_SSL", "False").lower() == "true"
+            else {}
+        ),
     },
 }
 
