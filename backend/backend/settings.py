@@ -300,10 +300,12 @@ DATABASES = {
         "PORT": int(os.getenv("DATABASE_PORT", "5432")),
         "OPTIONS": (
             {
-                "sslmode": "require",
+                "sslmode": "verify-full"
+                if os.getenv("DATABASE_SSL_CA_PATH")
+                else "require",
                 **(
-                    {"sslrootcert": os.getenv("DATABASE_SSL_ROOT_CERT")}
-                    if os.getenv("DATABASE_SSL_ROOT_CERT")
+                    {"sslrootcert": os.getenv("DATABASE_SSL_CA_PATH")}
+                    if os.getenv("DATABASE_SSL_CA_PATH")
                     else {}
                 ),
             }
@@ -334,7 +336,7 @@ CACHES = {
         "OPTIONS": (
             {
                 "ssl_cert_reqs": "required",
-                "ssl_ca_certs": os.getenv("REDIS_CA_CERTS_PATH"),
+                "ssl_ca_certs": os.getenv("REDIS_SSL_CA_PATH"),
             }
             if REDIS_SSL
             else {}
