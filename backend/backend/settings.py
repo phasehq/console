@@ -311,10 +311,17 @@ DATABASES = {
 
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_USERNAME = os.getenv("REDIS_USERNAME")
 REDIS_PASSWORD = get_secret("REDIS_PASSWORD")
 REDIS_SSL = os.getenv("REDIS_SSL", "False").lower() == "true"
 REDIS_PROTOCOL = "rediss" if REDIS_SSL else "redis"
-REDIS_AUTH = f":{urlquote(REDIS_PASSWORD, safe='')}@" if REDIS_PASSWORD else ""
+
+if REDIS_USERNAME and REDIS_PASSWORD:
+    REDIS_AUTH = f"{urlquote(REDIS_USERNAME, safe='')}:{urlquote(REDIS_PASSWORD, safe='')}@"
+elif REDIS_PASSWORD:
+    REDIS_AUTH = f":{urlquote(REDIS_PASSWORD, safe='')}@"
+else:
+    REDIS_AUTH = ""
 
 if REDIS_SSL and not os.getenv("REDIS_CA_CERTS_PATH"):
     raise RuntimeError("REDIS_CA_CERTS_PATH must be set when REDIS_SSL=true")
