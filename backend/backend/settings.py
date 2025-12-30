@@ -51,16 +51,10 @@ def get_version():
 
 
 VERSION = get_version()
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = get_secret("SECRET_KEY")
 
 SERVER_SECRET = get_secret("SERVER_SECRET")
 
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True if os.getenv("DEBUG") == "True" else False
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", []).split(",")
@@ -72,8 +66,6 @@ SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN")
 
 SESSION_COOKIE_AGE = 604800  # 1 week, in seconds
-
-# Application definition
 
 INSTALLED_APPS = [
     "django.contrib.admin",
