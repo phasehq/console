@@ -311,7 +311,7 @@ DATABASES = {
 
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_USERNAME = os.getenv("REDIS_USERNAME")
+REDIS_USERNAME = os.getenv("REDIS_USERNAME") or None
 REDIS_PASSWORD = get_secret("REDIS_PASSWORD")
 REDIS_SSL = os.getenv("REDIS_SSL", "False").lower() == "true"
 REDIS_PROTOCOL = "rediss" if REDIS_SSL else "redis"
@@ -354,6 +354,7 @@ RQ_QUEUES = {
     "default": {
         "HOST": REDIS_HOST,
         "PORT": REDIS_PORT,
+        "USERNAME": REDIS_USERNAME,
         "PASSWORD": REDIS_PASSWORD,
         "SSL": REDIS_SSL,
         "SSL_OPTIONS": RQ_SSL_OPTIONS,
@@ -362,6 +363,7 @@ RQ_QUEUES = {
     "scheduled-jobs": {
         "HOST": REDIS_HOST,
         "PORT": REDIS_PORT,
+        "USERNAME": REDIS_USERNAME,
         "PASSWORD": REDIS_PASSWORD,
         "SSL": REDIS_SSL,
         "SSL_OPTIONS": RQ_SSL_OPTIONS,
