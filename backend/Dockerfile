@@ -21,6 +21,11 @@ RUN set -ex \
     && apk add --virtual rundeps $runDeps \
     && apk del .build-deps
 RUN apk add --no-cache curl ca-certificates
+
+# Add AWS RDS eu-central-1 CA bundle
+ADD https://truststore.pki.rds.amazonaws.com/eu-central-1/eu-central-1-bundle.pem /etc/ssl/certs/rds-ca-bundle.pem
+RUN chmod 644 /etc/ssl/certs/rds-ca-bundle.pem
+
 RUN addgroup -S app && adduser -S app -G app
 ADD . /app
 WORKDIR /app
