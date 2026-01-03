@@ -8,6 +8,7 @@ from api.utils.syncing.aws.secrets_manager import sync_aws_secrets
 from api.utils.syncing.github.actions import (
     get_gh_actions_credentials,
     sync_github_secrets,
+    sync_github_org_secrets,
 )
 from api.utils.syncing.vault.main import sync_vault_secrets
 from api.utils.syncing.nomad.main import sync_nomad_secrets
@@ -255,19 +256,33 @@ def perform_cloudflare_pages_sync(environment_sync):
 def perform_github_actions_sync(environment_sync):
 
     access_token, api_host = get_gh_actions_credentials(environment_sync)
-    repo_name = environment_sync.options.get("repo_name")
-    repo_owner = environment_sync.options.get("owner")
-    environment_name = environment_sync.options.get("environment_name")
+    is_org_sync = environment_sync.options.get("org_sync", False)
 
-    handle_sync_event(
-        environment_sync,
-        sync_github_secrets,
-        access_token,
-        repo_name,
-        repo_owner,
-        api_host,
-        environment_name,
-    )
+    if is_org_sync:
+        org = environment_sync.options.get("org")
+        visibility = environment_sync.options.get("visibility", "all")
+        handle_sync_event(
+            environment_sync,
+            sync_github_org_secrets,
+            access_token,
+            org,
+            api_host,
+            visibility,
+        )
+    else:
+        repo_name = environment_sync.options.get("repo_name")
+        repo_owner = environment_sync.options.get("owner")
+        environment_name = environment_sync.options.get("environment_name")
+
+        handle_sync_event(
+            environment_sync,
+            sync_github_secrets,
+            access_token,
+            repo_name,
+            repo_owner,
+            api_host,
+            environment_name,
+        )
 
 
 @job("default", timeout=DEFAULT_TIMEOUT)
