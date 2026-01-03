@@ -38,7 +38,7 @@ export const SetupGhAuth = () => {
 
     const hostname = `${window.location.protocol}//${window.location.host}`
     const redirectUri = `${hostname}/service/oauth/github/callback`
-    const scope = 'user,repo,admin:repo_hook,read:org'
+    const scope = 'user,repo,admin:repo_hook,admin:org'
 
     const statePayload = {
       returnUrl: path,

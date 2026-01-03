@@ -1,4 +1,5 @@
 import GetGithubRepos from '@/graphql/queries/syncing/github/getRepos.gql'
+import GetGithubOrgs from '@/graphql/queries/syncing/github/getOrgs.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
@@ -7,8 +8,13 @@ import GetGithubEnvironments from '@/graphql/queries/syncing/github/getEnvironme
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import { EnvironmentType, GitHubRepoType, ProviderCredentialsType } from '@/apollo/graphql'
-import { Combobox, RadioGroup, Transition } from '@headlessui/react'
+import {
+  EnvironmentType,
+  GitHubRepoType,
+  GitHubOrgType,
+  ProviderCredentialsType,
+} from '@/apollo/graphql'
+import { Combobox, RadioGroup, Tab, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
   FaAngleDoubleDown,
@@ -30,20 +36,43 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   const { appId, closeModal } = props
 
   const [createGhActionsSync, { data: syncData, loading: creating }] =
-    useMutation(CreateNewGhActionsSync)
+    useMutation(CreateNewGhActionsSync, {
+      onCompleted: () => {
+        toast.success('Created new Sync!')
+        closeModal()
+      },
+    })
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
+  const [selectedOrg, setSelectedOrg] = useState<GitHubOrgType | undefined>(undefined)
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined)
   const [query, setQuery] = useState('')
+  const [orgQuery, setOrgQuery] = useState('')
   const [envQuery, setEnvQuery] = useState('')
 
   const [repos, setRepos] = useState<GitHubRepoType[]>([])
+  const [orgs, setOrgs] = useState<GitHubOrgType[]>([])
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
 
+  const [isOrgSync, setIsOrgSync] = useState(false)
+  const [orgVisibility, setOrgVisibility] = useState<'all' | 'private'>('all')
   const [credentialsValid, setCredentialsValid] = useState(false)
+
+  const visibilityOptions = [
+    {
+      value: 'all',
+      label: 'All repositories',
+      description: 'Make this secret available to all repositories in the organization.',
+    },
+    {
+      value: 'private',
+      label: 'Private repositories',
+      description: 'Make this secret available only to private repositories in the organization.',
+    },
+  ]
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
@@ -55,6 +84,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   })
 
   const [getGhRepos, { loading: loadingRepos }] = useLazyQuery(GetGithubRepos)
+  const [getGhOrgs, { loading: loadingOrgs }] = useLazyQuery(GetGithubOrgs)
 
   const { data: environmentsData } = useQuery(GetGithubEnvironments, {
     variables: {
@@ -88,32 +118,50 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
       toast.error('Please select credential to use for this sync')
       return false
     } else if (!credentialsValid) {
-      const { data: reposData } = await getGhRepos({
-        variables: {
-          credentialId: credential.id,
-        },
-      })
-      if (reposData?.githubRepos) {
-        setRepos(reposData?.githubRepos)
-        setCredentialsValid(true)
+      const [reposResult, orgsResult] = await Promise.all([
+        getGhRepos({ variables: { credentialId: credential.id } }),
+        getGhOrgs({ variables: { credentialId: credential.id } }),
+      ])
+      if (reposResult.data?.githubRepos) {
+        setRepos(reposResult.data.githubRepos)
       }
-    } else if (selectedRepo === undefined) {
+      if (orgsResult.data?.githubOrgs) {
+        setOrgs(orgsResult.data.githubOrgs)
+      }
+      setCredentialsValid(true)
+    } else if (isOrgSync && selectedOrg === undefined) {
+      toast.error('Please select an organization to sync with!')
+      return false
+    } else if (!isOrgSync && selectedRepo === undefined) {
       toast.error('Please select a repo to sync with!')
       return false
     } else {
-      await createGhActionsSync({
-        variables: {
-          envId: phaseEnv?.id,
-          path,
-          repoName: selectedRepo.name,
-          owner: selectedRepo.owner,
-          credentialId: credential.id,
-          environmentName: selectedEnvironment || null,
-        },
-        refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
-      })
-      toast.success('Created new Sync!')
-      closeModal()
+      if (isOrgSync) {
+        await createGhActionsSync({
+          variables: {
+            envId: phaseEnv?.id,
+            path,
+            owner: selectedOrg!.name,
+            credentialId: credential.id,
+            orgSync: true,
+            repoVisibility: orgVisibility,
+          },
+          refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
+        })
+      } else {
+        await createGhActionsSync({
+          variables: {
+            envId: phaseEnv?.id,
+            path,
+            repoName: selectedRepo!.name,
+            owner: selectedRepo!.owner,
+            credentialId: credential.id,
+            environmentName: selectedEnvironment || null,
+            orgSync: false,
+          },
+          refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
+        })
+      }
     }
   }
 
@@ -127,6 +175,13 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
     const repoOwnerMatches = repo.owner?.toLowerCase().includes(queryLower) || false
 
     return repoNameMatches || repoOwnerMatches // Include the repo if either name or owner matches the query
+  })
+
+  const filteredOrgs = orgs.filter((org) => {
+    if (orgQuery === '') {
+      return true
+    }
+    return org.name?.toLowerCase().includes(orgQuery.toLowerCase()) || false
   })
 
   return (
@@ -200,197 +255,373 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
             <div className="grid grid-cols-2 gap-8">
               <div className="relative col-span-2">
-                <Combobox as="div" value={selectedRepo} onChange={setSelectedRepo}>
-                  {({ open }) => (
-                    <>
-                      <div className="space-y-2">
-                        <Combobox.Label as={Fragment}>
-                          <label className="block text-neutral-500 text-sm" htmlFor="name">
-                            GitHub Repository
-                          </label>
-                        </Combobox.Label>
-                        <div className="w-full relative flex items-center">
-                          <Combobox.Input
-                            className="w-full"
-                            onChange={(event) => setQuery(event.target.value)}
-                            required
-                            displayValue={(repo: GitHubRepoType) =>
-                              repo ? `${repo?.owner}/${repo?.name}` : query || ''
-                            }
-                          />
-                          <div className="absolute inset-y-0 right-2 flex items-center">
-                            <Combobox.Button>
-                              <FaChevronDown
-                                className={clsx(
-                                  'text-neutral-500 transform transition ease cursor-pointer',
-                                  open ? 'rotate-180' : 'rotate-0'
-                                )}
-                              />
-                            </Combobox.Button>
-                          </div>
+                <Tab.Group
+                  selectedIndex={isOrgSync ? 1 : 0}
+                  onChange={(index: number) => setIsOrgSync(index === 1)}
+                >
+                  <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 text-zinc-900 dark:text-zinc-100">
+                    <Tab as={Fragment}>
+                      {({ selected }) => (
+                        <div
+                          className={clsx(
+                            'p-3 font-medium border-b focus:outline-none',
+                            selected
+                              ? 'border-emerald-500 font-semibold'
+                              : 'border-transparent cursor-pointer'
+                          )}
+                        >
+                          Repository
                         </div>
-                      </div>
-                      <Transition
-                        enter="transition duration-100 ease-out"
-                        enterFrom="transform scale-95 opacity-0"
-                        enterTo="transform scale-100 opacity-100"
-                        leave="transition duration-75 ease-out"
-                        leaveFrom="transform scale-100 opacity-100"
-                        leaveTo="transform scale-95 opacity-0"
-                      >
-                        <Combobox.Options as={Fragment}>
-                          <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
-                            {filteredRepos.map((repo: GitHubRepoType) => (
-                              <Combobox.Option
-                                as="div"
-                                key={`${repo.owner}/${repo.name}`}
-                                value={repo}
-                              >
-                                {({ active, selected }) => (
-                                  <div
-                                    className={clsx(
-                                      'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
-                                      active && 'bg-zinc-300 dark:bg-zinc-700'
-                                    )}
+                      )}
+                    </Tab>
+                    <Tab as={Fragment}>
+                      {({ selected }) => (
+                        <div
+                          className={clsx(
+                            'p-3 font-medium border-b focus:outline-none',
+                            selected
+                              ? 'border-emerald-500 font-semibold'
+                              : 'border-transparent cursor-pointer'
+                          )}
+                        >
+                          Organization
+                        </div>
+                      )}
+                    </Tab>
+                  </Tab.List>
+                  <Tab.Panels className="py-4">
+                    <Tab.Panel>
+                      <div className="space-y-6">
+                        <Combobox as="div" value={selectedRepo} onChange={setSelectedRepo}>
+                          {({ open }) => (
+                            <>
+                              <div className="space-y-2">
+                                <Combobox.Label as={Fragment}>
+                                  <label
+                                    className="block text-neutral-500 text-sm"
+                                    htmlFor="name"
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <SiGithub className="shrink-0 text-black dark:text-white" />
-                                      <div>
-                                        <div className="font-semibold text-black dark:text-white">
-                                          {repo.name}{' '}
-                                          <span
+                                    GitHub Repository
+                                  </label>
+                                </Combobox.Label>
+                                <div className="w-full relative flex items-center">
+                                  <Combobox.Input
+                                    className="w-full"
+                                    onChange={(event) => setQuery(event.target.value)}
+                                    required
+                                    displayValue={(repo: GitHubRepoType) =>
+                                      repo ? `${repo?.owner}/${repo?.name}` : query || ''
+                                    }
+                                  />
+                                  <div className="absolute inset-y-0 right-2 flex items-center">
+                                    <Combobox.Button>
+                                      <FaChevronDown
+                                        className={clsx(
+                                          'text-neutral-500 transform transition ease cursor-pointer',
+                                          open ? 'rotate-180' : 'rotate-0'
+                                        )}
+                                      />
+                                    </Combobox.Button>
+                                  </div>
+                                </div>
+                              </div>
+                              <Transition
+                                enter="transition duration-100 ease-out"
+                                enterFrom="transform scale-95 opacity-0"
+                                enterTo="transform scale-100 opacity-100"
+                                leave="transition duration-75 ease-out"
+                                leaveFrom="transform scale-100 opacity-100"
+                                leaveTo="transform scale-95 opacity-0"
+                              >
+                                <Combobox.Options as={Fragment}>
+                                  <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
+                                    {filteredRepos.map((repo: GitHubRepoType) => (
+                                      <Combobox.Option
+                                        as="div"
+                                        key={`${repo.owner}/${repo.name}`}
+                                        value={repo}
+                                      >
+                                        {({ active, selected }) => (
+                                          <div
                                             className={clsx(
-                                              'text-2xs px-2 py-0.5 rounded-full font-medium',
-                                              repo.type === 'private'
-                                                ? 'bg-amber-100 dark:bg-amber-400/10 text-amber-800 dark:text-amber-400  ring-1 ring-inset ring-amber-400/20'
-                                                : 'bg-neutral-200 dark:bg-neutral-700 ring-1 ring-inset ring-neutral-500/20 text-neutral-500 dark:text-neutral-300'
+                                              'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
+                                              active && 'bg-zinc-300 dark:bg-zinc-700'
                                             )}
                                           >
-                                            {repo.type}
-                                          </span>
-                                        </div>
-                                        <div className="text-neutral-500 text-2xs">
-                                          {repo.owner}
-                                        </div>
-                                      </div>
+                                            <div className="flex items-center gap-2">
+                                              <SiGithub className="shrink-0 text-black dark:text-white" />
+                                              <div>
+                                                <div className="font-semibold text-black dark:text-white">
+                                                  {repo.name}{' '}
+                                                  <span
+                                                    className={clsx(
+                                                      'text-2xs px-2 py-0.5 rounded-full font-medium',
+                                                      repo.type === 'private'
+                                                        ? 'bg-amber-100 dark:bg-amber-400/10 text-amber-800 dark:text-amber-400  ring-1 ring-inset ring-amber-400/20'
+                                                        : 'bg-neutral-200 dark:bg-neutral-700 ring-1 ring-inset ring-neutral-500/20 text-neutral-500 dark:text-neutral-300'
+                                                    )}
+                                                  >
+                                                    {repo.type}
+                                                  </span>
+                                                </div>
+                                                <div className="text-neutral-500 text-2xs">
+                                                  {repo.owner}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            {selected && (
+                                              <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                            )}
+                                          </div>
+                                        )}
+                                      </Combobox.Option>
+                                    ))}
+                                  </div>
+                                </Combobox.Options>
+                              </Transition>
+                            </>
+                          )}
+                        </Combobox>
+
+                        <Combobox
+                          as="div"
+                          value={selectedEnvironment}
+                          onChange={setSelectedEnvironment}
+                        >
+                          {({ open }) => (
+                            <>
+                              <div className="space-y-2">
+                                <Combobox.Label as={Fragment}>
+                                  <label
+                                    className="block text-neutral-500 text-sm"
+                                    htmlFor="gh-env"
+                                  >
+                                    GitHub Environment (optional)
+                                  </label>
+                                </Combobox.Label>
+                                <div className="w-full relative flex items-center">
+                                  <Combobox.Input
+                                    className={clsx(
+                                      'w-full',
+                                      !selectedRepo &&
+                                        'opacity-60 cursor-not-allowed pointer-events-none'
+                                    )}
+                                    onChange={(e) => setEnvQuery(e.target.value)}
+                                    displayValue={(env?: string) => (env ? env : envQuery)}
+                                    aria-disabled={!selectedRepo}
+                                    placeholder={
+                                      !selectedRepo
+                                        ? 'Select a repository'
+                                        : environments.length === 0
+                                          ? 'No environments found'
+                                          : 'Select an environment'
+                                    }
+                                  />
+                                  <div className="absolute inset-y-0 right-2 flex items-center">
+                                    <Combobox.Button
+                                      aria-disabled={!selectedRepo}
+                                      className={clsx(!selectedRepo && 'pointer-events-none')}
+                                    >
+                                      <FaChevronDown
+                                        className={clsx(
+                                          'text-neutral-500 transform transition ease',
+                                          open ? 'rotate-180' : 'rotate-0',
+                                          !selectedRepo && 'opacity-50 cursor-not-allowed'
+                                        )}
+                                      />
+                                    </Combobox.Button>
+                                  </div>
+                                </div>
+                              </div>
+                              {selectedRepo && (
+                                <Transition
+                                  enter="transition duration-100 ease-out"
+                                  enterFrom="transform scale-95 opacity-0"
+                                  enterTo="transform scale-100 opacity-100"
+                                  leave="transition duration-75 ease-out"
+                                  leaveFrom="transform scale-100 opacity-100"
+                                  leaveTo="transform scale-95 opacity-0"
+                                >
+                                  <Combobox.Options as={Fragment}>
+                                    <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
+                                      <Combobox.Option as="div" key="__none__" value={undefined}>
+                                        {({ active, selected }) => (
+                                          <div
+                                            className={clsx(
+                                              'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
+                                              active && 'bg-zinc-300 dark:bg-zinc-700'
+                                            )}
+                                          >
+                                            <div className="text-neutral-500 text-sm">
+                                              No environment (repo-level)
+                                            </div>
+                                            {selected && (
+                                              <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                            )}
+                                          </div>
+                                        )}
+                                      </Combobox.Option>
+                                      {environments
+                                        .filter((env: string) =>
+                                          envQuery
+                                            ? env.toLowerCase().includes(envQuery.toLowerCase())
+                                            : true
+                                        )
+                                        .map((env: string) => (
+                                          <Combobox.Option as="div" key={env} value={env}>
+                                            {({ active, selected }) => (
+                                              <div
+                                                className={clsx(
+                                                  'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
+                                                  active && 'bg-zinc-300 dark:bg-zinc-700'
+                                                )}
+                                              >
+                                                <div className="font-semibold text-black dark:text-white">
+                                                  {env}
+                                                </div>
+                                                {selected && (
+                                                  <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                                )}
+                                              </div>
+                                            )}
+                                          </Combobox.Option>
+                                        ))}
                                     </div>
-                                    {selected && (
-                                      <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                  </Combobox.Options>
+                                </Transition>
+                              )}
+                            </>
+                          )}
+                        </Combobox>
+                      </div>
+                    </Tab.Panel>
+                    <Tab.Panel>
+                      <div className="space-y-6">
+                        <Combobox as="div" value={selectedOrg} onChange={setSelectedOrg}>
+                          {({ open }) => (
+                            <>
+                              <div className="space-y-2">
+                                <Combobox.Label as={Fragment}>
+                                  <label className="block text-neutral-500 text-sm" htmlFor="org">
+                                    GitHub Organization
+                                  </label>
+                                </Combobox.Label>
+                                <div className="w-full relative flex items-center">
+                                  <Combobox.Input
+                                    className="w-full"
+                                    onChange={(event) => setOrgQuery(event.target.value)}
+                                    required
+                                    displayValue={(org: GitHubOrgType) =>
+                                      org ? org.name || '' : orgQuery || ''
+                                    }
+                                    placeholder={
+                                      orgs.length === 0
+                                        ? 'No organizations found'
+                                        : 'Select an organization'
+                                    }
+                                  />
+                                  <div className="absolute inset-y-0 right-2 flex items-center">
+                                    <Combobox.Button>
+                                      <FaChevronDown
+                                        className={clsx(
+                                          'text-neutral-500 transform transition ease cursor-pointer',
+                                          open ? 'rotate-180' : 'rotate-0'
+                                        )}
+                                      />
+                                    </Combobox.Button>
+                                  </div>
+                                </div>
+                              </div>
+                              <Transition
+                                enter="transition duration-100 ease-out"
+                                enterFrom="transform scale-95 opacity-0"
+                                enterTo="transform scale-100 opacity-100"
+                                leave="transition duration-75 ease-out"
+                                leaveFrom="transform scale-100 opacity-100"
+                                leaveTo="transform scale-95 opacity-0"
+                              >
+                                <Combobox.Options as={Fragment}>
+                                  <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
+                                    {filteredOrgs.length === 0 ? (
+                                      <div className="p-2 text-neutral-500 text-sm">
+                                        No organizations found
+                                      </div>
+                                    ) : (
+                                      filteredOrgs.map((org: GitHubOrgType) => (
+                                        <Combobox.Option as="div" key={org.name} value={org}>
+                                          {({ active, selected }) => (
+                                            <div
+                                              className={clsx(
+                                                'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
+                                                active && 'bg-zinc-300 dark:bg-zinc-700'
+                                              )}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <SiGithub className="shrink-0 text-black dark:text-white" />
+                                                <div>
+                                                  <div className="font-semibold text-black dark:text-white">
+                                                    {org.name}
+                                                  </div>
+                                                  <div className="text-neutral-500 text-2xs capitalize">
+                                                    {org.role}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              {selected && (
+                                                <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                              )}
+                                            </div>
+                                          )}
+                                        </Combobox.Option>
+                                      ))
                                     )}
                                   </div>
-                                )}
-                              </Combobox.Option>
-                            ))}
-                          </div>
-                        </Combobox.Options>
-                      </Transition>
-                    </>
-                  )}
-                </Combobox>
-              </div>
-              <div className="relative col-span-2">
-                <Combobox as="div" value={selectedEnvironment} onChange={setSelectedEnvironment}>
-                  {({ open }) => (
-                    <>
-                      <div className="space-y-2">
-                        <Combobox.Label as={Fragment}>
-                          <label className="block text-neutral-500 text-sm" htmlFor="gh-env">
-                            GitHub Environment (optional)
-                          </label>
-                        </Combobox.Label>
-                        <div className="w-full relative flex items-center">
-                          <Combobox.Input
-                            className={clsx(
-                              'w-full',
-                              !selectedRepo && 'opacity-60 cursor-not-allowed pointer-events-none'
-                            )}
-                            onChange={(e) => setEnvQuery(e.target.value)}
-                            displayValue={(env?: string) => (env ? env : envQuery)}
-                            aria-disabled={!selectedRepo}
-                            placeholder={
-                              !selectedRepo
-                                ? 'Select a repository'
-                                : environments.length === 0
-                                  ? 'No environments found'
-                                  : 'Select an environment'
-                            }
-                          />
-                          <div className="absolute inset-y-0 right-2 flex items-center">
-                            <Combobox.Button
-                              aria-disabled={!selectedRepo}
-                              className={clsx(!selectedRepo && 'pointer-events-none')}
-                            >
-                              <FaChevronDown
-                                className={clsx(
-                                  'text-neutral-500 transform transition ease',
-                                  open ? 'rotate-180' : 'rotate-0',
-                                  !selectedRepo && 'opacity-50 cursor-not-allowed'
-                                )}
-                              />
-                            </Combobox.Button>
-                          </div>
-                        </div>
-                      </div>
-                      {selectedRepo && (
-                        <Transition
-                          enter="transition duration-100 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-75 ease-out"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          <Combobox.Options as={Fragment}>
-                            <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
-                              <Combobox.Option as="div" key="__none__" value={undefined}>
-                                {({ active, selected }) => (
+                                </Combobox.Options>
+                              </Transition>
+                            </>
+                          )}
+                        </Combobox>
+
+                        <RadioGroup value={orgVisibility} onChange={setOrgVisibility}>
+                          <RadioGroup.Label as={Fragment}>
+                            <label className="block text-neutral-500 text-sm mb-2">
+                              Repository Access
+                            </label>
+                          </RadioGroup.Label>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {visibilityOptions.map((option) => (
+                              <RadioGroup.Option
+                                key={option.value}
+                                value={option.value}
+                                as={Fragment}
+                              >
+                                {({ active, checked }) => (
                                   <div
                                     className={clsx(
-                                      'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
-                                      active && 'bg-zinc-300 dark:bg-zinc-700'
+                                      'flex items-center gap-2 py-1 px-2 cursor-pointer bg-zinc-800 border border-zinc-800 rounded-full',
+                                      active && 'border-zinc-700',
+                                      checked && 'bg-zinc-700'
                                     )}
                                   >
-                                    <div className="text-neutral-500 text-sm">
-                                      No environment (repo-level)
-                                    </div>
-                                    {selected && (
-                                      <FaCheckCircle className="shrink-0 text-emerald-500" />
+                                    {checked ? (
+                                      <FaDotCircle className="text-emerald-500" />
+                                    ) : (
+                                      <FaCircle />
                                     )}
+                                    {option.label}
                                   </div>
                                 )}
-                              </Combobox.Option>
-                              {environments
-                                .filter((env: string) =>
-                                  envQuery
-                                    ? env.toLowerCase().includes(envQuery.toLowerCase())
-                                    : true
-                                )
-                                .map((env: string) => (
-                                  <Combobox.Option as="div" key={env} value={env}>
-                                    {({ active, selected }) => (
-                                      <div
-                                        className={clsx(
-                                          'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
-                                          active && 'bg-zinc-300 dark:bg-zinc-700'
-                                        )}
-                                      >
-                                        <div className="font-semibold text-black dark:text-white">
-                                          {env}
-                                        </div>
-                                        {selected && (
-                                          <FaCheckCircle className="shrink-0 text-emerald-500" />
-                                        )}
-                                      </div>
-                                    )}
-                                  </Combobox.Option>
-                                ))}
-                            </div>
-                          </Combobox.Options>
-                        </Transition>
-                      )}
-                    </>
-                  )}
-                </Combobox>
+                              </RadioGroup.Option>
+                            ))}
+                          </div>
+                          <p className="text-xs text-neutral-500 mt-2">
+                            {visibilityOptions.find((o) => o.value === orgVisibility)?.description}
+                          </p>
+                        </RadioGroup>
+                      </div>
+                    </Tab.Panel>
+                  </Tab.Panels>
+                </Tab.Group>
               </div>
             </div>
           </div>
@@ -403,7 +634,11 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
               </Button>
             )}
           </div>
-          <Button isLoading={credentialsValid ? creating : loadingRepos} variant="primary" type="submit">
+          <Button
+            isLoading={credentialsValid ? creating : loadingRepos || loadingOrgs}
+            variant="primary"
+            type="submit"
+          >
             {credentialsValid ? 'Create' : 'Next'}
           </Button>
         </div>

@@ -42,6 +42,7 @@ type Query {
   cloudflareWorkers(credentialId: ID): [CloudflareWorkerType]
   awsSecrets(credentialId: ID): [AWSSecretType]
   githubRepos(credentialId: ID): [GitHubRepoType]
+  githubOrgs(credentialId: ID): [GitHubOrgType]
   githubEnvironments(credentialId: ID, owner: String, repoName: String): [String]
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
@@ -81,6 +82,7 @@ value as specified by
 """
 scalar DateTime
 
+"""An enumeration."""
 enum ApiOrganisationPlanChoices {
   """Free"""
   FR
@@ -189,6 +191,7 @@ type EnvironmentType {
   syncs: [EnvironmentSyncType]!
 }
 
+"""An enumeration."""
 enum ApiEnvironmentEnvTypeChoices {
   """Development"""
   DEV
@@ -346,6 +349,7 @@ type AwsIamConfigType {
   stsEndpoint: String
 }
 
+"""An enumeration."""
 enum ApiSecretEventEventTypeChoices {
   """Create"""
   C
@@ -409,6 +413,7 @@ type ProviderType {
   authScheme: String
 }
 
+"""An enumeration."""
 enum ApiDynamicSecretProviderChoices {
   """AWS"""
   AWS
@@ -456,6 +461,7 @@ type DynamicSecretLeaseType {
   events: [DynamicSecretLeaseEventType]
 }
 
+"""An enumeration."""
 enum ApiDynamicSecretLeaseStatusChoices {
   """Created"""
   CREATED
@@ -493,6 +499,7 @@ type DynamicSecretLeaseEventType {
   createdAt: DateTime!
 }
 
+"""An enumeration."""
 enum ApiDynamicSecretLeaseEventEventTypeChoices {
   """Created"""
   CREATED
@@ -524,6 +531,7 @@ type EnvironmentSyncType {
   history: [EnvironmentSyncEventType!]!
 }
 
+"""An enumeration."""
 enum ApiEnvironmentSyncStatusChoices {
   """In progress"""
   IN_PROGRESS
@@ -557,6 +565,7 @@ type EnvironmentSyncEventType {
   completedAt: DateTime
 }
 
+"""An enumeration."""
 enum ApiEnvironmentSyncEventStatusChoices {
   """In progress"""
   IN_PROGRESS
@@ -632,6 +641,7 @@ type ActivatedPhaseLicenseType {
   activatedAt: DateTime!
 }
 
+"""An enumeration."""
 enum ApiActivatedPhaseLicensePlanChoices {
   """Free"""
   FR
@@ -780,6 +790,11 @@ type GitHubRepoType {
   name: String
   owner: String
   type: String
+}
+
+type GitHubOrgType {
+  name: String
+  role: String
 }
 
 type GitLabProjectType {
@@ -1000,7 +1015,7 @@ type Mutation {
   createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
   createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
   createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, path: String, secretName: String): CreateAWSSecretsManagerSync
-  createGhActionsSync(credentialId: ID, envId: ID, environmentName: String, owner: String, path: String, repoName: String): CreateGitHubActionsSync
+  createGhActionsSync(credentialId: ID, envId: ID, environmentName: String, orgSync: Boolean, owner: String, path: String, repoName: String, repoVisibility: String): CreateGitHubActionsSync
   createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync

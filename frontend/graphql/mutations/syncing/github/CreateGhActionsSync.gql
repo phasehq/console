@@ -1,5 +1,5 @@
-mutation CreateNewGhActionsSync($envId: ID!, $path: String!, $repoName: String!, $owner: String!, $credentialId: ID!, $environmentName: String) {
-  createGhActionsSync(envId: $envId, path: $path, repoName: $repoName, owner: $owner, credentialId: $credentialId, environmentName: $environmentName) {
+mutation CreateNewGhActionsSync($envId: ID!, $path: String!, $repoName: String, $owner: String!, $credentialId: ID!, $environmentName: String, $orgSync: Boolean, $repoVisibility: String) {
+  createGhActionsSync(envId: $envId, path: $path, repoName: $repoName, owner: $owner, credentialId: $credentialId, environmentName: $environmentName, orgSync: $orgSync, repoVisibility: $repoVisibility) {
     sync {
       id
       environment {
