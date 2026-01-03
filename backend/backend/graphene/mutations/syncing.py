@@ -264,15 +264,27 @@ class CreateGitHubActionsSync(graphene.Mutation):
         env_id = graphene.ID()
         path = graphene.String()
         credential_id = graphene.ID()
-        repo_name = graphene.String()
+        repo_name = graphene.String(required=False)
         owner = graphene.String()
         environment_name = graphene.String(required=False)
+        org_sync = graphene.Boolean(required=False)
+        repo_visibility = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
     @classmethod
     def mutate(
-        cls, root, info, env_id, path, credential_id, repo_name, owner, environment_name=None
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        owner,
+        repo_name=None,
+        environment_name=None,
+        org_sync=False,
+        repo_visibility="all",
     ):
         service_id = "github_actions"
         service_config = ServiceConfig.get_service_config(service_id)
@@ -285,9 +297,18 @@ class CreateGitHubActionsSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
-        sync_options = {"repo_name": repo_name, "owner": owner}
-        if environment_name:
-            sync_options["environment_name"] = environment_name
+        if org_sync:
+            sync_options = {
+                "org": owner,
+                "org_sync": True,
+                "visibility": repo_visibility or "all",
+            }
+        else:
+            if not repo_name:
+                raise GraphQLError("Repository name is required for repository syncs")
+            sync_options = {"repo_name": repo_name, "owner": owner}
+            if environment_name:
+                sync_options["environment_name"] = environment_name
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None
@@ -295,6 +316,10 @@ class CreateGitHubActionsSync(graphene.Mutation):
 
         for es in existing_syncs:
             if es.options == sync_options:
+                if org_sync:
+                    raise GraphQLError(
+                        "A sync already exists for this GitHub organization!"
+                    )
                 raise GraphQLError("A sync already exists for this GitHub repo!")
 
         sync = EnvironmentSync.objects.create(
