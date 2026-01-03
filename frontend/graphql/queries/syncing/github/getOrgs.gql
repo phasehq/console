@@ -1,0 +1,7 @@
+query GetGithubOrgs($credentialId: ID!) {
+  githubOrgs(credentialId: $credentialId) {
+    name
+    role
+  }
+}
+
