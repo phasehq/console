@@ -20,7 +20,7 @@ from api.utils.access.permissions import (
 )
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.aws.secrets_manager import list_aws_secrets
-from api.utils.syncing.github.actions import list_repos, list_environments
+from api.utils.syncing.github.actions import list_repos, list_environments, list_orgs
 from api.utils.syncing.vault.main import test_vault_creds
 from api.utils.syncing.nomad.main import test_nomad_creds
 from api.utils.syncing.gitlab.main import list_gitlab_groups, list_gitlab_projects
@@ -195,6 +195,14 @@ def resolve_github_environments(root, info, credential_id, owner, repo_name):
     try:
         envs = list_environments(credential_id, owner, repo_name)
         return envs
+    except Exception as ex:
+        raise GraphQLError(ex)
+
+
+def resolve_gh_orgs(root, info, credential_id):
+    try:
+        orgs = list_orgs(credential_id)
+        return orgs
     except Exception as ex:
         raise GraphQLError(ex)
 
