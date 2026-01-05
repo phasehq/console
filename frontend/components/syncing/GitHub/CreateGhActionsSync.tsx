@@ -261,9 +261,9 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                     const orgSync = index === 1
                     setIsOrgSync(orgSync)
                     if (orgSync) {
-                      setSelectedRepo(null as unknown as GitHubRepoType | null)
+                      setSelectedRepo(undefined)
                     } else {
-                      setSelectedOrg(null as unknown as GitHubOrgType | null)
+                      setSelectedOrg(undefined)
                     }
                   }}
                 >
