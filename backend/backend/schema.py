@@ -140,6 +140,7 @@ from .graphene.mutations.syncing import (
     CreateAWSSecretsManagerSync,
     CreateCloudflarePagesSync,
     CreateGitHubActionsSync,
+    CreateGitHubDependabotSync,
     CreateGitLabCISync,
     CreateNomadSync,
     CreateProviderCredentials,
@@ -1100,6 +1101,7 @@ class Mutation(graphene.ObjectType):
 
     # GitHub
     create_gh_actions_sync = CreateGitHubActionsSync.Field()
+    create_gh_dependabot_sync = CreateGitHubDependabotSync.Field()
 
     # Vault
     create_vault_sync = CreateVaultSync.Field()
