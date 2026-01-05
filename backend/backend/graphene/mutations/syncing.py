@@ -394,7 +394,13 @@ class CreateGitHubDependabotSync(graphene.Mutation):
         )
 
         for es in existing_syncs:
-            if org_sync and es.options.get("org") == owner and es.options.get("org_sync"):
+            if (
+                org_sync
+                and es.options.get("org") == owner
+                and es.options.get("org_sync")
+                and es.options.get("visibility", "all")
+                == sync_options.get("visibility", "all")
+            ):
                 raise GraphQLError(
                     "A sync already exists for this GitHub organization!"
                 )
