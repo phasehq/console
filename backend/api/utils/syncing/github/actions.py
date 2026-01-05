@@ -318,7 +318,10 @@ def sync_github_secrets(
         for key, value in local_secrets.items():
             encrypted_value = encrypt_secret(public_key_value, value)
             if len(encrypted_value) > 64 * 1024:
-                continue  # Skip oversized secret
+                message = (
+                    f"Secret '{key}' is too large to sync. GitHub Actions has a limit of 64KB for secrets."
+                )
+                return False, {"message": message}
 
             secret_data = {"encrypted_value": encrypted_value, "key_id": key_id}
             if environment_name:
@@ -426,7 +429,10 @@ def sync_github_org_secrets(
         for key, value in local_secrets.items():
             encrypted_value = encrypt_secret(public_key_value, value)
             if len(encrypted_value) > 64 * 1024:
-                continue  # Skip oversized secret
+                message = (
+                    f"Secret '{key}' is too large to sync. GitHub Actions has a limit of 64KB for secrets."
+                )
+                return False, {"message": message}
 
             secret_data = {
                 "encrypted_value": encrypted_value,
