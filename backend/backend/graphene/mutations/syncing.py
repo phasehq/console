@@ -318,11 +318,13 @@ class CreateGitHubActionsSync(graphene.Mutation):
         )
 
         for es in existing_syncs:
-            if es.options == sync_options:
-                if org_sync:
-                    raise GraphQLError(
-                        "A sync already exists for this GitHub organization!"
-                    )
+            # Block duplicate org syncs to the same org regardless of visibility
+            if org_sync and es.options.get("org") == owner and es.options.get("org_sync"):
+                raise GraphQLError(
+                    "A sync already exists for this GitHub organization!"
+                )
+            # Repo syncs must match all options to be considered duplicate
+            if not org_sync and es.options == sync_options:
                 raise GraphQLError("A sync already exists for this GitHub repo!")
 
         sync = EnvironmentSync.objects.create(
