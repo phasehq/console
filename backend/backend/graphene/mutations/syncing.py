@@ -280,8 +280,8 @@ class CreateGitHubActionsSync(graphene.Mutation):
         env_id,
         path,
         credential_id,
-        owner,
         repo_name=None,
+        owner=None,
         environment_name=None,
         org_sync=False,
         repo_visibility="all",
@@ -290,6 +290,9 @@ class CreateGitHubActionsSync(graphene.Mutation):
         service_config = ServiceConfig.get_service_config(service_id)
 
         env = Environment.objects.get(id=env_id)
+
+        if not owner:
+            raise GraphQLError("Owner is required for GitHub Actions syncs")
 
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
