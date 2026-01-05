@@ -1016,6 +1016,7 @@ type Mutation {
   createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
   createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, path: String, secretName: String): CreateAWSSecretsManagerSync
   createGhActionsSync(credentialId: ID, envId: ID, environmentName: String, orgSync: Boolean, owner: String, path: String, repoName: String, repoVisibility: String): CreateGitHubActionsSync
+  createGhDependabotSync(credentialId: ID, envId: ID, orgSync: Boolean, owner: String, path: String, repoName: String, repoVisibility: String): CreateGitHubDependabotSync
   createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
@@ -1314,6 +1315,10 @@ type CreateAWSSecretsManagerSync {
 }
 
 type CreateGitHubActionsSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateGitHubDependabotSync {
   sync: EnvironmentSyncType
 }
 
