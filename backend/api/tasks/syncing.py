@@ -10,6 +10,10 @@ from api.utils.syncing.github.actions import (
     sync_github_secrets,
     sync_github_org_secrets,
 )
+from api.utils.syncing.github.dependabot import (
+    sync_github_dependabot_secrets,
+    sync_github_dependabot_org_secrets,
+)
 from api.utils.syncing.vault.main import sync_vault_secrets
 from api.utils.syncing.nomad.main import sync_nomad_secrets
 from api.utils.syncing.gitlab.main import sync_gitlab_secrets
@@ -81,6 +85,15 @@ def trigger_sync_tasks(env_sync):
         env_sync.save()
 
         job = perform_github_actions_sync.delay(env_sync)
+        job_id = job.get_id()
+
+        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+
+    elif env_sync.service == ServiceConfig.GITHUB_DEPENDABOT["id"]:
+        env_sync.status = EnvironmentSync.IN_PROGRESS
+        env_sync.save()
+
+        job = perform_github_dependabot_sync.delay(env_sync)
         job_id = job.get_id()
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
@@ -282,6 +295,37 @@ def perform_github_actions_sync(environment_sync):
             repo_owner,
             api_host,
             environment_name,
+        )
+
+
+@job("default", timeout=DEFAULT_TIMEOUT)
+def perform_github_dependabot_sync(environment_sync):
+
+    access_token, api_host = get_gh_actions_credentials(environment_sync)
+    is_org_sync = environment_sync.options.get("org_sync", False)
+
+    if is_org_sync:
+        org = environment_sync.options.get("org")
+        visibility = environment_sync.options.get("visibility", "all")
+        handle_sync_event(
+            environment_sync,
+            sync_github_dependabot_org_secrets,
+            access_token,
+            org,
+            api_host,
+            visibility,
+        )
+    else:
+        repo_name = environment_sync.options.get("repo_name")
+        repo_owner = environment_sync.options.get("owner")
+
+        handle_sync_event(
+            environment_sync,
+            sync_github_dependabot_secrets,
+            access_token,
+            repo_name,
+            repo_owner,
+            api_host,
         )
 
 
