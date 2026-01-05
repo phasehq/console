@@ -50,12 +50,12 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
     {
       value: 'all',
       label: 'All repositories',
-      description: 'This secret may be used by any repository in the organization.',
+      description: 'Make this secret available to any repository in the organization.',
     },
     {
       value: 'private',
       label: 'Private repositories',
-      description: 'This secret may only be used by private repositories in the organization.',
+      description: 'Make this secret available only to private repositories in the organization.',
     },
   ]
 
