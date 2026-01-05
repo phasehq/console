@@ -23,7 +23,7 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
 
   const { appId, closeModal } = props
 
-  const [createGhDependabotSync, { data: syncData, loading: creating }] = useMutation(CreateNewGhDependabotSync, {
+  const [createGhDependabotSync, { loading: creating }] = useMutation(CreateNewGhDependabotSync, {
     onCompleted: () => {
       toast.success('Created new Sync!')
       closeModal()
