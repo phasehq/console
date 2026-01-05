@@ -257,7 +257,15 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
               <div className="relative col-span-2">
                 <Tab.Group
                   selectedIndex={isOrgSync ? 1 : 0}
-                  onChange={(index: number) => setIsOrgSync(index === 1)}
+                  onChange={(index: number) => {
+                    const orgSync = index === 1
+                    setIsOrgSync(orgSync)
+                    if (orgSync) {
+                      setSelectedRepo(null as unknown as GitHubRepoType | null)
+                    } else {
+                      setSelectedOrg(null as unknown as GitHubOrgType | null)
+                    }
+                  }}
                 >
                   <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 text-zinc-900 dark:text-zinc-100">
                     <Tab as={Fragment}>
