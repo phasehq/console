@@ -366,7 +366,6 @@ class CreateGitHubDependabotSync(graphene.Mutation):
         repo_visibility="all",
     ):
         service_id = "github_dependabot"
-        service_config = ServiceConfig.get_service_config(service_id)
 
         env = Environment.objects.get(id=env_id)
 
