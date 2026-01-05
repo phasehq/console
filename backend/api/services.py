@@ -129,6 +129,13 @@ class ServiceConfig:
         "provider": Providers.GITHUB,
         "resource_type": "repo",
     }
+    
+    GITHUB_DEPENDABOT = {
+        "id": "github_dependabot",
+        "name": "GitHub Dependabot",
+        "provider": Providers.GITHUB,
+        "resource_type": "repo",
+    }
 
     GITLAB_CI = {
         "id": "gitlab_ci",
