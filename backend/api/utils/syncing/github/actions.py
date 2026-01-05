@@ -130,14 +130,7 @@ def list_orgs(credential_id):
             break
 
         for org in orgs_on_page:
-            # Get org membership to determine role
-            membership_response = requests.get(
-                f"{api_host}/user/memberships/orgs/{org['login']}", headers=headers
-            )
-            role = "member"
-            if membership_response.status_code == 200:
-                role = membership_response.json().get("role", "member")
-
+            role = org.get("role", "member")
             all_orgs.append({"name": org["login"], "role": role})
 
         page += 1
