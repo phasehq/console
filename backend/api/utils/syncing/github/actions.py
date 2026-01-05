@@ -370,9 +370,15 @@ def get_all_org_secrets(org, headers, api_host=GITHUB_CLOUD_API_URL):
             f"{api_host}/orgs/{org}/actions/secrets?page={page}",
             headers=headers,
         )
-        if response.status_code != 200 or not response.json().get("secrets"):
+        if response.status_code != 200:
             break
-        all_secrets.extend(response.json()["secrets"])
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            break
+        if not data.get("secrets"):
+            break
+        all_secrets.extend(data["secrets"])
         page += 1
     return all_secrets
 
