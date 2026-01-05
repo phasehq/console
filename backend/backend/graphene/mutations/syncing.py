@@ -340,6 +340,81 @@ class CreateGitHubActionsSync(graphene.Mutation):
         return CreateGitHubActionsSync(sync=sync)
 
 
+class CreateGitHubDependabotSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        repo_name = graphene.String(required=False)
+        owner = graphene.String()
+        org_sync = graphene.Boolean(required=False)
+        repo_visibility = graphene.String(required=False)
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        repo_name=None,
+        owner=None,
+        org_sync=False,
+        repo_visibility="all",
+    ):
+        service_id = "github_dependabot"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        if not owner:
+            raise GraphQLError("Owner is required for GitHub Dependabot syncs")
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        if org_sync:
+            sync_options = {
+                "org": owner,
+                "org_sync": True,
+                "visibility": repo_visibility or "all",
+            }
+        else:
+            if not repo_name:
+                raise GraphQLError("Repository name is required for repository syncs")
+            sync_options = {"repo_name": repo_name, "owner": owner}
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        for es in existing_syncs:
+            if org_sync and es.options.get("org") == owner and es.options.get("org_sync"):
+                raise GraphQLError(
+                    "A sync already exists for this GitHub organization!"
+                )
+            if not org_sync and es.options == sync_options:
+                raise GraphQLError("A sync already exists for this GitHub repo!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateGitHubDependabotSync(sync=sync)
+
+
 class CreateVaultSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
