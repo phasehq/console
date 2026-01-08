@@ -1084,7 +1084,7 @@ class CreatePersonalSecretMutation(graphene.Mutation):
             organisation=org, user=info.context.user, deleted_at=None
         )
 
-        if not user_can_access_environment(info.context.user, secret.environment.id):
+        if not user_can_access_environment(info.context.user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this secret")
 
         override, _ = PersonalSecret.objects.get_or_create(
@@ -1111,7 +1111,7 @@ class DeletePersonalSecretMutation(graphene.Mutation):
             organisation=org, user=info.context.user, deleted_at=None
         )
 
-        if not user_can_access_environment(info.context.user, secret.environment.id):
+        if not user_can_access_environment(info.context.user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this secret")
 
         PersonalSecret.objects.filter(secret_id=secret_id, user=org_member).delete()
