@@ -12,6 +12,9 @@ BLOCKED_NETWORKS = [
     ipaddress.ip_network("127.0.0.0/8"),     # Loopback
     ipaddress.ip_network("0.0.0.0/8"),       # Current network
     ipaddress.ip_network("240.0.0.0/4"),     # Reserved
+    ipaddress.ip_network("::1/128"),         # IPv6 Loopback
+    ipaddress.ip_network("fe80::/10"),       # IPv6 Link-Local
+    ipaddress.ip_network("fc00::/7"),        # IPv6 Unique Local Address
 ]
 
 def is_ip_private(ip_str):
