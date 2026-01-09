@@ -3,14 +3,15 @@ import ipaddress
 from urllib.parse import urlparse
 from django.core.exceptions import ValidationError
 
-# Additional blocked networks not covered by standard properties
-# 100.64.0.0/10: Carrier Grade NAT (used by Tailscale, Alibaba Cloud metadata)
-# 192.0.0.0/24: IETF Protocol Assignments
-# 198.18.0.0/15: Network Benchmark
+
 BLOCKED_NETWORKS = [
-    ipaddress.ip_network("100.64.0.0/10"),
-    ipaddress.ip_network("192.0.0.0/24"),
-    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("100.64.0.0/10"), # Carrier Grade NAT (used by Tailscale, Alibaba Cloud metadata)
+    ipaddress.ip_network("192.0.0.0/24"), # IETF Protocol Assignments
+    ipaddress.ip_network("198.18.0.0/15"), # Network Benchmark
+    ipaddress.ip_network("169.254.0.0/16"),  # Link-Local / Cloud Metadata
+    ipaddress.ip_network("127.0.0.0/8"),     # Loopback
+    ipaddress.ip_network("0.0.0.0/8"),       # Current network
+    ipaddress.ip_network("240.0.0.0/4"),     # Reserved
 ]
 
 def is_ip_private(ip_str):
