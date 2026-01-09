@@ -839,6 +839,10 @@ class ProviderCredentialsType(DjangoObjectType):
         return Providers.get_provider_config(self.provider)
 
     def resolve_credentials(self, info):
+        if not user_has_permission(
+            info.context.user, "read", "IntegrationCredentials", self.organisation
+        ):
+            return None
         return get_credentials(self.id)
 
 

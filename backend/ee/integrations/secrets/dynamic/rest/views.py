@@ -214,7 +214,8 @@ class DynamicSecretLeaseView(APIView):
 
     def _get_lease_or_404(self, lease_id: str) -> DynamicSecretLease:
         try:
-            return DynamicSecretLease.objects.get(id=lease_id)
+            env = self.request.auth["environment"]
+            return DynamicSecretLease.objects.get(id=lease_id, secret__environment=env)
         except DynamicSecretLease.DoesNotExist:
             raise NotFound("Lease not found")
 
