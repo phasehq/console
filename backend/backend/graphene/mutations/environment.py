@@ -327,7 +327,7 @@ class CreateEnvironmentKeyMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         # check that the user for whom we are adding a key has access
-        if not user_id is not None and member_can_access_org(
+        if user_id is not None and not member_can_access_org(
             user_id, env.app.organisation.id
         ):
             raise GraphQLError("This user doesn't have access to this app")
