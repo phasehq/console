@@ -1047,26 +1047,29 @@ class ReadSecretMutation(graphene.Mutation):
     def mutate(cls, root, info, ids):
         for id in ids:
             secret = Secret.objects.get(id=id)
+            if not user_can_access_environment(
+                info.context.user.userId, secret.environment.id
+            ):
+                raise GraphQLError("You don't have permission to perform this action")
+
             env = secret.environment
             org = env.app.organisation
-            if not user_is_org_member(info.context.user.userId, org.id):
-                raise GraphQLError("You don't have permission to perform this action")
-            else:
-                ip_address, user_agent = get_resolver_request_meta(info.context)
 
-                org_member = OrganisationMember.objects.get(
-                    user=info.context.user, organisation=org, deleted_at=None
-                )
+            ip_address, user_agent = get_resolver_request_meta(info.context)
 
-                log_secret_event(
-                    secret,
-                    SecretEvent.READ,
-                    org_member,
-                    None,
-                    None,
-                    ip_address,
-                    user_agent,
-                )
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=org, deleted_at=None
+            )
+
+            log_secret_event(
+                secret,
+                SecretEvent.READ,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
+            )
         return ReadSecretMutation(ok=True)
 
 
