@@ -9,12 +9,16 @@ BLOCKED_NETWORKS = [
     ipaddress.ip_network("192.0.0.0/24"), # IETF Protocol Assignments
     ipaddress.ip_network("198.18.0.0/15"), # Network Benchmark
     ipaddress.ip_network("169.254.0.0/16"),  # Link-Local / Cloud Metadata
+    ipaddress.ip_network("192.0.0.192/32"),  # Oracle Cloud Metadata
     ipaddress.ip_network("127.0.0.0/8"),     # Loopback
     ipaddress.ip_network("0.0.0.0/8"),       # Current network
     ipaddress.ip_network("240.0.0.0/4"),     # Reserved
     ipaddress.ip_network("::1/128"),         # IPv6 Loopback
     ipaddress.ip_network("fe80::/10"),       # IPv6 Link-Local
     ipaddress.ip_network("fc00::/7"),        # IPv6 Unique Local Address
+    ipaddress.ip_network("224.0.0.0/4"),     # Multicast (IPv4)
+    ipaddress.ip_network("ff00::/8"),        # Multicast (IPv6)
+    ipaddress.ip_network("fec0::/10"),       # IPv6 Site-Local (Deprecated)
 ]
 
 def is_ip_private(ip_str):
