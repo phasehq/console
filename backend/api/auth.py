@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class ServiceAccountUser:
     """Mock ServiceAccount user"""
-    
+
     def __init__(self, service_account):
         self.userId = service_account.id
         self.id = service_account.id
@@ -115,15 +115,16 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         if token_type == "User":
             try:
                 org_member = get_org_member_from_user_token(auth_token)
-                auth["org_member"] = org_member
-                user = org_member.user
-
-                if not user_can_access_environment(org_member.user.userId, env.id):
-                    raise exceptions.AuthenticationFailed(
-                        "User cannot access this environment"
-                    )
-            except Exception as ex:
+                if org_member.deleted_at is not None:
+                    raise exceptions.NotFound("User not found")
+            except Exception:
                 raise exceptions.NotFound("User not found")
+
+            auth["org_member"] = org_member
+            user = org_member.user
+
+            if not user_can_access_environment(user.userId, env.id):
+                raise exceptions.PermissionDenied("User cannot access this environment")
 
         elif token_type == "Service":
             service_token = get_service_token(auth_token)
@@ -134,14 +135,14 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
             try:
                 service_token = get_service_token(auth_token)
-                service_account = get_service_account_from_token(auth_token)          
-                
+                service_account = get_service_account_from_token(auth_token)
+
                 creator = getattr(service_token, "created_by", None)
                 if creator:
                     user = creator.user
                 else:
                     user = ServiceAccountUser(service_account)
-                    
+
                 auth["service_account"] = service_account
                 auth["service_account_token"] = service_token
 
