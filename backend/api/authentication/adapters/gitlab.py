@@ -58,7 +58,9 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
     profile_url = "{0}/api/{1}/user".format(provider_url, provider_api_version)
 
     def complete_login(self, request, app, token, response):
-        response = requests.get(self.profile_url, params={"access_token": token.token})
+        response = requests.get(
+            self.profile_url, headers={"Authorization": f"Bearer {token.token}"}
+        )
         data = _check_gitlab_errors(response)
         login = self.get_provider().sociallogin_from_response(request, data)
 
