@@ -48,7 +48,7 @@ def list_repos(credential_id):
     )
 
     api_host = GITHUB_CLOUD_API_URL
-    if "host" in credential.credentials:
+    if "host_url" in credential.credentials:
         api_host = decrypt_asymmetric(
             credential.credentials["api_url"], sk.hex(), pk.hex()
         )
@@ -125,7 +125,7 @@ def list_environments(credential_id, owner, repo_name):
     )
 
     api_host = GITHUB_CLOUD_API_URL
-    if "host" in credential.credentials:
+    if "host_url" in credential.credentials:
         api_host = decrypt_asymmetric(
             credential.credentials["api_url"], sk.hex(), pk.hex()
         )
