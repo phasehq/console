@@ -27,5 +27,5 @@ staticfiles/
 .gitignore
 Dockerfile
 Dockerfile.dev
-dev-requirements.txt
+
 

@@ -2,6 +2,8 @@ import requests
 import re
 import urllib.parse
 import graphene
+from django.conf import settings
+from api.utils.network import validate_url_is_safe
 
 from api.utils.syncing.auth import get_credentials
 
@@ -67,6 +69,9 @@ def get_gitlab_credentials(credential_id):
 
     host = credentials["gitlab_host"]
     token = credentials["gitlab_token"]
+
+    if settings.APP_HOST == "cloud":
+        validate_url_is_safe(host)
 
     return host, token
 
