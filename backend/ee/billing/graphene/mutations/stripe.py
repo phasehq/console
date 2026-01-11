@@ -103,6 +103,11 @@ class DeletePaymentMethodMutation(Mutation):
 
         try:
             stripe.api_key = settings.STRIPE["secret_key"]
+
+            payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+            if payment_method.customer != org.stripe_customer_id:
+                raise GraphQLError("Payment method does not belong to this organisation")
+
             stripe.PaymentMethod.detach(payment_method_id)
 
             return DeletePaymentMethodMutation(ok=True)

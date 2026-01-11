@@ -271,6 +271,10 @@ class CreateIdentityMutation(graphene.Mutation):
         # Store provider-specific configuration in a generic config field
         # Convert comma-separated trusted_principals to list for consistency
         trusted_list = [p.strip() for p in trusted_principals.split(",") if p.strip()]
+
+        from api.utils.network import validate_url_is_safe
+        validate_url_is_safe(sts_endpoint)
+
         config = {
             "trustedPrincipals": trusted_list,
             "signatureTtlSeconds": signature_ttl_seconds,
@@ -353,6 +357,9 @@ class UpdateIdentityMutation(graphene.Mutation):
         if signature_ttl_seconds is not None:
             config_updates["signatureTtlSeconds"] = signature_ttl_seconds
         if sts_endpoint is not None:
+            from api.utils.network import validate_url_is_safe
+
+            validate_url_is_safe(sts_endpoint)
             config_updates["stsEndpoint"] = sts_endpoint
 
         if config_updates:

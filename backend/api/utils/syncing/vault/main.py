@@ -1,6 +1,8 @@
 from api.utils.syncing.auth import get_credentials
 from hvac import Client as VaultClient, exceptions as hvac_exceptions
 import graphene
+from django.conf import settings
+from api.utils.network import validate_url_is_safe
 
 
 class VaultMountType(graphene.ObjectType):
@@ -18,6 +20,9 @@ def authenticate_vault_client(credential_id):
     VAULT_ROLE_ID = credentials["vault_role_id"]
     VAULT_SECRET_ID = credentials["vault_secret_id"]
     VAULT_NAMESPACE = credentials.get("vault_namespace", "")
+
+    if settings.APP_HOST == "cloud":
+        validate_url_is_safe(VAULT_ADDR)
 
     client = VaultClient(url=VAULT_ADDR, namespace=VAULT_NAMESPACE)
     client.auth.approle.login(role_id=VAULT_ROLE_ID, secret_id=VAULT_SECRET_ID)
