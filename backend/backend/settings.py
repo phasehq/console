@@ -317,13 +317,13 @@ DATABASES = {
 
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_USERNAME = os.getenv("REDIS_USERNAME") or None
+REDIS_USER = os.getenv("REDIS_USER") or None
 REDIS_PASSWORD = get_secret("REDIS_PASSWORD")
 REDIS_SSL = os.getenv("REDIS_SSL", "False").lower() == "true"
 REDIS_PROTOCOL = "rediss" if REDIS_SSL else "redis"
 
-if REDIS_USERNAME and REDIS_PASSWORD:
-    REDIS_AUTH = f"{urlquote(REDIS_USERNAME, safe='')}:{urlquote(REDIS_PASSWORD, safe='')}@"
+if REDIS_USER and REDIS_PASSWORD:
+    REDIS_AUTH = f"{urlquote(REDIS_USER, safe='')}:{urlquote(REDIS_PASSWORD, safe='')}@"
 elif REDIS_PASSWORD:
     REDIS_AUTH = f":{urlquote(REDIS_PASSWORD, safe='')}@"
 else:
@@ -357,7 +357,7 @@ RQ_QUEUES = {
     "default": {
         "HOST": REDIS_HOST,
         "PORT": REDIS_PORT,
-        "USERNAME": REDIS_USERNAME,
+        "USERNAME": REDIS_USER,
         "PASSWORD": REDIS_PASSWORD,
         "SSL": REDIS_SSL,
         "SSL_OPTIONS": RQ_SSL_OPTIONS,
@@ -366,7 +366,7 @@ RQ_QUEUES = {
     "scheduled-jobs": {
         "HOST": REDIS_HOST,
         "PORT": REDIS_PORT,
-        "USERNAME": REDIS_USERNAME,
+        "USERNAME": REDIS_USER,
         "PASSWORD": REDIS_PASSWORD,
         "SSL": REDIS_SSL,
         "SSL_OPTIONS": RQ_SSL_OPTIONS,
