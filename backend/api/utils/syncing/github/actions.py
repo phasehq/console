@@ -29,7 +29,8 @@ def normalize_api_host(api_host):
     if not api_host or api_host.strip() == "":
         api_host = GITHUB_CLOUD_API_URL
 
-    if settings.APP_HOST == "cloud":
+    app_host = getattr(settings, "APP_HOST", None)
+    if app_host == "cloud":
         validate_url_is_safe(api_host)
 
     stripped_host = api_host.rstrip("/")
