@@ -174,6 +174,12 @@ class CreateCloudflarePagesSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
+
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
@@ -224,6 +230,12 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
         service_id = "aws_secrets_manager"
 
         env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
@@ -291,8 +303,11 @@ class CreateGitHubActionsSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
-        if not owner:
-            raise GraphQLError("Owner is required for GitHub Actions syncs")
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
@@ -437,6 +452,12 @@ class CreateVaultSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
+
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
@@ -484,6 +505,12 @@ class CreateNomadSync(graphene.Mutation):
         service_config = ServiceConfig.get_service_config(service_id)
 
         env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
@@ -545,6 +572,12 @@ class CreateGitLabCISync(graphene.Mutation):
         service_config = ServiceConfig.get_service_config(service_id)
 
         env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
@@ -610,6 +643,12 @@ class CreateRailwaySync(graphene.Mutation):
         service_config = ServiceConfig.get_service_config(service_id)
 
         env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
@@ -686,6 +725,12 @@ class CreateVercelSync(graphene.Mutation):
         service_id = "vercel"
 
         env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
@@ -831,6 +876,12 @@ class CreateCloudflareWorkersSync(graphene.Mutation):
 
         env = Environment.objects.get(id=env_id)
 
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
+
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")
 
@@ -891,6 +942,12 @@ class CreateRenderSync(graphene.Mutation):
         service_config = ServiceConfig.get_service_config(service_type)
 
         env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         if not env.app.sse_enabled:
             raise GraphQLError("Syncing is not enabled for this environment!")

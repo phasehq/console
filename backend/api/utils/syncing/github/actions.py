@@ -8,6 +8,8 @@ import nacl.public
 import base64
 import datetime
 from django.apps import apps
+from django.conf import settings
+from api.utils.network import validate_url_is_safe
 
 GITHUB_CLOUD_API_URL = "https://api.github.com"
 
@@ -26,6 +28,9 @@ class GitHubOrgType(ObjectType):
 def normalize_api_host(api_host):
     if not api_host or api_host.strip() == "":
         api_host = GITHUB_CLOUD_API_URL
+
+    if settings.APP_HOST == "cloud":
+        validate_url_is_safe(api_host)
 
     stripped_host = api_host.rstrip("/")
 
@@ -48,7 +53,7 @@ def list_repos(credential_id):
     )
 
     api_host = GITHUB_CLOUD_API_URL
-    if "host" in credential.credentials:
+    if "host_url" in credential.credentials:
         api_host = decrypt_asymmetric(
             credential.credentials["api_url"], sk.hex(), pk.hex()
         )
@@ -171,7 +176,7 @@ def list_environments(credential_id, owner, repo_name):
     )
 
     api_host = GITHUB_CLOUD_API_URL
-    if "host" in credential.credentials:
+    if "host_url" in credential.credentials:
         api_host = decrypt_asymmetric(
             credential.credentials["api_url"], sk.hex(), pk.hex()
         )

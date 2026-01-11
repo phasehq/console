@@ -115,6 +115,9 @@ def aws_iam_auth(request):
         if configured and "://" not in configured:
             configured = f"https://{configured}"
 
+        from api.utils.network import validate_url_is_safe
+        validate_url_is_safe(configured)
+
         cfg_host = get_normalized_host(configured)
         header_host = (headers.get("Host") or headers.get("host") or "").lower()
 

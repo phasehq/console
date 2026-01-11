@@ -327,7 +327,7 @@ class CreateEnvironmentKeyMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         # check that the user for whom we are adding a key has access
-        if not user_id is not None and member_can_access_org(
+        if user_id is not None and not member_can_access_org(
             user_id, env.app.organisation.id
         ):
             raise GraphQLError("This user doesn't have access to this app")
@@ -1047,26 +1047,29 @@ class ReadSecretMutation(graphene.Mutation):
     def mutate(cls, root, info, ids):
         for id in ids:
             secret = Secret.objects.get(id=id)
+            if not user_can_access_environment(
+                info.context.user.userId, secret.environment.id
+            ):
+                raise GraphQLError("You don't have permission to perform this action")
+
             env = secret.environment
             org = env.app.organisation
-            if not user_is_org_member(info.context.user.userId, org.id):
-                raise GraphQLError("You don't have permission to perform this action")
-            else:
-                ip_address, user_agent = get_resolver_request_meta(info.context)
 
-                org_member = OrganisationMember.objects.get(
-                    user=info.context.user, organisation=org, deleted_at=None
-                )
+            ip_address, user_agent = get_resolver_request_meta(info.context)
 
-                log_secret_event(
-                    secret,
-                    SecretEvent.READ,
-                    org_member,
-                    None,
-                    None,
-                    ip_address,
-                    user_agent,
-                )
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=org, deleted_at=None
+            )
+
+            log_secret_event(
+                secret,
+                SecretEvent.READ,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
+            )
         return ReadSecretMutation(ok=True)
 
 
@@ -1084,7 +1087,7 @@ class CreatePersonalSecretMutation(graphene.Mutation):
             organisation=org, user=info.context.user, deleted_at=None
         )
 
-        if not user_can_access_environment(info.context.user, secret.environment.id):
+        if not user_can_access_environment(info.context.user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this secret")
 
         override, _ = PersonalSecret.objects.get_or_create(
@@ -1111,7 +1114,7 @@ class DeletePersonalSecretMutation(graphene.Mutation):
             organisation=org, user=info.context.user, deleted_at=None
         )
 
-        if not user_can_access_environment(info.context.user, secret.environment.id):
+        if not user_can_access_environment(info.context.user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this secret")
 
         PersonalSecret.objects.filter(secret_id=secret_id, user=org_member).delete()

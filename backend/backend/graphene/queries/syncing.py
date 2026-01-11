@@ -82,6 +82,11 @@ def resolve_cloudflare_pages_projects(root, info, credential_id):
 
     credential = ProviderCredentials.objects.get(id=credential_id)
 
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+
     if credential.provider != "cloudflare":
         raise GraphQLError("These credentials can't be used to sync with Cloudflare!")
 
@@ -124,6 +129,11 @@ def resolve_cloudflare_workers(root, info, credential_id):
 def resolve_aws_secret_manager_secrets(root, info, credential_id):
     pk, sk = get_server_keypair()
     credential = ProviderCredentials.objects.get(id=credential_id)
+
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
 
     try:
         decrypted_creds = {}
@@ -184,6 +194,12 @@ def resolve_validate_aws_assume_role_credentials(
 
 
 def resolve_gh_repos(root, info, credential_id):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+
     try:
         secrets = list_repos(credential_id)
         return secrets
@@ -224,6 +240,12 @@ def resolve_test_nomad_creds(root, info, credential_id):
 
 
 def resolve_gitlab_projects(root, info, credential_id):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+
     try:
         projects = list_gitlab_projects(credential_id)
         return projects
