@@ -44,24 +44,39 @@ def get_vercel_headers(token):
 def vercel_request(method, url, headers, json=None, max_retries=5):
     """Make requests to the Vercel API and handle rate limits."""
     last_response = None
+    max_retries = max(1, max_retries)
     for attempt in range(max_retries):
-        response = requests.request(method, url, headers=headers, json=json)
-        last_response = response
+        try:
+            response = requests.request(method, url, headers=headers, json=json)
+            last_response = response
 
-        is_rate_limited = response.status_code == 429 or "rate_limited" in response.text
-        if not is_rate_limited:
-            return response
+            is_rate_limited = response.status_code == 429
+            if not is_rate_limited:
+                return response
 
-        reset_header = response.headers.get("X-RateLimit-Reset")
-        wait_seconds = 5
-        if reset_header and reset_header.isdigit():
-            wait_seconds = max(int(reset_header) - int(time.time()), 1)
+            reset_header = response.headers.get("X-RateLimit-Reset")
+            wait_seconds = 5
+            if reset_header and reset_header.isdigit():
+                reset_ts = int(reset_header)
+                wait_seconds = reset_ts - int(time.time())
+                wait_seconds = max(min(wait_seconds, 300), 1)
 
-        logger.warning(
-            f"Vercel {method} {url} rate limited (attempt {attempt + 1}/{max_retries}); "
-            f"waiting {wait_seconds}s before retrying."
+            logger.warning(
+                f"Vercel {method} {url} rate limited (attempt {attempt + 1}/{max_retries}); "
+                f"waiting {wait_seconds}s before retrying."
+            )
+            time.sleep(wait_seconds)
+        except requests.exceptions.RequestException as e:
+            logger.warning(
+                f"Vercel {method} {url} request failed (attempt {attempt + 1}/{max_retries}): {e}; "
+                f"retrying in 5s."
+            )
+            time.sleep(5)
+
+    if last_response is None:
+        raise Exception(
+            f"Failed to connect to Vercel API after {max_retries} attempts: {method} {url}"
         )
-        time.sleep(wait_seconds)
 
     return last_response
 
