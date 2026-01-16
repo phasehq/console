@@ -252,7 +252,12 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_cloudflare_pages_sync(environment_sync):
 
-    account_id, access_token = get_cf_pages_credentials(environment_sync)
+    account_id = None
+    access_token = None
+
+    if environment_sync.authentication:
+        account_id, access_token = get_cf_pages_credentials(environment_sync)
+
     project_info = environment_sync.options
 
     handle_sync_event(
@@ -268,7 +273,12 @@ def perform_cloudflare_pages_sync(environment_sync):
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_github_actions_sync(environment_sync):
 
-    access_token, api_host = get_gh_actions_credentials(environment_sync)
+    access_token = None
+    api_host = None
+
+    if environment_sync.authentication:
+        access_token, api_host = get_gh_actions_credentials(environment_sync)
+
     is_org_sync = environment_sync.options.get("org_sync", False)
 
     if is_org_sync:
@@ -301,7 +311,12 @@ def perform_github_actions_sync(environment_sync):
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_github_dependabot_sync(environment_sync):
 
-    access_token, api_host = get_gh_actions_credentials(environment_sync)
+    access_token = None
+    api_host = None
+
+    if environment_sync.authentication:
+        access_token, api_host = get_gh_actions_credentials(environment_sync)
+
     is_org_sync = environment_sync.options.get("org_sync", False)
 
     if is_org_sync:
@@ -334,12 +349,16 @@ def perform_aws_sm_sync(environment_sync):
     project_info = environment_sync.options
 
     # Determine authentication method and get appropriate credentials
-    has_role_arn = "role_arn" in environment_sync.authentication.credentials
+    credentials = {}
 
-    if has_role_arn:
-        credentials = get_aws_assume_role_credentials(environment_sync)
-    else:
-        credentials = get_aws_secrets_manager_credentials(environment_sync)
+    if environment_sync.authentication:
+        has_role_arn = "role_arn" in environment_sync.authentication.credentials
+
+        if has_role_arn:
+            credentials = get_aws_assume_role_credentials(environment_sync)
+        else:
+            credentials = get_aws_secrets_manager_credentials(environment_sync)
+
     handle_sync_event(
         environment_sync,
         sync_aws_secrets,
@@ -359,10 +378,14 @@ def perform_vault_sync(environment_sync):
 
     project_info = environment_sync.options
 
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
     handle_sync_event(
         environment_sync,
         sync_vault_secrets,
-        environment_sync.authentication.id,
+        auth_id,
         project_info.get("engine"),
         project_info.get("path"),
     )
@@ -373,10 +396,14 @@ def perform_nomad_sync(environment_sync):
 
     project_info = environment_sync.options
 
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
     handle_sync_event(
         environment_sync,
         sync_nomad_secrets,
-        environment_sync.authentication.id,
+        auth_id,
         project_info.get("path"),
         project_info.get("namespace"),
     )
@@ -389,10 +416,14 @@ def perform_gitlab_sync(environment_sync):
     resource_id = project_info.get("resource_id")
     resource_path = project_info.get("resource_path")
 
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
     handle_sync_event(
         environment_sync,
         sync_gitlab_secrets,
-        environment_sync.authentication.id,
+        auth_id,
         resource_id if resource_id is not None else resource_path,
         project_info.get("is_group"),
         project_info.get("masked"),
@@ -409,10 +440,14 @@ def perform_railway_sync(environment_sync):
     railway_environment = railway_sync_options.get("environment")
     railway_service = railway_sync_options.get("service")
 
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
     handle_sync_event(
         environment_sync,
         sync_railway_secrets,
-        environment_sync.authentication.id,
+        auth_id,
         railway_project["id"],
         railway_environment["id"],
         railway_service["id"] if railway_service is not None else None,
@@ -429,10 +464,14 @@ def perform_vercel_sync(environment_sync):
     vercel_environment = vercel_sync_options.get("environment", "production")
     vercel_secret_type = vercel_sync_options.get("secret_type", "encrypted")
 
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
     handle_sync_event(
         environment_sync,
         sync_vercel_secrets,
-        environment_sync.authentication.id,
+        auth_id,
         vercel_project["id"],
         vercel_team["id"] if vercel_team is not None else None,
         vercel_environment,
@@ -442,7 +481,11 @@ def perform_vercel_sync(environment_sync):
 
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_cloudflare_workers_sync(environment_sync):
-    account_id, access_token = get_cf_workers_credentials(environment_sync)
+    account_id = None
+    access_token = None
+
+    if environment_sync.authentication:
+        account_id, access_token = get_cf_workers_credentials(environment_sync)
 
     worker_info = environment_sync.options
 
@@ -461,13 +504,17 @@ def perform_render_service_sync(environment_sync):
     render_resource_id = render_service_options.get("resource_id")
     render_resource_type = render_service_options.get("resource_type")
 
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
     if render_resource_type == RenderResourceType.ENVIRONMENT_GROUP.value:
         secret_file_name = render_service_options.get("secret_file_name")
 
         handle_sync_event(
             environment_sync,
             sync_render_env_group_secret_file,
-            environment_sync.authentication.id,
+            auth_id,
             render_resource_id,
             secret_file_name,
         )
@@ -476,6 +523,6 @@ def perform_render_service_sync(environment_sync):
         handle_sync_event(
             environment_sync,
             sync_render_service_env_vars,
-            environment_sync.authentication.id,
+            auth_id,
             render_resource_id,
         )
