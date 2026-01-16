@@ -208,6 +208,11 @@ def resolve_gh_repos(root, info, credential_id):
 
 
 def resolve_github_environments(root, info, credential_id, owner, repo_name):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
     try:
         envs = list_environments(credential_id, owner, repo_name)
         return envs
@@ -216,6 +221,11 @@ def resolve_github_environments(root, info, credential_id, owner, repo_name):
 
 
 def resolve_gh_orgs(root, info, credential_id):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
     try:
         orgs = list_orgs(credential_id)
         return orgs
