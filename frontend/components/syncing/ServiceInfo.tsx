@@ -21,6 +21,22 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     return <div className="flex gap-2 text-neutral-500">{secretName}</div>
   } else if (sync.serviceInfo?.id?.includes('github')) {
     const ghSyncMeta = JSON.parse(sync.options)
+    const isOrgSync = ghSyncMeta['org_sync']
+
+    if (isOrgSync) {
+      const org = ghSyncMeta['org']
+      const visibility = ghSyncMeta['visibility']
+
+      return (
+        <div className="flex gap-2 text-neutral-500 items-center">
+          {org}{' '}
+          <span className="text-neutral-500 font-normal">
+            ({visibility === 'private' ? 'private repos' : 'all repos'})
+          </span>
+        </div>
+      )
+    }
+
     const repoName = ghSyncMeta['repo_name']
     const owner = ghSyncMeta['owner']
     const ghEnv = ghSyncMeta['environment_name']
@@ -29,6 +45,32 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
       <div className="flex gap-2 text-neutral-500">
         {owner}/{repoName}
         {ghEnv && <span className="font-normal">({ghEnv})</span>}
+      </div>
+    )
+  } else if (sync.serviceInfo?.id?.includes('dependabot')) {
+    const ghSyncMeta = JSON.parse(sync.options)
+    const isOrgSync = ghSyncMeta['org_sync']
+
+    if (isOrgSync) {
+      const org = ghSyncMeta['org']
+      const visibility = ghSyncMeta['visibility']
+
+      return (
+        <div className="flex gap-2 text-neutral-500 items-center">
+          {org}{' '}
+          <span className="text-neutral-500 font-normal">
+            ({visibility === 'private' ? 'private repos' : 'all repos'})
+          </span>
+        </div>
+      )
+    }
+
+    const repoName = ghSyncMeta['repo_name']
+    const owner = ghSyncMeta['owner']
+
+    return (
+      <div className="flex gap-2 text-neutral-500">
+        {owner}/{repoName}
       </div>
     )
   } else if (sync.serviceInfo?.id?.includes('hashicorp_vault')) {

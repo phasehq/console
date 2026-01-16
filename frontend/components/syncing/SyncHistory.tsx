@@ -22,7 +22,7 @@ const FormattedJSON = (props: { jsonData: string }) => {
   // Format the JSON (or keep the original string if it's not valid JSON)
   const formattedJSON = jsonData
     ? jsonData.message || jsonData.error || JSON.stringify(jsonData, null, 2)
-    : 'No detail available'
+    : 'No logs available'
 
   return (
     <div className="overflow-auto py-4">
