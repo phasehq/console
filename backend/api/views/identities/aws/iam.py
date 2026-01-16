@@ -7,13 +7,14 @@ import requests
 from defusedxml.ElementTree import parse
 from django.http import JsonResponse
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 
 from api.utils.identity.common import (
     resolve_service_account,
     mint_service_account_token,
 )
+from api.throttling import PlanBasedRateThrottle
 
 
 def get_normalized_host(uri):
@@ -27,6 +28,7 @@ def get_normalized_host(uri):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([PlanBasedRateThrottle])
 def aws_iam_auth(request):
     """Accepts SigV4-signed STS GetCallerIdentity request and issues a ServiceAccount token if trusted."""
     try:
