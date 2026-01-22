@@ -378,24 +378,9 @@ RQ_QUEUES = {
 PHASE_LICENSE = check_license(get_secret("PHASE_LICENSE_OFFLINE"))
 
 
-def get_stripe_prices(env_var):
-    val = os.getenv(env_var)
-    if not val:
-        return []
-    return [x.strip() for x in val.split(",")]
-
-
 STRIPE = {}
-try:
-    STRIPE["secret_key"] = os.getenv("STRIPE_SECRET_KEY")
-    STRIPE["public_key"] = os.getenv("STRIPE_PUBLIC_KEY")
-    STRIPE["webhook_secret"] = os.getenv("STRIPE_WEBHOOK_SECRET")
-    STRIPE["prices"] = {
-        "free": get_stripe_prices("STRIPE_FREE"),
-        "pro_monthly": get_stripe_prices("STRIPE_PRO_MONTHLY"),
-        "pro_yearly": get_stripe_prices("STRIPE_PRO_YEARLY"),
-        "enterprise_monthly": get_stripe_prices("STRIPE_ENTERPRISE_MONTHLY"),
-        "enterprise_yearly": get_stripe_prices("STRIPE_ENTERPRISE_YEARLY"),
-    }
-except:
-    pass
+if APP_HOST == "cloud":
+    try:
+        from ee.settings import STRIPE
+    except ImportError:
+        pass
