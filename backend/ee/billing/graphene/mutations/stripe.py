@@ -1,10 +1,9 @@
+import stripe
 from api.models import Organisation
 from api.utils.access.permissions import user_has_permission
 from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
-
-import stripe
 from django.conf import settings
-from graphene import Mutation, ID, String, Boolean, ObjectType, Mutation, Enum
+from graphene import Mutation, ID, String, Boolean, ObjectType
 from graphql import GraphQLError
 
 
@@ -106,7 +105,9 @@ class DeletePaymentMethodMutation(Mutation):
 
             payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
             if payment_method.customer != org.stripe_customer_id:
-                raise GraphQLError("Payment method does not belong to this organisation")
+                raise GraphQLError(
+                    "Payment method does not belong to this organisation"
+                )
 
             stripe.PaymentMethod.detach(payment_method_id)
 
