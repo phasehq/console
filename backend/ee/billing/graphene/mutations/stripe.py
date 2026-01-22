@@ -1,7 +1,8 @@
-import stripe
 from api.models import Organisation
 from api.utils.access.permissions import user_has_permission
 from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
+from ee.billing.stripe import migrate_organisation_to_v2_pricing
+import stripe
 from django.conf import settings
 from graphene import Mutation, ID, String, Boolean, ObjectType
 from graphql import GraphQLError
@@ -369,3 +370,31 @@ class SetDefaultPaymentMethodMutation(Mutation):
         except Exception as e:
             # Handle other potential exceptions
             raise GraphQLError(f"An error occurred: {str(e)}")
+
+
+class MigratePricingMutation(Mutation):
+    class Arguments:
+        organisation_id = ID(required=True)
+
+    success = Boolean()
+    message = String()
+
+    def mutate(self, info, organisation_id):
+        try:
+            org = Organisation.objects.get(id=organisation_id)
+
+            if not user_has_permission(info.context.user, "update", "Billing", org):
+                raise GraphQLError(
+                    "You don't have the permissions required to update Billing information in this Organisation."
+                )
+
+            migrate_organisation_to_v2_pricing(org)
+
+            return MigratePricingMutation(
+                success=True, message="Organisation successfully migrated to pricing V2"
+            )
+
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+        except Exception as e:
+            return MigratePricingMutation(success=False, message=str(e))

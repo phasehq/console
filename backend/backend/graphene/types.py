@@ -104,6 +104,7 @@ class OrganisationType(DjangoObjectType):
             "member_id",
             "keyring",
             "recovery",
+            "pricing_version",
         )
 
     def resolve_role(self, info):

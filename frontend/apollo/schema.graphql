@@ -90,6 +90,7 @@ type OrganisationType {
   identityKey: String!
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
+  pricingVersion: Int!
   role: RoleType
   memberId: ID
   keyring: String
@@ -1419,6 +1420,7 @@ type Mutation {
     """
     paymentMethodId: String!
   ): SetDefaultPaymentMethodMutation
+  migratePricing(organisationId: ID!): MigratePricingMutation
   createAwsDynamicSecret(
     authenticationId: ID
     config: AWSConfigInput!
@@ -1867,6 +1869,11 @@ type CreateSetupIntentMutation {
 
 type SetDefaultPaymentMethodMutation {
   ok: Boolean
+}
+
+type MigratePricingMutation {
+  success: Boolean
+  message: String
 }
 
 type CreateAWSDynamicSecretMutation {

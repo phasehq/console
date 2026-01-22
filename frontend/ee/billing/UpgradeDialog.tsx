@@ -23,6 +23,9 @@ import clsx from 'clsx'
 import { Tab } from '@headlessui/react'
 import { toast } from 'react-toastify'
 import { userHasPermission } from '@/utils/access/permissions'
+import { Alert } from '@/components/common/Alert'
+import { MigratePricingDialog } from './MigratePricing'
+import { FaExternalLinkAlt } from 'react-icons/fa'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
@@ -130,6 +133,31 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
       if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr)
         setBillingPeriod(billingPeriodPreview)
       else handleModifySubscription()
+    }
+
+    if (activeOrganisation?.pricingVersion === 1) {
+      return (
+        <div className="space-y-4">
+          <Alert variant="warning" icon size="sm">
+            <div>
+              You must migrate to the new pricing model before upgrading your subscription.{' '}
+              <a
+                href="https://phase.dev/pricing"
+                target="_blank"
+                rel="noreferrer"
+                className="underline font-medium hover:opacity-80 inline-flex items-center gap-1"
+              >
+                Learn more <FaExternalLinkAlt className="text-xs" />
+              </a>
+              .
+            </div>
+          </Alert>
+          <div className="flex items-center justify-end">
+            {' '}
+            <MigratePricingDialog />
+          </div>
+        </div>
+      )
     }
 
     if (estimateLoading || !estimate)

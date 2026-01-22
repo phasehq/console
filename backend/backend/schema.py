@@ -69,6 +69,7 @@ from ee.billing.graphene.mutations.stripe import (
     ModifySubscriptionMutation,
     ResumeSubscriptionMutation,
     SetDefaultPaymentMethodMutation,
+    MigratePricingMutation,
 )
 from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
@@ -1166,6 +1167,7 @@ class Mutation(graphene.ObjectType):
     modify_subscription = ModifySubscriptionMutation.Field()
     create_setup_intent = CreateSetupIntentMutation.Field()
     set_default_payment_method = SetDefaultPaymentMethodMutation.Field()
+    migrate_pricing = MigratePricingMutation.Field()
 
     # Dynamic Secrets
     create_aws_dynamic_secret = CreateAWSDynamicSecretMutation.Field()
