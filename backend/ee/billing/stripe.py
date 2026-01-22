@@ -87,6 +87,8 @@ def map_stripe_plan_to_tier(stripe_plan_id):
         return Organisation.ENTERPRISE_PLAN
     elif stripe_plan_id in settings.STRIPE["prices"]["free"]:
         return Organisation.FREE_PLAN
+    
+    raise ValueError(f"Unknown Stripe price ID: {stripe_plan_id}")
 
 
 def migrate_organisation_to_v2_pricing(organisation):
