@@ -61,4 +61,9 @@ def calculate_graduated_price(seats, plan_type, billing_period):
 
         remaining_seats -= seats_in_tier
 
+    # Handle any remaining seats using the last tier's discount
+    if remaining_seats > 0:
+        tier_price = base_price * (1 - tiers[-1]["discount"])
+        total_price += remaining_seats * tier_price
+
     return total_price
