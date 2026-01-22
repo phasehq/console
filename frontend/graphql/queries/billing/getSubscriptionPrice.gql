@@ -1,0 +1,17 @@
+query EstimateStripeSubscription(
+  $organisationId: ID!
+  $planType: PlanTypeEnum!
+  $billingPeriod: BillingPeriodEnum!
+) {
+  estimateStripeSubscription(
+    organisationId: $organisationId
+    planType: $planType
+    billingPeriod: $billingPeriod
+  ) {
+    estimatedTotal
+    seatCount
+    unitPrice
+    currency
+    priceId
+  }
+}
