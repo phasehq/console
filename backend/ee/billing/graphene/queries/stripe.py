@@ -213,8 +213,12 @@ def resolve_estimate_stripe_subscription(
             # Fetch the relevant price ID for consistency, though calculation is manual
             price_key = f"{plan_type.value}_{billing_period.value}"
             prices = settings.STRIPE["prices"].get(price_key)
-            # Use the last price (legacy) if available, otherwise first
-            price_id = prices[-1] if prices else "legacy-price"
+
+            if not prices:
+                raise GraphQLError("Invalid plan configuration")
+
+            # Use the last price (legacy)
+            price_id = prices[-1]
 
             return StripePlanEstimate(
                 estimated_total=estimated_total,
