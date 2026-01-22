@@ -20,7 +20,7 @@ def get_org_member_name(org_member):
     member_name = social_acc.extra_data.get("name")
 
     if member_name is None:
-        member_name = org_member.email
+        member_name = org_member.user.email
 
     return member_name
 

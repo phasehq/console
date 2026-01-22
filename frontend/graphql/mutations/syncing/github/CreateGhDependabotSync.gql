@@ -1,0 +1,36 @@
+mutation CreateNewGhDependabotSync(
+  $envId: ID!
+  $path: String!
+  $repoName: String
+  $owner: String!
+  $credentialId: ID!
+  $orgSync: Boolean
+  $repoVisibility: String
+) {
+  createGhDependabotSync(
+    envId: $envId
+    path: $path
+    repoName: $repoName
+    owner: $owner
+    credentialId: $credentialId
+    orgSync: $orgSync
+    repoVisibility: $repoVisibility
+  ) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}
+

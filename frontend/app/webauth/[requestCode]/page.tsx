@@ -91,31 +91,31 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
         })
 
         if (data) resolve(pssUser)
-        else reject('Failed to create user token')
+        else reject(new Error('Failed to create user token'))
       } else {
-        reject('Keyring is locked')
+        reject(new Error('Keyring is locked'))
       }
     })
   }
 
   const validateKeyring = async (password: string, organisation: OrganisationType) => {
-    return new Promise<OrganisationKeyring>(async (resolve) => {
-      const decryptedKeyring = await getKeyring(session?.user?.email!, organisation, password)
-
-      resolve(decryptedKeyring)
-    })
+    return await getKeyring(session?.user?.email!, organisation, password)
   }
 
   const authenticate = async (organisation: OrganisationType, password: string) => {
     if (!requestParams) {
-      toast.error('Invalid webauth request')
       setStatus('error')
-      return false
+      throw new Error('Invalid webauth request')
+    }
+
+    let keyring: OrganisationKeyring
+    try {
+      keyring = await validateKeyring(password, organisation)
+    } catch (error) {
+      throw new Error('Incorrect sudo password')
     }
 
     try {
-      const keyring = await validateKeyring(password, organisation)
-
       const pssUser = await handleCreatePat(
         requestParams.requestedTokenName,
         organisation.id,
@@ -132,27 +132,36 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
       })
 
       if (cliResponse.status === 200) {
-        toast.success('CLI authentication complete')
         setStatus('success')
       } else {
-        toast.error('Something went wrong.')
         setStatus('error')
+        throw new Error('CLI authentication failed')
       }
     } catch (error) {
-      setStatus('error')
+      // Only set error status for non-password errors (fatal errors)
+      if (error instanceof Error && error.message !== 'Incorrect sudo password') {
+        setStatus('error')
+      }
+      throw error
     }
   }
 
   useEffect(() => {
     const validateWebAuthRequest = async () => {
-      const decodedWebAuthReq = await decodeb64string(decodeURIComponent(params.requestCode))
-      const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
+      try {
+        const decodedWebAuthReq = await decodeb64string(decodeURIComponent(params.requestCode))
+        const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
 
-      if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName)
+        if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName) {
+          setStatus('invalid')
+        } else {
+          setStatus('in progress')
+          setRequestParams(authRequestParams)
+        }
+      } catch (error) {
+        // Happens when the URL is truncated/corrupted (e.g. terminal wrapped the link)
+        toast.error('Malformed webauth link. Please open the link in a new tab.')
         setStatus('invalid')
-      else {
-        setStatus('in progress')
-        setRequestParams(authRequestParams)
       }
     }
 
@@ -171,10 +180,26 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
     const [password, setPassword] = useState<string>('')
     const [deviceIsTrusted, setDeviceIsTrusted] = useState(false)
+    const [isLoading, setIsLoading] = useState(false)
 
     const handleSubmit = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
-      await authenticate(organisation, password)
+      setIsLoading(true)
+      // Yield to allow UI to update
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      try {
+        await toast.promise(authenticate(organisation, password), {
+          pending: 'Authenticating...',
+          success: 'CLI authentication complete',
+          error: {
+            render: ({ data }) => (data as Error)?.message || 'Authentication failed',
+          },
+        })
+      } catch (e) {
+        // Error handled by toast
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     useEffect(() => {
@@ -211,7 +236,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                     <RoleLabel role={organisation.role!} />
                   </span>
                   {deviceIsTrusted && (
-                    <FaShieldAlt className="text-emerald-500" title="Trusted device" />
+                    <FaShieldAlt className="text-emerald-500" title="Trusted device. Sudo password is stored locally on device" />
                   )}
                 </div>
                 <FaChevronRight
@@ -242,14 +267,13 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                         value={password}
                         setValue={setPassword}
                         label="Sudo password"
-                        disabled={deviceIsTrusted}
                         secret={true}
                         autoFocus
                       />
                     </div>
                   </div>
                   <div className="py-1">
-                    <Button variant="primary" type="submit">
+                    <Button variant="primary" type="submit" isLoading={isLoading}>
                       Login
                     </Button>
                   </div>

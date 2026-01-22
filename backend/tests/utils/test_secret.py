@@ -2,8 +2,13 @@ import os
 import pytest
 from pathlib import Path
 import logging
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from backend.utils.secrets import get_secret
+from api.utils.secrets import (
+    normalize_path_string,
+    decompose_path_and_key,
+    decrypt_secret_value,
+)
 
 
 @pytest.fixture
@@ -168,3 +173,146 @@ def test_file_read_permission_error(tmp_path):
         {"TEST_SECRET_FILE": str(secret_file), "TEST_SECRET": "fallback_value"},
     ):
         assert get_secret("TEST_SECRET") == "fallback_value"
+
+
+def test_normalize_path_string():
+    """Test path normalization logic"""
+    assert normalize_path_string("/") == "/"
+    assert normalize_path_string("foo") == "/foo"
+    assert normalize_path_string("/foo") == "/foo"
+    assert normalize_path_string("/foo/") == "/foo"
+    assert normalize_path_string("//foo//bar") == "/foo/bar"
+    assert normalize_path_string("foo/bar/") == "/foo/bar"
+
+
+def test_decompose_path_and_key():
+    """Test splitting key into path and key name"""
+    assert decompose_path_and_key("foo") == ("/", "foo")
+    assert decompose_path_and_key("/foo") == ("/", "foo")
+    assert decompose_path_and_key("path/to/key") == ("/path/to", "key")
+    assert decompose_path_and_key("/path/to/key") == ("/path/to", "key")
+    assert decompose_path_and_key("folder/subfolder/key") == (
+        "/folder/subfolder",
+        "key",
+    )
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_simple(mock_get_context, mock_decrypt, mock_get_model):
+    """Test simple decryption without references"""
+    mock_get_context.return_value = (b"salt", b"pub", b"priv")
+    mock_decrypt.return_value = "plain_value"
+
+    secret = MagicMock()
+    secret.value = "encrypted"
+
+    assert decrypt_secret_value(secret) == "plain_value"
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.resolve_secret_value")
+@patch("api.utils.secrets.check_environment_access")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_with_cross_env_ref(
+    mock_get_context, mock_decrypt, mock_check_access, mock_resolve, mock_get_model
+):
+    """Test resolving ${Env.Key} reference"""
+    mock_get_context.return_value = (b"salt", b"pub", b"priv")
+    # First call is decrypting the main secret, subsequent calls might be for refs if not mocked out
+    mock_decrypt.return_value = "Value is ${Production.API_KEY}"
+    mock_resolve.return_value = "secret_api_key"
+    mock_check_access.return_value = True
+
+    # Setup mocks for models
+    MockEnvironment = MagicMock()
+    MockApp = MagicMock()
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Environment":
+            return MockEnvironment
+        if model_name == "App":
+            return MockApp
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    secret = MagicMock()
+    secret.environment.app.organisation = MagicMock()
+    secret.environment.app = MagicMock()
+
+    # Mock Environment.objects.get
+    mock_env = MagicMock()
+    MockEnvironment.objects.get.return_value = mock_env
+
+    result = decrypt_secret_value(secret)
+
+    assert result == "Value is secret_api_key"
+    mock_resolve.assert_called_with(mock_env, "/", "API_KEY", crypto_context=None)
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.resolve_secret_value")
+@patch("api.utils.secrets.check_environment_access")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_with_cross_env_ref_in_folder(
+    mock_get_context, mock_decrypt, mock_check_access, mock_resolve, mock_get_model
+):
+    """Test resolving ${Env.folder/Key} reference"""
+    mock_get_context.return_value = (b"salt", b"pub", b"priv")
+    mock_decrypt.return_value = "Value is ${Production.backend/API_KEY}"
+    mock_resolve.return_value = "secret_api_key"
+    mock_check_access.return_value = True
+
+    # Setup mocks for models
+    MockEnvironment = MagicMock()
+    MockApp = MagicMock()
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Environment":
+            return MockEnvironment
+        if model_name == "App":
+            return MockApp
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    secret = MagicMock()
+
+    mock_env = MagicMock()
+    MockEnvironment.objects.get.return_value = mock_env
+
+    result = decrypt_secret_value(secret)
+
+    assert result == "Value is secret_api_key"
+    mock_resolve.assert_called_with(
+        mock_env, "/backend", "API_KEY", crypto_context=None
+    )
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_ignores_railway_syntax(
+    mock_get_context, mock_decrypt, mock_get_model
+):
+    """Test that decrypt_secret_value ignores Railway-style references ${{...}}"""
+    mock_secret = MagicMock()
+    mock_secret.value = "encrypted_value"
+    mock_secret.environment.id = 1
+    mock_secret.environment.app.organisation.id = 1
+
+    # Mock decrypt_asymmetric to return a value containing Railway syntax
+    mock_decrypt.return_value = "Some value with ${{RAILWAY_REF}}"
+
+    # Mock get_environment_crypto_context
+    with patch("api.utils.secrets.get_environment_crypto_context") as mock_context:
+        mock_context.return_value = (b"salt", b"pub", b"priv")
+
+        # Should return the value as-is without trying to resolve ${{RAILWAY_REF}}
+        result = decrypt_secret_value(mock_secret)
+
+        assert result == "Some value with ${{RAILWAY_REF}}"

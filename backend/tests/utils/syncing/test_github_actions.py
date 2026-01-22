@@ -6,7 +6,15 @@ from api.utils.syncing.github.actions import (
     list_repos,
 )
 import base64
+import pytest
 from unittest.mock import patch, Mock, call
+
+
+@pytest.fixture(autouse=True)
+def mock_settings():
+    with patch("api.utils.syncing.github.actions.settings") as mock_settings:
+        mock_settings.APP_HOST = "cloud"
+        yield mock_settings
 
 
 def get_mocked_response(url, *args, **kwargs):
@@ -107,8 +115,8 @@ def test_sync_skips_oversized_secret(mock_get, mock_put, mock_encrypt, mock_exis
     success, result = sync_github_secrets(
         secrets, MOCK_ACCESS_TOKEN, MOCK_REPO, MOCK_OWNER
     )
-    assert success
-    assert "synced successfully" in result["message"]
+    assert not success
+    assert "too large to sync" in result["message"]
     mock_put.assert_not_called()
 
 

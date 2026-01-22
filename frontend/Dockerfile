@@ -63,4 +63,5 @@ USER app
 
 # Expose port and define CMD
 EXPOSE 3000
+STOPSIGNAL SIGTERM
 CMD ["/app/scripts/start.sh"]

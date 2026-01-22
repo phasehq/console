@@ -1,7 +1,7 @@
 from api.utils.syncing.cloudflare.pages import CloudFlarePagesType
 from api.utils.syncing.cloudflare.workers import CloudflareWorkerType
 from api.utils.syncing.aws.secrets_manager import AWSSecretType
-from api.utils.syncing.github.actions import GitHubRepoType
+from api.utils.syncing.github.actions import GitHubRepoType, GitHubOrgType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
@@ -74,6 +74,7 @@ from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
     resolve_aws_secret_manager_secrets,
     resolve_gh_repos,
+    resolve_gh_orgs,
     resolve_github_environments,
     resolve_gitlab_projects,
     resolve_gitlab_groups,
@@ -142,6 +143,7 @@ from .graphene.mutations.syncing import (
     CreateAWSSecretsManagerSync,
     CreateCloudflarePagesSync,
     CreateGitHubActionsSync,
+    CreateGitHubDependabotSync,
     CreateGitLabCISync,
     CreateNomadSync,
     CreateProviderCredentials,
@@ -398,6 +400,10 @@ class Query(graphene.ObjectType):
         GitHubRepoType,
         credential_id=graphene.ID(),
     )
+    github_orgs = graphene.List(
+        GitHubOrgType,
+        credential_id=graphene.ID(),
+    )
     github_environments = graphene.List(
         graphene.String,
         credential_id=graphene.ID(),
@@ -485,6 +491,7 @@ class Query(graphene.ObjectType):
     resolve_aws_secrets = resolve_aws_secret_manager_secrets
 
     resolve_github_repos = resolve_gh_repos
+    resolve_github_orgs = resolve_gh_orgs
     resolve_github_environments = resolve_github_environments
 
     resolve_gitlab_projects = resolve_gitlab_projects
@@ -1105,6 +1112,7 @@ class Mutation(graphene.ObjectType):
 
     # GitHub
     create_gh_actions_sync = CreateGitHubActionsSync.Field()
+    create_gh_dependabot_sync = CreateGitHubDependabotSync.Field()
 
     # Vault
     create_vault_sync = CreateVaultSync.Field()

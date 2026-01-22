@@ -55,6 +55,7 @@ type Query {
   cloudflareWorkers(credentialId: ID): [CloudflareWorkerType]
   awsSecrets(credentialId: ID): [AWSSecretType]
   githubRepos(credentialId: ID): [GitHubRepoType]
+  githubOrgs(credentialId: ID): [GitHubOrgType]
   githubEnvironments(credentialId: ID, owner: String, repoName: String): [String]
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
@@ -103,9 +104,7 @@ value as specified by
 """
 scalar DateTime
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiOrganisationPlanChoices {
   """
   Free
@@ -220,9 +219,7 @@ type EnvironmentType {
   syncs: [EnvironmentSyncType]!
 }
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiEnvironmentEnvTypeChoices {
   """
   Development
@@ -388,9 +385,7 @@ type AwsIamConfigType {
   stsEndpoint: String
 }
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiSecretEventEventTypeChoices {
   """
   Create
@@ -464,9 +459,7 @@ type ProviderType {
   authScheme: String
 }
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiDynamicSecretProviderChoices {
   """
   AWS
@@ -518,9 +511,7 @@ type DynamicSecretLeaseType {
   events: [DynamicSecretLeaseEventType]
 }
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiDynamicSecretLeaseStatusChoices {
   """
   Created
@@ -568,9 +559,7 @@ type DynamicSecretLeaseEventType {
   createdAt: DateTime!
 }
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiDynamicSecretLeaseEventEventTypeChoices {
   """
   Created
@@ -612,9 +601,7 @@ type EnvironmentSyncType {
   history: [EnvironmentSyncEventType!]!
 }
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiEnvironmentSyncStatusChoices {
   """
   In progress
@@ -658,9 +645,7 @@ type EnvironmentSyncEventType {
   completedAt: DateTime
 }
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiEnvironmentSyncEventStatusChoices {
   """
   In progress
@@ -746,9 +731,7 @@ type ActivatedPhaseLicenseType {
   activatedAt: DateTime!
 }
 
-"""
-An enumeration.
-"""
+"""An enumeration."""
 enum ApiActivatedPhaseLicensePlanChoices {
   """
   Free
@@ -907,6 +890,11 @@ type GitHubRepoType {
   name: String
   owner: String
   type: String
+}
+
+type GitHubOrgType {
+  name: String
+  role: String
 }
 
 type GitLabProjectType {
@@ -1266,95 +1254,18 @@ type Mutation {
     name: String
   ): UpdateProviderCredentials
   deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
-  createCloudflarePagesSync(
-    credentialId: ID
-    deploymentId: ID
-    envId: ID
-    path: String
-    projectEnv: String
-    projectName: String
-  ): CreateCloudflarePagesSync
-  createCloudflareWorkersSync(
-    credentialId: ID
-    envId: ID
-    path: String
-    workerName: String
-  ): CreateCloudflareWorkersSync
-  createAwsSecretSync(
-    credentialId: ID
-    envId: ID
-    kmsId: String
-    path: String
-    secretName: String
-  ): CreateAWSSecretsManagerSync
-  createGhActionsSync(
-    credentialId: ID
-    envId: ID
-    environmentName: String
-    owner: String
-    path: String
-    repoName: String
-  ): CreateGitHubActionsSync
-  createVaultSync(
-    credentialId: ID
-    engine: String
-    envId: ID
-    path: String
-    vaultPath: String
-  ): CreateVaultSync
-  createNomadSync(
-    credentialId: ID
-    envId: ID
-    nomadNamespace: String
-    nomadPath: String
-    path: String
-  ): CreateNomadSync
-  createGitlabCiSync(
-    credentialId: ID
-    envId: ID
-    isGroup: Boolean
-    masked: Boolean
-    path: String
-    protected: Boolean
-    resourceId: String
-    resourcePath: String
-  ): CreateGitLabCISync
-  createRailwaySync(
-    credentialId: ID
-    envId: ID
-    path: String
-    railwayEnvironment: RailwayResourceInput
-    railwayProject: RailwayResourceInput
-    railwayService: RailwayResourceInput
-  ): CreateRailwaySync
-  createVercelSync(
-    credentialId: ID
-    envId: ID
-    environment: String
-    path: String
-    projectId: String
-    projectName: String
-    secretType: String
-    teamId: String
-    teamName: String
-  ): CreateVercelSync
-  createRenderSync(
-    credentialId: ID
-    envId: ID
-    path: String
-    resourceId: String
-    resourceName: String
-    resourceType: RenderResourceType
-    secretFileName: String
-  ): CreateRenderSync
-  createUserToken(
-    expiry: BigInt
-    identityKey: String!
-    name: String!
-    orgId: ID!
-    token: String!
-    wrappedKeyShare: String!
-  ): CreateUserTokenMutation
+  createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
+  createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
+  createAwsSecretSync(credentialId: ID, envId: ID, kmsId: String, path: String, secretName: String): CreateAWSSecretsManagerSync
+  createGhActionsSync(credentialId: ID, envId: ID, environmentName: String, orgSync: Boolean, owner: String, path: String, repoName: String, repoVisibility: String): CreateGitHubActionsSync
+  createGhDependabotSync(credentialId: ID, envId: ID, orgSync: Boolean, owner: String, path: String, repoName: String, repoVisibility: String): CreateGitHubDependabotSync
+  createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
+  createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
+  createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
+  createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
+  createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
+  createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
+  createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(
     appId: ID!
@@ -1687,6 +1598,10 @@ type CreateAWSSecretsManagerSync {
 }
 
 type CreateGitHubActionsSync {
+  sync: EnvironmentSyncType
+}
+
+type CreateGitHubDependabotSync {
   sync: EnvironmentSyncType
 }
 

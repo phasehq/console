@@ -20,7 +20,7 @@ from api.utils.access.permissions import (
 )
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.aws.secrets_manager import list_aws_secrets
-from api.utils.syncing.github.actions import list_repos, list_environments
+from api.utils.syncing.github.actions import list_repos, list_environments, list_orgs
 from api.utils.syncing.vault.main import test_vault_creds
 from api.utils.syncing.nomad.main import test_nomad_creds
 from api.utils.syncing.gitlab.main import list_gitlab_groups, list_gitlab_projects
@@ -82,6 +82,11 @@ def resolve_cloudflare_pages_projects(root, info, credential_id):
 
     credential = ProviderCredentials.objects.get(id=credential_id)
 
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+
     if credential.provider != "cloudflare":
         raise GraphQLError("These credentials can't be used to sync with Cloudflare!")
 
@@ -124,6 +129,11 @@ def resolve_cloudflare_workers(root, info, credential_id):
 def resolve_aws_secret_manager_secrets(root, info, credential_id):
     pk, sk = get_server_keypair()
     credential = ProviderCredentials.objects.get(id=credential_id)
+
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
 
     try:
         decrypted_creds = {}
@@ -184,6 +194,12 @@ def resolve_validate_aws_assume_role_credentials(
 
 
 def resolve_gh_repos(root, info, credential_id):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+
     try:
         secrets = list_repos(credential_id)
         return secrets
@@ -192,9 +208,27 @@ def resolve_gh_repos(root, info, credential_id):
 
 
 def resolve_github_environments(root, info, credential_id, owner, repo_name):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
     try:
         envs = list_environments(credential_id, owner, repo_name)
         return envs
+    except Exception as ex:
+        raise GraphQLError(ex)
+
+
+def resolve_gh_orgs(root, info, credential_id):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+    try:
+        orgs = list_orgs(credential_id)
+        return orgs
     except Exception as ex:
         raise GraphQLError(ex)
 
@@ -216,6 +250,12 @@ def resolve_test_nomad_creds(root, info, credential_id):
 
 
 def resolve_gitlab_projects(root, info, credential_id):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+
     try:
         projects = list_gitlab_projects(credential_id)
         return projects
