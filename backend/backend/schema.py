@@ -54,10 +54,13 @@ from .graphene.mutations.access import (
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     StripeSubscriptionDetails,
+    StripePlanEstimate,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
     resolve_stripe_customer_portal_url,
+    resolve_estimate_stripe_subscription,
 )
+from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
 from ee.billing.graphene.mutations.stripe import (
     CancelSubscriptionMutation,
     CreateSubscriptionCheckoutSession,
@@ -437,6 +440,13 @@ class Query(graphene.ObjectType):
 
     stripe_customer_portal_url = graphene.String(
         organisation_id=graphene.ID(required=True)
+    )
+
+    estimate_stripe_subscription = graphene.Field(
+        StripePlanEstimate,
+        organisation_id=graphene.ID(required=True),
+        plan_type=PlanTypeEnum(required=True),
+        billing_period=BillingPeriodEnum(required=True),
     )
 
     # Dynamic secrets
@@ -1015,6 +1025,7 @@ class Query(graphene.ObjectType):
     resolve_stripe_checkout_details = resolve_stripe_checkout_details
     resolve_stripe_subscription_details = resolve_stripe_subscription_details
     resolve_stripe_customer_portal_url = resolve_stripe_customer_portal_url
+    resolve_estimate_stripe_subscription = resolve_estimate_stripe_subscription
 
 
 class Mutation(graphene.ObjectType):

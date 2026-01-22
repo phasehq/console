@@ -1,7 +1,7 @@
 from api.models import Organisation
-from api.utils.organisations import get_organisation_seats
 from api.utils.access.permissions import user_has_permission
 from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
+
 import stripe
 from django.conf import settings
 from graphene import Mutation, ID, String, Boolean, ObjectType, Mutation, Enum
@@ -35,24 +35,24 @@ class CreateSubscriptionCheckoutSession(Mutation):
             ):
                 raise GraphQLError("You don't have permission to update Billing")
 
-            seats = get_organisation_seats(organisation)
-
             # Ensure the organisation has a Stripe customer ID
             if not organisation.stripe_customer_id:
                 raise GraphQLError("Organisation must have a Stripe customer ID.")
 
+            seats = organisation.get_seats()
+
             if plan_type == PlanTypeEnum.ENTERPRISE:
                 price = (
-                    settings.STRIPE["prices"]["enterprise_monthly"]
+                    settings.STRIPE["prices"]["enterprise_monthly"][0]
                     if billing_period == BillingPeriodEnum.MONTHLY
-                    else settings.STRIPE["prices"]["enterprise_yearly"]
+                    else settings.STRIPE["prices"]["enterprise_yearly"][0]
                 )
 
             else:
                 price = (
-                    settings.STRIPE["prices"]["pro_monthly"]
+                    settings.STRIPE["prices"]["pro_monthly"][0]
                     if billing_period == BillingPeriodEnum.MONTHLY
-                    else settings.STRIPE["prices"]["pro_yearly"]
+                    else settings.STRIPE["prices"]["pro_yearly"][0]
                 )
 
             # Create the checkout session
@@ -250,16 +250,16 @@ class ModifySubscriptionMutation(Mutation):
 
             if plan_type == PlanTypeEnum.ENTERPRISE:
                 price = (
-                    settings.STRIPE["prices"]["enterprise_monthly"]
+                    settings.STRIPE["prices"]["enterprise_monthly"][0]
                     if billing_period == BillingPeriodEnum.MONTHLY
-                    else settings.STRIPE["prices"]["enterprise_yearly"]
+                    else settings.STRIPE["prices"]["enterprise_yearly"][0]
                 )
 
             else:
                 price = (
-                    settings.STRIPE["prices"]["pro_monthly"]
+                    settings.STRIPE["prices"]["pro_monthly"][0]
                     if billing_period == BillingPeriodEnum.MONTHLY
-                    else settings.STRIPE["prices"]["pro_yearly"]
+                    else settings.STRIPE["prices"]["pro_yearly"][0]
                 )
 
             # Retrieve the subscription and update it with a new price
@@ -269,7 +269,7 @@ class ModifySubscriptionMutation(Mutation):
                     {
                         "id": subscription_item_id,  # Assuming there's only one item in the subscription
                         "price": price,
-                        "quantity": get_organisation_seats(organisation),
+                        "quantity": organisation.get_seats(),
                     },
                 ],
             )
