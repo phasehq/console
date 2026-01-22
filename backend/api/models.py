@@ -101,8 +101,17 @@ class Organisation(models.Model):
 
     def get_seats(self):
         if self.pricing_version == self.PRICING_V2:
-            return self.users.count()
-        return self.users.count() + self.service_accounts.count()
+            return (
+                self.users.filter(deleted_at=None).count()
+                + self.invites.filter(
+                    valid=True, expires_at__gte=timezone.now()
+                ).count()
+            )
+        return (
+            self.users.filter(deleted_at=None).count()
+            + self.invites.filter(valid=True, expires_at__gte=timezone.now()).count()
+            + self.service_accounts.filter(deleted_at=None).count()
+        )
 
     def save(self, *args, **kwargs):
         if self._state.adding:
