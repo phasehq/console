@@ -113,9 +113,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       }))
       .filter(
         (acc: AccountWithEnvScope) => !selectedAccounts.map((sacc) => sacc.id).includes(acc.id)
-      ) ??
-    [] ??
-    []
+      ) ?? []
 
   const accountWithoutScope = selectedAccounts.some((account) => account.scope.length === 0)
 
