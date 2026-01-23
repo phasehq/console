@@ -910,7 +910,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-500/20 rounded-md">
-              {[...Array(6)].map((_, index) => (
+              {[...Array(13)].map((_, index) => (
                 <AppSecretRowSkeleton key={`skeleton-${index}`} index={index} envCount={3} />
               ))}
             </tbody>

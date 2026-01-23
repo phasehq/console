@@ -56,7 +56,7 @@ export const EnvironmentPageSkeleton = () => {
 
         {/* Secret rows */}
         <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
-          {[...Array(6)].map((_, index) => (
+          {[...Array(13)].map((_, index) => (
             <SecretRowSkeleton key={`skeleton-${index}`} index={index} />
           ))}
         </div>
