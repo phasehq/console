@@ -9,6 +9,7 @@ import { Alert } from '../common/Alert'
 import { Card } from '../common/Card'
 import { toast } from 'react-toastify'
 import { decryptBox } from '@/utils/crypto'
+import clsx from 'clsx'
 
 export const LockboxViewer = (props: { box: LockboxType }) => {
   const { box } = props
@@ -40,31 +41,45 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
   }
 
   return (
-    <div className="space-y-4">
-      {secret ? (
-        <div className="p-4 relative group font-mono text-sm break-all ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-lg ph-no-capture shadow-2xl">
-          <div className="absolute right-2 top-3.5 z-10 bg-zinc-200 dark:bg-zinc-800 rounded-bl-lg pl-2 pb-2">
-            <CopyButton value={secret} />
-          </div>
-          <div className="max-h-[80vh] overflow-y-auto pt-10 px-4">{secret}</div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <Card>
-            <div className="p-20  rounded-lg flex items-center justify-center">
-              <Button variant="primary" onClick={handleOpenBox}>
-                View Secret
-              </Button>
-            </div>
-          </Card>
+    <div className={clsx('flex flex-col', secret ? 'h-full' : 'justify-center flex-1')}>
+      {/* Header - compact when secret is shown */}
+      <div className={clsx('text-center', secret ? 'py-4' : 'py-8 md:py-16')}>
+        <h1 className={clsx('font-semibold', secret ? 'text-2xl' : 'text-3xl md:text-4xl')}>
+          Phase Lockbox
+        </h1>
+        {!secret && (
+          <p className="text-neutral-500 text-base md:text-lg mt-2 max-w-lg mx-auto">
+            You&apos;ve received a secret via Phase Lockbox, secured with Zero-Trust encryption.
+            Click the View button to decrypt and view this secret.
+          </p>
+        )}
+      </div>
 
-          <div>
+      {/* Content */}
+      <div className={clsx('w-full', secret ? 'flex-1 min-h-0' : '')}>
+        {secret ? (
+          <div className="h-full flex flex-col p-4 relative group font-mono text-sm break-all ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-lg ph-no-capture shadow-2xl">
+            <div className="absolute right-2 top-3.5 z-10 bg-zinc-200 dark:bg-zinc-800 rounded-bl-lg pl-2 pb-2">
+              <CopyButton value={secret} />
+            </div>
+            <div className="flex-1 overflow-y-auto pt-8 px-2">{secret}</div>
+          </div>
+        ) : (
+          <div className="space-y-4 max-w-md mx-auto">
+            <Card>
+              <div className="p-12 md:p-16 rounded-lg flex items-center justify-center">
+                <Button variant="primary" onClick={handleOpenBox}>
+                  View Secret
+                </Button>
+              </div>
+            </Card>
+
             <Alert variant="info" icon={true} size="sm">
               {expiryDescription}
             </Alert>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
