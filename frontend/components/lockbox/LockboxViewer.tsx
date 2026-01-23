@@ -45,12 +45,11 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
       {/* Header - compact when secret is shown */}
       <div className={clsx('text-center', secret ? 'py-4' : 'py-8 md:py-16')}>
         <h1 className={clsx('font-semibold', secret ? 'text-2xl' : 'text-3xl md:text-4xl')}>
-          Phase Lockbox
+            Lockbox
         </h1>
         {!secret && (
           <p className="text-neutral-500 text-base md:text-lg mt-2 max-w-lg mx-auto">
             You&apos;ve received a secret via Phase Lockbox, secured with Zero-Trust encryption.
-            Click the View button to decrypt and view this secret.
           </p>
         )}
       </div>
