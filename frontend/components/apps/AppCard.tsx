@@ -291,7 +291,11 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
                 {name}
               </>
             ) : (
-              <Link href={`/${organisation?.name}/apps/${app.id}`} className="flex items-center gap-2">
+              <Link
+                href={`/${organisation?.name}/apps/${app.id}`}
+                className="flex items-center gap-2"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <EncryptionDot sseEnabled={app.sseEnabled!} />
                 {name}
               </Link>
