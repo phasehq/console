@@ -46,7 +46,7 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
           <div className="absolute right-2 top-3.5 z-10 bg-zinc-200 dark:bg-zinc-800 rounded-bl-lg pl-2 pb-2">
             <CopyButton value={secret} />
           </div>
-          <div className="max-h-[80vh] overflow-y-auto">{secret}</div>
+          <div className="max-h-[80vh] overflow-y-auto pt-10 px-4">{secret}</div>
         </div>
       ) : (
         <div className="space-y-4">
