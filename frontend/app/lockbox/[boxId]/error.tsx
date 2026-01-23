@@ -14,7 +14,7 @@ export default function Error({ error, reset }: { error: Error; reset: () => voi
         <div className="space-y-2 my-auto">
           <FaBoxOpen className="text-neutral-500/40 size-40 mx-auto" />
 
-          <div className="text-4xl font-semibold">Phase Lockbox</div>
+          <div className="text-4xl font-semibold">Lockbox</div>
           <div className="text-neutral-500 text-lg">
             This box has either expired or doesn&apos;t exist!
           </div>
