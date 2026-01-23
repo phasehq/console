@@ -4,7 +4,7 @@ import { AppType } from '@/apollo/graphql'
 import { ProviderIcon } from '../syncing/ProviderIcon'
 import { Avatar } from '../common/Avatar'
 import { BsListColumnsReverse } from 'react-icons/bs'
-import { EncryptionModeIndicator } from './EncryptionModeIndicator'
+import { EncryptionModeIndicator, EncryptionDot } from './EncryptionModeIndicator'
 import clsx from 'clsx'
 import { ReactNode, useContext } from 'react'
 import CopyButton from '../common/CopyButton'
@@ -275,30 +275,27 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
     >
       <div
         className={clsx(
-          'flex justify-between',
-          variant === 'normal' ? 'items-start' : 'items-center col-span-2 w-full lg:max-w-[24rem]'
+          'flex',
+          variant === 'normal' ? 'justify-between items-start' : 'col-span-2 w-full lg:max-w-[24rem] pl-3'
         )}
       >
         <div className="space-y-0.5 w-full">
           <div
             className={clsx(
-              'font-semibold flex items-center justify-between gap-2 text-zinc-700 dark:text-zinc-100 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease',
-              variant === 'normal' ? 'text-2xl' : 'text-lg pl-3'
+              'font-semibold text-zinc-700 dark:text-zinc-100 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease flex items-center gap-2',
+              variant === 'normal' ? 'text-2xl' : 'text-lg'
             )}
           >
             {variant === 'normal' ? (
-              name
-            ) : (
-              <Link
-                href={`/${organisation?.name}/apps/${app.id}`}
-                className="flex items-center gap-4 justify-between w-full"
-              >
+              <>
                 {name}
-                <div className="xl:hidden">
-                  <EncryptionModeIndicator app={app} />
-                </div>
+              </>
+            ) : (
+              <Link href={`/${organisation?.name}/apps/${app.id}`} className="flex items-center gap-2">
+                <EncryptionDot sseEnabled={app.sseEnabled!} />
+                {name}
               </Link>
-            )}{' '}
+            )}
           </div>
           {variant === 'normal' ? (
             <div className="text-2xs font-mono text-neutral-500 w-full break-all text-left">
@@ -319,9 +316,9 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             </div>
           )}
         </div>
-        <div className="hidden xl:block">
-          <EncryptionModeIndicator app={app} />
-        </div>
+        {variant === 'normal' && (
+          <EncryptionDot sseEnabled={app.sseEnabled!} />
+        )}
       </div>
 
       {variant === 'normal' ? (
