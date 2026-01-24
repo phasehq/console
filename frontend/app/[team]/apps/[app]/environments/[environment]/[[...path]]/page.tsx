@@ -1172,7 +1172,7 @@ export default function EnvironmentPath({
                 {searchQuery ? (
                   userCanCreateSecrets && (
                     <Button variant="primary" onClick={handleCreateSecretFromSearch}>
-                      <FaPlus /> Create "{normalizeKey(searchQuery)}"
+                      <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
                     </Button>
                   )
                 ) : (
