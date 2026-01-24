@@ -600,7 +600,7 @@ export default function EnvironmentPath({
   const filteredSecrets = useMemo(() => {
     if (searchQuery === '') return clientSecrets
     const re = new RegExp(searchQuery, 'i')
-    return clientSecrets.filter((s) => re.test(s.key))
+    return clientSecrets.filter((s) => re.test(s.key) || re.test(s.value))
   }, [clientSecrets, searchQuery])
 
   const filteredAndSortedSecrets = useMemo(
@@ -1015,7 +1015,7 @@ export default function EnvironmentPath({
                     <FaSearch className="text-neutral-500" />
                   </div>
                   <input
-                    placeholder="Search"
+                    placeholder="Search keys or values"
                     className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
