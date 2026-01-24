@@ -454,6 +454,7 @@ class Query(graphene.ObjectType):
         organisation_id=graphene.ID(required=True),
         plan_type=PlanTypeEnum(required=True),
         billing_period=BillingPeriodEnum(required=True),
+        preview_v2=graphene.Boolean(default_value=False),
     )
 
     # Dynamic secrets

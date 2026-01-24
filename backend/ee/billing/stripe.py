@@ -87,7 +87,7 @@ def map_stripe_plan_to_tier(stripe_plan_id):
         return Organisation.ENTERPRISE_PLAN
     elif stripe_plan_id in settings.STRIPE["prices"]["free"]:
         return Organisation.FREE_PLAN
-    
+
     raise ValueError(f"Unknown Stripe price ID: {stripe_plan_id}")
 
 
@@ -96,6 +96,71 @@ def migrate_organisation_to_v2_pricing(organisation):
     Helper to migrate an organisation to the new pricing model.
     Should be called when an organisation changes plans.
     """
-    if organisation.pricing_version == Organisation.PRICING_V1:
-        organisation.pricing_version = Organisation.PRICING_V2
-        organisation.save()
+    if organisation.pricing_version == Organisation.PRICING_V2:
+        return
+
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    # Update local state
+    organisation.pricing_version = Organisation.PRICING_V2
+    organisation.save()
+
+    if organisation.plan in [Organisation.PRO_PLAN, Organisation.ENTERPRISE_PLAN]:
+        if not organisation.stripe_subscription_id:
+            return
+
+        try:
+            subscription = stripe.Subscription.retrieve(
+                organisation.stripe_subscription_id
+            )
+            if not subscription["items"]["data"]:
+                return
+
+            item = subscription["items"]["data"][0]
+            current_price = item["price"]
+            item_id = item["id"]
+
+            # Determine billing period based on current price interval
+            is_yearly = current_price.get("recurring", {}).get("interval") == "year"
+
+            # Get new price ID (first in the list is the new active price)
+            if organisation.plan == Organisation.PRO_PLAN:
+                prices = (
+                    settings.STRIPE["prices"]["pro_yearly"]
+                    if is_yearly
+                    else settings.STRIPE["prices"]["pro_monthly"]
+                )
+            else:  # Enterprise
+                prices = (
+                    settings.STRIPE["prices"]["enterprise_yearly"]
+                    if is_yearly
+                    else settings.STRIPE["prices"]["enterprise_monthly"]
+                )
+
+            if not prices:
+                raise ValueError(
+                    "No active price configuration found for plan migration"
+                )
+
+            new_price_id = prices[0]
+            new_seat_count = organisation.get_seats()
+
+            # Modify subscription to use new price and quantity
+            stripe.Subscription.modify(
+                organisation.stripe_subscription_id,
+                items=[
+                    {
+                        "id": item_id,
+                        "price": new_price_id,
+                        "quantity": new_seat_count,
+                    }
+                ],
+                proration_behavior="always_invoice",
+            )
+
+        except Exception as e:
+            notify_slack(
+                f"Failed to migrate Stripe subscription for organisation {organisation.id}: {e}"
+            )
+            # Re-raise so the mutation is aware of the failure
+            raise e

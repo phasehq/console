@@ -1,6 +1,6 @@
 import { useRef, useContext } from 'react'
 import GenericDialog from '@/components/common/GenericDialog'
-import { useMutation } from '@apollo/client'
+import { useMutation, useQuery } from '@apollo/client'
 import { MigratePricing } from '@/graphql/mutations/billing/migratePricing.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
@@ -8,11 +8,45 @@ import { toast } from 'react-toastify'
 import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { FaExchangeAlt, FaExternalLinkAlt } from 'react-icons/fa'
 import { Alert } from '@/components/common/Alert'
+import { EstimateStripeSubscription } from '@/graphql/queries/billing/getSubscriptionPrice.gql'
+import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptionDetails.gql'
+import { PlanTypeEnum, BillingPeriodEnum } from '@/apollo/graphql'
 
 export const MigratePricingDialog = () => {
   const { activeOrganisation } = useContext(organisationContext)
-  const [migratePricing, { loading }] = useMutation(MigratePricing)
+  const [migratePricing, { loading: migrationLoading }] = useMutation(MigratePricing)
   const dialogRef = useRef<any>(null)
+
+  const { data: subData, loading: subLoading } = useQuery(GetSubscriptionDetails, {
+    variables: { organisationId: activeOrganisation?.id },
+    skip: !activeOrganisation || activeOrganisation.plan === 'FR',
+  })
+
+  const planType = subData?.stripeSubscriptionDetails?.planType || PlanTypeEnum.Pro
+  const billingPeriod =
+    subData?.stripeSubscriptionDetails?.billingPeriod || BillingPeriodEnum.Monthly
+
+  const { data: v1Data, loading: v1Loading } = useQuery(EstimateStripeSubscription, {
+    variables: {
+      organisationId: activeOrganisation?.id,
+      planType,
+      billingPeriod,
+      previewV2: false,
+    },
+    skip: !activeOrganisation,
+  })
+
+  const { data: v2Data, loading: v2Loading } = useQuery(EstimateStripeSubscription, {
+    variables: {
+      organisationId: activeOrganisation?.id,
+      planType,
+      billingPeriod,
+      previewV2: true,
+    },
+    skip: !activeOrganisation,
+  })
+
+  const isLoading = subLoading || v1Loading || v2Loading
 
   // Only show for V1 pricing orgs
   if (activeOrganisation?.pricingVersion !== 1) return null
@@ -35,6 +69,13 @@ export const MigratePricingDialog = () => {
     } catch (error) {
       toast.error('An error occurred during migration')
     }
+  }
+
+  const formatCurrency = (amount: number, currency: string) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+    }).format(amount)
   }
 
   return (
@@ -65,6 +106,56 @@ export const MigratePricingDialog = () => {
             .
           </p>
 
+          {!isLoading && v1Data && v2Data && (
+            <div className="grid grid-cols-2 gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
+              <div className="space-y-1">
+                <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  Current (Legacy)
+                </h3>
+                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                  {formatCurrency(
+                    v1Data.estimateStripeSubscription.estimatedTotal,
+                    v1Data.estimateStripeSubscription.currency
+                  )}
+                  <span className="text-sm font-normal text-zinc-500 ml-1">
+                    /{billingPeriod === BillingPeriodEnum.Monthly ? 'mo' : 'yr'}
+                  </span>
+                </div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                  {v1Data.estimateStripeSubscription.seatCount} seats
+                </div>
+                <div className="text-xs text-zinc-500">Graduated pricing</div>
+              </div>
+
+              <div className="space-y-1 border-l border-zinc-200 dark:border-zinc-700 pl-4">
+                <h3 className="font-semibold text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  New (v2)
+                </h3>
+                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                  {formatCurrency(
+                    v2Data.estimateStripeSubscription.estimatedTotal,
+                    v2Data.estimateStripeSubscription.currency
+                  )}
+                  <span className="text-sm font-normal text-zinc-500 ml-1">
+                    /{billingPeriod === BillingPeriodEnum.Monthly ? 'mo' : 'yr'}
+                  </span>
+                </div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                  {v2Data.estimateStripeSubscription.seatCount} seats
+                </div>
+                <div className="text-xs text-zinc-500">
+                  Linear pricing
+                  {v2Data.estimateStripeSubscription.seatCount <
+                    v1Data.estimateStripeSubscription.seatCount && (
+                    <span className="block text-emerald-600 dark:text-emerald-400 mt-1">
+                      (Service accounts excluded)
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <ul className="list-disc list-inside space-y-2 text-zinc-600 dark:text-zinc-400 ml-2 text-sm">
             <li>Your organisation will be switched to a flat-price, per-user billing model</li>
             <li>Service Accounts are no longer counted as billable seats</li>
@@ -76,7 +167,7 @@ export const MigratePricingDialog = () => {
           </Alert>
 
           <div className="pt-4 flex justify-end gap-2">
-            <Button variant="primary" isLoading={loading} onClick={handleMigration}>
+            <Button variant="primary" isLoading={migrationLoading} onClick={handleMigration}>
               <FaExchangeAlt />
               Confirm Migration
             </Button>

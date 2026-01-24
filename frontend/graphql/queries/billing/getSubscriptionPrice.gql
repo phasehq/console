@@ -2,11 +2,13 @@ query EstimateStripeSubscription(
   $organisationId: ID!
   $planType: PlanTypeEnum!
   $billingPeriod: BillingPeriodEnum!
+  $previewV2: Boolean
 ) {
   estimateStripeSubscription(
     organisationId: $organisationId
     planType: $planType
     billingPeriod: $billingPeriod
+    previewV2: $previewV2
   ) {
     estimatedTotal
     seatCount

@@ -5,6 +5,7 @@ import graphene
 from graphene import ObjectType, String, Boolean, List, Int, Float
 import stripe
 from django.conf import settings
+from django.utils import timezone
 from graphql import GraphQLError
 from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
 from ee.billing.utils import calculate_graduated_price
@@ -190,7 +191,7 @@ class StripePlanEstimate(ObjectType):
 
 
 def resolve_estimate_stripe_subscription(
-    self, info, organisation_id, plan_type, billing_period
+    self, info, organisation_id, plan_type, billing_period, preview_v2=False
 ):
     stripe.api_key = settings.STRIPE["secret_key"]
 
@@ -199,12 +200,18 @@ def resolve_estimate_stripe_subscription(
         if not user_has_permission(info.context.user, "read", "Billing", org):
             raise GraphQLError("You don't have permission to view billing information")
 
-        if org.plan == Organisation.FREE_PLAN and org.pricing_version == 1:
-            migrate_organisation_to_v2_pricing(org)
+        # Determine effective pricing version
+        is_v2 = org.pricing_version == 2 or preview_v2
 
-        seats = org.get_seats()
+        if is_v2:
+            seats = (
+                org.users.filter(deleted_at=None).count()
+                + org.invites.filter(valid=True, expires_at__gte=timezone.now()).count()
+            )
+        else:
+            seats = org.get_seats()
 
-        if org.pricing_version == 1:
+        if not is_v2:
             estimated_total = calculate_graduated_price(
                 seats, plan_type, billing_period
             )

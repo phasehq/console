@@ -153,7 +153,6 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
             </div>
           </Alert>
           <div className="flex items-center justify-end">
-            {' '}
             <MigratePricingDialog />
           </div>
         </div>
