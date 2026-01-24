@@ -79,6 +79,7 @@ type Query {
     organisationId: ID!
     planType: PlanTypeEnum!
     billingPeriod: BillingPeriodEnum!
+    previewV2: Boolean = false
   ): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
   dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]

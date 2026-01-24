@@ -8,7 +8,7 @@ import { toast } from 'react-toastify'
 import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { FaExchangeAlt, FaExternalLinkAlt } from 'react-icons/fa'
 import { Alert } from '@/components/common/Alert'
-import { EstimateStripeSubscription } from '@/graphql/queries/billing/getSubscriptionPrice.gql'
+import { GetStripeSubscriptionEstimate } from '@/graphql/queries/billing/getSubscriptionPrice.gql'
 import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptionDetails.gql'
 import { PlanTypeEnum, BillingPeriodEnum } from '@/apollo/graphql'
 
@@ -26,7 +26,7 @@ export const MigratePricingDialog = () => {
   const billingPeriod =
     subData?.stripeSubscriptionDetails?.billingPeriod || BillingPeriodEnum.Monthly
 
-  const { data: v1Data, loading: v1Loading } = useQuery(EstimateStripeSubscription, {
+  const { data: v1Data, loading: v1Loading } = useQuery(GetStripeSubscriptionEstimate, {
     variables: {
       organisationId: activeOrganisation?.id,
       planType,
@@ -36,7 +36,7 @@ export const MigratePricingDialog = () => {
     skip: !activeOrganisation,
   })
 
-  const { data: v2Data, loading: v2Loading } = useQuery(EstimateStripeSubscription, {
+  const { data: v2Data, loading: v2Loading } = useQuery(GetStripeSubscriptionEstimate, {
     variables: {
       organisationId: activeOrganisation?.id,
       planType,

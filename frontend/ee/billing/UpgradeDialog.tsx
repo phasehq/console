@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useState } from 'react'
 import { InitStripeUpgradeCheckout } from '@/graphql/mutations/billing/initUpgradeCheckout.gql'
 import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptionDetails.gql'
 import { ModifyStripeSubscription } from '@/graphql/mutations/billing/modifySubscription.gql'
-import { EstimateStripeSubscription } from '@/graphql/queries/billing/getSubscriptionPrice.gql'
+import { GetStripeSubscriptionEstimate } from '@/graphql/queries/billing/getSubscriptionPrice.gql'
 import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { useMutation, useQuery } from '@apollo/client'
 import { loadStripe } from '@stripe/stripe-js'
@@ -96,14 +96,17 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
       skip: !activeOrganisation || !userCanReadBilling,
     })
 
-    const { data: estimateData, loading: estimateLoading } = useQuery(EstimateStripeSubscription, {
-      variables: {
-        organisationId: activeOrganisation?.id!,
-        planType,
-        billingPeriod: billingPeriodPreview,
-      },
-      skip: !activeOrganisation,
-    })
+    const { data: estimateData, loading: estimateLoading } = useQuery(
+      GetStripeSubscriptionEstimate,
+      {
+        variables: {
+          organisationId: activeOrganisation?.id!,
+          planType,
+          billingPeriod: billingPeriodPreview,
+        },
+        skip: !activeOrganisation,
+      }
+    )
 
     const subscriptionData: StripeSubscriptionDetails | undefined =
       subscriptionDataQuery?.stripeSubscriptionDetails ?? undefined
