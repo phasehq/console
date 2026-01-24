@@ -189,7 +189,9 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
 
         <div className="bg-zinc-200 dark:bg-zinc-700 p-3 rounded-lg mt-4 text-zinc-900 dark:text-zinc-100 text-xs space-y-1">
           <div className="flex justify-between text-zinc-900 dark:text-zinc-100">
-            <span>Avg Unit Price:</span>
+            <span>
+              {activeOrganisation?.pricingVersion === 2 ? 'Unit Price:' : 'Avg Unit Price:'}
+            </span>
             <span>${monthlyPricePerUser.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-zinc-900 dark:text-zinc-100">

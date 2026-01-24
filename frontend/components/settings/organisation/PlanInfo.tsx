@@ -212,7 +212,11 @@ export const PlanInfo = () => {
                   </Link>
                 </div>
 
-                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.seatsUsed.serviceAccounts} Seats used`}</div>
+                <div className="text-neutral-500 text-xs">
+                  {activeOrganisation.pricingVersion === 2
+                    ? data.organisationPlan.seatsUsed.serviceAccounts
+                    : `${data.organisationPlan.seatsUsed.serviceAccounts} Seats used`}
+                </div>
               </div>
               {seatLimit && (
                 <ProgressBar
