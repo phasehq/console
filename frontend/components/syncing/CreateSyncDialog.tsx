@@ -6,6 +6,7 @@ import { CreateCloudflarePagesSync } from './Cloudflare/CreateCloudflarePagesSyn
 import React from 'react'
 import { CreateAWSSecretsSync } from './AWS/CreateAWSSecretsSync'
 import { CreateGhActionsSync } from './GitHub/CreateGhActionsSync'
+import { CreateGhDependabotSync } from './GitHub/CreateGhDependabotSync'
 import { CreateVaultSync } from './Vault/CreateVaultSync'
 import { CreateNomadSync } from './Nomad/CreateNomadSync'
 import { CreateGitLabCISync } from './GitLab/CreateGitLabCISync'
@@ -58,6 +59,8 @@ export const CreateSyncDialog = (props: {
         return <CreateCloudflarePagesSync appId={props.appId} closeModal={closeModal} />
       case 'github_actions':
         return <CreateGhActionsSync appId={props.appId} closeModal={closeModal} />
+      case 'github_dependabot':
+        return <CreateGhDependabotSync appId={props.appId} closeModal={closeModal} />
       case 'gitlab_ci':
         return <CreateGitLabCISync appId={props.appId} closeModal={closeModal} />
       case 'hashicorp_vault':

@@ -115,8 +115,8 @@ def test_sync_skips_oversized_secret(mock_get, mock_put, mock_encrypt, mock_exis
     success, result = sync_github_secrets(
         secrets, MOCK_ACCESS_TOKEN, MOCK_REPO, MOCK_OWNER
     )
-    assert success
-    assert "synced successfully" in result["message"]
+    assert not success
+    assert "too large to sync" in result["message"]
     mock_put.assert_not_called()
 
 

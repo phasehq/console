@@ -1,5 +1,6 @@
 import requests
 import logging
+import time
 from graphene import ObjectType, List, ID, String
 from api.utils.syncing.auth import get_credentials
 
@@ -40,6 +41,46 @@ def get_vercel_headers(token):
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 
+def vercel_request(method, url, headers, json=None, max_retries=5):
+    """Make requests to the Vercel API and handle rate limits."""
+    last_response = None
+    max_retries = max(1, max_retries)
+    for attempt in range(max_retries):
+        try:
+            response = requests.request(method, url, headers=headers, json=json)
+            last_response = response
+
+            is_rate_limited = response.status_code == 429
+            if not is_rate_limited:
+                return response
+
+            reset_header = response.headers.get("X-RateLimit-Reset")
+            wait_seconds = 5
+            if reset_header and reset_header.isdigit():
+                reset_ts = int(reset_header)
+                wait_seconds = reset_ts - int(time.time())
+                wait_seconds = max(min(wait_seconds, 300), 1)
+
+            logger.warning(
+                f"Vercel {method} {url} rate limited (attempt {attempt + 1}/{max_retries}); "
+                f"waiting {wait_seconds}s before retrying."
+            )
+            time.sleep(wait_seconds)
+        except requests.exceptions.RequestException as e:
+            logger.warning(
+                f"Vercel {method} {url} request failed (attempt {attempt + 1}/{max_retries}): {e}; "
+                f"retrying in 5s."
+            )
+            time.sleep(5)
+
+    if last_response is None:
+        raise Exception(
+            f"Failed to connect to Vercel API after {max_retries} attempts: {method} {url}"
+        )
+
+    return last_response
+
+
 def test_vercel_creds(credential_id):
     """Test if the Vercel credentials are valid."""
     try:
@@ -56,8 +97,8 @@ def delete_env_var(token, project_id, team_id, env_var_id):
     url = f"{VERCEL_API_BASE_URL}/v9/projects/{project_id}/env/{env_var_id}"
     if team_id is not None:
         url += f"?teamId={team_id}"
-    response = requests.delete(url, headers=get_vercel_headers(token))
 
+    response = vercel_request("DELETE", url, headers=get_vercel_headers(token))
     if response.status_code != 200:
         raise Exception(f"Error deleting environment variable: {response.text}")
 
@@ -237,7 +278,7 @@ def get_existing_env_vars(token, project_id, team_id, target_environment):
     if team_id is not None:
         url += f"?teamId={team_id}"
 
-    response = requests.get(url, headers=get_vercel_headers(token))
+    response = vercel_request("GET", url, headers=get_vercel_headers(token))
     if response.status_code != 200:
         raise Exception(f"Error retrieving environment variables: {response.text}")
 
@@ -415,8 +456,8 @@ def sync_vercel_secrets(
                 if team_id is not None:
                     url += f"&teamId={team_id}"
 
-                response = requests.post(
-                    url, headers=get_vercel_headers(token), json=payload
+                response = vercel_request(
+                    "POST", url, headers=get_vercel_headers(token), json=payload
                 )
 
                 if response.status_code not in [200, 201]:

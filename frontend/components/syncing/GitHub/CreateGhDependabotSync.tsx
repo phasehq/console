@@ -3,26 +3,14 @@ import GetGithubOrgs from '@/graphql/queries/syncing/github/getOrgs.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
-import CreateNewGhActionsSync from '@/graphql/mutations/syncing/github/CreateGhActionsSync.gql'
-import GetGithubEnvironments from '@/graphql/queries/syncing/github/getEnvironments.gql'
+import CreateNewGhDependabotSync from '@/graphql/mutations/syncing/github/CreateGhDependabotSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import {
-  EnvironmentType,
-  GitHubRepoType,
-  GitHubOrgType,
-  ProviderCredentialsType,
-} from '@/apollo/graphql'
+import { EnvironmentType, GitHubRepoType, GitHubOrgType, ProviderCredentialsType } from '@/apollo/graphql'
 import { Combobox, RadioGroup, Tab, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import {
-  FaAngleDoubleDown,
-  FaCheckCircle,
-  FaChevronDown,
-  FaCircle,
-  FaDotCircle,
-} from 'react-icons/fa'
+import { FaAngleDoubleDown, FaCheckCircle, FaChevronDown, FaCircle, FaDotCircle } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 
 import { organisationContext } from '@/contexts/organisationContext'
@@ -30,27 +18,24 @@ import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { SiGithub } from 'react-icons/si'
 import { Input } from '@/components/common/Input'
 
-export const CreateGhActionsSync = (props: { appId: string; closeModal: () => void }) => {
+export const CreateGhDependabotSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { appId, closeModal } = props
 
-  const [createGhActionsSync, { data: syncData, loading: creating }] =
-    useMutation(CreateNewGhActionsSync, {
-      onCompleted: () => {
-        toast.success('Created new Sync!')
-        closeModal()
-      },
-    })
+  const [createGhDependabotSync, { loading: creating }] = useMutation(CreateNewGhDependabotSync, {
+    onCompleted: () => {
+      toast.success('Created new Sync!')
+      closeModal()
+    },
+  })
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
   const [selectedOrg, setSelectedOrg] = useState<GitHubOrgType | undefined>(undefined)
-  const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined)
   const [query, setQuery] = useState('')
   const [orgQuery, setOrgQuery] = useState('')
-  const [envQuery, setEnvQuery] = useState('')
 
   const [repos, setRepos] = useState<GitHubRepoType[]>([])
   const [orgs, setOrgs] = useState<GitHubOrgType[]>([])
@@ -65,7 +50,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
     {
       value: 'all',
       label: 'All repositories',
-      description: 'Make this secret available to all repositories in the organization.',
+      description: 'Make this secret available to any repository in the organization.',
     },
     {
       value: 'private',
@@ -86,24 +71,12 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   const [getGhRepos, { loading: loadingRepos }] = useLazyQuery(GetGithubRepos)
   const [getGhOrgs, { loading: loadingOrgs }] = useLazyQuery(GetGithubOrgs)
 
-  const { data: environmentsData } = useQuery(GetGithubEnvironments, {
-    variables: {
-      credentialId: credential?.id,
-      owner: selectedRepo?.owner,
-      repoName: selectedRepo?.name,
-    },
-    skip: !credential || !selectedRepo, // Only fetch when we have both credential and selected repo
-  })
-
-  const environments = environmentsData?.githubEnvironments || []
-
   useEffect(() => {
     if (credentialsData && credentialsData.savedCredentials.length > 0) {
       setCredential(credentialsData.savedCredentials[0])
     }
   }, [credentialsData])
 
-  // Preselect the first available env
   useEffect(() => {
     if (appEnvsData?.appEnvironments.length > 0) {
       const defaultEnv: EnvironmentType = appEnvsData.appEnvironments[0]
@@ -137,7 +110,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
       return false
     } else {
       if (isOrgSync) {
-        await createGhActionsSync({
+        await createGhDependabotSync({
           variables: {
             envId: phaseEnv?.id,
             path,
@@ -149,14 +122,13 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
           refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
         })
       } else {
-        await createGhActionsSync({
+        await createGhDependabotSync({
           variables: {
             envId: phaseEnv?.id,
             path,
             repoName: selectedRepo!.name,
             owner: selectedRepo!.owner,
             credentialId: credential.id,
-            environmentName: selectedEnvironment || null,
             orgSync: false,
           },
           refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
@@ -167,14 +139,14 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
   const filteredRepos = repos.filter((repo) => {
     if (query === '') {
-      return true // If the query is empty, include all repos
+      return true
     }
 
     const queryLower = query.toLowerCase()
     const repoNameMatches = repo.name?.toLowerCase().includes(queryLower) || false
     const repoOwnerMatches = repo.owner?.toLowerCase().includes(queryLower) || false
 
-    return repoNameMatches || repoOwnerMatches // Include the repo if either name or owner matches the query
+    return repoNameMatches || repoOwnerMatches
   })
 
   const filteredOrgs = orgs.filter((org) => {
@@ -189,9 +161,9 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
       <div>
         <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
           <SiGithub />
-          GitHub Actions
+          GitHub Dependabot
         </div>
-        <div className="text-neutral-500 text-sm">Sync an environment with GitHub Actions.</div>
+        <div className="text-neutral-500 text-sm">Sync an environment with GitHub Dependabot.</div>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -390,117 +362,6 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                             </>
                           )}
                         </Combobox>
-
-                        <Combobox
-                          as="div"
-                          value={selectedEnvironment}
-                          onChange={setSelectedEnvironment}
-                        >
-                          {({ open }) => (
-                            <>
-                              <div className="space-y-2">
-                                <Combobox.Label as={Fragment}>
-                                  <label
-                                    className="block text-neutral-500 text-sm"
-                                    htmlFor="gh-env"
-                                  >
-                                    GitHub Environment (optional)
-                                  </label>
-                                </Combobox.Label>
-                                <div className="w-full relative flex items-center">
-                                  <Combobox.Input
-                                    className={clsx(
-                                      'w-full',
-                                      !selectedRepo &&
-                                        'opacity-60 cursor-not-allowed pointer-events-none'
-                                    )}
-                                    onChange={(e) => setEnvQuery(e.target.value)}
-                                    displayValue={(env?: string) => (env ? env : envQuery)}
-                                    aria-disabled={!selectedRepo}
-                                    placeholder={
-                                      !selectedRepo
-                                        ? 'Select a repository'
-                                        : environments.length === 0
-                                          ? 'No environments found'
-                                          : 'Select an environment'
-                                    }
-                                  />
-                                  <div className="absolute inset-y-0 right-2 flex items-center">
-                                    <Combobox.Button
-                                      aria-disabled={!selectedRepo}
-                                      className={clsx(!selectedRepo && 'pointer-events-none')}
-                                    >
-                                      <FaChevronDown
-                                        className={clsx(
-                                          'text-neutral-500 transform transition ease',
-                                          open ? 'rotate-180' : 'rotate-0',
-                                          !selectedRepo && 'opacity-50 cursor-not-allowed'
-                                        )}
-                                      />
-                                    </Combobox.Button>
-                                  </div>
-                                </div>
-                              </div>
-                              {selectedRepo && (
-                                <Transition
-                                  enter="transition duration-100 ease-out"
-                                  enterFrom="transform scale-95 opacity-0"
-                                  enterTo="transform scale-100 opacity-100"
-                                  leave="transition duration-75 ease-out"
-                                  leaveFrom="transform scale-100 opacity-100"
-                                  leaveTo="transform scale-95 opacity-0"
-                                >
-                                  <Combobox.Options as={Fragment}>
-                                    <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
-                                      <Combobox.Option as="div" key="__none__" value={undefined}>
-                                        {({ active, selected }) => (
-                                          <div
-                                            className={clsx(
-                                              'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
-                                              active && 'bg-zinc-300 dark:bg-zinc-700'
-                                            )}
-                                          >
-                                            <div className="text-neutral-500 text-sm">
-                                              No environment (repo-level)
-                                            </div>
-                                            {selected && (
-                                              <FaCheckCircle className="shrink-0 text-emerald-500" />
-                                            )}
-                                          </div>
-                                        )}
-                                      </Combobox.Option>
-                                      {environments
-                                        .filter((env: string) =>
-                                          envQuery
-                                            ? env.toLowerCase().includes(envQuery.toLowerCase())
-                                            : true
-                                        )
-                                        .map((env: string) => (
-                                          <Combobox.Option as="div" key={env} value={env}>
-                                            {({ active, selected }) => (
-                                              <div
-                                                className={clsx(
-                                                  'flex items-center justify-between gap-2 p-2 cursor-pointer  w-full border-b border-neutral-500/20',
-                                                  active && 'bg-zinc-300 dark:bg-zinc-700'
-                                                )}
-                                              >
-                                                <div className="font-semibold text-black dark:text-white">
-                                                  {env}
-                                                </div>
-                                                {selected && (
-                                                  <FaCheckCircle className="shrink-0 text-emerald-500" />
-                                                )}
-                                              </div>
-                                            )}
-                                          </Combobox.Option>
-                                        ))}
-                                    </div>
-                                  </Combobox.Options>
-                                </Transition>
-                              )}
-                            </>
-                          )}
-                        </Combobox>
                       </div>
                     </Tab.Panel>
                     <Tab.Panel>
@@ -654,3 +515,4 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
     </div>
   )
 }
+
