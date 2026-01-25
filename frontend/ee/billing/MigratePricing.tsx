@@ -10,7 +10,8 @@ import { FaExchangeAlt, FaExternalLinkAlt } from 'react-icons/fa'
 import { Alert } from '@/components/common/Alert'
 import { GetStripeSubscriptionEstimate } from '@/graphql/queries/billing/getSubscriptionPrice.gql'
 import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptionDetails.gql'
-import { PlanTypeEnum, BillingPeriodEnum } from '@/apollo/graphql'
+import { PlanTypeEnum, BillingPeriodEnum, ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 
 export const MigratePricingDialog = () => {
   const { activeOrganisation } = useContext(organisationContext)
@@ -23,6 +24,11 @@ export const MigratePricingDialog = () => {
   })
 
   const planType = subData?.stripeSubscriptionDetails?.planType || PlanTypeEnum.Pro
+  const planChoice =
+    planType === PlanTypeEnum.Enterprise
+      ? ApiOrganisationPlanChoices.En
+      : ApiOrganisationPlanChoices.Pr
+
   const billingPeriod =
     subData?.stripeSubscriptionDetails?.billingPeriod || BillingPeriodEnum.Monthly
 
@@ -92,7 +98,11 @@ export const MigratePricingDialog = () => {
       >
         <div className="space-y-4">
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
-            We have updated our pricing to a simpler, linear model with a flat pricing structure.
+            Your organisation is currently on the V1 pricing model. We have updated our pricing to a
+            simpler, linear model with a flat pricing structure (V2). You can choose to remain on
+            the old pricing model, or migrate to the new pricing.
+          </p>
+          <p className="text-zinc-600 dark:text-zinc-400 text-sm">
             Migrating will switch your organization to the new pricing structure. You can learn more
             on our{' '}
             <a
@@ -109,8 +119,8 @@ export const MigratePricingDialog = () => {
           {!isLoading && v1Data && v2Data && (
             <div className="grid grid-cols-2 gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
               <div className="space-y-1">
-                <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                  Current (Legacy)
+                <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
+                  Current (Legacy) <PlanLabel plan={planChoice} />
                 </h3>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {formatCurrency(
@@ -128,8 +138,8 @@ export const MigratePricingDialog = () => {
               </div>
 
               <div className="space-y-1 border-l border-zinc-200 dark:border-zinc-700 pl-4">
-                <h3 className="font-semibold text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  New (v2)
+                <h3 className="font-semibold text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                  New (v2) <PlanLabel plan={planChoice} />
                 </h3>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {formatCurrency(
