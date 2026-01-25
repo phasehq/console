@@ -54,7 +54,7 @@ def can_add_app(organisation):
     return current_app_count < plan_limits["max_apps"]
 
 
-def can_add_account(organisation, count=1):
+def can_add_account(organisation, count=1, account_type="user"):
     """Check if a new human or service account can be added to the organisation."""
 
     Organisation = apps.get_model("api", "Organisation")
@@ -65,9 +65,18 @@ def can_add_account(organisation, count=1):
     if not CLOUD_HOSTED and organisation.plan == Organisation.FREE_PLAN:
         return True
 
+    # If the organisation is on pricing version 2 and not on the free plan,
+    # service accounts are not limited by quotas.
+    if (
+        organisation.pricing_version == Organisation.PRICING_V2
+        and organisation.plan != Organisation.FREE_PLAN
+        and account_type == "service_account"
+    ):
+        return True
+
     from ee.billing.utils import get_org_seat_limit
 
-    # Calculate the current count of users and service accounts
+    # Calculate the current count of users
     current_human_user_count = (
         OrganisationMember.objects.filter(
             organisation=organisation, deleted_at=None
@@ -76,9 +85,17 @@ def can_add_account(organisation, count=1):
             organisation=organisation, valid=True, expires_at__gte=timezone.now()
         ).count()
     )
-    current_service_account_count = ServiceAccount.objects.filter(
-        organisation=organisation, deleted_at=None
-    ).count()
+
+    current_service_account_count = 0
+    # Include service accounts in the count only if strictly required based on plan/version
+    if (
+        organisation.pricing_version == Organisation.PRICING_V1
+        or organisation.plan == Organisation.FREE_PLAN
+    ):
+        current_service_account_count = ServiceAccount.objects.filter(
+            organisation=organisation, deleted_at=None
+        ).count()
+
     total_account_count = current_human_user_count + current_service_account_count
 
     seats = get_org_seat_limit(organisation)

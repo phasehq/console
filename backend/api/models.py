@@ -278,7 +278,7 @@ class OrganisationMember(models.Model):
 class ServiceAccountManager(models.Manager):
     def create(self, *args, **kwargs):
         organisation = kwargs.get("organisation")
-        if not can_add_account(organisation):
+        if not can_add_account(organisation, account_type="service_account"):
             raise ValueError("Cannot add more accounts to this organisation's plan.")
         return super().create(*args, **kwargs)
 

@@ -37,7 +37,10 @@ def resolve_organisation_plan(self, info, organisation_id):
             ).count(),
         }
 
-        if organisation.pricing_version == Organisation.PRICING_V2:
+        if (
+            organisation.pricing_version == Organisation.PRICING_V2
+            and organisation.plan != Organisation.FREE_PLAN
+        ):
             plan["seats_used"]["total"] = plan["seats_used"]["users"]
         else:
             plan["seats_used"]["total"] = (
