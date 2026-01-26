@@ -46,7 +46,12 @@ class CreateOrganisationMutation(graphene.Mutation):
             raise GraphQLError("This organisation name is not available.")
 
         user = CustomUser.objects.get(userId=info.context.user.userId)
-        org = Organisation.objects.create(id=id, name=name, identity_key=identity_key)
+        org = Organisation.objects.create(
+            id=id,
+            name=name,
+            identity_key=identity_key,
+            pricing_version=Organisation.PRICING_V2,
+        )
 
         for role_name, _ in default_roles.items():
             Role.objects.create(
