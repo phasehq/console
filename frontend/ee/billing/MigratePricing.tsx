@@ -13,7 +13,8 @@ import { GetSubscriptionDetails } from '@/graphql/queries/billing/getSubscriptio
 import { PlanTypeEnum, BillingPeriodEnum, ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 
-export const MigratePricingDialog = () => {
+export const MigratePricingDialog = (props: { title?: string; buttonText?: string }) => {
+  const { title = 'Switch to new pricing', buttonText = 'Switch to new pricing' } = props
   const { activeOrganisation } = useContext(organisationContext)
   const [migratePricing, { loading: migrationLoading }] = useMutation(MigratePricing)
   const dialogRef = useRef<any>(null)
@@ -40,6 +41,7 @@ export const MigratePricingDialog = () => {
       previewV2: false,
     },
     skip: !activeOrganisation,
+    fetchPolicy: 'cache-and-network',
   })
 
   const { data: v2Data, loading: v2Loading } = useQuery(GetStripeSubscriptionEstimate, {
@@ -50,6 +52,7 @@ export const MigratePricingDialog = () => {
       previewV2: true,
     },
     skip: !activeOrganisation,
+    fetchPolicy: 'cache-and-network',
   })
 
   const isLoading = subLoading || v1Loading || v2Loading
@@ -109,23 +112,23 @@ export const MigratePricingDialog = () => {
     <>
       <GenericDialog
         ref={dialogRef}
-        title="Migrate Pricing Model"
+        title={title}
         buttonVariant="primary"
         buttonContent={
           <div className="flex items-center gap-2">
-            <FaExchangeAlt /> Migrate Pricing
+            <FaExchangeAlt /> {buttonText}
           </div>
         }
       >
         <div className="space-y-4">
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
-            Your organisation is currently on the V1 pricing model. We have updated our pricing to a
-            simpler, linear model with a flat pricing structure (V2). You can choose to remain on
-            the old pricing model, or migrate to the new pricing.
+            Your organisation is currently on the old pricing model. We have updated our pricing to
+            a simpler, linear model with a flat price for user accounts only. You can choose to
+            remain on the old pricing model, or switch to the new pricing.
           </p>
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
-            Migrating will switch your organization to the new pricing structure. You can learn more
-            on our{' '}
+            Here is a preview of your expected billing structure on the new pricing model. Please
+            see the{' '}
             <a
               href="https://phase.dev/pricing"
               target="_blank"
@@ -133,16 +136,20 @@ export const MigratePricingDialog = () => {
               className="text-emerald-500 hover:text-emerald-400 font-medium underline inline-flex items-center gap-1"
             >
               pricing page <FaExternalLinkAlt className="text-xs" />
-            </a>
-            .
+            </a>{' '}
+            for more details.
           </p>
 
           {!isLoading && v1Data && v2Data && (
             <div className="grid grid-cols-2 gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
               <div className="space-y-1">
                 <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
-                  Current (Legacy) <PlanLabel plan={planChoice} />
+                  Current <PlanLabel plan={planChoice} />
                 </h3>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                  {v1Data.estimateStripeSubscription.seatCount} seat
+                  {v1Data.estimateStripeSubscription.seatCount !== 1 && 's'}
+                </div>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {formatCurrency(
                     v1Data.estimateStripeSubscription.estimatedTotal,
@@ -152,16 +159,22 @@ export const MigratePricingDialog = () => {
                     /{billingPeriod === BillingPeriodEnum.Monthly ? 'mo' : 'yr'}
                   </span>
                 </div>
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {v1Data.estimateStripeSubscription.seatCount} seats
-                </div>
-                <div className="text-xs text-zinc-500">Graduated pricing</div>
               </div>
 
               <div className="space-y-1 border-l border-zinc-200 dark:border-zinc-700 pl-4">
                 <h3 className="font-semibold text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                  New (v2) <PlanLabel plan={planChoice} />
+                  New <PlanLabel plan={planChoice} />
                 </h3>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                  {v2Data.estimateStripeSubscription.seatCount} seat
+                  {v2Data.estimateStripeSubscription.seatCount !== 1 && 's'}
+                  {v2Data.estimateStripeSubscription.seatCount <
+                    v1Data.estimateStripeSubscription.seatCount && (
+                    <span className="text-emerald-600 dark:text-emerald-400 ml-2 text-xs">
+                      (Service accounts excluded)
+                    </span>
+                  )}
+                </div>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {formatCurrency(
                     v2Data.estimateStripeSubscription.estimatedTotal,
@@ -171,36 +184,24 @@ export const MigratePricingDialog = () => {
                     /{billingPeriod === BillingPeriodEnum.Monthly ? 'mo' : 'yr'}
                   </span>
                 </div>
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {v2Data.estimateStripeSubscription.seatCount} seats
-                </div>
-                <div className="text-xs text-zinc-500">
-                  Linear pricing
-                  {v2Data.estimateStripeSubscription.seatCount <
-                    v1Data.estimateStripeSubscription.seatCount && (
-                    <span className="block text-emerald-600 dark:text-emerald-400 mt-1">
-                      (Service accounts excluded)
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
           )}
 
-          <ul className="list-disc list-inside space-y-2 text-zinc-600 dark:text-zinc-400 ml-2 text-sm">
+          <ul className="list-disc list-inside  text-zinc-600 dark:text-zinc-400 ml-2 text-sm">
             <li>Your organisation will be switched to a flat-price, per-user billing model</li>
             <li>Service Accounts are no longer counted as billable seats</li>
             <li>New per-user prices will apply. Please see our pricing page for more details.</li>
           </ul>
 
-          <Alert variant="warning" icon size="sm">
+          <Alert variant="info" icon size="sm">
             This action cannot be undone
           </Alert>
 
           <div className="pt-4 flex justify-end gap-2">
             <Button variant="primary" isLoading={migrationLoading} onClick={handleMigration}>
               <FaExchangeAlt />
-              Confirm Migration
+              Switch to new pricing
             </Button>
           </div>
         </div>

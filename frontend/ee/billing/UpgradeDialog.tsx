@@ -141,9 +141,9 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
     if (activeOrganisation?.pricingVersion === 1) {
       return (
         <div className="space-y-4">
-          <Alert variant="warning" icon size="sm">
+          <Alert variant="info" icon size="sm">
             <div>
-              You must migrate to the new pricing model before upgrading your subscription.{' '}
+              You must switch to the new pricing model before upgrading your subscription.{' '}
               <a
                 href="https://phase.dev/pricing"
                 target="_blank"
@@ -156,7 +156,7 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
             </div>
           </Alert>
           <div className="flex items-center justify-end">
-            <MigratePricingDialog />
+            <MigratePricingDialog buttonText="Preview new pricing" />
           </div>
         </div>
       )
