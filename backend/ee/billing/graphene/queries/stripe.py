@@ -1,6 +1,5 @@
 from api.models import Organisation
 from api.utils.access.permissions import user_has_permission
-from ee.billing.stripe import migrate_organisation_to_v2_pricing
 import graphene
 from graphene import ObjectType, String, Boolean, List, Int, Float
 import stripe
