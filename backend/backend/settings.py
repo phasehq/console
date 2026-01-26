@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import quote as urlquote
 import logging.config
 from backend.utils.secrets import get_secret
 from ee.licensing.verifier import check_license
@@ -50,16 +51,10 @@ def get_version():
 
 
 VERSION = get_version()
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = get_secret("SECRET_KEY")
 
 SERVER_SECRET = get_secret("SERVER_SECRET")
 
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True if os.getenv("DEBUG") == "True" else False
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", []).split(",")
@@ -71,8 +66,6 @@ SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN")
 
 SESSION_COOKIE_AGE = 604800  # 1 week, in seconds
-
-# Application definition
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -241,6 +234,16 @@ REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "api.serializers.CustomUserSerializer"
 }
 
+# Global rate limit
+PLAN_RATE_LIMITS = {
+    # PHASE CLOUD
+    "FR": os.getenv("RATE_LIMIT_FREE"),
+    "PR": os.getenv("RATE_LIMIT_PRO"),
+    "EN": os.getenv("RATE_LIMIT_ENTERPRISE"),
+    # PHASE SELF-HOSTED
+    "DEFAULT": os.getenv("RATE_LIMIT_DEFAULT"),
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -248,6 +251,10 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.SessionAuthentication",
     ),
+    "DEFAULT_THROTTLE_CLASSES": [],
+    "DEFAULT_THROTTLE_RATES": {
+        "plan_based": PLAN_RATE_LIMITS["DEFAULT"],
+    },
     "EXCEPTION_HANDLER": "backend.exceptions.custom_exception_handler",
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -290,7 +297,80 @@ DATABASES = {
         "PASSWORD": get_secret("DATABASE_PASSWORD"),
         "NAME": os.getenv("DATABASE_NAME"),
         "HOST": os.getenv("DATABASE_HOST"),
-        "PORT": os.getenv("DATABASE_PORT"),
+        "PORT": int(os.getenv("DATABASE_PORT", "5432")),
+        "OPTIONS": (
+            {
+                "sslmode": "verify-full"
+                if os.getenv("DATABASE_SSL_CA_PATH")
+                else "require",
+                **(
+                    {"sslrootcert": os.getenv("DATABASE_SSL_CA_PATH")}
+                    if os.getenv("DATABASE_SSL_CA_PATH")
+                    else {}
+                ),
+            }
+            if os.getenv("DATABASE_SSL", "False").lower() == "true"
+            else {}
+        ),
+    },
+}
+
+REDIS_HOST = os.getenv("REDIS_HOST")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_USER = os.getenv("REDIS_USER") or None
+REDIS_PASSWORD = get_secret("REDIS_PASSWORD")
+REDIS_SSL = os.getenv("REDIS_SSL", "False").lower() == "true"
+REDIS_PROTOCOL = "rediss" if REDIS_SSL else "redis"
+
+if REDIS_USER and REDIS_PASSWORD:
+    REDIS_AUTH = f"{urlquote(REDIS_USER, safe='')}:{urlquote(REDIS_PASSWORD, safe='')}@"
+elif REDIS_PASSWORD:
+    REDIS_AUTH = f":{urlquote(REDIS_PASSWORD, safe='')}@"
+else:
+    REDIS_AUTH = ""
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"{REDIS_PROTOCOL}://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}",
+        "OPTIONS": (
+            {
+                "ssl_cert_reqs": "required",
+                "ssl_ca_certs": os.getenv("REDIS_SSL_CA_PATH"),
+            }
+            if REDIS_SSL
+            else {}
+        ),
+    }
+}
+
+RQ_SSL_OPTIONS = (
+    {
+        "ssl_cert_reqs": "required",
+        "ssl_ca_certs": os.getenv("REDIS_SSL_CA_PATH"),
+    }
+    if REDIS_SSL
+    else None
+)
+
+RQ_QUEUES = {
+    "default": {
+        "HOST": REDIS_HOST,
+        "PORT": REDIS_PORT,
+        "USERNAME": REDIS_USER,
+        "PASSWORD": REDIS_PASSWORD,
+        "SSL": REDIS_SSL,
+        "SSL_OPTIONS": RQ_SSL_OPTIONS,
+        "DB": 0,
+    },
+    "scheduled-jobs": {
+        "HOST": REDIS_HOST,
+        "PORT": REDIS_PORT,
+        "USERNAME": REDIS_USER,
+        "PASSWORD": REDIS_PASSWORD,
+        "SSL": REDIS_SSL,
+        "SSL_OPTIONS": RQ_SSL_OPTIONS,
+        "DB": 0,
     },
 }
 
@@ -358,22 +438,6 @@ try:
 except:
     APP_HOST = "self"
 
-RQ_QUEUES = {
-    "default": {
-        "HOST": os.getenv("REDIS_HOST"),
-        "PORT": os.getenv("REDIS_PORT"),
-        "PASSWORD": get_secret("REDIS_PASSWORD"),
-        "SSL": os.getenv("REDIS_SSL", None),
-        "DB": 0,
-    },
-    "scheduled-jobs": {
-        "HOST": os.getenv("REDIS_HOST"),
-        "PORT": os.getenv("REDIS_PORT"),
-        "PASSWORD": get_secret("REDIS_PASSWORD"),
-        "SSL": os.getenv("REDIS_SSL", None),
-        "DB": 0,
-    },
-}
 
 PHASE_LICENSE = check_license(get_secret("PHASE_LICENSE_OFFLINE"))
 
