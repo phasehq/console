@@ -63,7 +63,10 @@ export const MigratePricingDialog = () => {
         variables: {
           organisationId: activeOrganisation.id,
         },
-        refetchQueries: [{ query: GetOrganisations }],
+        refetchQueries: [
+          { query: GetOrganisations },
+          { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation.id } },
+        ],
       })
 
       if (data?.migratePricing?.success) {
