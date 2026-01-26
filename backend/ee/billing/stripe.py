@@ -156,6 +156,7 @@ def migrate_organisation_to_v2_pricing(organisation):
                     }
                 ],
                 proration_behavior="always_invoice",
+                billing_cycle_anchor="unchanged",
             )
 
         except Exception as e:
