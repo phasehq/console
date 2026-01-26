@@ -1,7 +1,7 @@
 import { useRef, useContext } from 'react'
 import GenericDialog from '@/components/common/GenericDialog'
 import { useMutation, useQuery } from '@apollo/client'
-import { MigratePricing } from '@/graphql/mutations/billing/migratePricing.gql'
+import { MigratePricingOp as MigratePricing } from '@/graphql/mutations/billing/migratePricing.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'

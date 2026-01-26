@@ -29,7 +29,7 @@ const documents = {
     "mutation CreateStripeSetupIntentOp($organisationId: ID!) {\n  createSetupIntent(organisationId: $organisationId) {\n    clientSecret\n  }\n}": types.CreateStripeSetupIntentOpDocument,
     "mutation DeleteStripePaymentMethod($organisationId: ID!, $paymentMethodId: String!) {\n  deletePaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}": types.DeleteStripePaymentMethodDocument,
     "mutation InitStripeUpgradeCheckout($organisationId: ID!, $planType: PlanTypeEnum!, $billingPeriod: BillingPeriodEnum!) {\n  createSubscriptionCheckoutSession(\n    organisationId: $organisationId\n    planType: $planType\n    billingPeriod: $billingPeriod\n  ) {\n    clientSecret\n  }\n}": types.InitStripeUpgradeCheckoutDocument,
-    "mutation MigratePricing($organisationId: ID!) {\n  migratePricing(organisationId: $organisationId) {\n    success\n    message\n  }\n}": types.MigratePricingDocument,
+    "mutation MigratePricingOp($organisationId: ID!) {\n  migratePricing(organisationId: $organisationId) {\n    success\n    message\n  }\n}": types.MigratePricingOpDocument,
     "mutation ModifyStripeSubscription($organisationId: ID!, $subscriptionId: String!, $planType: PlanTypeEnum!, $billingPeriod: BillingPeriodEnum!) {\n  modifySubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n    planType: $planType\n    billingPeriod: $billingPeriod\n  ) {\n    success\n    message\n    status\n  }\n}": types.ModifyStripeSubscriptionDocument,
     "mutation ResumeStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  resumeSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n    message\n    cancelledAt\n    status\n  }\n}": types.ResumeStripeSubscriptionDocument,
     "mutation SetDefaultStripePaymentMethodOp($organisationId: ID!, $paymentMethodId: String!) {\n  setDefaultPaymentMethod(\n    organisationId: $organisationId\n    paymentMethodId: $paymentMethodId\n  ) {\n    ok\n  }\n}": types.SetDefaultStripePaymentMethodOpDocument,
@@ -252,7 +252,7 @@ export function graphql(source: "mutation InitStripeUpgradeCheckout($organisatio
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation MigratePricing($organisationId: ID!) {\n  migratePricing(organisationId: $organisationId) {\n    success\n    message\n  }\n}"): (typeof documents)["mutation MigratePricing($organisationId: ID!) {\n  migratePricing(organisationId: $organisationId) {\n    success\n    message\n  }\n}"];
+export function graphql(source: "mutation MigratePricingOp($organisationId: ID!) {\n  migratePricing(organisationId: $organisationId) {\n    success\n    message\n  }\n}"): (typeof documents)["mutation MigratePricingOp($organisationId: ID!) {\n  migratePricing(organisationId: $organisationId) {\n    success\n    message\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
