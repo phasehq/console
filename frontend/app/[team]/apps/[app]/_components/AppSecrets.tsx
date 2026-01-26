@@ -200,7 +200,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       ? clientAppSecrets
       : clientAppSecrets.filter((secret) => {
           const searchRegex = new RegExp(searchQuery, 'i')
-          return searchRegex.test(secret.key)
+          const valueMatch = secret.envs.some(
+            (env) => env.secret && searchRegex.test(env.secret.value)
+          )
+          return searchRegex.test(secret.key) || valueMatch
         })
 
   const filteredDynamicSecrets =
@@ -378,13 +381,22 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const handleAddNewClientSecret = () => {
+  const normalizeKey = (key: string) => {
+    return key
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]/g, '_')
+      .replace(/[^A-Z0-9_]/g, '')
+  }
+
+  const handleAddNewClientSecret = (initialKey?: string | any) => {
+    const keyToUse = typeof initialKey === 'string' ? initialKey : ''
     const envs: EnvironmentType[] = appEnvironments
 
     setClientAppSecrets([
       {
         id: crypto.randomUUID(),
-        key: '',
+        key: keyToUse,
         envs: envs.map((environment) => {
           return {
             env: environment,
@@ -392,7 +404,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               id: `new-${crypto.randomUUID()}`,
               updatedAt: null,
               version: 1,
-              key: '',
+              key: keyToUse,
               value: '',
               tags: [],
               comment: '',
@@ -404,6 +416,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       },
       ...clientAppSecrets,
     ])
+  }
+
+  const handleCreateSecretFromSearch = () => {
+    const normalizedKey = normalizeKey(searchQuery)
+    handleAddNewClientSecret(normalizedKey)
+    setSearchQuery('')
   }
 
   /**
@@ -694,7 +712,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             <FaSearch className="text-neutral-500" />
           </div>
           <input
-            placeholder="Search"
+            placeholder="Search keys or values"
             className="custom bg-zinc-100 dark:bg-zinc-800"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -787,7 +805,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         </div>
       )}
 
-      {clientAppSecrets.length > 0 || appFolders.length > 0 ? (
+      {clientAppSecrets.length > 0 || appFolders.length > 0 || searchQuery ? (
         <>
           {filteredSecrets.length > 0 || filteredFolders.length > 0 ? (
             <div className="overflow-x-auto">
@@ -872,7 +890,13 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                   </div>
                 }
               >
-                <></>
+                {userCanCreateSecrets && (
+                  <div className="mt-4">
+                    <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                      <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                    </Button>
+                  </div>
+                )}
               </EmptyState>
             </div>
           )}

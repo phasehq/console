@@ -120,6 +120,12 @@ export default function EnvironmentPath({
     'read',
     true
   )
+  const userCanCreateSecrets = userHasPermission(
+    organisation?.role?.permissions,
+    'Secrets',
+    'create',
+    true
+  )
   const userCanReadSyncs = userHasPermission(
     organisation?.role?.permissions,
     'Integrations',
@@ -223,12 +229,20 @@ export default function EnvironmentPath({
         }
       }) ?? []
 
-  const handleAddSecret = (start: boolean = true) => {
+  const normalizeKey = (key: string) => {
+    return key
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]/g, '_')
+      .replace(/[^A-Z0-9_]/g, '')
+  }
+
+  const handleAddSecret = (start: boolean = true, key: string = '') => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
       version: 1,
-      key: '',
+      key: key,
       value: '',
       tags: [],
       comment: '',
@@ -238,6 +252,12 @@ export default function EnvironmentPath({
     start
       ? setClientSecrets([newSecret, ...clientSecrets])
       : setClientSecrets([...clientSecrets, newSecret])
+  }
+
+  const handleCreateSecretFromSearch = () => {
+    const normalizedKey = normalizeKey(searchQuery)
+    handleAddSecret(true, normalizedKey)
+    setSearchQuery('')
   }
 
   /**
@@ -580,7 +600,7 @@ export default function EnvironmentPath({
   const filteredSecrets = useMemo(() => {
     if (searchQuery === '') return clientSecrets
     const re = new RegExp(searchQuery, 'i')
-    return clientSecrets.filter((s) => re.test(s.key))
+    return clientSecrets.filter((s) => re.test(s.key) || re.test(s.value))
   }, [clientSecrets, searchQuery])
 
   const filteredAndSortedSecrets = useMemo(
@@ -995,7 +1015,7 @@ export default function EnvironmentPath({
                     <FaSearch className="text-neutral-500" />
                   </div>
                   <input
-                    placeholder="Search"
+                    placeholder="Search keys or values"
                     className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1149,7 +1169,15 @@ export default function EnvironmentPath({
                   </div>
                 }
               >
-                <NewSecretMenu />
+                {searchQuery ? (
+                  userCanCreateSecrets && (
+                    <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                      <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                    </Button>
+                  )
+                ) : (
+                  <NewSecretMenu />
+                )}
                 {!searchQuery && (
                   <div className="w-full max-w-screen-sm h-40 rounded-lg">
                     <EmptyStateFileImport />
