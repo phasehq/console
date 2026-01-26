@@ -66,6 +66,24 @@ export const MigratePricingDialog = () => {
         refetchQueries: [
           { query: GetOrganisations },
           { query: GetSubscriptionDetails, variables: { organisationId: activeOrganisation.id } },
+          {
+            query: GetStripeSubscriptionEstimate,
+            variables: {
+              organisationId: activeOrganisation.id,
+              planType,
+              billingPeriod,
+              previewV2: false,
+            },
+          },
+          {
+            query: GetStripeSubscriptionEstimate,
+            variables: {
+              organisationId: activeOrganisation.id,
+              planType,
+              billingPeriod,
+              previewV2: true,
+            },
+          },
         ],
       })
 
