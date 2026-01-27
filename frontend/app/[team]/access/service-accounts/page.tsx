@@ -17,6 +17,7 @@ import { ServiceAccountRoleSelector } from './_components/RoleSelector'
 import clsx from 'clsx'
 import { MdSearchOff } from 'react-icons/md'
 import { Avatar } from '@/components/common/Avatar'
+import { MemberListSkeleton } from '@/components/access/MemberListSkeleton'
 
 export default function ServiceAccounts({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -31,7 +32,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create')
     : false
 
-  const { data } = useQuery(GetServiceAccounts, {
+  const { data, loading } = useQuery(GetServiceAccounts, {
     variables: { orgId: organisation?.id },
     skip: !organisation || !userCanReadSA,
     fetchPolicy: 'cache-and-network',
@@ -82,7 +83,9 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
           </div>
 
           {userCanReadSA ? (
-            data?.serviceAccounts.length === 0 ? (
+            loading && !data ? (
+              <MemberListSkeleton count={10} />
+            ) : data?.serviceAccounts.length === 0 ? (
               <EmptyState
                 title="No Service Accounts"
                 subtitle="Click the button below to create a new Service Account"
