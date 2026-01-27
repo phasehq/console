@@ -113,9 +113,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       }))
       .filter(
         (acc: AccountWithEnvScope) => !selectedAccounts.map((sacc) => sacc.id).includes(acc.id)
-      ) ??
-    [] ??
-    []
+      ) ?? []
 
   const accountWithoutScope = selectedAccounts.some((account) => account.scope.length === 0)
 
@@ -296,7 +294,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                   />
                 </div>
 
-                <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-2xl">
+                <div className="max-h-96 overflow-y-auto overflow-x-hidden divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-2xl pr-4">
                   {loading ? (
                     <div className="p-4">
                       <Spinner size="sm" />
@@ -323,7 +321,9 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                                 </div>
                               </div>
                             </div>
-                            <RoleLabel role={account.role!} />
+                            <div className="max-w-28 shrink-0">
+                              <RoleLabel role={account.role!} />
+                            </div>
                           </div>
                         )}
                       </Menu.Item>

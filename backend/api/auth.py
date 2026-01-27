@@ -63,14 +63,20 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         if secret_id:
             found = False
             try:
-                secret = Secret.objects.get(id=secret_id)
+                # Pre-fetch environment, app, and organisation
+                secret = Secret.objects.select_related(
+                    "environment__app__organisation"
+                ).get(id=secret_id)
                 env = secret.environment
                 found = True
             except Secret.DoesNotExist:
                 pass
             if not found:
                 try:
-                    dyn_secret = DynamicSecret.objects.get(id=secret_id)
+                    # Pre-fetch environment, app, and organisation
+                    dyn_secret = DynamicSecret.objects.select_related(
+                        "environment__app__organisation"
+                    ).get(id=secret_id)
                     env = dyn_secret.environment
                     found = True
                 except DynamicSecret.DoesNotExist:
@@ -84,7 +90,10 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             # Try resolving env from header
             if env_id:
                 try:
-                    env = Environment.objects.get(id=env_id)
+                    # Pre-fetch app and organisation
+                    env = Environment.objects.select_related("app__organisation").get(
+                        id=env_id
+                    )
                 except Environment.DoesNotExist:
                     raise exceptions.AuthenticationFailed("Environment not found")
 
@@ -99,7 +108,10 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                         )
                     if not env_name:
                         raise exceptions.AuthenticationFailed("Missing env parameter")
-                    env = Environment.objects.get(app_id=app_id, name__iexact=env_name)
+                    # Pre-fetch app and organisation
+                    env = Environment.objects.select_related("app__organisation").get(
+                        app_id=app_id, name__iexact=env_name
+                    )
                 except Environment.DoesNotExist:
                     # Check if the app exists to give a more specific error
                     App = apps.get_model("api", "App")

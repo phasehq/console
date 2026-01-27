@@ -147,7 +147,7 @@ function SecretRow(props: {
     if (value.includes('\n') && !expanded) setExpanded(true)
   }
 
-  const KeyActionMenu = () => (
+  const keyActionMenu = (
     <>
       <div className="flex items-center gap-1 absolute right-1 top-3 opacity-100 group-hover:opacity-0 text-2xs">
         <div className="flex items-center gap-0.5">
@@ -198,7 +198,7 @@ function SecretRow(props: {
     </>
   )
 
-  const ValueActionMenu = () => (
+  const valueActionMenu = (
     <div
       className={clsx(
         'flex gap-1 items-start pt-1 rounded-t-lg right-px px-1 transition ease',
@@ -289,7 +289,7 @@ function SecretRow(props: {
             handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
           }
         />
-        <KeyActionMenu />
+        {keyActionMenu}
       </div>
       <div className="w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease p-px">
         {isBoolean && !stagedForDelete && (
@@ -328,7 +328,7 @@ function SecretRow(props: {
           onFocus={() => setExpanded(true)}
           disabled={stagedForDelete || !userCanUpdateSecrets}
         />
-        <ValueActionMenu />
+        {valueActionMenu}
       </div>
     </div>
   )

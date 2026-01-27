@@ -57,7 +57,7 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
     return (
       <div
         className={clsx(
-          'rounded-full flex items-center justify-center',
+          'rounded-full flex items-center justify-center shrink-0',
           sizeStyle,
           getBgColor(serviceAccount.name)
         )}
