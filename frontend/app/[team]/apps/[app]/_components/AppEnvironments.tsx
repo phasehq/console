@@ -17,6 +17,7 @@ import { BsListColumnsReverse } from 'react-icons/bs'
 import { FaArrowRight, FaBan, FaExchangeAlt, FaFolder, FaKey } from 'react-icons/fa'
 import { EmptyState } from '@/components/common/EmptyState'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
+import { EnvironmentCardSkeleton } from './EnvironmentCardSkeleton'
 
 export const AppEnvironments = ({ appId }: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -88,6 +89,9 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 py-4">
+        {fetching && !appEnvironments?.length
+          ? [...Array(3)].map((_, index) => <EnvironmentCardSkeleton key={`env-skeleton-${index}`} />)
+          : null}
         {appEnvironments?.map((env: EnvironmentType, index: number) => (
           <Card key={env.id}>
             <div className="group">

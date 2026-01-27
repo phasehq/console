@@ -65,7 +65,7 @@ import SortMenu from '@/components/environments/secrets/SortMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
-import Spinner from '@/components/common/Spinner'
+import { EnvironmentPageSkeleton } from './_components/EnvironmentPageSkeleton'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
@@ -93,6 +93,8 @@ export default function EnvironmentPath({
   const [clientSecrets, setClientSecrets] = useState<SecretType[]>([])
 
   const [dynamicSecrets, setDynamicSecrets] = useState<DynamicSecretType[]>([])
+
+  const [decrypting, setDecrypting] = useState(false)
 
   const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
@@ -398,6 +400,7 @@ export default function EnvironmentPath({
 
   useEffect(() => {
     if (data && envKeys) {
+      setDecrypting(true)
       const decryptSecrets = async () => {
         const decryptedStaticSecrets = await Promise.all(
           data.secrets.map(async (secret: SecretType) => {
@@ -497,6 +500,7 @@ export default function EnvironmentPath({
         setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
         setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
         setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
+        setDecrypting(false)
       })
     }
   }, [envKeys, data])
@@ -880,12 +884,9 @@ export default function EnvironmentPath({
     )
   }
 
-  if (loading || !organisation)
-    return (
-      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
-        <Spinner size="md" />
-      </div>
-    )
+  // Track secret readiness. Show skeleton while: loading query, no org, decrypting, or waiting for envKeys to initialize
+  const isInitializing = loading || !organisation || decrypting || (data && !envKeys)
+  if (isInitializing) return <EnvironmentPageSkeleton />
 
   if (!userCanReadEnvironments || !userCanReadSecrets)
     return (
