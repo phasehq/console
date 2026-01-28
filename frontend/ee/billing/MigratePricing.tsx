@@ -120,7 +120,7 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
           </div>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-4 pt-4">
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
             Your organisation is currently on the old pricing model. We have updated our pricing to
             a simpler, linear model with a flat price for user accounts only. You can choose to
