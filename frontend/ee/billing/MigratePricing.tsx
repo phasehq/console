@@ -122,12 +122,11 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
       >
         <div className="space-y-4 pt-4">
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
-            Your organisation is currently on the old pricing model. We have updated our pricing to
-            a simpler, linear model with a flat price for user accounts only. You can choose to
-            remain on the old pricing model, or switch to the new pricing.
+            Your organisation is currently on the legacy pricing model. We have updated our pricing to
+            only bill for User accounts.
           </p>
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
-            Here is a preview of your expected billing structure on the new pricing model. Please
+            Please
             see the{' '}
             <a
               href="https://phase.dev/pricing"
