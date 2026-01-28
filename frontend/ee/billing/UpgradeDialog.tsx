@@ -105,6 +105,7 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
           billingPeriod: billingPeriodPreview,
         },
         skip: !activeOrganisation,
+        fetchPolicy: 'cache-and-network',
       }
     )
 

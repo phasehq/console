@@ -87,6 +87,14 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
               previewV2: true,
             },
           },
+          {
+            query: GetStripeSubscriptionEstimate,
+            variables: {
+              organisationId: activeOrganisation.id,
+              planType,
+              billingPeriod,
+            },
+          },
         ],
       })
 
@@ -122,12 +130,11 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
       >
         <div className="space-y-4 pt-4">
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
-            Your organisation is currently on the legacy pricing model. We have updated our pricing to
-            only bill for User accounts.
+            Your organisation is currently on the legacy pricing model. We have updated our pricing
+            to only bill for User accounts.
           </p>
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
-            Please
-            see the{' '}
+            Please see the{' '}
             <a
               href="https://phase.dev/pricing"
               target="_blank"
