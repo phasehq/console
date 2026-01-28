@@ -6,6 +6,7 @@ import stripe
 from django.conf import settings
 from graphene import Mutation, ID, String, Boolean, ObjectType
 from graphql import GraphQLError
+from ee.billing.utils import get_org_billable_seats
 
 
 class UpdateSubscriptionResponse(ObjectType):
@@ -39,7 +40,7 @@ class CreateSubscriptionCheckoutSession(Mutation):
             if not organisation.stripe_customer_id:
                 raise GraphQLError("Organisation must have a Stripe customer ID.")
 
-            seats = organisation.get_seats()
+            seats = get_org_billable_seats(organisation)
 
             if plan_type == PlanTypeEnum.ENTERPRISE:
                 price = (
@@ -276,7 +277,7 @@ class ModifySubscriptionMutation(Mutation):
                     {
                         "id": subscription_item_id,  # Assuming there's only one item in the subscription
                         "price": price,
-                        "quantity": organisation.get_seats(),
+                        "quantity": get_org_billable_seats(organisation),
                     },
                 ],
             )

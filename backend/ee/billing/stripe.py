@@ -2,12 +2,13 @@ from api.models import Organisation
 from backend.api.notifier import notify_slack
 import stripe
 from django.conf import settings
+from ee.billing.utils import get_org_billable_seats
 
 
 def create_stripe_customer(organisation, email):
     stripe.api_key = settings.STRIPE["secret_key"]
 
-    seats = organisation.get_seats()
+    seats = get_org_billable_seats(organisation)
 
     stripe_customer = stripe.Customer.create(
         name=organisation.name,
@@ -39,7 +40,7 @@ def update_stripe_subscription_seats(organisation):
         raise ValueError("Organisation must have a Stripe subscription ID.")
 
     try:
-        new_seat_count = organisation.get_seats()
+        new_seat_count = get_org_billable_seats(organisation)
 
         # Retrieve the subscription
         subscription = stripe.Subscription.retrieve(organisation.stripe_subscription_id)
@@ -141,7 +142,7 @@ def migrate_organisation_to_v2_pricing(organisation):
                         )
 
                     new_price_id = prices[0]
-                    new_seat_count = organisation.get_seats()
+                    new_seat_count = get_org_billable_seats(organisation)
 
                     # Modify subscription to use new price and quantity
                     stripe.Subscription.modify(

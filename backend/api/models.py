@@ -99,20 +99,6 @@ class Organisation(models.Model):
     pricing_version = models.IntegerField(default=1)
     list_display = ("name", "identity_key", "id")
 
-    def get_seats(self):
-        if self.pricing_version == self.PRICING_V2:
-            return (
-                self.users.filter(deleted_at=None).count()
-                + self.invites.filter(
-                    valid=True, expires_at__gte=timezone.now()
-                ).count()
-            )
-        return (
-            self.users.filter(deleted_at=None).count()
-            + self.invites.filter(valid=True, expires_at__gte=timezone.now()).count()
-            + self.service_accounts.filter(deleted_at=None).count()
-        )
-
     def save(self, *args, **kwargs):
         if self._state.adding:
             self.pricing_version = self.PRICING_V2

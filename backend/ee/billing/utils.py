@@ -67,3 +67,21 @@ def calculate_graduated_price(seats, plan_type, billing_period):
         total_price += remaining_seats * tier_price
 
     return total_price
+
+
+def get_org_billable_seats(organisation, pricing_version=None):
+    """
+    Get the total number of billable seats for an organisation.
+    Invites are NOT included in this count.
+    """
+    from api.models import Organisation
+
+    base_users = organisation.users.filter(deleted_at=None).count()
+
+    version = pricing_version or organisation.pricing_version
+
+    # If V1 pricing, add service accounts
+    if version == Organisation.PRICING_V1:
+        base_users += organisation.service_accounts.filter(deleted_at=None).count()
+
+    return base_users

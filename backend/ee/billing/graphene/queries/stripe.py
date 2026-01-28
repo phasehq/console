@@ -7,7 +7,7 @@ from django.conf import settings
 from django.utils import timezone
 from graphql import GraphQLError
 from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
-from ee.billing.utils import calculate_graduated_price
+from ee.billing.utils import calculate_graduated_price, get_org_billable_seats
 
 
 class StripeCheckoutDetails(graphene.ObjectType):
@@ -201,14 +201,9 @@ def resolve_estimate_stripe_subscription(
 
         # Determine effective pricing version
         is_v2 = org.pricing_version == 2 or preview_v2
+        pricing_version = 2 if is_v2 else 1
 
-        if is_v2:
-            seats = (
-                org.users.filter(deleted_at=None).count()
-                + org.invites.filter(valid=True, expires_at__gte=timezone.now()).count()
-            )
-        else:
-            seats = org.get_seats()
+        seats = get_org_billable_seats(org, pricing_version=pricing_version)
 
         if not is_v2:
             estimated_total = calculate_graduated_price(
