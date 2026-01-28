@@ -100,6 +100,10 @@ def migrate_organisation_to_v2_pricing(organisation):
 
     stripe.api_key = settings.STRIPE["secret_key"]
 
+    # Update local state first to calculate correct V2 seat count
+    organisation.pricing_version = Organisation.PRICING_V2
+    organisation.save()
+
     if organisation.plan in [Organisation.PRO_PLAN, Organisation.ENTERPRISE_PLAN]:
         if organisation.stripe_subscription_id:
             try:
@@ -154,11 +158,12 @@ def migrate_organisation_to_v2_pricing(organisation):
                     )
 
             except Exception as e:
+                # Revert local state if stripe update fails
+                organisation.pricing_version = Organisation.PRICING_V1
+                organisation.save()
+
                 notify_slack(
                     f"Failed to migrate Stripe subscription for organisation {organisation.id}: {e}"
                 )
                 # Re-raise so the mutation is aware of the failure
                 raise e
-
-    organisation.pricing_version = Organisation.PRICING_V2
-    organisation.save()
