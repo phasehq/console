@@ -192,11 +192,6 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
             <li>Service Accounts will not be billed</li>
             <li>This action is permanent</li>
           </ul>
-
-          <Alert variant="info" icon size="sm">
-            This action cannot be undone
-          </Alert>
-
           <div className="pt-4 flex justify-end gap-2">
             <Button variant="primary" isLoading={migrationLoading} onClick={handleMigration}>
               <FaExchangeAlt />
