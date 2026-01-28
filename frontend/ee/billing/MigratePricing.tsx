@@ -200,8 +200,12 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
             <li>This action is permanent</li>
           </ul>
           <div className="pt-4 flex justify-end gap-2">
-            <Button variant="primary" isLoading={migrationLoading} onClick={handleMigration}>
-              <FaExchangeAlt />
+            <Button
+              variant="primary"
+              isLoading={migrationLoading}
+              onClick={handleMigration}
+              icon={FaExchangeAlt}
+            >
               Switch to new pricing
             </Button>
           </div>
