@@ -171,7 +171,7 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
                   {v2Data.estimateStripeSubscription.seatCount <
                     v1Data.estimateStripeSubscription.seatCount && (
                     <span className="text-emerald-600 dark:text-emerald-400 ml-2 text-xs">
-                      (Service accounts excluded)
+                      (User accounts only)
                     </span>
                   )}
                 </div>
@@ -189,9 +189,9 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
           )}
 
           <ul className="list-disc list-inside  text-zinc-600 dark:text-zinc-400 ml-2 text-sm">
-            <li>Your organisation will be switched to a flat-price, per-user billing model</li>
-            <li>Service Accounts are no longer counted as billable seats</li>
-            <li>New per-user prices will apply. Please see our pricing page for more details.</li>
+            <li>Your organisation will be switched to new per-user pricing</li>
+            <li>Service Accounts will not be billed</li>
+            <li>This action is permanent</li>
           </ul>
 
           <Alert variant="info" icon size="sm">
