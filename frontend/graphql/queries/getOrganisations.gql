@@ -26,5 +26,6 @@ query GetOrganisations {
     memberId
     keyring
     recovery
+    pricingVersion
   }
 }

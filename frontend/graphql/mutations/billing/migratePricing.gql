@@ -1,0 +1,6 @@
+mutation MigratePricingOp($organisationId: ID!) {
+  migratePricing(organisationId: $organisationId) {
+    success
+    message
+  }
+}

@@ -22,7 +22,7 @@ import clsx from 'clsx'
 export const ModifySubscriptionDialog = () => {
   const { activeOrganisation } = useContext(organisationContext)
 
-  const [modifySubscription] = useMutation(ModifyStripeSubscription)
+  const [modifySubscription, { loading: modifyIsPending }] = useMutation(ModifyStripeSubscription)
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
@@ -187,10 +187,11 @@ export const ModifySubscriptionDialog = () => {
           <Button
             onClick={handleModifySubscription}
             disabled={!subscriptionChanged}
+            isLoading={modifyIsPending}
             variant="primary"
+            icon={subscriptionChanged ? FaCheck : undefined}
           >
-            {subscriptionChanged && <FaCheck />} Modify subscription{' '}
-            {subscriptionChanged && changes()}
+            Modify subscription {subscriptionChanged && changes()}
           </Button>
         </div>
       </div>
