@@ -90,7 +90,8 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
       ? userHasPermission(activeOrganisation.role?.permissions, 'Billing', 'read')
       : false
 
-    const [modifySubscription] = useMutation(ModifyStripeSubscription)
+    const [modifySubscription, { loading: modifySubscriptionLoading }] =
+      useMutation(ModifyStripeSubscription)
     const { data: subscriptionDataQuery } = useQuery(GetSubscriptionDetails, {
       variables: { organisationId: activeOrganisation?.id },
       skip: !activeOrganisation || !userCanReadBilling,
@@ -163,10 +164,9 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
       )
     }
 
-    if (estimateLoading || !estimate)
-      return <div className="text-center text-neutral-500 p-40">Loading...</div>
+    if (!estimate) return <div className="text-center text-neutral-500 p-40">Loading...</div>
 
-    const monthlyPricePerUser =
+    const monthlyPrice =
       billingPeriodPreview === BillingPeriodEnum.Monthly
         ? estimate.unitPrice
         : estimate.unitPrice / 12
@@ -175,8 +175,15 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
       <div className="group shadow-xl bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 rounded-lg p-4 space-y-6 transition ease">
         <div className="flex items-start justify-between">
           <div className="text-zinc-900 dark:text-zinc-100">
-            <span className="font-extralight text-7xl">${monthlyPricePerUser.toFixed(2)}</span>
-            <div className="text-neutral-500">/mo per account</div>
+            <span className="font-extralight text-7xl">${monthlyPrice.toFixed(2)}</span>
+            <div className="text-neutral-500">
+              /mo per account{' '}
+              {billingPeriodPreview === BillingPeriodEnum.Yearly && (
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  (billed yearly)
+                </span>
+              )}
+            </div>
           </div>
           <div>
             <div className="text-neutral-500 text-xs uppercase font-medium">Billed</div>
@@ -196,7 +203,7 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
             <span>
               {activeOrganisation?.pricingVersion === 2 ? 'Unit Price:' : 'Avg Unit Price:'}
             </span>
-            <span>${monthlyPricePerUser.toFixed(2)}</span>
+            <span>${estimate.unitPrice.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-zinc-900 dark:text-zinc-100">
             <span>Number of Accounts:</span>
@@ -216,8 +223,12 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
         </div>
 
         <div className="flex items-center gap-1 text-emerald-500 font-medium pt-4 justify-end">
-          <Button variant="primary" onClick={handleCheckout}>
-            <FaCartShopping />{' '}
+          <Button
+            variant="primary"
+            onClick={handleCheckout}
+            icon={FaCartShopping}
+            isLoading={modifySubscriptionLoading}
+          >
             {activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr
               ? 'Upgrade'
               : 'Start 14-day trial'}
