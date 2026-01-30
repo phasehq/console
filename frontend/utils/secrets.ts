@@ -200,7 +200,7 @@ export const processEnvFile = (
       key: key.toUpperCase(),
       value: withValues ? valueStr : '',
       tags: [],
-      comment: withComments ? (lastComment || inlineComment || '') : '',
+      comment: withComments ? lastComment || inlineComment || '' : '',
       path,
       environment,
     })
@@ -212,12 +212,10 @@ export const processEnvFile = (
   return newSecrets
 }
 
-
 export const duplicateKeysExist = (
   secrets: SecretType[] | AppSecret[],
   dynamicSecrets: DynamicSecretType[] = []
 ): boolean => {
-
   const keySet = new Set<string>()
 
   // Check regular secrets
@@ -244,7 +242,6 @@ export const duplicateKeysExist = (
   return false // No duplicates
 }
 
-
 export const envFilePlaceholder = `# Paste your .env here
 
 # Comments before a key-value pair will be parsed
@@ -269,3 +266,23 @@ export const sortEnvs = (
   envs
     .filter((e): e is Partial<EnvironmentType> => !!e && typeof e.index === 'number')
     .sort((a, b) => a.index! - b.index!)
+
+/**
+ * Normalizes a string into a valid environment variable key.
+ *
+ * This function performs the following operations:
+ * 1. Trims whitespace from both ends.
+ * 2. Converts the string to uppercase.
+ * 3. Replaces spaces and hyphens with underscores.
+ * 4. Removes any characters that are not uppercase letters, numbers, or underscores.
+ *
+ * @param {string} key - The raw key string to normalize.
+ * @returns {string} - The normalized key.
+ */
+export const normalizeKey = (key: string) => {
+  return key
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]/g, '_')
+    .replace(/[^A-Z0-9_]/g, '')
+}

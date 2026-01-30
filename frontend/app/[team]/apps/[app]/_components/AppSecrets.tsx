@@ -36,6 +36,7 @@ import {
   getUserKxPublicKey,
   arraysEqual,
 } from '@/utils/crypto'
+import { escapeRegExp } from 'lodash'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
@@ -46,7 +47,7 @@ import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
-import { duplicateKeysExist } from '@/utils/secrets'
+import { duplicateKeysExist, normalizeKey } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
 import { AppFolderRow } from './AppFolderRow'
@@ -149,7 +150,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   const filteredFolders = useMemo(() => {
     if (searchQuery === '') return appFolders
-    const re = new RegExp(searchQuery, 'i')
+    const re = new RegExp(escapeRegExp(searchQuery), 'i')
     return appFolders.filter((folder) => re.test(folder.name))
   }, [appFolders, searchQuery])
 
@@ -199,7 +200,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     searchQuery === ''
       ? clientAppSecrets
       : clientAppSecrets.filter((secret) => {
-          const searchRegex = new RegExp(searchQuery, 'i')
+          const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
           const valueMatch = secret.envs.some(
             (env) => env.secret && searchRegex.test(env.secret.value)
           )
@@ -210,7 +211,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     searchQuery === ''
       ? appDynamicSecrets
       : appDynamicSecrets.filter((secret) => {
-          const searchRegex = new RegExp(searchQuery, 'i')
+          const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
           return searchRegex.test(secret.name)
         })
 
@@ -381,16 +382,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const normalizeKey = (key: string) => {
-    return key
-      .trim()
-      .toUpperCase()
-      .replace(/[\s-]/g, '_')
-      .replace(/[^A-Z0-9_]/g, '')
-  }
-
-  const handleAddNewClientSecret = (initialKey?: string | any) => {
-    const keyToUse = typeof initialKey === 'string' ? initialKey : ''
+  const handleAddNewClientSecret = (initialKey?: string) => {
+    const keyToUse = initialKey ?? ''
     const envs: EnvironmentType[] = appEnvironments
 
     setClientAppSecrets([
@@ -797,7 +790,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <TbDownload /> Import secrets
             </Button>
             {userCanCreateSecrets && (
-              <Button variant="primary" onClick={handleAddNewClientSecret}>
+              <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
                 <FaPlus /> New Secret
               </Button>
             )}
@@ -956,7 +949,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <Button variant="outline" onClick={() => importDialogRef.current?.openModal()}>
                 <TbDownload /> Import secrets
               </Button>
-              <Button variant="primary" onClick={handleAddNewClientSecret}>
+              <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
                 <FaPlus /> New Secret
               </Button>
             </div>
