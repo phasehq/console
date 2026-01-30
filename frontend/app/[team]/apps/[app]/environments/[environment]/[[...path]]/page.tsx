@@ -59,13 +59,20 @@ import {
   envKeyring,
   EnvKeyring,
 } from '@/utils/crypto'
+import { escapeRegExp } from 'lodash'
 import { EmptyState } from '@/components/common/EmptyState'
-import { duplicateKeysExist, processEnvFile, SortOption, sortSecrets } from '@/utils/secrets'
+import {
+  duplicateKeysExist,
+  normalizeKey,
+  processEnvFile,
+  SortOption,
+  sortSecrets,
+} from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
-import Spinner from '@/components/common/Spinner'
+import { EnvironmentPageSkeleton } from './_components/EnvironmentPageSkeleton'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
@@ -94,6 +101,9 @@ export default function EnvironmentPath({
 
   const [dynamicSecrets, setDynamicSecrets] = useState<DynamicSecretType[]>([])
 
+  const [secretsLoaded, setSecretsLoaded] = useState(false)
+  const [decrypting, setDecrypting] = useState(false)
+
   const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isLoading, setIsloading] = useState(false)
@@ -120,6 +130,12 @@ export default function EnvironmentPath({
     'read',
     true
   )
+  const userCanCreateSecrets = userHasPermission(
+    organisation?.role?.permissions,
+    'Secrets',
+    'create',
+    true
+  )
   const userCanReadSyncs = userHasPermission(
     organisation?.role?.permissions,
     'Integrations',
@@ -143,6 +159,10 @@ export default function EnvironmentPath({
       setGloballyRevealed(false)
     }
   }
+
+  useEffect(() => {
+    setSecretsLoaded(false)
+  }, [params.environment, params.app, params.team])
 
   useEffect(() => {
     // 2. Scroll into view when secretToHighlight changes
@@ -223,12 +243,12 @@ export default function EnvironmentPath({
         }
       }) ?? []
 
-  const handleAddSecret = (start: boolean = true) => {
+  const handleAddSecret = (start: boolean = true, key: string = '') => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
       version: 1,
-      key: '',
+      key: key,
       value: '',
       tags: [],
       comment: '',
@@ -238,6 +258,14 @@ export default function EnvironmentPath({
     start
       ? setClientSecrets([newSecret, ...clientSecrets])
       : setClientSecrets([...clientSecrets, newSecret])
+  }
+
+  const handleCreateSecretFromSearch = () => {
+    const normalizedKey = normalizeKey(searchQuery)
+    if (!normalizedKey) return
+
+    handleAddSecret(true, normalizedKey)
+    setSearchQuery('')
   }
 
   /**
@@ -398,6 +426,7 @@ export default function EnvironmentPath({
 
   useEffect(() => {
     if (data && envKeys) {
+      setDecrypting(true)
       const decryptSecrets = async () => {
         const decryptedStaticSecrets = await Promise.all(
           data.secrets.map(async (secret: SecretType) => {
@@ -497,6 +526,8 @@ export default function EnvironmentPath({
         setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
         setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
         setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
+        setDecrypting(false)
+        setSecretsLoaded(true)
       })
     }
   }, [envKeys, data])
@@ -573,14 +604,14 @@ export default function EnvironmentPath({
 
   const filteredFolders = useMemo(() => {
     if (searchQuery === '') return folders
-    const re = new RegExp(searchQuery, 'i')
+    const re = new RegExp(escapeRegExp(searchQuery), 'i')
     return folders.filter((f) => re.test(f.name))
   }, [folders, searchQuery])
 
   const filteredSecrets = useMemo(() => {
     if (searchQuery === '') return clientSecrets
-    const re = new RegExp(searchQuery, 'i')
-    return clientSecrets.filter((s) => re.test(s.key))
+    const re = new RegExp(escapeRegExp(searchQuery), 'i')
+    return clientSecrets.filter((s) => re.test(s.key) || re.test(s.value))
   }, [clientSecrets, searchQuery])
 
   const filteredAndSortedSecrets = useMemo(
@@ -590,7 +621,7 @@ export default function EnvironmentPath({
 
   const filteredDynamicSecrets = useMemo(() => {
     if (searchQuery === '') return dynamicSecrets
-    const re = new RegExp(searchQuery, 'i')
+    const re = new RegExp(escapeRegExp(searchQuery), 'i')
     return dynamicSecrets.filter((s) =>
       re.test(`${s.name}${(s.keyMap ?? []).map((k) => k?.keyName).join('')}`)
     )
@@ -880,12 +911,11 @@ export default function EnvironmentPath({
     )
   }
 
-  if (loading || !organisation)
-    return (
-      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
-        <Spinner size="md" />
-      </div>
-    )
+  // Track secret readiness. Show skeleton while: loading query, no org, decrypting, or waiting for envKeys to initialize
+  const isResolving = loading || decrypting || (data && !envKeys)
+  const isInitializing = !organisation || (!secretsLoaded && isResolving)
+
+  if (isInitializing) return <EnvironmentPageSkeleton />
 
   if (!userCanReadEnvironments || !userCanReadSecrets)
     return (
@@ -995,7 +1025,7 @@ export default function EnvironmentPath({
                     <FaSearch className="text-neutral-500" />
                   </div>
                   <input
-                    placeholder="Search"
+                    placeholder="Search keys or values"
                     className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1149,7 +1179,16 @@ export default function EnvironmentPath({
                   </div>
                 }
               >
-                <NewSecretMenu />
+                {searchQuery ? (
+                  userCanCreateSecrets &&
+                  normalizeKey(searchQuery) && (
+                    <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                      <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                    </Button>
+                  )
+                ) : (
+                  <NewSecretMenu />
+                )}
                 {!searchQuery && (
                   <div className="w-full max-w-screen-sm h-40 rounded-lg">
                     <EmptyStateFileImport />

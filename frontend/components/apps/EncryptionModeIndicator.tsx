@@ -7,7 +7,6 @@ import { FaCog, FaServer } from 'react-icons/fa'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { Button } from '../common/Button'
 import clsx from 'clsx'
-import app from 'next/app'
 import { userHasPermission } from '@/utils/access/permissions'
 
 export const SseLabel = ({ sseEnabled }: { sseEnabled: boolean }) => (
@@ -21,6 +20,16 @@ export const SseLabel = ({ sseEnabled }: { sseEnabled: boolean }) => (
     {sseEnabled ? <FaServer /> : <FaArrowDownUpLock />}
     {sseEnabled ? 'SSE' : 'E2EE'}
   </div>
+)
+
+export const EncryptionDot = ({ sseEnabled }: { sseEnabled: boolean }) => (
+  <div
+    title={sseEnabled ? 'Server-side encryption (SSE)' : 'End-to-end encryption (E2EE)'}
+    className={clsx(
+      'size-2.5 rounded-full shrink-0',
+      sseEnabled ? 'bg-sky-500' : 'bg-emerald-500'
+    )}
+  />
 )
 
 export const EncryptionModeIndicator = (props: { app: AppType; asMenu?: boolean }) => {

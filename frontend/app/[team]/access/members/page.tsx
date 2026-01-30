@@ -21,6 +21,7 @@ import { InviteDialog } from './_components/InviteDialog'
 import { MdSearchOff } from 'react-icons/md'
 import CopyButton from '@/components/common/CopyButton'
 import { DeleteInviteDialog } from './_components/DeleteInviteDialog'
+import { MemberListSkeleton } from '@/components/access/MemberListSkeleton'
 
 export default function Members({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -35,7 +36,7 @@ export default function Members({ params }: { params: { team: string } }) {
     ? userHasPermission(organisation.role!.permissions, 'Members', 'read')
     : false
 
-  const { data: membersData } = useQuery(GetOrganisationMembers, {
+  const { data: membersData, loading: membersLoading } = useQuery(GetOrganisationMembers, {
     variables: {
       organisationId: organisation?.id,
       role: null,
@@ -119,97 +120,101 @@ export default function Members({ params }: { params: { team: string } }) {
             )}
           </div>
 
-          {userCanReadMembers && membersData ? (
-            <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
-              <thead>
-                <tr>
-                  <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Joined
-                  </th>
-                  <th className="px-6 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-500/20">
-                {filteredMembers.map((member: OrganisationMemberType) => (
-                  <tr key={member.id} className="group">
-                    <td className="py-2 flex items-center gap-2">
-                      <Avatar member={member} size="md" />
-                      <div>
-                        <div className="font-medium">
-                          {member.fullName || member.email} {member.self && ' (You)'}
-                        </div>
-                        {member.fullName && (
-                          <div className="text-sm text-neutral-500">{member.email}</div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-2 text-sm">
-                      <RoleLabel role={member.role!} />
-                    </td>
-                    <td className="px-6 py-2 text-sm">
-                      {relativeTimeFromDates(new Date(member.createdAt))}
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap text-right">
-                      <Link href={`/${params.team}/access/members/${member.id}`}>
-                        <Button variant="secondary">
-                          Manage <FaChevronRight />
-                        </Button>
-                      </Link>
-                    </td>
+          {userCanReadMembers ? (
+            membersLoading && !membersData ? (
+              <MemberListSkeleton count={10} />
+            ) : (
+              <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+                <thead>
+                  <tr>
+                    <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      User
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Joined
+                    </th>
+                    <th className="px-6 py-3"></th>
                   </tr>
-                ))}
-                {filteredInvites.map((invite: OrganisationMemberInviteType) => (
-                  <tr key={invite.id}>
-                    <td className="py-3 flex items-center gap-2 opacity-60">
-                      <Avatar user={{ email: invite.inviteeEmail }} size="md" />
-
-                      <div>
-                        <div className="font-medium">
-                          {invite.inviteeEmail}{' '}
-                          <span className="text-sm text-neutral-500">
-                            (invited by{' '}
-                            {invite.invitedBy.self
-                              ? 'You'
-                              : invite.invitedBy.fullName || invite.invitedBy.email}
-                            )
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-2 text-sm opacity-60">
-                      {invite.role && <RoleLabel role={invite.role} />}
-                    </td>
-                    <td
-                      className={clsx(
-                        'px-6 py-3 text-sm',
-                        inviteIsExpired(invite) ? 'text-red-500' : 'text-amber-500'
-                      )}
-                    >
-                      {inviteIsExpired(invite)
-                        ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
-                        : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
-                    </td>
-                    <td className="px-6 py-3 flex items-center justify-end gap-2">
-                      {!inviteIsExpired(invite) && (
-                        <CopyButton value={getInviteLink(invite.id)}>
-                          <div className="flex items-center gap-2">
-                            <FaCopy /> Invite link
+                </thead>
+                <tbody className="divide-y divide-zinc-500/20">
+                  {filteredMembers.map((member: OrganisationMemberType) => (
+                    <tr key={member.id} className="group">
+                      <td className="py-2 flex items-center gap-2">
+                        <Avatar member={member} size="md" />
+                        <div>
+                          <div className="font-medium">
+                            {member.fullName || member.email} {member.self && ' (You)'}
                           </div>
-                        </CopyButton>
-                      )}
+                          {member.fullName && (
+                            <div className="text-sm text-neutral-500">{member.email}</div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-2 text-sm">
+                        <RoleLabel role={member.role!} />
+                      </td>
+                      <td className="px-6 py-2 text-sm">
+                        {relativeTimeFromDates(new Date(member.createdAt))}
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap text-right">
+                        <Link href={`/${params.team}/access/members/${member.id}`}>
+                          <Button variant="secondary">
+                            Manage <FaChevronRight />
+                          </Button>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredInvites.map((invite: OrganisationMemberInviteType) => (
+                    <tr key={invite.id}>
+                      <td className="py-3 flex items-center gap-2 opacity-60">
+                        <Avatar user={{ email: invite.inviteeEmail }} size="md" />
 
-                      <DeleteInviteDialog invite={invite} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        <div>
+                          <div className="font-medium">
+                            {invite.inviteeEmail}{' '}
+                            <span className="text-sm text-neutral-500">
+                              (invited by{' '}
+                              {invite.invitedBy.self
+                                ? 'You'
+                                : invite.invitedBy.fullName || invite.invitedBy.email}
+                              )
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-2 text-sm opacity-60">
+                        {invite.role && <RoleLabel role={invite.role} />}
+                      </td>
+                      <td
+                        className={clsx(
+                          'px-6 py-3 text-sm',
+                          inviteIsExpired(invite) ? 'text-red-500' : 'text-amber-500'
+                        )}
+                      >
+                        {inviteIsExpired(invite)
+                          ? `Expired ${relativeTimeFromDates(new Date(invite.expiresAt))}`
+                          : `Invited ${relativeTimeFromDates(new Date(invite.createdAt))}`}
+                      </td>
+                      <td className="px-6 py-3 flex items-center justify-end gap-2">
+                        {!inviteIsExpired(invite) && (
+                          <CopyButton value={getInviteLink(invite.id)}>
+                            <div className="flex items-center gap-2">
+                              <FaCopy /> Invite link
+                            </div>
+                          </CopyButton>
+                        )}
+
+                        <DeleteInviteDialog invite={invite} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
           ) : (
             <EmptyState
               title="Access restricted"
