@@ -18,6 +18,7 @@ from api.utils.rest import (
 )
 
 from api.utils.access.middleware import IsIPAllowed
+from api.throttling import PlanBasedRateThrottle
 from ee.integrations.secrets.dynamic.aws.utils import (
     revoke_aws_dynamic_secret_lease,
 )
@@ -50,6 +51,7 @@ logger = logging.getLogger(__name__)
 class DynamicSecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
+    throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [
         CamelCaseJSONRenderer,
     ]
@@ -200,6 +202,7 @@ class DynamicSecretsView(APIView):
 class DynamicSecretLeaseView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
+    throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [CamelCaseJSONRenderer]
 
     def _get_account_and_org(self, request):

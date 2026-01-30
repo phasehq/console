@@ -295,7 +295,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                   />
                 </div>
 
-                <div className="max-h-96 overflow-y-auto divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-lg">
+                <div className="max-h-96 overflow-y-auto overflow-x-hidden divide-y divide-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur rounded-b-md w-full max-w-screen-lg pr-4">
                   {loading ? (
                     <div className="p-4">
                       <Spinner size="sm" />
@@ -324,7 +324,9 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                                 )}
                               </div>
                             </div>
-                            <RoleLabel role={member.role!} />
+                            <div className="max-w-28 shrink-0">
+                              <RoleLabel role={member.role!} />
+                            </div>
                           </div>
                         )}
                       </Menu.Item>
