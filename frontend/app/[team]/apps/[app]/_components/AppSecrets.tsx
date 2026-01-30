@@ -28,7 +28,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import clsx from 'clsx'
 import { userHasPermission } from '@/utils/access/permissions'
-import Spinner from '@/components/common/Spinner'
 import {
   digest,
   encryptAsymmetric,
@@ -51,6 +50,7 @@ import { duplicateKeysExist } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
 import { AppFolderRow } from './AppFolderRow'
+import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -878,9 +878,43 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           )}
           <SecretInfoLegend />
         </>
-      ) : isLoading || fetching ? (
-        <div className="w-full flex justify-center py-80">
-          <Spinner size="xl" />
+      ) : isLoading || fetching || (appSecrets?.length > 0 && clientAppSecrets.length === 0) ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full table-auto w-full">
+            <thead
+              id="table-head"
+              className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
+            >
+              <tr>
+                <th className="pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                  key
+                </th>
+                {['Development', 'Staging', 'Production'].map((envName) => (
+                  <th
+                    key={envName}
+                    className="group text-center text-2xs 2xl:text-sm font-semibold uppercase tracking-widest py-2"
+                  >
+                    <Button variant="outline">
+                      <div className="items-center gap-2 justify-center hidden 2xl:flex">
+                        {envName}
+                        <div className="opacity-30">
+                          <FaArrowRight />
+                        </div>
+                      </div>
+                      <div title={envName} className="block 2xl:hidden text-2xs">
+                        {envName.slice(0, 1)}
+                      </div>
+                    </Button>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-500/20 rounded-md">
+              {[...Array(13)].map((_, index) => (
+                <AppSecretRowSkeleton key={`skeleton-${index}`} index={index} envCount={3} />
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : userCanReadEnvironments && userCanReadSecrets ? (
         <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">

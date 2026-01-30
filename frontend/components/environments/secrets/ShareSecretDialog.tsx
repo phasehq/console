@@ -67,7 +67,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
   const [readSecrets] = useMutation(LogSecretReads)
 
   const [tabIndex, setTabIndex] = useState(0)
-  const [secretData, setSecretData] = useState({ text: secret.value })
+  const [secretData, setSecretData] = useState({ text: `${secret.key}=${secret.value}` })
   const [allowedViews, setAllowedViews] = useState<number | undefined>(1)
   const [expiry, setExpiry] = useState<ExpiryOptionT>(lockboxExpiryOptions[1])
 
@@ -78,7 +78,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
     : ''
 
   const reset = () => {
-    setSecretData({ text: secret.value })
+    setSecretData({ text: `${secret.key}=${secret.value}` })
     setAllowedViews(1)
     setExpiry(lockboxExpiryOptions[1])
     setBox(null)

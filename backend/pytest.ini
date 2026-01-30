@@ -1,0 +1,2 @@
+[pytest]
+python_files = tests.py test_*.py *_tests.py
