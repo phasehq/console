@@ -59,8 +59,15 @@ import {
   envKeyring,
   EnvKeyring,
 } from '@/utils/crypto'
+import { escapeRegExp } from 'lodash'
 import { EmptyState } from '@/components/common/EmptyState'
-import { duplicateKeysExist, processEnvFile, SortOption, sortSecrets } from '@/utils/secrets'
+import {
+  duplicateKeysExist,
+  normalizeKey,
+  processEnvFile,
+  SortOption,
+  sortSecrets,
+} from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
@@ -121,6 +128,12 @@ export default function EnvironmentPath({
     organisation?.role?.permissions,
     'Secrets',
     'read',
+    true
+  )
+  const userCanCreateSecrets = userHasPermission(
+    organisation?.role?.permissions,
+    'Secrets',
+    'create',
     true
   )
   const userCanReadSyncs = userHasPermission(
@@ -230,12 +243,12 @@ export default function EnvironmentPath({
         }
       }) ?? []
 
-  const handleAddSecret = (start: boolean = true) => {
+  const handleAddSecret = (start: boolean = true, key: string = '') => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
       version: 1,
-      key: '',
+      key: key,
       value: '',
       tags: [],
       comment: '',
@@ -245,6 +258,14 @@ export default function EnvironmentPath({
     start
       ? setClientSecrets([newSecret, ...clientSecrets])
       : setClientSecrets([...clientSecrets, newSecret])
+  }
+
+  const handleCreateSecretFromSearch = () => {
+    const normalizedKey = normalizeKey(searchQuery)
+    if (!normalizedKey) return
+
+    handleAddSecret(true, normalizedKey)
+    setSearchQuery('')
   }
 
   /**
@@ -583,14 +604,14 @@ export default function EnvironmentPath({
 
   const filteredFolders = useMemo(() => {
     if (searchQuery === '') return folders
-    const re = new RegExp(searchQuery, 'i')
+    const re = new RegExp(escapeRegExp(searchQuery), 'i')
     return folders.filter((f) => re.test(f.name))
   }, [folders, searchQuery])
 
   const filteredSecrets = useMemo(() => {
     if (searchQuery === '') return clientSecrets
-    const re = new RegExp(searchQuery, 'i')
-    return clientSecrets.filter((s) => re.test(s.key))
+    const re = new RegExp(escapeRegExp(searchQuery), 'i')
+    return clientSecrets.filter((s) => re.test(s.key) || re.test(s.value))
   }, [clientSecrets, searchQuery])
 
   const filteredAndSortedSecrets = useMemo(
@@ -600,7 +621,7 @@ export default function EnvironmentPath({
 
   const filteredDynamicSecrets = useMemo(() => {
     if (searchQuery === '') return dynamicSecrets
-    const re = new RegExp(searchQuery, 'i')
+    const re = new RegExp(escapeRegExp(searchQuery), 'i')
     return dynamicSecrets.filter((s) =>
       re.test(`${s.name}${(s.keyMap ?? []).map((k) => k?.keyName).join('')}`)
     )
@@ -1004,7 +1025,7 @@ export default function EnvironmentPath({
                     <FaSearch className="text-neutral-500" />
                   </div>
                   <input
-                    placeholder="Search"
+                    placeholder="Search keys or values"
                     className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1158,7 +1179,16 @@ export default function EnvironmentPath({
                   </div>
                 }
               >
-                <NewSecretMenu />
+                {searchQuery ? (
+                  userCanCreateSecrets &&
+                  normalizeKey(searchQuery) && (
+                    <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                      <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                    </Button>
+                  )
+                ) : (
+                  <NewSecretMenu />
+                )}
                 {!searchQuery && (
                   <div className="w-full max-w-screen-sm h-40 rounded-lg">
                     <EmptyStateFileImport />
