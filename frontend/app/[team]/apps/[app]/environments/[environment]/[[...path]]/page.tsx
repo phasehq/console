@@ -94,6 +94,7 @@ export default function EnvironmentPath({
 
   const [dynamicSecrets, setDynamicSecrets] = useState<DynamicSecretType[]>([])
 
+  const [secretsLoaded, setSecretsLoaded] = useState(false)
   const [decrypting, setDecrypting] = useState(false)
 
   const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
@@ -145,6 +146,10 @@ export default function EnvironmentPath({
       setGloballyRevealed(false)
     }
   }
+
+  useEffect(() => {
+    setSecretsLoaded(false)
+  }, [params.environment, params.app, params.team])
 
   useEffect(() => {
     // 2. Scroll into view when secretToHighlight changes
@@ -501,6 +506,7 @@ export default function EnvironmentPath({
         setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
         setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
         setDecrypting(false)
+        setSecretsLoaded(true)
       })
     }
   }, [envKeys, data])
@@ -885,7 +891,9 @@ export default function EnvironmentPath({
   }
 
   // Track secret readiness. Show skeleton while: loading query, no org, decrypting, or waiting for envKeys to initialize
-  const isInitializing = loading || !organisation || decrypting || (data && !envKeys)
+  const isResolving = loading || decrypting || (data && !envKeys)
+  const isInitializing = !organisation || (!secretsLoaded && isResolving)
+
   if (isInitializing) return <EnvironmentPageSkeleton />
 
   if (!userCanReadEnvironments || !userCanReadSecrets)
