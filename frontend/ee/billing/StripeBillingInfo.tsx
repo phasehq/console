@@ -168,8 +168,9 @@ const ResumeSubscription = ({
         onClick={handleResumeSubscription}
         isLoading={resumeIsPending}
         title="Resume subscription"
+        icon={FaPlay}
       >
-        <FaPlay /> Resume
+        Resume
       </Button>
     )
   else
@@ -342,9 +343,11 @@ const ManagePaymentMethodsDialog = () => {
 const CancelSubscriptionDialog = ({ subscriptionId }: { subscriptionId: string }) => {
   const { activeOrganisation } = useContext(organisationContext)
 
+  const planName = activeOrganisation?.plan === ApiOrganisationPlanChoices.En ? 'Enterprise' : 'Pro'
+
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
-  const [cancelSubscription] = useMutation(CancelStripeSubscription)
+  const [cancelSubscription, { loading }] = useMutation(CancelStripeSubscription)
 
   const handleCancelSubscription = async () =>
     await cancelSubscription({
@@ -372,13 +375,19 @@ const CancelSubscriptionDialog = ({ subscriptionId }: { subscriptionId: string }
       <div>
         <div className="py-4">
           <p className="text-neutral-500">
-            Are you sure you want to cancel your subscription of Phase Pro? You will lose access to
-            all current and future Phase Pro features at the end of the current billing cycle.
+            Are you sure you want to cancel your subscription of Phase {planName}? You will lose
+            access to all current and future Phase {planName} features at the end of the current
+            billing cycle.
           </p>
         </div>
         <div className="flex items-center justify-end">
-          <Button variant="danger" onClick={handleCancelSubscription}>
-            <FaTimes /> Cancel subscription
+          <Button
+            variant="danger"
+            onClick={handleCancelSubscription}
+            icon={FaTimes}
+            isLoading={loading}
+          >
+            Cancel subscription
           </Button>
         </div>
       </div>

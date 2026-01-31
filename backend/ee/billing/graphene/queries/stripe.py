@@ -4,8 +4,10 @@ import graphene
 from graphene import ObjectType, String, Boolean, List, Int, Float
 import stripe
 from django.conf import settings
+from django.utils import timezone
 from graphql import GraphQLError
 from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
+from ee.billing.utils import calculate_graduated_price, get_org_billable_seats
 
 
 class StripeCheckoutDetails(graphene.ObjectType):
@@ -154,6 +156,7 @@ def resolve_stripe_subscription_details(self, info, organisation_id):
     except stripe.error.StripeError as e:
         raise GraphQLError(f"Stripe error: {e}")
 
+
 def resolve_stripe_customer_portal_url(self, info, organisation_id):
     stripe.api_key = settings.STRIPE["secret_key"]
 
@@ -163,12 +166,11 @@ def resolve_stripe_customer_portal_url(self, info, organisation_id):
         if not user_has_permission(info.context.user, "update", "Billing", org):
             raise GraphQLError("You don't have permission to view billing information.")
 
-        return_url=f"{settings.OAUTH_REDIRECT_URI}/{org.name}/settings"
+        return_url = f"{settings.OAUTH_REDIRECT_URI}/{org.name}/settings"
 
         # Create the portal session only on demand
         session = stripe.billing_portal.Session.create(
-            customer=org.stripe_customer_id,
-            return_url=return_url
+            customer=org.stripe_customer_id, return_url=return_url
         )
 
         return session.url
@@ -177,3 +179,78 @@ def resolve_stripe_customer_portal_url(self, info, organisation_id):
         raise GraphQLError("Organisation not found.")
     except stripe.error.StripeError as e:
         raise GraphQLError(f"Stripe error: {str(e)}")
+
+
+class StripePlanEstimate(ObjectType):
+    estimated_total = Float()
+    seat_count = Int()
+    unit_price = Float()
+    currency = String()
+    price_id = String()
+
+
+def resolve_estimate_stripe_subscription(
+    self, info, organisation_id, plan_type, billing_period, preview_v2=False
+):
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    try:
+        org = Organisation.objects.get(id=organisation_id)
+        if not user_has_permission(info.context.user, "read", "Billing", org):
+            raise GraphQLError("You don't have permission to view billing information")
+
+        # Determine effective pricing version
+        is_v2 = org.pricing_version == 2 or preview_v2
+        pricing_version = 2 if is_v2 else 1
+
+        seats = get_org_billable_seats(org, pricing_version=pricing_version)
+
+        if not is_v2:
+            estimated_total = calculate_graduated_price(
+                seats, plan_type, billing_period
+            )
+            unit_price = estimated_total / seats if seats > 0 else 0
+
+            # Fetch the relevant price ID for consistency, though calculation is manual
+            price_key = f"{plan_type.value}_{billing_period.value}"
+            prices = settings.STRIPE["prices"].get(price_key)
+
+            if not prices:
+                raise GraphQLError("Invalid plan configuration")
+
+            # Use the last price (legacy)
+            price_id = prices[-1]
+
+            return StripePlanEstimate(
+                estimated_total=estimated_total,
+                seat_count=seats,
+                unit_price=unit_price,
+                currency="usd",
+                price_id=price_id,
+            )
+
+        price_key = f"{plan_type.value}_{billing_period.value}"
+        prices = settings.STRIPE["prices"].get(price_key)
+
+        if not prices:
+            raise GraphQLError("Invalid plan configuration")
+
+        # Use the first price as the active one
+        price_id = prices[0]
+        price = stripe.Price.retrieve(price_id)
+
+        unit_price = price.unit_amount / 100
+        estimated_total = unit_price * seats
+
+        return StripePlanEstimate(
+            estimated_total=estimated_total,
+            seat_count=seats,
+            unit_price=unit_price,
+            currency=price.currency,
+            price_id=price_id,
+        )
+
+    except Organisation.DoesNotExist:
+        raise GraphQLError("Organisation not found.")
+    except stripe.error.StripeError as e:
+        raise GraphQLError(f"Stripe error: {e}")
