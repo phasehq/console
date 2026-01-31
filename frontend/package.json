@@ -41,7 +41,7 @@
     "jspdf": "^4.0.0",
     "libsodium-wrappers-sumo": "^0.7.13",
     "lodash": "^4.17.23",
-    "next": "^14.2.35",
+    "next": "^16.1.6",
     "next-auth": "^4.24.13",
     "nextjs-toploader": "^3.8.16",
     "posthog-js": "^1.335.3",
