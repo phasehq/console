@@ -627,6 +627,7 @@ class EnvironmentType(DjangoObjectType):
 class AppType(DjangoObjectType):
     environments = graphene.NonNull(graphene.List(EnvironmentType))
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
+    service_accounts = graphene.NonNull(graphene.List(lambda: ServiceAccountType))
 
     class Meta:
         model = App
@@ -683,6 +684,9 @@ class AppType(DjangoObjectType):
 
     def resolve_members(self, info):
         return self.members.filter(deleted_at=None)
+
+    def resolve_service_accounts(self, info):
+        return self.service_accounts.filter(deleted_at=None)
 
 
 class AppMembershipType(DjangoObjectType):
