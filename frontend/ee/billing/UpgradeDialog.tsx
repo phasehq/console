@@ -147,7 +147,7 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
             <div>
               You must switch to the new pricing model before upgrading your subscription.{' '}
               <a
-                href="https://phase.dev/pricing"
+                href="https://phase.dev/blog/2026-pricing-updates/"
                 target="_blank"
                 rel="noreferrer"
                 className="underline font-medium hover:opacity-80 inline-flex items-center gap-1"
