@@ -1,11 +1,12 @@
 from api.models import Organisation
-from api.utils.organisations import get_organisation_seats
 from api.utils.access.permissions import user_has_permission
 from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
+from ee.billing.stripe import migrate_organisation_to_v2_pricing
 import stripe
 from django.conf import settings
-from graphene import Mutation, ID, String, Boolean, ObjectType, Mutation, Enum
+from graphene import Mutation, ID, String, Boolean, ObjectType
 from graphql import GraphQLError
+from ee.billing.utils import get_org_billable_seats
 
 
 class UpdateSubscriptionResponse(ObjectType):
@@ -35,24 +36,24 @@ class CreateSubscriptionCheckoutSession(Mutation):
             ):
                 raise GraphQLError("You don't have permission to update Billing")
 
-            seats = get_organisation_seats(organisation)
-
             # Ensure the organisation has a Stripe customer ID
             if not organisation.stripe_customer_id:
                 raise GraphQLError("Organisation must have a Stripe customer ID.")
 
+            seats = get_org_billable_seats(organisation)
+
             if plan_type == PlanTypeEnum.ENTERPRISE:
                 price = (
-                    settings.STRIPE["prices"]["enterprise_monthly"]
+                    settings.STRIPE["prices"]["enterprise_monthly"][0]
                     if billing_period == BillingPeriodEnum.MONTHLY
-                    else settings.STRIPE["prices"]["enterprise_yearly"]
+                    else settings.STRIPE["prices"]["enterprise_yearly"][0]
                 )
 
             else:
                 price = (
-                    settings.STRIPE["prices"]["pro_monthly"]
+                    settings.STRIPE["prices"]["pro_monthly"][0]
                     if billing_period == BillingPeriodEnum.MONTHLY
-                    else settings.STRIPE["prices"]["pro_yearly"]
+                    else settings.STRIPE["prices"]["pro_yearly"][0]
                 )
 
             # Create the checkout session
@@ -106,7 +107,9 @@ class DeletePaymentMethodMutation(Mutation):
 
             payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
             if payment_method.customer != org.stripe_customer_id:
-                raise GraphQLError("Payment method does not belong to this organisation")
+                raise GraphQLError(
+                    "Payment method does not belong to this organisation"
+                )
 
             stripe.PaymentMethod.detach(payment_method_id)
 
@@ -255,16 +258,16 @@ class ModifySubscriptionMutation(Mutation):
 
             if plan_type == PlanTypeEnum.ENTERPRISE:
                 price = (
-                    settings.STRIPE["prices"]["enterprise_monthly"]
+                    settings.STRIPE["prices"]["enterprise_monthly"][0]
                     if billing_period == BillingPeriodEnum.MONTHLY
-                    else settings.STRIPE["prices"]["enterprise_yearly"]
+                    else settings.STRIPE["prices"]["enterprise_yearly"][0]
                 )
 
             else:
                 price = (
-                    settings.STRIPE["prices"]["pro_monthly"]
+                    settings.STRIPE["prices"]["pro_monthly"][0]
                     if billing_period == BillingPeriodEnum.MONTHLY
-                    else settings.STRIPE["prices"]["pro_yearly"]
+                    else settings.STRIPE["prices"]["pro_yearly"][0]
                 )
 
             # Retrieve the subscription and update it with a new price
@@ -274,7 +277,7 @@ class ModifySubscriptionMutation(Mutation):
                     {
                         "id": subscription_item_id,  # Assuming there's only one item in the subscription
                         "price": price,
-                        "quantity": get_organisation_seats(organisation),
+                        "quantity": get_org_billable_seats(organisation),
                     },
                 ],
             )
@@ -368,3 +371,31 @@ class SetDefaultPaymentMethodMutation(Mutation):
         except Exception as e:
             # Handle other potential exceptions
             raise GraphQLError(f"An error occurred: {str(e)}")
+
+
+class MigratePricingMutation(Mutation):
+    class Arguments:
+        organisation_id = ID(required=True)
+
+    success = Boolean()
+    message = String()
+
+    def mutate(self, info, organisation_id):
+        try:
+            org = Organisation.objects.get(id=organisation_id)
+
+            if not user_has_permission(info.context.user, "update", "Billing", org):
+                raise GraphQLError(
+                    "You don't have the permissions required to update Billing information in this Organisation."
+                )
+
+            migrate_organisation_to_v2_pricing(org)
+
+            return MigratePricingMutation(
+                success=True, message="Organisation successfully migrated to pricing V2"
+            )
+
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+        except Exception as e:
+            return MigratePricingMutation(success=False, message=str(e))

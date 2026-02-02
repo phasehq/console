@@ -37,9 +37,15 @@ def resolve_organisation_plan(self, info, organisation_id):
             ).count(),
         }
 
-        plan["seats_used"]["total"] = (
-            plan["seats_used"]["users"] + plan["seats_used"]["service_accounts"]
-        )
+        if (
+            organisation.pricing_version == Organisation.PRICING_V2
+            and organisation.plan != Organisation.FREE_PLAN
+        ):
+            plan["seats_used"]["total"] = plan["seats_used"]["users"]
+        else:
+            plan["seats_used"]["total"] = (
+                plan["seats_used"]["users"] + plan["seats_used"]["service_accounts"]
+            )
 
         if not CLOUD_HOSTED and organisation.plan == Organisation.FREE_PLAN:
             seat_limit = None
