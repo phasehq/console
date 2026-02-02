@@ -124,7 +124,8 @@ export const PlanInfo = () => {
                 <LogoWordMark className="fill-black dark:fill-white h-10" />{' '}
                 <PlanLabel plan={activeOrganisation.plan} />
               </div>
-              {activeOrganisation.plan === ApiOrganisationPlanChoices.En &&
+              {isCloudHosted() &&
+                activeOrganisation.plan === ApiOrganisationPlanChoices.En &&
                 activeOrganisation.pricingVersion === 1 && <MigratePricingDialog />}
               {activeOrganisation.plan !== ApiOrganisationPlanChoices.En && (
                 <div className="flex items-center gap-4">
