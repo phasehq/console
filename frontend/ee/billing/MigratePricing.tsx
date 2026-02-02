@@ -143,6 +143,15 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
             >
               pricing page <FaExternalLinkAlt className="text-xs" />
             </a>{' '}
+            or read our{' '}
+            <a
+              href="https://phase.dev/blog/2026-pricing-updates/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-emerald-500 hover:text-emerald-400 font-medium underline inline-flex items-center gap-1"
+            >
+              announcement <FaExternalLinkAlt className="text-xs" />
+            </a>{' '}
             for more details.
           </p>
 
