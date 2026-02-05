@@ -6,6 +6,7 @@ import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { AppType } from '@/apollo/graphql'
 import { AppDescriptionViewer } from '@/components/apps/AppDescriptionViewer'
+import { FaInfo } from 'react-icons/fa6'
 
 interface AppDescriptionProps {
   appId: string
@@ -35,12 +36,16 @@ export const AppDescription = ({ appId }: AppDescriptionProps) => {
   return (
     <div className="space-y-4 flex flex-col h-0 min-h-full">
       <div className="space-y-1 shrink-0 pt-2">
-        <p className="text-neutral-500 text-sm italic">App description and documentation</p>
+        <p className="text-neutral-500 text-sm italic flex items-center gap-2">
+          <FaInfo /> App description and documentation
+        </p>
       </div>
       <AppDescriptionViewer
+        appId={appId}
         description={app.description}
         className="flex-grow min-h-0"
         maxHeightClass="h-full"
+        showEditButton
       />
     </div>
   )

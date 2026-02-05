@@ -1,26 +1,32 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useContext } from 'react'
 import { Button } from '@/components/common/Button'
-import ReactMarkdown from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism'
 import clsx from 'clsx'
-import { FaExpand } from 'react-icons/fa'
+import { FaEdit, FaExpand, FaInfo } from 'react-icons/fa'
 import GenericDialog from '@/components/common/GenericDialog'
+import { MarkdownViewer } from '@/components/common/MarkdownViewer'
+import Link from 'next/link'
+import { organisationContext } from '@/contexts/organisationContext'
 
 interface AppDescriptionViewerProps {
+  appId: string
   description: string
   className?: string
   maxHeightClass?: string
+  showEditButton?: boolean
 }
 
 export const AppDescriptionViewer = ({
+  appId,
   description,
   className,
   maxHeightClass = 'max-h-80',
+  showEditButton = false,
 }: AppDescriptionViewerProps) => {
   const dialogRef = useRef<{ openModal: () => void }>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const [isOverflowing, setIsOverflowing] = useState(false)
+
+  const { activeOrganisation: organisation } = useContext(organisationContext)
 
   useEffect(() => {
     const element = contentRef.current
@@ -39,22 +45,6 @@ export const AppDescriptionViewer = ({
   }, [description])
 
   if (!description) return null
-
-  const components = {
-    code(props: any) {
-      const { children, className, node, ...rest } = props
-      const match = /language-(\w+)/.exec(className || '')
-      return match ? (
-        <SyntaxHighlighter {...rest} PreTag="div" language={match[1]} style={vscDarkPlus}>
-          {String(children).replace(/\n$/, '')}
-        </SyntaxHighlighter>
-      ) : (
-        <code {...rest} className={className}>
-          {children}
-        </code>
-      )
-    },
-  }
 
   return (
     <>
@@ -76,7 +66,7 @@ export const AppDescriptionViewer = ({
             'overflow-hidden'
           )}
         >
-          <ReactMarkdown components={components}>{description}</ReactMarkdown>
+          <MarkdownViewer text={description} />
         </div>
         {isOverflowing && (
           <div
@@ -88,9 +78,30 @@ export const AppDescriptionViewer = ({
         )}
       </div>
 
-      <GenericDialog ref={dialogRef} title="App Description" size="lg">
+      <GenericDialog
+        ref={dialogRef}
+        title="App description and documentation"
+        dialogTitle={
+          <div className="flex justify-between items-center gap-4">
+            <div className="text-zinc-900 dark:text-zinc-100 text-base font-medium flex items-center gap-2">
+              <FaInfo /> App description and documentation{' '}
+            </div>
+            {showEditButton && (
+              <Link
+                href={`/${organisation?.name}/apps/${appId}/settings?editDescription`}
+                className="ml-auto"
+              >
+                <Button variant="secondary">
+                  <FaEdit /> Edit
+                </Button>
+              </Link>
+            )}
+          </div>
+        }
+        size="lg"
+      >
         <div className="prose dark:prose-invert max-w-none">
-          <ReactMarkdown components={components}>{description}</ReactMarkdown>
+          <MarkdownViewer text={description} />
         </div>
       </GenericDialog>
     </>

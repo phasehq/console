@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
-import ReactMarkdown from 'react-markdown'
 import { Textarea } from '@/components/common/TextArea'
 import clsx from 'clsx'
 import { FaEdit } from 'react-icons/fa'
 import { useMutation } from '@apollo/client'
 import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { AppDescriptionViewer } from '@/components/apps/AppDescriptionViewer'
+import { MarkdownViewer } from '@/components/common/MarkdownViewer'
 
 import { AppType } from '@/apollo/graphql'
 
@@ -23,7 +24,15 @@ export const AppDescriptionEditor = ({ app, canUpdate }: AppDescriptionEditorPro
   const [isEditing, setIsEditing] = useState(false)
   const [tab, setTab] = useState<'write' | 'preview'>('write')
 
+  const searchParams = useSearchParams()
+
   const [updateAppInfo, { loading }] = useMutation(UpdateAppInfoOp)
+
+  useEffect(() => {
+    if (searchParams?.has('editDescription') && canUpdate) {
+      setIsEditing(true)
+    }
+  }, [searchParams, canUpdate])
 
   useEffect(() => {
     if (!isEditing) {
@@ -57,7 +66,7 @@ export const AppDescriptionEditor = ({ app, canUpdate }: AppDescriptionEditorPro
       {!isEditing ? (
         <div className="relative group">
           {description ? (
-            <AppDescriptionViewer description={description} />
+            <AppDescriptionViewer appId={app.id} description={description} />
           ) : (
             <div className="italic text-neutral-500 p-4 border border-dashed border-neutral-300 dark:border-neutral-700 rounded-lg">
               No description provided
@@ -120,7 +129,7 @@ export const AppDescriptionEditor = ({ app, canUpdate }: AppDescriptionEditorPro
               />
             ) : (
               <div className="prose dark:prose-invert max-w-none p-4 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-800 min-h-[200px]">
-                <ReactMarkdown>{description || '*No content*'}</ReactMarkdown>
+                <MarkdownViewer text={description || '*No content*'} />
               </div>
             )}
           </div>
