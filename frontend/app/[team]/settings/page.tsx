@@ -90,7 +90,7 @@ export default function Settings({ params }: { params: { team: string } }) {
           </Tab.List>
 
           <Tab.Panels>
-            <div className="max-h-[80vh] overflow-y-auto px-4">
+            <div className="px-4">
               {userCanManageBilling && (
                 <Tab.Panel>
                   <div className="space-y-10 py-4">
