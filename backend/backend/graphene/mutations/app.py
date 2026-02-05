@@ -157,6 +157,46 @@ class UpdateAppNameMutation(graphene.Mutation):
         return UpdateAppNameMutation(app=app)
 
 
+class UpdateAppInfoMutation(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+        name = graphene.String(required=False)
+        description = graphene.String(required=False)
+
+    app = graphene.Field(AppType)
+
+    @classmethod
+    def mutate(cls, root, info, id, name=None, description=None):
+        user = info.context.user
+        app = App.objects.get(id=id)
+
+        if not user_can_access_app(user.userId, app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        if not user_has_permission(
+            info.context.user, "update", "Apps", app.organisation
+        ):
+            raise GraphQLError("You don't have permission to update Apps")
+
+        if name is not None:
+            # Validate name is not blank
+            if not name or name.strip() == "":
+                raise GraphQLError("App name cannot be blank")
+
+            # Validate name length
+            if len(name) > 64:
+                raise GraphQLError("App name cannot exceed 64 characters")
+
+            app.name = name
+
+        if description is not None:
+            app.description = description
+
+        app.save()
+
+        return UpdateAppInfoMutation(app=app)
+
+
 class DeleteAppMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
