@@ -34,7 +34,7 @@ export default function AppLayout({
 
   const [tabs, setTabs] = useState([
     {
-      name: 'Secrets',
+      name: 'Home',
       link: '',
     },
     {
