@@ -82,8 +82,8 @@ export const AppDescriptionViewer = ({
         ref={dialogRef}
         title="App description and documentation"
         dialogTitle={
-          <div className="flex justify-between items-center gap-4">
-            <div className="text-zinc-900 dark:text-zinc-100 text-base font-medium flex items-center gap-2">
+          <div className="flex justify-between items-center gap-4 pb-2">
+            <div className="text-neutral-500 text-sm font-medium flex items-center gap-2">
               <FaInfo /> App description and documentation{' '}
             </div>
             {showEditButton && (

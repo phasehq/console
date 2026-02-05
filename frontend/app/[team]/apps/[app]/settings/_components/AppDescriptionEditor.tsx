@@ -6,7 +6,7 @@ import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { Textarea } from '@/components/common/TextArea'
 import clsx from 'clsx'
-import { FaEdit } from 'react-icons/fa'
+import { FaEdit, FaInfo } from 'react-icons/fa'
 import { useMutation } from '@apollo/client'
 import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { AppDescriptionViewer } from '@/components/apps/AppDescriptionViewer'
@@ -58,10 +58,9 @@ export const AppDescriptionEditor = ({ app, canUpdate }: AppDescriptionEditorPro
 
   return (
     <div className="space-y-6 py-4">
-      {/* <div className="space-y-1">
-        <h3 className="text-xl font-semibold">Description</h3>
-        <p className="text-neutral-500">App description and documentation</p>
-      </div> */}
+      <div className="text-neutral-500 text-sm flex items-center gap-2">
+        <FaInfo /> App description and documentation{' '}
+      </div>
 
       {!isEditing ? (
         <div className="relative group">
