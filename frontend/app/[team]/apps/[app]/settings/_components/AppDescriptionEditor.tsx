@@ -73,7 +73,7 @@ export const AppDescriptionEditor = ({ app, canUpdate }: AppDescriptionEditorPro
                   </Button>
                 </div>
               ) : (
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-30">
                   <Button variant="secondary" onClick={() => setIsEditing(true)}>
                     <FaEdit /> <span className="ml-1">Edit</span>
                   </Button>

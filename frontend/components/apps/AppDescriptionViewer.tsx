@@ -45,13 +45,9 @@ export const AppDescriptionViewer = ({
       const { children, className, node, ...rest } = props
       const match = /language-(\w+)/.exec(className || '')
       return match ? (
-        <SyntaxHighlighter
-          {...rest}
-          PreTag="div"
-          children={String(children).replace(/\n$/, '')}
-          language={match[1]}
-          style={vscDarkPlus}
-        />
+        <SyntaxHighlighter {...rest} PreTag="div" language={match[1]} style={vscDarkPlus}>
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
       ) : (
         <code {...rest} className={className}>
           {children}
@@ -85,7 +81,7 @@ export const AppDescriptionViewer = ({
         {isOverflowing && (
           <div
             className={clsx(
-              'absolute bottom-0 inset-x-0 h-12 pointer-events-none rounded-b-lg z-10',
+              'absolute bottom-0 inset-x-0 h-20 pointer-events-none rounded-b-lg z-10',
               'bg-gradient-to-t from-neutral-50 dark:from-neutral-900 via-neutral-50/90 dark:via-neutral-900/90 to-transparent'
             )}
           />
