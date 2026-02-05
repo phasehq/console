@@ -785,6 +785,7 @@ type OrganisationMemberInviteType {
 type AppType {
   id: String!
   name: String!
+  description: String
   identityKey: String!
   appVersion: Int!
   appToken: String!
@@ -793,7 +794,7 @@ type AppType {
   createdAt: DateTime
   updatedAt: DateTime!
   sseEnabled: Boolean!
-  serviceAccounts: [ServiceAccountType!]!
+  serviceAccounts: [ServiceAccountType]!
   environments: [EnvironmentType]!
   members: [OrganisationMemberType]!
 }
