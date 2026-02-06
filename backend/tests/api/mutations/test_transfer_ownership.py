@@ -174,6 +174,70 @@ class TestTransferOrganisationOwnershipMutation:
         with pytest.raises(GraphQLError, match="must have global access"):
             mutation.mutate(None, info, "org-1", "member-2")
 
+    @patch("backend.graphene.mutations.organisation.role_has_global_access")
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_cannot_transfer_to_member_with_null_identity_key(
+        self, MockOrganisation, MockOrgMember, mock_role_has_global_access
+    ):
+        """Test that ownership cannot be transferred to a member with a NULL identity_key."""
+        from graphql import GraphQLError
+
+        mutation = self._get_mutation_class()
+
+        org = MagicMock()
+        MockOrganisation.objects.get.return_value = org
+
+        user = MagicMock()
+        owner_role = self._make_role("Owner")
+        admin_role = self._make_role("Admin")
+
+        current_member = self._make_member("member-1", user, owner_role)
+        target_user = MagicMock()
+        target_member = self._make_member(
+            "member-2", target_user, admin_role, identity_key=None
+        )
+
+        MockOrgMember.objects.get.side_effect = [current_member, target_member]
+        mock_role_has_global_access.return_value = True
+
+        info = self._make_info(user)
+
+        with pytest.raises(GraphQLError, match="does not have a valid identity key"):
+            mutation.mutate(None, info, "org-1", "member-2")
+
+    @patch("backend.graphene.mutations.organisation.role_has_global_access")
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_cannot_transfer_to_member_with_empty_identity_key(
+        self, MockOrganisation, MockOrgMember, mock_role_has_global_access
+    ):
+        """Test that ownership cannot be transferred to a member with an empty identity_key."""
+        from graphql import GraphQLError
+
+        mutation = self._get_mutation_class()
+
+        org = MagicMock()
+        MockOrganisation.objects.get.return_value = org
+
+        user = MagicMock()
+        owner_role = self._make_role("Owner")
+        admin_role = self._make_role("Admin")
+
+        current_member = self._make_member("member-1", user, owner_role)
+        target_user = MagicMock()
+        target_member = self._make_member(
+            "member-2", target_user, admin_role, identity_key=""
+        )
+
+        MockOrgMember.objects.get.side_effect = [current_member, target_member]
+        mock_role_has_global_access.return_value = True
+
+        info = self._make_info(user)
+
+        with pytest.raises(GraphQLError, match="does not have a valid identity key"):
+            mutation.mutate(None, info, "org-1", "member-2")
+
     @patch("backend.graphene.mutations.organisation.send_ownership_transferred_email")
     @patch("backend.graphene.mutations.organisation.role_has_global_access")
     @patch("backend.graphene.mutations.organisation.Role")
