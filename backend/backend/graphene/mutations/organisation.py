@@ -411,6 +411,12 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
                 "The new owner must have global access (Admin role) before ownership can be transferred. "
             )
 
+        # Verify the new owner has a valid identity_key
+        if not new_owner_member.identity_key:
+            raise GraphQLError(
+                "The new owner does not have a valid identity key. They may need to complete account setup first."
+            )
+
         # Get the Owner and Admin roles
         owner_role = Role.objects.get(organisation=org, name__iexact="owner")
         admin_role = Role.objects.get(organisation=org, name__iexact="admin")
