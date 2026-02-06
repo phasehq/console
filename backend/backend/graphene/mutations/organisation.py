@@ -1,4 +1,4 @@
-from api.emails import send_user_joined_email, send_welcome_email
+from api.emails import send_user_joined_email, send_welcome_email, send_ownership_transferred_email
 from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
@@ -435,5 +435,11 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
             # Use provided billing_email or fall back to new owner's email
             email_to_use = billing_email if billing_email else new_owner_member.user.email
             update_stripe_customer_email(org, email_to_use)
+
+        # 5. Send email notifications to both old and new owner
+        try:
+            send_ownership_transferred_email(org, current_member, new_owner_member)
+        except Exception as e:
+            print(f"Error sending ownership transfer emails: {e}")
 
         return TransferOrganisationOwnershipMutation(ok=True)
