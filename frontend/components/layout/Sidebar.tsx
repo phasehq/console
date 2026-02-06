@@ -252,7 +252,7 @@ const Sidebar = () => {
   return (
     <div
       className={clsx(
-        'h-screen flex flex-col pt-[64px] transition-all duration-300',
+        'h-screen flex flex-col pt-16 transition-all duration-300',
         collapsed ? 'w-20' : 'w-72'
       )}
     >
