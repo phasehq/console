@@ -6,8 +6,7 @@ import { Fragment, useContext, useRef, useState, useMemo, useEffect } from 'reac
 import { OrganisationMemberType, RoleType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Combobox, Transition } from '@headlessui/react'
-import { FaChevronDown } from 'react-icons/fa'
-import { HiBuildingOffice2 } from 'react-icons/hi2'
+import { FaChevronDown, FaExchangeAlt } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { userHasGlobalAccess } from '@/utils/access/permissions'
@@ -163,7 +162,7 @@ export const TransferOwnershipSection = () => {
             buttonVariant="danger"
             buttonContent={
               <>
-                <HiBuildingOffice2 /> Transfer Ownership
+                <FaExchangeAlt /> Transfer Ownership
               </>
             }
             onOpen={() => {
@@ -385,6 +384,7 @@ export const TransferOwnershipSection = () => {
                     onClick={handleTransferOwnership}
                     isLoading={loading || isProcessing}
                     disabled={!canTransfer}
+                    icon={FaExchangeAlt}
                   >
                     Transfer Ownership
                   </Button>
