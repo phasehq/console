@@ -112,8 +112,8 @@ def update_stripe_customer_email(organisation, new_email):
             notify_slack(
                 f"Failed to update Stripe customer email for organisation {organisation.id}: {ex}"
             )
-        except:
-            pass
+        except Exception as slack_ex:
+            print(f"Failed to send Slack notification for Stripe email update error: {slack_ex}")
 
 
 def migrate_organisation_to_v2_pricing(organisation):
