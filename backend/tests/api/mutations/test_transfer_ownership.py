@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 
 @patch("backend.graphene.mutations.organisation.transaction")
+@patch("backend.graphene.mutations.organisation.user_is_org_member", return_value=True)
 class TestTransferOrganisationOwnershipMutation:
     """Tests for the TransferOrganisationOwnershipMutation GraphQL mutation."""
 
@@ -46,6 +47,7 @@ class TestTransferOrganisationOwnershipMutation:
         MockRole,
         mock_role_has_global_access,
         mock_send_email,
+        mock_user_is_org_member,
         mock_transaction,
     ):
         """Test successful ownership transfer between owner and admin."""
@@ -118,6 +120,7 @@ class TestTransferOrganisationOwnershipMutation:
         MockRole,
         mock_role_has_global_access,
         mock_send_email,
+        mock_user_is_org_member,
         mock_transaction,
     ):
         """Test that all role/org saves happen inside transaction.atomic() block."""
@@ -176,9 +179,22 @@ class TestTransferOrganisationOwnershipMutation:
             "atomic_exit",
         ]
 
+    def test_non_member_cannot_transfer(self, mock_user_is_org_member, mock_transaction):
+        """Test that a non-member user cannot initiate a transfer."""
+        from graphql import GraphQLError
+
+        mutation = self._get_mutation_class()
+        mock_user_is_org_member.return_value = False
+
+        user = MagicMock()
+        info = self._make_info(user)
+
+        with pytest.raises(GraphQLError, match="You don't have permission"):
+            mutation.mutate(None, info, "org-1", "member-2")
+
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
-    def test_non_owner_cannot_transfer(self, MockOrganisation, MockOrgMember, mock_transaction):
+    def test_non_owner_cannot_transfer(self, MockOrganisation, MockOrgMember, mock_user_is_org_member, mock_transaction):
         """Test that a non-owner member cannot initiate a transfer."""
         from graphql import GraphQLError
 
@@ -199,7 +215,7 @@ class TestTransferOrganisationOwnershipMutation:
 
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
-    def test_cannot_transfer_to_self(self, MockOrganisation, MockOrgMember, mock_transaction):
+    def test_cannot_transfer_to_self(self, MockOrganisation, MockOrgMember, mock_user_is_org_member, mock_transaction):
         """Test that an owner cannot transfer ownership to themselves."""
         from graphql import GraphQLError
 
@@ -224,7 +240,7 @@ class TestTransferOrganisationOwnershipMutation:
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_cannot_transfer_to_non_global_access_member(
-        self, MockOrganisation, MockOrgMember, mock_role_has_global_access, mock_transaction
+        self, MockOrganisation, MockOrgMember, mock_role_has_global_access, mock_user_is_org_member, mock_transaction
     ):
         """Test that ownership cannot be transferred to a member without global access."""
         from graphql import GraphQLError
@@ -254,7 +270,7 @@ class TestTransferOrganisationOwnershipMutation:
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_cannot_transfer_to_member_with_null_identity_key(
-        self, MockOrganisation, MockOrgMember, mock_role_has_global_access, mock_transaction
+        self, MockOrganisation, MockOrgMember, mock_role_has_global_access, mock_user_is_org_member, mock_transaction
     ):
         """Test that ownership cannot be transferred to a member with a NULL identity_key."""
         from graphql import GraphQLError
@@ -286,7 +302,7 @@ class TestTransferOrganisationOwnershipMutation:
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_cannot_transfer_to_member_with_empty_identity_key(
-        self, MockOrganisation, MockOrgMember, mock_role_has_global_access, mock_transaction
+        self, MockOrganisation, MockOrgMember, mock_role_has_global_access, mock_user_is_org_member, mock_transaction
     ):
         """Test that ownership cannot be transferred to a member with an empty identity_key."""
         from graphql import GraphQLError
@@ -326,6 +342,7 @@ class TestTransferOrganisationOwnershipMutation:
         MockRole,
         mock_role_has_global_access,
         mock_send_email,
+        mock_user_is_org_member,
         mock_transaction,
     ):
         """Test that Stripe customer email is updated when running in cloud mode."""
@@ -373,6 +390,7 @@ class TestTransferOrganisationOwnershipMutation:
         MockRole,
         mock_role_has_global_access,
         mock_send_email,
+        mock_user_is_org_member,
         mock_transaction,
     ):
         """Test that a custom billing email is used for Stripe when provided."""
@@ -422,6 +440,7 @@ class TestTransferOrganisationOwnershipMutation:
         MockRole,
         mock_role_has_global_access,
         mock_send_email,
+        mock_user_is_org_member,
         mock_transaction,
     ):
         """Test that Stripe is not updated when running in self-hosted mode."""
@@ -463,6 +482,7 @@ class TestTransferOrganisationOwnershipMutation:
         MockRole,
         mock_role_has_global_access,
         mock_send_email,
+        mock_user_is_org_member,
         mock_transaction,
     ):
         """Test that email sending failure doesn't prevent the transfer from completing."""
@@ -508,6 +528,7 @@ class TestTransferOrganisationOwnershipMutation:
         MockRole,
         mock_role_has_global_access,
         mock_send_email,
+        mock_user_is_org_member,
         mock_transaction,
     ):
         """Test that the organisation's identity_key is updated to the new owner's key."""
