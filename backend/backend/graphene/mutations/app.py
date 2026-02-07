@@ -1,4 +1,3 @@
-from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import EnvironmentKeyInput
 from api.utils.access.permissions import (
     user_can_access_app,
@@ -16,10 +15,7 @@ from api.models import (
     ServiceAccount,
 )
 from backend.graphene.types import AppType, MemberType
-from django.conf import settings
 from django.db.models import Q
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 class CreateAppMutation(graphene.Mutation):
@@ -88,41 +84,6 @@ class CreateAppMutation(graphene.Mutation):
         return CreateAppMutation(app=app)
 
 
-class RotateAppKeysMutation(graphene.Mutation):
-    class Arguments:
-        id = graphene.ID(required=True)
-        app_token = graphene.String(required=True)
-        wrapped_key_share = graphene.String(required=True)
-
-    app = graphene.Field(AppType)
-
-    @classmethod
-    def mutate(cls, root, info, id, app_token, wrapped_key_share):
-        user = info.context.user
-        app = App.objects.get(id=id)
-
-        if not user_can_access_app(user.userId, app.id):
-            raise GraphQLError("You don't have access to this app")
-
-        if CLOUD_HOSTED:
-            # delete current keys from cloudflare KV
-            deleted = delete(app.app_token)
-
-            # purge keys from cloudflare cache
-            purged = purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}"
-            )
-
-            if not deleted or not purged:
-                raise GraphQLError("Failed to delete app keys. Please try again.")
-
-        app.app_token = app_token
-        app.wrapped_key_share = wrapped_key_share
-        app.save()
-
-        return RotateAppKeysMutation(app=app)
-
-
 class UpdateAppNameMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
@@ -175,18 +136,6 @@ class DeleteAppMutation(graphene.Mutation):
             info.context.user, "delete", "Apps", app.organisation
         ):
             raise GraphQLError("You don't have permission to delete Apps")
-
-        if CLOUD_HOSTED:
-            # delete current keys from cloudflare KV
-            deleted = delete(app.app_token)
-
-            # purge keys from cloudflare cache
-            purged = purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}"
-            )
-
-            if not deleted or not purged:
-                raise GraphQLError("Failed to delete app keys. Please try again.")
 
         app.wrapped_key_share = ""
         app.save()
