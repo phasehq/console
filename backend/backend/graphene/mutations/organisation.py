@@ -383,6 +383,9 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, organisation_id, new_owner_id, billing_email=None):
+        if not user_is_org_member(info.context.user, organisation_id):
+            raise GraphQLError("You don't have permission to perform this action")
+
         org = Organisation.objects.get(id=organisation_id)
 
         # Verify the caller is the current owner
