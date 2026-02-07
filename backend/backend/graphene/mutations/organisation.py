@@ -9,6 +9,7 @@ from api.utils.access.roles import default_roles
 from api.tasks.emails import send_invite_email_job
 from backend.quotas import can_add_account
 import graphene
+from django.db import transaction
 from graphql import GraphQLError
 from api.models import (
     App,
@@ -421,18 +422,19 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
         owner_role = Role.objects.get(organisation=org, name__iexact="owner")
         admin_role = Role.objects.get(organisation=org, name__iexact="admin")
 
-        # Transfer ownership:
-        # 1. Set new owner's role to Owner
-        new_owner_member.role = owner_role
-        new_owner_member.save()
+        # Transfer ownership atomically to prevent inconsistent state
+        with transaction.atomic():
+            # 1. Set new owner's role to Owner
+            new_owner_member.role = owner_role
+            new_owner_member.save()
 
-        # 2. Update org's identity_key to the new owner's identity_key
-        org.identity_key = new_owner_member.identity_key
-        org.save()
+            # 2. Update org's identity_key to the new owner's identity_key
+            org.identity_key = new_owner_member.identity_key
+            org.save()
 
-        # 3. Demote current owner to Admin
-        current_member.role = admin_role
-        current_member.save()
+            # 3. Demote current owner to Admin
+            current_member.role = admin_role
+            current_member.save()
 
         # 4. Update Stripe customer email if in cloud mode
         if settings.APP_HOST == "cloud":
