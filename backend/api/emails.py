@@ -160,3 +160,41 @@ def send_welcome_email(new_member):
         "api/welcome.html",
         context,
     )
+
+
+def send_ownership_transferred_email(org, old_owner_member, new_owner_member):
+    """Send email notifications to both the old and new owner after an ownership transfer."""
+    organisation = org.name
+    members_page_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}/access/members"
+    org_home_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}"
+
+    old_owner_name = get_org_member_name(old_owner_member)
+    new_owner_name = get_org_member_name(new_owner_member)
+
+    # Email to old owner
+    send_email(
+        f"Ownership transferred - {organisation} on Phase",
+        [old_owner_member.user.email],
+        "api/ownership_transferred_old_owner.html",
+        {
+            "old_owner_name": old_owner_name,
+            "new_owner_name": new_owner_name,
+            "new_owner_email": new_owner_member.user.email,
+            "organisation": organisation,
+            "members_page_link": members_page_link,
+        },
+    )
+
+    # Email to new owner
+    send_email(
+        f"You are now the owner of {organisation} on Phase",
+        [new_owner_member.user.email],
+        "api/ownership_transferred_new_owner.html",
+        {
+            "new_owner_name": new_owner_name,
+            "old_owner_name": old_owner_name,
+            "old_owner_email": old_owner_member.user.email,
+            "organisation": organisation,
+            "org_home_link": org_home_link,
+        },
+    )
