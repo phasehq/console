@@ -127,7 +127,10 @@ export const TransferOwnershipSection = () => {
 
   if (!isOwner) return null
 
-  const canTransfer = confirmed && keysBackedUp && selectedMember
+  const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  
+  const canTransfer =
+    confirmed && keysBackedUp && selectedMember && (!isCloudHosted() || isValidEmail(billingEmail))
 
   const dialogTitle = (
     <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200">
