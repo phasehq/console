@@ -58,8 +58,7 @@ export const TransferOwnershipSection = () => {
       : globalAccessMembers.filter((member: OrganisationMemberType) => {
           const q = query.toLowerCase()
           return (
-            member.fullName?.toLowerCase().includes(q) ||
-            member.email?.toLowerCase().includes(q)
+            member.fullName?.toLowerCase().includes(q) || member.email?.toLowerCase().includes(q)
           )
         })
 
@@ -128,7 +127,7 @@ export const TransferOwnershipSection = () => {
   if (!isOwner) return null
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  
+
   const canTransfer =
     confirmed && keysBackedUp && selectedMember && (!isCloudHosted() || isValidEmail(billingEmail))
 
@@ -141,9 +140,7 @@ export const TransferOwnershipSection = () => {
   return (
     <div className="space-y-6 border-t border-neutral-500/40 pt-6">
       <div className="border-b border-neutral-500/20 pb-2">
-        <div className="text-lg font-medium py-2 text-red-500">
-          Danger Zone
-        </div>
+        <div className="text-lg font-medium py-2 text-red-500">Danger Zone</div>
         <div className="text-neutral-500">
           Proceed with caution. These actions may have unintended consequences.
         </div>
@@ -164,7 +161,11 @@ export const TransferOwnershipSection = () => {
             dialogTitle={dialogTitle}
             ref={dialogRef}
             buttonVariant="danger"
-            buttonContent={<><HiBuildingOffice2 /> Transfer Ownership</>}
+            buttonContent={
+              <>
+                <HiBuildingOffice2 /> Transfer Ownership
+              </>
+            }
             onOpen={() => {
               resetState()
               if (organisation?.id) {
@@ -175,16 +176,14 @@ export const TransferOwnershipSection = () => {
           >
             {/* Step 1: Select a member */}
             {step === 1 && (
-              <div className="space-y-6 py-4">
+              <div className="space-y-6 pt-4">
                 <div className="space-y-3">
                   <div className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100">
                     Select a new <RoleLabel role={ownerRole as RoleType} size="sm" />
                   </div>
                   <p className="text-sm text-neutral-500">
-                    Only{' '}
-                    <RoleLabel role={adminRole as RoleType} size="sm" />{' '}
-                    members can be made the organisation owner. You can set a member&apos;s role
-                    to Admin from{' '}
+                    Only <RoleLabel role={adminRole as RoleType} size="sm" /> members can be made
+                    the organisation owner. You can set a member&apos;s role to Admin from{' '}
                     <a
                       href={`/${organisation?.name}/access/members`}
                       className="text-emerald-500 hover:underline"
@@ -194,7 +193,12 @@ export const TransferOwnershipSection = () => {
                     .{' '}
                   </p>
 
-                  <Combobox as="div" className="relative" value={selectedMember} onChange={setSelectedMember}>
+                  <Combobox
+                    as="div"
+                    className="relative"
+                    value={selectedMember}
+                    onChange={setSelectedMember}
+                  >
                     {({ open }) => (
                       <>
                         <div className="w-full relative flex items-center">
@@ -270,14 +274,14 @@ export const TransferOwnershipSection = () => {
 
                 {/* Action Buttons */}
                 <div className="flex items-center justify-between gap-4 pt-2">
-                  <Button variant="secondary" type="button" onClick={() => dialogRef.current?.closeModal()}>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => dialogRef.current?.closeModal()}
+                  >
                     Cancel
                   </Button>
-                  <Button
-                    variant="primary"
-                    onClick={() => setStep(2)}
-                    disabled={!selectedMember}
-                  >
+                  <Button variant="primary" onClick={() => setStep(2)} disabled={!selectedMember}>
                     Next
                   </Button>
                 </div>
@@ -286,7 +290,7 @@ export const TransferOwnershipSection = () => {
 
             {/* Step 2: Confirm transfer */}
             {step === 2 && selectedMember && (
-              <div className="space-y-6 py-4">
+              <div className="space-y-6 pt-4">
                 {/* Selected User Card */}
                 <div className="flex items-center gap-3 p-4 rounded-lg bg-zinc-200 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/20">
                   <Avatar member={selectedMember} size="lg" />
@@ -307,8 +311,8 @@ export const TransferOwnershipSection = () => {
                     <li>
                       <span className="flex items-center gap-1.5 flex-wrap">
                         You will lose your current{' '}
-                        <RoleLabel role={ownerRole as RoleType} size="sm" /> role and become
-                        an <RoleLabel role={adminRole as RoleType} size="sm" />
+                        <RoleLabel role={ownerRole as RoleType} size="sm" /> role and become an{' '}
+                        <RoleLabel role={adminRole as RoleType} size="sm" />
                       </span>
                     </li>
                     <li>
@@ -329,8 +333,8 @@ export const TransferOwnershipSection = () => {
                 <Alert variant="danger" icon>
                   <span className="text-sm">
                     When the ownership transfer is complete, the new owner&apos;s{' '}
-                    <span className="font-semibold">account recovery kit</span>{' '}
-                    will be the only way to recover access to this organisation.
+                    <span className="font-semibold">account recovery kit</span> will be the only way
+                    to recover access to this organisation.
                   </span>
                 </Alert>
 
@@ -342,7 +346,8 @@ export const TransferOwnershipSection = () => {
                     </div>
                     <div className="text-sm text-neutral-500">
                       This email will be used for your organisation&apos;s billing related
-                      notifications, given the owner is primarily responsible for billing. You can change this later.
+                      notifications, given the owner is primarily responsible for billing. You can
+                      change this later.
                     </div>
                     <Input
                       value={billingEmail}
