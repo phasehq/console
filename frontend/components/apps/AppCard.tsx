@@ -179,22 +179,24 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
               : `/${organisation?.name}/apps/${app.id}/access/service-accounts`
           }
         >
-          {serviceAccounts.slice(0, 5).map((account, index) => (
-            <div
-              key={account!.id}
-              className={clsx(
-                'rounded-full transition ease',
-                variant === 'compact' && 'group-hover:saturate-50',
-                index !== 0 && '-ml-3',
-                index === 1 && 'z-[1]',
-                index === 2 && 'z-[2]',
-                index === 3 && 'z-[3]',
-                index === 4 && 'z-[4]'
-              )}
-            >
-              <Avatar serviceAccount={account} size="md" />
-            </div>
-          ))}
+          {serviceAccounts.slice(0, 5).map((account, index) =>
+            account ? (
+              <div
+                key={account.id}
+                className={clsx(
+                  'rounded-full transition ease',
+                  variant === 'compact' && 'group-hover:saturate-50',
+                  index !== 0 && '-ml-3',
+                  index === 1 && 'z-[1]',
+                  index === 2 && 'z-[2]',
+                  index === 3 && 'z-[3]',
+                  index === 4 && 'z-[4]'
+                )}
+              >
+                <Avatar serviceAccount={account} size="md" />
+              </div>
+            ) : null
+          )}
           {surplusServiceAccountsCount > 0 && (
             <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
               +{surplusServiceAccountsCount}
