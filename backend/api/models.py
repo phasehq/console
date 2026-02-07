@@ -5,10 +5,7 @@ from django.contrib.auth.models import (
     PermissionsMixin,
 )
 from uuid import uuid4
-from backend.api.kv import write
-import json
 from django.utils import timezone
-from django.conf import settings
 from api.services import Providers, ServiceConfig
 from api.tasks.syncing import trigger_sync_tasks
 from backend.quotas import (
@@ -19,7 +16,6 @@ from backend.quotas import (
 )
 from django.core.exceptions import ValidationError
 
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 class CustomUserManager(BaseUserManager):
@@ -155,17 +151,6 @@ class App(models.Model):
     sse_enabled = models.BooleanField(default=False)
 
     objects = AppManager()
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)  # Call the "real" save() method.
-        if CLOUD_HOSTED:
-            key = self.app_token
-            value = self.wrapped_key_share
-            meta = {"appId": self.id, "appName": self.name, "live": True}
-            try:
-                write(key, value, json.dumps(meta))
-            except:
-                pass
 
     def __str__(self):
         return self.name
