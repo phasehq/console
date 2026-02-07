@@ -173,6 +173,7 @@ from .graphene.mutations.app import (
     RemoveAppMemberMutation,
     RotateAppKeysMutation,
     UpdateAppNameMutation,
+    UpdateAppInfoMutation,
 )
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
@@ -1051,6 +1052,7 @@ class Mutation(graphene.ObjectType):
     rotate_app_keys = RotateAppKeysMutation.Field()
     delete_app = DeleteAppMutation.Field()
     update_app_name = UpdateAppNameMutation.Field()
+    update_app_info = UpdateAppInfoMutation.Field()
     add_app_member = AddAppMemberMutation.Field()
     bulk_add_app_members = BulkAddAppMembersMutation.Field()
     remove_app_member = RemoveAppMemberMutation.Field()

@@ -2,6 +2,7 @@ query GetAppDetail($organisationId: ID!, $appId: ID!) {
   apps(organisationId: $organisationId, appId: $appId) {
     id
     name
+    description
     identityKey
     createdAt
     appToken

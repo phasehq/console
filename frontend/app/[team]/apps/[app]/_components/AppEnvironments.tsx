@@ -65,7 +65,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
   }
 
   return (
-    <section className="space-y-4 py-4">
+    <section className="space-y-4 pt-4">
       <div className="space-y-2">
         <div className="space-y-1">
           <h1 className="h3 font-semibold text-2xl">Environments</h1>
@@ -88,9 +88,11 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
           )}
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 py-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pt-4">
         {fetching && !appEnvironments?.length
-          ? [...Array(3)].map((_, index) => <EnvironmentCardSkeleton key={`env-skeleton-${index}`} />)
+          ? [...Array(3)].map((_, index) => (
+              <EnvironmentCardSkeleton key={`env-skeleton-${index}`} />
+            ))
           : null}
         {appEnvironments?.map((env: EnvironmentType, index: number) => (
           <Card key={env.id}>
