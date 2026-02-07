@@ -1,4 +1,4 @@
-mutation TransferOrganisationOwnership($organisationId: ID!, $newOwnerId: ID!, $billingEmail: String) {
+mutation TransferOrgOwnership($organisationId: ID!, $newOwnerId: ID!, $billingEmail: String) {
   transferOrganisationOwnership(organisationId: $organisationId, newOwnerId: $newOwnerId, billingEmail: $billingEmail) {
     ok
   }
