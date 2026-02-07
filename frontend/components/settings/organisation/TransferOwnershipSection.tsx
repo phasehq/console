@@ -168,7 +168,7 @@ const TransferOwnershipDialog = (props: {
           toast.success('Ownership transferred successfully.')
           closeModal()
           // Redirect to the members page so the user can verify role changes
-          window.location.href = `/${organisation?.name}/access/members`
+          router.push(`/${organisation?.name}/access/members`)
         },
         onError: (error) => {
           toast.error(`Failed to transfer ownership: ${error.message}`)
