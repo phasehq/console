@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch, call, PropertyMock
+from unittest.mock import MagicMock, patch
 
 
 class TestTransferOrganisationOwnershipMutation:
