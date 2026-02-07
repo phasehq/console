@@ -1,34 +1,26 @@
 'use client'
 
-import { useMutation, useQuery } from '@apollo/client'
+import { useMutation } from '@apollo/client'
+import { useRouter } from 'next/navigation'
 import { Fragment, useContext, useState, useMemo, useEffect } from 'react'
 import { OrganisationMemberType, RoleType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
-import { KeyringContext } from '@/contexts/keyringContext'
 import { Combobox, Transition, Dialog } from '@headlessui/react'
 import { FaChevronDown, FaTimes } from 'react-icons/fa'
 import { HiBuildingOffice2 } from 'react-icons/hi2'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
-import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import { userHasGlobalAccess } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { Avatar } from '@/components/common/Avatar'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { Checkbox } from '@/components/common/Checkbox'
 import { Input } from '@/components/common/Input'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import { isCloudHosted } from '@/utils/appConfig'
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
-import GetApps from '@/graphql/queries/getApps.gql'
-import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
-import UpdateMemberRole from '@/graphql/mutations/organisation/updateOrgMemberRole.gql'
-import AddMemberToApp from '@/graphql/mutations/apps/addAppMember.gql'
 import TransferOwnership from '@/graphql/mutations/organisation/transferOwnership.gql'
-import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { useLazyQuery } from '@apollo/client'
-import { AppType, EnvironmentType } from '@/apollo/graphql'
 
 // Mock role objects for displaying badges
 const ownerRole: Partial<RoleType> = { name: 'Owner', permissions: '' }
@@ -90,7 +82,7 @@ const TransferOwnershipDialog = (props: {
   const { isOpen, onClose } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  const { keyring } = useContext(KeyringContext)
+  const router = useRouter()
 
   const [fetchMembers, { data: membersData }] = useLazyQuery(GetOrganisationMembers, {
     fetchPolicy: 'network-only',
@@ -138,26 +130,6 @@ const TransferOwnershipDialog = (props: {
     }
   }, [selectedMember])
 
-  // Queries for granting global access if needed
-  const userCanReadApps = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Apps', 'read')
-    : false
-
-  const { data: appsData } = useQuery(GetApps, {
-    variables: { organisationId: organisation?.id },
-    skip: !userCanReadApps || !organisation?.id,
-  })
-
-  const { data: roleData } = useQuery(GetRoles, {
-    variables: { orgId: organisation?.id },
-    skip: !organisation?.id,
-  })
-
-  const [getAppEnvs] = useLazyQuery(GetAppEnvironments)
-  const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
-  const [updateRole] = useMutation(UpdateMemberRole)
-  const [addMemberToApp] = useMutation(AddMemberToApp)
-
   const closeModal = () => {
     setStep(1)
     setSelectedMember(null)
@@ -174,103 +146,12 @@ const TransferOwnershipDialog = (props: {
     setKeysBackedUp(false)
   }
 
-  /**
-   * Assigns global access to a member by wrapping environment keys and updating role to Admin
-   */
-  const assignGlobalAccess = async (member: OrganisationMemberType): Promise<void> => {
-    if (!appsData || !roleData) {
-      return Promise.reject(new Error('Required data not available'))
-    }
-
-    const apps = appsData.apps
-
-    const processApp = async (app: AppType) => {
-      try {
-        const { data: appEnvsData } = await getAppEnvs({ variables: { appId: app.id } })
-        const appEnvironments = appEnvsData.appEnvironments as EnvironmentType[]
-
-        const envKeyPromises = appEnvironments.map(async (env: EnvironmentType) => {
-          const { data } = await getEnvKey({
-            variables: { envId: env.id, appId: app.id },
-          })
-
-          const { wrappedSeed: userWrappedSeed, wrappedSalt: userWrappedSalt, identityKey } =
-            data.environmentKeys[0]
-
-          const { seed, salt } = await unwrapEnvSecretsForUser(
-            userWrappedSeed,
-            userWrappedSalt,
-            keyring!
-          )
-
-          const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount({ seed, salt }, member)
-
-          return {
-            envId: env.id,
-            userId: member.id,
-            identityKey,
-            wrappedSeed,
-            wrappedSalt,
-          }
-        })
-
-        const envKeyInputs = await Promise.all(envKeyPromises)
-
-        await addMemberToApp({
-          variables: { memberId: member.id, appId: app.id, envKeys: envKeyInputs },
-        })
-      } catch (error) {
-        console.error(`Error processing app ${app.id}:`, error)
-        throw error
-      }
-    }
-
-    try {
-      for (const app of apps) {
-        await processApp(app)
-      }
-
-      const adminRole = roleData.roles.find(
-        (option: RoleType) => option.name?.toLowerCase() === 'admin'
-      )
-
-      if (!adminRole) {
-        throw new Error('Admin role not found')
-      }
-
-      await updateRole({
-        variables: { memberId: member.id, roleId: adminRole.id },
-        refetchQueries: [
-          {
-            query: GetOrganisationMembers,
-            variables: { organisationId: organisation?.id, role: null },
-          },
-        ],
-      })
-    } catch (error) {
-      console.error('Error assigning global access:', error)
-      throw error
-    }
-  }
-
   const handleTransferOwnership = async () => {
     if (!confirmed || !keysBackedUp || !selectedMember) return
 
     setIsProcessing(true)
 
     try {
-      // Check if member has global access, if not, grant it first
-      const memberHasGlobalAccess = userHasGlobalAccess(selectedMember.role?.permissions || '')
-
-      if (!memberHasGlobalAccess) {
-        await toast.promise(assignGlobalAccess(selectedMember), {
-          pending: 'Granting global access to member...',
-          success: 'Global access granted!',
-          error: 'Failed to grant global access',
-        })
-      }
-
-      // Now transfer ownership
       await transferOwnership({
         variables: {
           organisationId: organisation?.id,
