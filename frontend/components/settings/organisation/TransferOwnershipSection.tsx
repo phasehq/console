@@ -115,6 +115,7 @@ export const TransferOwnershipSection = () => {
         },
       })
     } catch (error) {
+      toast.error('Failed to transfer ownership. Please try again.')
       console.error('Failed to transfer ownership:', error)
     } finally {
       setIsProcessing(false)
