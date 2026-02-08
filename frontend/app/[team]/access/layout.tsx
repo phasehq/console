@@ -86,7 +86,7 @@ export default function AccessLayout({
             </Tab>
           ))}
         </Tab.List>
-        <div className="py-6 h-full">{children}</div>
+        <div className="py-6 flex-1 overflow-y-auto">{children}</div>
       </Tab.Group>
     </div>
   )

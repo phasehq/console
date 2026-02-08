@@ -935,6 +935,12 @@ type Mutation {
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
   updateOrganisationMemberRole(memberId: ID!, roleId: ID!): UpdateOrganisationMemberRole
+
+  """
+  Transfer organisation ownership from the current owner to another member.
+  The new owner must have global access (Admin role) to ensure they have all necessary keys.
+  """
+  transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
   updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
@@ -1049,6 +1055,14 @@ type DeleteOrganisationMemberMutation {
 
 type UpdateOrganisationMemberRole {
   orgMember: OrganisationMemberType
+}
+
+"""
+Transfer organisation ownership from the current owner to another member.
+The new owner must have global access (Admin role) to ensure they have all necessary keys.
+"""
+type TransferOrganisationOwnershipMutation {
+  ok: Boolean
 }
 
 type UpdateUserWrappedSecretsMutation {
