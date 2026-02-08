@@ -13,9 +13,7 @@ type Query {
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
-  kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
   secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
-  appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
   appServiceAccounts(appId: ID): [ServiceAccountType]
@@ -684,32 +682,9 @@ type AppType {
   members: [OrganisationMemberType]!
 }
 
-type KMSLogsResponseType {
-  logs: [KMSLogType]
+type SecretLogsResponseType {
+  logs: [SecretEventType]
   count: Int
-}
-
-type KMSLogType implements Node {
-  id: ID!
-  timestamp: BigInt
-  appId: String
-  phaseNode: String
-  eventType: String
-  ipAddress: String
-  phSize: Int
-  asn: Int
-  isp: String
-  edgeLocation: String
-  country: String
-  city: String
-  latitude: Float
-  longitude: Float
-}
-
-"""An object with an ID"""
-interface Node {
-  """The ID of the object"""
-  id: ID!
 }
 
 """
@@ -719,29 +694,9 @@ compatible type.
 """
 scalar BigInt
 
-type SecretLogsResponseType {
-  logs: [SecretEventType]
-  count: Int
-}
-
 enum MemberType {
   USER
   SERVICE
-}
-
-type ChartDataPointType {
-  index: Int
-  date: BigInt
-  data: Int
-}
-
-enum TimeRange {
-  HOUR
-  DAY
-  WEEK
-  MONTH
-  YEAR
-  ALL_TIME
 }
 
 type EnvironmentKeyType {
@@ -989,7 +944,6 @@ type Mutation {
   updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
-  rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
   updateAppName(id: ID!, name: String!): UpdateAppNameMutation
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
@@ -1120,10 +1074,6 @@ type DeleteInviteMutation {
 }
 
 type CreateAppMutation {
-  app: AppType
-}
-
-type RotateAppKeysMutation {
   app: AppType
 }
 

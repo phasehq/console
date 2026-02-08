@@ -1,7 +1,7 @@
 {
-  "name": "dashboard",
+  "name": "console",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "scripts": {
     "dev": "NODE_ENV=development next dev",
     "build": "next build",
@@ -35,9 +35,7 @@
     "framer-motion": "^11.0.3",
     "graphql": "^16.8.1",
     "graphql-tag": "^2.12.6",
-    "install": "^0.13.0",
     "ipaddr.js": "^2.2.0",
-    "jsonwebtoken": "^9.0.2",
     "jspdf": "^4.0.0",
     "libsodium-wrappers-sumo": "^0.7.13",
     "lodash": "^4.17.23",
@@ -60,7 +58,6 @@
     "@graphql-codegen/typescript-react-apollo": "^4.1.0",
     "@types/country-flag-icons": "^1.2.2",
     "@types/jest": "^29.5.11",
-    "@types/jsonwebtoken": "^9.0.5",
     "@typescript-eslint/eslint-plugin": "^6.19.1",
     "@typescript-eslint/parser": "^6.19.1",
     "eslint-config-prettier": "^9.1.0",

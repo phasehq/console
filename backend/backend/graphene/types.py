@@ -8,7 +8,6 @@ from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_sec
 from ee.integrations.secrets.dynamic.graphene.types import DynamicSecretType
 from backend.quotas import PLAN_CONFIG
 import graphene
-from enum import Enum
 from graphene import ObjectType, relay, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
@@ -40,7 +39,6 @@ from api.models import (
     UserToken,
     Identity,
 )
-from logs.dynamodb_models import KMSLog
 from django.utils import timezone
 from api.utils.access.roles import default_roles
 from graphql import GraphQLError
@@ -904,61 +902,6 @@ class SecretTagType(DjangoObjectType):
     class Meta:
         model = SecretTag
         fields = ("id", "name", "color")
-
-
-class KMSLogType(ObjectType):
-    class Meta:
-        model = KMSLog
-        fields = (
-            "id",
-            "app_id",
-            "timestamp",
-            "phase_node",
-            "event_type",
-            "ip_address",
-            "ph_size",
-            "edge_location",
-            "country",
-            "city",
-            "latitude",
-            "longitude",
-        )
-        interfaces = (relay.Node,)
-
-    id = graphene.ID(required=True)
-    timestamp = graphene.BigInt()
-    app_id = graphene.String()
-    phase_node = graphene.String()
-    event_type = graphene.String()
-    ip_address = graphene.String()
-    ph_size = graphene.Int()
-    asn = graphene.Int()
-    isp = graphene.String()
-    edge_location = graphene.String()
-    country = graphene.String()
-    city = graphene.String()
-    latitude = graphene.Float()
-    longitude = graphene.Float()
-
-
-class ChartDataPointType(graphene.ObjectType):
-    index = graphene.Int()
-    date = graphene.BigInt()
-    data = graphene.Int()
-
-
-class TimeRange(Enum):
-    HOUR = "hour"
-    DAY = "day"
-    WEEK = "week"
-    MONTH = "month"
-    YEAR = "year"
-    ALL_TIME = "allTime"
-
-
-class KMSLogsResponseType(ObjectType):
-    logs = graphene.List(KMSLogType)
-    count = graphene.Int()
 
 
 class SecretLogsResponseType(ObjectType):
