@@ -11,8 +11,7 @@ import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 import { initializePostHog } from '@/utils/posthog'
 import { isCloudHosted } from '@/utils/appConfig'
-import { Suspense, useEffect } from 'react'
-import PostHogPageview from '@/components/PostHogPageview'
+import { useEffect } from 'react'
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -28,12 +27,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
           <ApolloProvider client={graphQlClient}>
             <OrganisationProvider>
               <KeyringProvider>
-                <PostHogProvider client={posthog}>
-                  <Suspense fallback={null}>
-                    <PostHogPageview />
-                  </Suspense>
-                  {children}
-                </PostHogProvider>
+                <PostHogProvider client={posthog}>{children}</PostHogProvider>
               </KeyringProvider>
             </OrganisationProvider>
           </ApolloProvider>
