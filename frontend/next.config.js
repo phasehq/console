@@ -11,7 +11,7 @@ const ContentSecurityPolicy = `
   img-src 'self' https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://secure.gravatar.com https://gitlab.com https://*.stripe.com; 
   manifest-src 'self';
   media-src 'self';
-  worker-src 'none';
+  worker-src 'self' blob:;
 `
 
 const securityHeaders = [
