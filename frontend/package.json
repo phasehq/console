@@ -25,7 +25,7 @@
     "@types/react-icons": "^3.0.0",
     "@types/zxcvbn": "^4.4.4",
     "autoprefixer": "^10.4.17",
-    "axios": "^1.12.0",
+    "axios": "^1.13.5",
     "bip39": "^3.1.0",
     "clsx": "^2.1.0",
     "country-flag-icons": "^1.5.9",
