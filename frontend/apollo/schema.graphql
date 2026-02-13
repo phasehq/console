@@ -58,6 +58,7 @@ type Query {
   stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   stripeCustomerPortalUrl(organisationId: ID!): String
+  estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
   dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]
 }
@@ -68,6 +69,7 @@ type OrganisationType {
   identityKey: String!
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
+  pricingVersion: Int!
   role: RoleType
   memberId: ID
   keyring: String
@@ -677,7 +679,7 @@ type AppType {
   createdAt: DateTime
   updatedAt: DateTime!
   sseEnabled: Boolean!
-  serviceAccounts: [ServiceAccountType!]!
+  serviceAccounts: [ServiceAccountType]!
   environments: [EnvironmentType]!
   members: [OrganisationMemberType]!
 }
@@ -957,6 +959,14 @@ enum PlanTypeEnum {
   ENTERPRISE
 }
 
+type StripePlanEstimate {
+  estimatedTotal: Float
+  seatCount: Int
+  unitPrice: Float
+  currency: String
+  priceId: String
+}
+
 type DynamicSecretProviderType {
   id: String!
   name: String!
@@ -970,6 +980,12 @@ type Mutation {
   createOrganisationMember(identityKey: String!, inviteId: ID!, orgId: ID!, wrappedKeyring: String, wrappedRecovery: String): CreateOrganisationMemberMutation
   deleteOrganisationMember(memberId: ID!): DeleteOrganisationMemberMutation
   updateOrganisationMemberRole(memberId: ID!, roleId: ID!): UpdateOrganisationMemberRole
+
+  """
+  Transfer organisation ownership from the current owner to another member.
+  The new owner must have global access (Admin role) to ensure they have all necessary keys.
+  """
+  transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
   updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
@@ -1052,6 +1068,7 @@ type Mutation {
     """Payment Method ID to set as default"""
     paymentMethodId: String!
   ): SetDefaultPaymentMethodMutation
+  migratePricing(organisationId: ID!): MigratePricingMutation
   createAwsDynamicSecret(authenticationId: ID, config: AWSConfigInput!, defaultTtl: Int, description: String, environmentId: ID!, keyMap: [KeyMapInput]!, maxTtl: Int, name: String!, organisationId: ID!, path: String): CreateAWSDynamicSecretMutation
   updateAwsDynamicSecret(authenticationId: ID, config: AWSConfigInput!, defaultTtl: Int, description: String, dynamicSecretId: ID!, keyMap: [KeyMapInput]!, maxTtl: Int, name: String!, organisationId: ID!, path: String): UpdateAWSDynamicSecretMutation
   deleteDynamicSecret(secretId: ID!): DeleteDynamicSecretMutation
@@ -1084,6 +1101,14 @@ type DeleteOrganisationMemberMutation {
 
 type UpdateOrganisationMemberRole {
   orgMember: OrganisationMemberType
+}
+
+"""
+Transfer organisation ownership from the current owner to another member.
+The new owner must have global access (Admin role) to ensure they have all necessary keys.
+"""
+type TransferOrganisationOwnershipMutation {
+  ok: Boolean
 }
 
 type UpdateUserWrappedSecretsMutation {
@@ -1478,6 +1503,11 @@ type CreateSetupIntentMutation {
 
 type SetDefaultPaymentMethodMutation {
   ok: Boolean
+}
+
+type MigratePricingMutation {
+  success: Boolean
+  message: String
 }
 
 type CreateAWSDynamicSecretMutation {

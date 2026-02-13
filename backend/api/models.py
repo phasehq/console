@@ -81,6 +81,9 @@ class Organisation(models.Model):
         (ENTERPRISE_PLAN, "Enterprise"),
     ]
 
+    PRICING_V1 = 1
+    PRICING_V2 = 2
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=64, unique=True)
     identity_key = models.CharField(max_length=256)
@@ -93,7 +96,13 @@ class Organisation(models.Model):
     )
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True)
+    pricing_version = models.IntegerField(default=1)
     list_display = ("name", "identity_key", "id")
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            self.pricing_version = self.PRICING_V2
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -255,7 +264,7 @@ class OrganisationMember(models.Model):
 class ServiceAccountManager(models.Manager):
     def create(self, *args, **kwargs):
         organisation = kwargs.get("organisation")
-        if not can_add_account(organisation):
+        if not can_add_account(organisation, account_type="service_account"):
             raise ValueError("Cannot add more accounts to this organisation's plan.")
         return super().create(*args, **kwargs)
 

@@ -27,6 +27,7 @@ import { FaKey } from 'react-icons/fa6'
 import { useSearchParams } from 'next/navigation'
 import { PostCheckoutScreen } from '@/ee/billing/PostCheckoutScreen'
 import { UpsellDialog } from './UpsellDialog'
+import { MigratePricingDialog } from '../../../ee/billing/MigratePricing'
 import { userHasPermission } from '@/utils/access/permissions'
 import Accordion from '@/components/common/Accordion'
 import clsx from 'clsx'
@@ -62,6 +63,7 @@ export const PlanInfo = () => {
   const { loading, data } = useQuery(GetOrganisationPlan, {
     variables: { organisationId: activeOrganisation?.id },
     skip: !activeOrganisation,
+    fetchPolicy: 'cache-and-network',
   })
 
   const { data: licenseData } = useQuery(GetOrgLicense, {
@@ -122,6 +124,9 @@ export const PlanInfo = () => {
                 <LogoWordMark className="fill-black dark:fill-white h-10" />{' '}
                 <PlanLabel plan={activeOrganisation.plan} />
               </div>
+              {isCloudHosted() &&
+                activeOrganisation.plan === ApiOrganisationPlanChoices.En &&
+                activeOrganisation.pricingVersion === 1 && <MigratePricingDialog />}
               {activeOrganisation.plan !== ApiOrganisationPlanChoices.En && (
                 <div className="flex items-center gap-4">
                   <Link href="https://phase.dev/pricing" target="_blank" rel="noreferrer">
@@ -197,34 +202,39 @@ export const PlanInfo = () => {
               )}
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium text-sm text-black dark:text-white">
-                    Service Accounts
+            {(activeOrganisation.pricingVersion !== 2 ||
+              activeOrganisation.plan === ApiOrganisationPlanChoices.Fr) && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium text-sm text-black dark:text-white">
+                      Service Accounts
+                    </div>
+                    <Link href={`/${activeOrganisation.name}/access/service-accounts`}>
+                      <Button variant="secondary">
+                        <div className="flex items-center gap-1 text-2xs">
+                          <FaCog /> Manage
+                        </div>
+                      </Button>
+                    </Link>
                   </div>
-                  <Link href={`/${activeOrganisation.name}/access/service-accounts`}>
-                    <Button variant="secondary">
-                      <div className="flex items-center gap-1 text-2xs">
-                        <FaCog /> Manage
-                      </div>
-                    </Button>
-                  </Link>
-                </div>
 
-                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.seatsUsed.serviceAccounts} Seats used`}</div>
+                  <div className="text-neutral-500 text-xs">
+                    {`${data.organisationPlan.seatsUsed.serviceAccounts} Seats used`}
+                  </div>
+                </div>
+                {seatLimit && (
+                  <ProgressBar
+                    percentage={serviceAccountQuotaUsage}
+                    color={progressBarColor(
+                      data.organisationPlan.seatsUsed.serviceAccounts,
+                      seatLimit
+                    )}
+                    size="sm"
+                  />
+                )}
               </div>
-              {seatLimit && (
-                <ProgressBar
-                  percentage={serviceAccountQuotaUsage}
-                  color={progressBarColor(
-                    data.organisationPlan.seatsUsed.serviceAccounts,
-                    seatLimit
-                  )}
-                  size="sm"
-                />
-              )}
-            </div>
+            )}
           </div>
         </Accordion>
 

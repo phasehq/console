@@ -54,10 +54,13 @@ from .graphene.mutations.access import (
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     StripeSubscriptionDetails,
+    StripePlanEstimate,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
     resolve_stripe_customer_portal_url,
+    resolve_estimate_stripe_subscription,
 )
+from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
 from ee.billing.graphene.mutations.stripe import (
     CancelSubscriptionMutation,
     CreateSubscriptionCheckoutSession,
@@ -66,6 +69,7 @@ from ee.billing.graphene.mutations.stripe import (
     ModifySubscriptionMutation,
     ResumeSubscriptionMutation,
     SetDefaultPaymentMethodMutation,
+    MigratePricingMutation,
 )
 from .graphene.mutations.lockbox import CreateLockboxMutation
 from .graphene.queries.syncing import (
@@ -176,6 +180,7 @@ from .graphene.mutations.organisation import (
     CreateOrganisationMutation,
     DeleteInviteMutation,
     DeleteOrganisationMemberMutation,
+    TransferOrganisationOwnershipMutation,
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
@@ -443,6 +448,14 @@ class Query(graphene.ObjectType):
 
     stripe_customer_portal_url = graphene.String(
         organisation_id=graphene.ID(required=True)
+    )
+
+    estimate_stripe_subscription = graphene.Field(
+        StripePlanEstimate,
+        organisation_id=graphene.ID(required=True),
+        plan_type=PlanTypeEnum(required=True),
+        billing_period=BillingPeriodEnum(required=True),
+        preview_v2=graphene.Boolean(default_value=False),
     )
 
     # Dynamic secrets
@@ -1022,6 +1035,7 @@ class Query(graphene.ObjectType):
     resolve_stripe_checkout_details = resolve_stripe_checkout_details
     resolve_stripe_subscription_details = resolve_stripe_subscription_details
     resolve_stripe_customer_portal_url = resolve_stripe_customer_portal_url
+    resolve_estimate_stripe_subscription = resolve_estimate_stripe_subscription
 
 
 class Mutation(graphene.ObjectType):
@@ -1030,6 +1044,7 @@ class Mutation(graphene.ObjectType):
     create_organisation_member = CreateOrganisationMemberMutation.Field()
     delete_organisation_member = DeleteOrganisationMemberMutation.Field()
     update_organisation_member_role = UpdateOrganisationMemberRole.Field()
+    transfer_organisation_ownership = TransferOrganisationOwnershipMutation.Field()
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
@@ -1155,6 +1170,7 @@ class Mutation(graphene.ObjectType):
     modify_subscription = ModifySubscriptionMutation.Field()
     create_setup_intent = CreateSetupIntentMutation.Field()
     set_default_payment_method = SetDefaultPaymentMethodMutation.Field()
+    migrate_pricing = MigratePricingMutation.Field()
 
     # Dynamic Secrets
     create_aws_dynamic_secret = CreateAWSDynamicSecretMutation.Field()
