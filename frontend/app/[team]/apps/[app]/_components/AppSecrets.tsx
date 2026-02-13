@@ -18,6 +18,7 @@ import {
   FaCloudUploadAlt,
   FaFolder,
   FaPlus,
+  FaRegEye,
   FaSearch,
   FaTimesCircle,
   FaUndo,
@@ -26,6 +27,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
+import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
 import { userHasPermission } from '@/utils/access/permissions'
 import {
@@ -102,6 +104,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const [appSecretsToDelete, setAppSecretsToDelete] = useState<string[]>([])
 
   const [expandedSecrets, setExpandedSecrets] = useState<string[]>([])
+
+  const [revealOnHover, setRevealOnHover] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState<string>('')
 
@@ -784,6 +788,34 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <FaAngleDoubleUp />
               Collapse all
             </Button>
+
+            <div className="flex items-center gap-2 pl-2 border-l border-neutral-500/20">
+              <Switch
+                checked={revealOnHover}
+                onChange={setRevealOnHover}
+                className={clsx(
+                  revealOnHover
+                    ? 'bg-emerald-400/10 ring-emerald-400/20'
+                    : 'bg-neutral-500/40 ring-neutral-500/30',
+                  'relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset transition-colors'
+                )}
+              >
+                <span className="sr-only">Reveal on hover</span>
+                <span
+                  className={clsx(
+                    revealOnHover ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500',
+                    'inline-block h-4 w-4 transform rounded-full transition-transform'
+                  )}
+                />
+              </Switch>
+              <span
+                className="flex items-center gap-1.5 text-sm text-neutral-500 cursor-pointer select-none"
+                onClick={() => setRevealOnHover(!revealOnHover)}
+              >
+                <FaRegEye className={revealOnHover ? 'text-emerald-500' : ''} />
+                Reveal on hover
+              </span>
+            </div>
           </div>
           <div className="flex justify-end pr-4 gap-4">
             <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
@@ -867,6 +899,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       updateValue={handleUpdateSecretValue}
                       deleteKey={handleStageClientSecretForDelete}
                       stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
+                      revealOnHover={revealOnHover}
                     />
                   ))}
                 </tbody>

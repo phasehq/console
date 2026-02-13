@@ -49,6 +49,7 @@ const EnvSecretComponent = ({
   updateEnvValue,
   addEnvValue,
   deleteEnvValue,
+  revealOnHover,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
@@ -64,6 +65,7 @@ const EnvSecretComponent = ({
   updateEnvValue: (id: string, envId: string, value: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
+  revealOnHover?: boolean
 }) => {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -161,7 +163,14 @@ const EnvSecretComponent = ({
   )
 
   return (
-    <div className={`px-4 rounded-md ${bgColor()}`}>
+    <div
+      className={clsx(
+        'px-4 py-2 rounded-md group transition-colors',
+        bgColor(),
+        !stagedForDelete && 'hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
+      )}
+      onMouseEnter={revealOnHover && !showValue ? handleRevealSecret : undefined}
+    >
       <div>
         {valueIsNew ? (
           <EnvLabel />
@@ -191,7 +200,7 @@ const EnvSecretComponent = ({
         </div>
       ) : (
         <div className="flex justify-between items-center w-full">
-          <div className="relative w-full group">
+          <div className="relative w-full">
             <div className="flex items-center gap-2">
               {isBoolean && !stagedForDelete && (
                 <div className="flex items-center px-2">
@@ -221,7 +230,7 @@ const EnvSecretComponent = ({
                 className={clsx(
                   INPUT_BASE_STYLE,
                   inputTextColor(),
-                  'rounded-sm focus:outline-none py-2'
+                  'rounded-sm focus:outline-none py-2 pl-2'
                 )}
                 value={clientEnvSecret.secret.value}
                 onChange={(v) => updateEnvValue(appSecretId, clientEnvSecret.env.id!, v)}
@@ -230,7 +239,7 @@ const EnvSecretComponent = ({
               />
             </div>
             {clientEnvSecret.secret !== null && (
-              <div className="flex items-center pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
+              <div className="flex items-center gap-2 absolute inset-y-0 right-0 pl-32 pr-2 opacity-0 group-hover:opacity-100 transition ease bg-gradient-to-r from-transparent via-zinc-100/90 to-zinc-100 dark:via-zinc-800/90 dark:to-zinc-800 group-hover:via-zinc-200/90 group-hover:to-zinc-200 dark:group-hover:via-zinc-700/90 dark:group-hover:to-zinc-700">
                 <Button variant="outline" onClick={toggleShowValue}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
@@ -260,6 +269,7 @@ const areEnvSecretEqual = (
     prev.appSecretId === next.appSecretId &&
     prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
     prev.sameAsProd === next.sameAsProd &&
+    prev.revealOnHover === next.revealOnHover &&
     prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
     (p?.id ?? null) === (n?.id ?? null) &&
     (p?.value ?? '') === (n?.value ?? '') &&
@@ -283,6 +293,7 @@ interface AppSecretRowProps {
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteKey: (id: string) => void
+  revealOnHover?: boolean
 }
 
 const AppSecretRowComponent = ({
@@ -298,6 +309,7 @@ const AppSecretRowComponent = ({
   addEnvValue,
   deleteEnvValue,
   deleteKey,
+  revealOnHover,
 }: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -492,22 +504,24 @@ const AppSecretRowComponent = ({
                 onClick={toggleAccordion}
               >
                 <div
-                  className="flex items-center justify-center text-sm xl:text-base"
+                  className="flex items-center justify-center"
                   title={tooltipText(env)}
                 >
                   {env.secret !== null ? (
                     env.secret.value.length === 0 ? (
-                      <FaCircle className="text-neutral-500 shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-neutral-400 dark:bg-neutral-500" />
                     ) : (
-                      <FaCheckCircle
+                      <span
                         className={clsx(
-                          'shrink-0',
-                          secretIsSameAsProd(env) ? 'text-amber-500' : 'text-emerald-500'
+                          'w-2 h-2 rounded-full',
+                          secretIsSameAsProd(env)
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
                         )}
                       />
                     )
                   ) : (
-                    <FaTimesCircle className="text-red-500 shrink-0" />
+                    <span className="w-2 h-2 rounded-full ring-2 ring-red-500 ring-inset" />
                   )}
                 </div>
               </td>
@@ -547,6 +561,7 @@ const AppSecretRowComponent = ({
                         updateEnvValue={updateValue}
                         addEnvValue={addEnvValue}
                         deleteEnvValue={deleteEnvValue}
+                        revealOnHover={revealOnHover}
                       />
                     ))}
                   </div>
@@ -563,6 +578,7 @@ const AppSecretRowComponent = ({
 const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) => {
   if (prev.isExpanded !== next.isExpanded) return false
   if (prev.stagedForDelete !== next.stagedForDelete) return false
+  if (prev.revealOnHover !== next.revealOnHover) return false
   if (prev.clientAppSecret.id !== next.clientAppSecret.id) return false
   if (prev.clientAppSecret.key !== next.clientAppSecret.key) return false
 
