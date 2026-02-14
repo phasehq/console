@@ -298,6 +298,8 @@ const Sidebar = () => {
             <Link
               key={link.name}
               href={link.href}
+              title={link.name}
+              aria-label={link.name}
               className={clsx(
                 'flex items-center justify-center flex-1 h-full text-xl transition-colors',
                 link.active
