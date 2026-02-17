@@ -50,6 +50,7 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
 })
 
 export const graphQlClient = new ApolloClient({
+  connectToDevTools: false,
   link: from([errorLink, httpLink]),
   cache: new InMemoryCache({
   typePolicies: {
