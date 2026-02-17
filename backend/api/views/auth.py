@@ -121,6 +121,8 @@ class OktaLoginView(SocialLoginView):
     client_class = OAuth2Client
 
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
 def logout_view(request):
     logout(request)
     return JsonResponse({"message": "Logged out"})

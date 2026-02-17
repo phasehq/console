@@ -28,7 +28,7 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     path("auth/", include("dj_rest_auth.urls")),
     path("social/login/", include("api.urls")),
-    path("logout/", csrf_exempt(logout_view)),
+    path("logout/", logout_view),
     # GraphQL API
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     # OAuth integrations
