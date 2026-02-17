@@ -376,8 +376,9 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
             <Alert variant="info" icon={true}>
               <div className="flex flex-col gap-2">
                 <p>
-                  All organisation members are added to this App. You can invite more users from the
-                  organisation members page.
+                  {orgMembersData?.organisationMembers?.length <= 1
+                    ? 'There are no other members in this organisation to add. You can invite more users from the organisation members page.'
+                    : 'All organisation members are added to this App. You can invite more users from the organisation members page.'}
                 </p>
                 <Link href={`/${organisation?.name}/access/members`}>
                   <Button variant="secondary">

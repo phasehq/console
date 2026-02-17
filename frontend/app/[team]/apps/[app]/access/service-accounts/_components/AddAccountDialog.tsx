@@ -373,8 +373,9 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
             <Alert variant="info" icon={true}>
               <div className="flex flex-col gap-2">
                 <p>
-                  All organisation service accounts are added to this App. You can create more
-                  service accounts from the organisation access page.
+                  {serviceAccountsData?.serviceAccounts?.length === 0
+                    ? 'No service accounts exist in this organisation. You can create service accounts from the organisation access page.'
+                    : 'All organisation service accounts are added to this App. You can create more service accounts from the organisation access page.'}
                 </p>
                 <Link href={`/${organisation?.name}/access/service-accounts`}>
                   <Button variant="secondary">
