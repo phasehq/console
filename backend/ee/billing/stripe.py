@@ -92,6 +92,30 @@ def map_stripe_plan_to_tier(stripe_plan_id):
     raise ValueError(f"Unknown Stripe price ID: {stripe_plan_id}")
 
 
+def update_stripe_customer_email(organisation, new_email):
+    """
+    Update the Stripe customer email when organisation ownership is transferred.
+    """
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    if not organisation.stripe_customer_id:
+        return  # No Stripe customer to update
+
+    try:
+        stripe.Customer.modify(
+            organisation.stripe_customer_id,
+            email=new_email,
+        )
+    except Exception as ex:
+        print(f"Failed to update Stripe customer email: {ex}")
+        try:
+            notify_slack(
+                f"Failed to update Stripe customer email for organisation {organisation.id}: {ex}"
+            )
+        except Exception as slack_ex:
+            print(f"Failed to send Slack notification for Stripe email update error: {slack_ex}")
+
+
 def migrate_organisation_to_v2_pricing(organisation):
     """
     Helper to migrate an organisation to the V2 pricing model.

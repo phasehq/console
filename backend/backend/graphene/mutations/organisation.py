@@ -1,4 +1,4 @@
-from api.emails import send_user_joined_email, send_welcome_email
+from api.emails import send_user_joined_email, send_welcome_email, send_ownership_transferred_email
 from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
@@ -9,6 +9,7 @@ from api.utils.access.roles import default_roles
 from api.tasks.emails import send_invite_email_job
 from backend.quotas import can_add_account
 import graphene
+from django.db import transaction
 from graphql import GraphQLError
 from api.models import (
     App,
@@ -365,3 +366,91 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         org_member.save()
 
         return UpdateOrganisationMemberRole(org_member=org_member)
+
+
+class TransferOrganisationOwnershipMutation(graphene.Mutation):
+    """
+    Transfer organisation ownership from the current owner to another member.
+    The new owner must have global access (Admin role) to ensure they have all necessary keys.
+    """
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+        new_owner_id = graphene.ID(required=True)
+        billing_email = graphene.String(required=False)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, organisation_id, new_owner_id, billing_email=None):
+        if not user_is_org_member(info.context.user, organisation_id):
+            raise GraphQLError("You don't have permission to perform this action")
+
+        org = Organisation.objects.get(id=organisation_id)
+
+        # Verify the caller is the current owner
+        current_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation=org,
+            deleted_at=None,
+        )
+
+        if current_member.role.name.lower() != "owner":
+            raise GraphQLError("Only the organisation owner can transfer ownership")
+
+        # Get the new owner member
+        new_owner_member = OrganisationMember.objects.get(
+            id=new_owner_id,
+            organisation=org,
+            deleted_at=None,
+        )
+
+        # Verify the new owner isn't the current owner
+        if new_owner_member.id == current_member.id:
+            raise GraphQLError("You cannot transfer ownership to yourself")
+
+        # Verify the new owner has global access (Admin role)
+        if not role_has_global_access(new_owner_member.role):
+            raise GraphQLError(
+                "The new owner must have global access (Admin role) before ownership can be transferred. "
+            )
+
+        # Verify the new owner has a valid identity_key
+        if not new_owner_member.identity_key:
+            raise GraphQLError(
+                "The new owner does not have a valid identity key. They may need to complete account setup first."
+            )
+
+        # Get the Owner and Admin roles
+        owner_role = Role.objects.get(organisation=org, name__iexact="owner")
+        admin_role = Role.objects.get(organisation=org, name__iexact="admin")
+
+        # Transfer ownership atomically to prevent inconsistent state
+        with transaction.atomic():
+            # 1. Set new owner's role to Owner
+            new_owner_member.role = owner_role
+            new_owner_member.save()
+
+            # 2. Update org's identity_key to the new owner's identity_key
+            org.identity_key = new_owner_member.identity_key
+            org.save()
+
+            # 3. Demote current owner to Admin
+            current_member.role = admin_role
+            current_member.save()
+
+        # 4. Update Stripe customer email if in cloud mode
+        if settings.APP_HOST == "cloud":
+            from ee.billing.stripe import update_stripe_customer_email
+
+            # Use provided billing_email or fall back to new owner's email
+            email_to_use = billing_email if billing_email else new_owner_member.user.email
+            update_stripe_customer_email(org, email_to_use)
+
+        # 5. Send email notifications to both old and new owner
+        try:
+            send_ownership_transferred_email(org, current_member, new_owner_member)
+        except Exception as e:
+            print(f"Error sending ownership transfer emails: {e}")
+
+        return TransferOrganisationOwnershipMutation(ok=True)

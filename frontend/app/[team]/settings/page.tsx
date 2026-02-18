@@ -8,7 +8,8 @@ import { ViewRecoveryDialog } from '@/components/settings/account/ViewRecoveryDi
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { PlanInfo } from '@/components/settings/organisation/PlanInfo'
-import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
+import { TransferOwnershipSection } from '@/components/settings/organisation/TransferOwnershipSection'
+import { userHasPermission } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from 'next-auth/react'
@@ -90,7 +91,7 @@ export default function Settings({ params }: { params: { team: string } }) {
           </Tab.List>
 
           <Tab.Panels>
-            <div className="max-h-[80vh] overflow-y-auto px-4">
+            <div className="px-4">
               {userCanManageBilling && (
                 <Tab.Panel>
                   <div className="space-y-10 py-4">
@@ -99,6 +100,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                       <p className="text-neutral-500">Organisation info and settings</p>
                     </div>
                     <PlanInfo />
+                    <TransferOwnershipSection />
                   </div>
                 </Tab.Panel>
               )}

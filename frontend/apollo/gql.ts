@@ -69,6 +69,7 @@ const documents = {
     "mutation BulkInviteMembers($orgId: ID!, $invites: [InviteInput!]!) {\n  bulkInviteOrganisationMembers(orgId: $orgId, invites: $invites) {\n    invites {\n      id\n      inviteeEmail\n      expiresAt\n    }\n  }\n}": types.BulkInviteMembersDocument,
     "mutation DeleteOrgInvite($inviteId: ID!) {\n  deleteInvitation(inviteId: $inviteId) {\n    ok\n  }\n}": types.DeleteOrgInviteDocument,
     "mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}": types.RemoveMemberDocument,
+    "mutation TransferOrgOwnership($organisationId: ID!, $newOwnerId: ID!, $billingEmail: String) {\n  transferOrganisationOwnership(\n    organisationId: $organisationId\n    newOwnerId: $newOwnerId\n    billingEmail: $billingEmail\n  ) {\n    ok\n  }\n}": types.TransferOrgOwnershipDocument,
     "mutation UpdateMemberRole($memberId: ID!, $roleId: ID!) {\n  updateOrganisationMemberRole(memberId: $memberId, roleId: $roleId) {\n    orgMember {\n      id\n      role {\n        name\n      }\n    }\n  }\n}": types.UpdateMemberRoleDocument,
     "mutation UpdateWrappedSecrets($orgId: ID!, $wrappedKeyring: String!, $wrappedRecovery: String!) {\n  updateMemberWrappedSecrets(\n    orgId: $orgId\n    wrappedKeyring: $wrappedKeyring\n    wrappedRecovery: $wrappedRecovery\n  ) {\n    orgMember {\n      id\n    }\n  }\n}": types.UpdateWrappedSecretsDocument,
     "mutation RotateAppKey($id: ID!, $appToken: String!, $wrappedKeyShare: String!) {\n  rotateAppKeys(id: $id, appToken: $appToken, wrappedKeyShare: $wrappedKeyShare) {\n    app {\n      id\n    }\n  }\n}": types.RotateAppKeyDocument,
@@ -409,6 +410,10 @@ export function graphql(source: "mutation DeleteOrgInvite($inviteId: ID!) {\n  d
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}"): (typeof documents)["mutation RemoveMember($memberId: ID!) {\n  deleteOrganisationMember(memberId: $memberId) {\n    ok\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation TransferOrgOwnership($organisationId: ID!, $newOwnerId: ID!, $billingEmail: String) {\n  transferOrganisationOwnership(\n    organisationId: $organisationId\n    newOwnerId: $newOwnerId\n    billingEmail: $billingEmail\n  ) {\n    ok\n  }\n}"): (typeof documents)["mutation TransferOrgOwnership($organisationId: ID!, $newOwnerId: ID!, $billingEmail: String) {\n  transferOrganisationOwnership(\n    organisationId: $organisationId\n    newOwnerId: $newOwnerId\n    billingEmail: $billingEmail\n  ) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
