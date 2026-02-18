@@ -12,11 +12,10 @@ import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import Link from 'next/link'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { userHasPermission } from '@/utils/access/permissions'
-import { UpdateAppNameOp } from '@/graphql/mutations/apps/updateAppName.gql'
+import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { AppDescriptionEditor } from './_components/AppDescriptionEditor'
-import app from 'next/app'
 
 export default function AppSettings({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -46,7 +45,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
     ? userHasPermission(organisation.role?.permissions, 'Apps', 'update')
     : false
 
-  const [updateAppName] = useMutation(UpdateAppNameOp)
+  const [updateAppName] = useMutation(UpdateAppInfoOp)
 
   const nameUpdated = app ? app.name !== name : false
 

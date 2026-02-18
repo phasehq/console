@@ -124,6 +124,7 @@ export const AppDescriptionEditor = ({ app, canUpdate }: AppDescriptionEditorPro
                 setValue={setDescription}
                 placeholder="Enter app description (Markdown supported)..."
                 rows={8}
+                maxLength={10000}
                 className="font-mono text-sm"
               />
             ) : (
@@ -133,13 +134,23 @@ export const AppDescriptionEditor = ({ app, canUpdate }: AppDescriptionEditorPro
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => setIsEditing(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={saveDescription} isLoading={loading}>
-              Save
-            </Button>
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className={clsx(
+                'text-xs font-mono',
+                description.length > 9500 ? 'text-amber-500' : 'text-neutral-400'
+              )}
+            >
+              {description.length.toLocaleString()} / 10,000
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => setIsEditing(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={saveDescription} isLoading={loading}>
+                Save
+              </Button>
+            </div>
           </div>
         </div>
       )}
