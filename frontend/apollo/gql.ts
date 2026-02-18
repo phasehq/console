@@ -23,7 +23,7 @@ const documents = {
     "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.AddMemberToAppDocument,
     "mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}": types.BulkAddMembersToAppDocument,
     "mutation RemoveMemberFromApp($memberId: ID!, $memberType: MemberType, $appId: ID!) {\n  removeAppMember(memberId: $memberId, memberType: $memberType, appId: $appId) {\n    app {\n      id\n    }\n  }\n}": types.RemoveMemberFromAppDocument,
-    "mutation UpdateAppNameOp($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}": types.UpdateAppNameOpDocument,
+    "mutation UpdateAppInfoOp($id: ID!, $name: String, $description: String) {\n  updateAppInfo(id: $id, name: $name, description: $description) {\n    app {\n      id\n      name\n      description\n    }\n  }\n}": types.UpdateAppInfoOpDocument,
     "mutation UpdateEnvScope($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  updateMemberEnvironmentScope(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.UpdateEnvScopeDocument,
     "mutation CancelStripeSubscription($organisationId: ID!, $subscriptionId: String!) {\n  cancelSubscription(\n    organisationId: $organisationId\n    subscriptionId: $subscriptionId\n  ) {\n    success\n  }\n}": types.CancelStripeSubscriptionDocument,
     "mutation CreateStripeSetupIntentOp($organisationId: ID!) {\n  createSetupIntent(organisationId: $organisationId) {\n    clientSecret\n  }\n}": types.CreateStripeSetupIntentOpDocument,
@@ -229,7 +229,7 @@ export function graphql(source: "mutation RemoveMemberFromApp($memberId: ID!, $m
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation UpdateAppNameOp($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}"): (typeof documents)["mutation UpdateAppNameOp($id: ID!, $name: String!) {\n  updateAppName(id: $id, name: $name) {\n    app {\n      id\n      name\n    }\n  }\n}"];
+export function graphql(source: "mutation UpdateAppInfoOp($id: ID!, $name: String, $description: String) {\n  updateAppInfo(id: $id, name: $name, description: $description) {\n    app {\n      id\n      name\n      description\n    }\n  }\n}"): (typeof documents)["mutation UpdateAppInfoOp($id: ID!, $name: String, $description: String) {\n  updateAppInfo(id: $id, name: $name, description: $description) {\n    app {\n      id\n      name\n      description\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
