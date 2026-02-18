@@ -24,6 +24,7 @@ export const AppDescriptionViewer = ({
 }: AppDescriptionViewerProps) => {
   const dialogRef = useRef<{ openModal: () => void }>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const dialogContentRef = useRef(null)
   const [isOverflowing, setIsOverflowing] = useState(false)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -57,11 +58,11 @@ export const AppDescriptionViewer = ({
             <FaExpand /> <span className="ml-1">Expand</span>
           </Button>
         </div>
-        <div className="absolute inset-0 z-10 bg-neutral-50/60 dark:bg-neutral-900/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg pointer-events-none" />
+        <div className="absolute inset-0 z-10 bg-neutral-50/60 dark:bg-neutral-900/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg" />
         <div
           ref={contentRef}
           className={clsx(
-            'prose dark:prose-invert max-w-none p-4 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800',
+            'prose dark:prose-invert max-w-none p-4 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 pointer-events-none select-none',
             maxHeightClass,
             'overflow-hidden'
           )}
@@ -99,8 +100,9 @@ export const AppDescriptionViewer = ({
           </div>
         }
         size="lg"
+        initialFocus={dialogContentRef}
       >
-        <div className="prose dark:prose-invert max-w-none">
+        <div ref={dialogContentRef} className="prose dark:prose-invert max-w-none">
           <MarkdownViewer text={description} />
         </div>
       </GenericDialog>
