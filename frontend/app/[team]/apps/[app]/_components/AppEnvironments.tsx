@@ -14,7 +14,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useContext } from 'react'
 import { BsListColumnsReverse } from 'react-icons/bs'
-import { FaArrowRight, FaBan, FaExchangeAlt, FaFolder, FaKey } from 'react-icons/fa'
+import { FaBan, FaExchangeAlt, FaFolder, FaKey } from 'react-icons/fa'
 import { EmptyState } from '@/components/common/EmptyState'
 import { useAppSecrets } from '../_hooks/useAppSecrets'
 import { EnvironmentCardSkeleton } from './EnvironmentCardSkeleton'
@@ -67,10 +67,10 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
   return (
     <section className="space-y-4 pt-4">
       <div className="space-y-2">
-        <div className="space-y-1">
-          <h1 className="h3 font-semibold text-2xl">Environments</h1>
+        <div>
+          <h1 className="h3 font-semibold text-xl">Environments</h1>
           {userCanReadEnvironments ? (
-            <p className="text-neutral-500">
+            <p className="text-neutral-500 text-sm">
               You have access to {appEnvironments?.length} Environments in this App.
             </p>
           ) : (
@@ -95,17 +95,20 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
             ))
           : null}
         {appEnvironments?.map((env: EnvironmentType, index: number) => (
-          <Card key={env.id}>
+          <Card key={env.id} padding="p-3">
             <div className="group">
+              {/* Stretched link makes the entire card clickable */}
+              <Link
+                href={`${pathname}/environments/${env.id}`}
+                className="absolute inset-0 z-0"
+                aria-label={`Open ${env.name} environment`}
+              />
               <div className="flex gap-2 xl:gap-4">
-                <div className="pt-1.5">
-                  <BsListColumnsReverse className="text-black dark:text-white text-lg xl:text-xl" />
-                </div>
                 <div className="space-y-6 w-full min-w-0">
                   <div className="flex items-start justify-between gap-2">
-                    <Link href={`${pathname}/environments/${env.id}`} className="group min-w-0">
-                      <div className="font-semibold text-base xl:text-lg truncate">{env.name}</div>
-                      <div className="text-neutral-500 text-xs xl:text-sm">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-base truncate">{env.name}</div>
+                      <div className="text-neutral-500 text-xs">
                         {/* Text-based secrets and folder count on wider screens */}
                         <div className="hidden lg:block">
                           {env.secretCount} secrets{' '}
@@ -129,23 +132,15 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                           </div>
                         </div>
                       </div>
-                    </Link>
-                    <ManageEnvironmentDialog environment={env} />
-                  </div>
-
-                  <div className="flex items-center">
-                    <Link href={`${pathname}/environments/${env.id}`}>
-                      <Button variant="primary">
-                        <div className="flex items-center gap-1 xl:gap-2 text-2xs xl:text-xs">
-                          Explore <FaArrowRight />
-                        </div>
-                      </Button>
-                    </Link>
+                    </div>
+                    <div className="relative z-10">
+                      <ManageEnvironmentDialog environment={env} />
+                    </div>
                   </div>
                 </div>
               </div>
               {allowReordering && (
-                <div className="flex justify-between items-center opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto">
+                <div className="relative z-10 flex justify-between items-center opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto">
                   <div>
                     {index !== 0 && (
                       <Button
@@ -178,8 +173,8 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
 
         {userCanCreateEnvironments && (
           <Card>
-            <div className="flex flex-col w-full h-full">
-              <div className="mx-auto my-auto">
+            <div className="flex flex-col w-full h-full min-w-0">
+              <div className="mx-auto my-auto max-w-full">
                 <CreateEnvironmentDialog appId={appId} />
               </div>
             </div>

@@ -34,7 +34,7 @@ export const AppDescription = ({ appId }: AppDescriptionProps) => {
   if (!app?.description) return null
 
   return (
-    <div className="space-y-4 flex flex-col h-0 min-h-full">
+    <div className="space-y-4 flex flex-col h-40 lg:h-0 lg:min-h-full">
       <div className="space-y-1 shrink-0 pt-2">
         <p className="text-neutral-500 text-sm italic flex items-center gap-2">
           <FaInfo /> App description and documentation

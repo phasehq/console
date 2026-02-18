@@ -20,7 +20,7 @@ export default function AppSecretsView({ params }: { params: { team: string; app
 
   return (
     <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white relative space-y-8">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch w-full">
         <AppDescription appId={app} />
         <div className="lg:col-span-2">
           <AppEnvironments appId={app} />

@@ -21,8 +21,8 @@ export const MarkdownViewer = ({ text, className }: MarkdownViewerProps) => {
       const codeString = String(children).replace(/\n$/, '')
 
       return match ? (
-        <div className="relative group">
-          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex items-center gap-2">
+        <div className="relative group/code">
+          <div className="absolute right-2 top-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10 flex items-center gap-2">
             <span className="text-xs font-mono text-neutral-500 uppercase">{match[1]}</span>
             <CopyButton value={codeString} buttonVariant="secondary" />
           </div>

@@ -101,7 +101,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
               <div className="flex flex-col gap-1 w-full">
                 <h3 className="relative group w-full max-w-md">
                   <input
-                    className="custom bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-50/80 dark:hover:bg-neutral-900/50 rounded-lg transition ease w-full text-xl font-medium"
+                    className="custom bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-50/80 dark:hover:bg-neutral-900/50 rounded-lg transition ease w-full text-xl font-semibold"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     readOnly={!userCanUpdateApps}
@@ -124,8 +124,9 @@ export default function AppSettings({ params }: { params: { team: string; app: s
                 </h3>
 
                 <div className="flex items-center gap-4 group relative">
-                  <span className="text-neutral-500 text-sm font-mono">{app.id}</span>
-                  <CopyButton value={app.id} />
+                  <CopyButton value={app.id} buttonVariant="ghost">
+                    <span className="text-neutral-500 text-sm font-mono">{app.id}</span>
+                  </CopyButton>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-neutral-500 text-xs justify-end whitespace-nowrap">
