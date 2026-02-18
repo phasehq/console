@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { ExtraProps } from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/cjs/styles/prism'
 import { ThemeContext } from '@/contexts/themeContext'
@@ -15,7 +15,7 @@ export const MarkdownViewer = ({ text, className }: MarkdownViewerProps) => {
   const { theme } = useContext(ThemeContext)
 
   const components = {
-    code(props: any) {
+    code(props: React.HTMLAttributes<HTMLElement> & ExtraProps) {
       const { children, className, node, ...rest } = props
       const match = /language-(\w+)/.exec(className || '')
       const codeString = String(children).replace(/\n$/, '')
