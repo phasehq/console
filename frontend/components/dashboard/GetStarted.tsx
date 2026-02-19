@@ -483,7 +483,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       <Button variant="primary">Go to Integrations</Button>
                     </Link>
                     <Link
-                      href="https://docs.phase.dev/console/users#add-users-to-an-organisation"
+                      href="https://docs.phase.dev/integrations/platforms/docker"
                       target="_blank"
                     >
                       <Button variant="secondary">View Docs</Button>
