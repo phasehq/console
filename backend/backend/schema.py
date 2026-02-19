@@ -137,6 +137,7 @@ from .graphene.mutations.environment import (
     ReadSecretMutation,
     RenameEnvironmentMutation,
     SwapEnvironmentOrderMutation,
+    UpdateEnvironmentOrderMutation,
     UpdateMemberEnvScopeMutation,
 )
 from .graphene.mutations.syncing import (
@@ -1062,6 +1063,7 @@ class Mutation(graphene.ObjectType):
     delete_environment = DeleteEnvironmentMutation.Field()
     rename_environment = RenameEnvironmentMutation.Field()
     swap_environment_order = SwapEnvironmentOrderMutation.Field()
+    update_environment_order = UpdateEnvironmentOrderMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
 
