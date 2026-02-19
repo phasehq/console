@@ -58,7 +58,7 @@ export const AppDescriptionViewer = ({
             <FaExpand /> <span className="ml-1">Expand</span>
           </Button>
         </div>
-        <div className="absolute inset-0 z-10 bg-neutral-50/60 dark:bg-neutral-900/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg" />
+        <div className="absolute inset-0 z-10 bg-neutral-50/30 dark:bg-neutral-900/30 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg" />
         <div
           ref={contentRef}
           className={clsx(
