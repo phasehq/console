@@ -212,7 +212,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                             title={`Move before ${envList[index - 1].name}`}
                             onClick={() => handleLocalSwap(index, index - 1)}
                           >
-                            <FaArrowLeft className="text-xs shrink-0" />
+                            <FaArrowLeft className="text-xs shrink-0 my-0.5" />
                           </Button>
                         )}
                       </div>
@@ -224,7 +224,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                             title={`Move after ${envList[index + 1].name}`}
                             onClick={() => handleLocalSwap(index, index + 1)}
                           >
-                            <FaArrowRight className="text-xs shrink-0" />
+                            <FaArrowRight className="text-xs shrink-0 my-0.5" />
                           </Button>
                         )}
                       </div>

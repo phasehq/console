@@ -249,7 +249,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
   }
 
   return (
-    <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16">
+    <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16 px-8">
       {userCanReadTokens ? (
         <section className="max-w-screen-xl">
           {keyring !== null && (

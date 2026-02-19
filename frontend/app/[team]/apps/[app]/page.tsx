@@ -19,7 +19,7 @@ export default function AppSecretsView({ params }: { params: { team: string; app
   const { team, app } = params
 
   return (
-    <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white relative space-y-8">
+    <div className="max-h-screen overflow-y-auto w-full text-black dark:text-white relative space-y-8 px-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch w-full">
         <AppDescription appId={app} />
         <div className="lg:col-span-2">
