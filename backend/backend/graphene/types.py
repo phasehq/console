@@ -107,35 +107,27 @@ class OrganisationType(DjangoObjectType):
             "pricing_version",
         )
 
+    def _get_member(self, info):
+        if not hasattr(self, "_cached_member"):
+            self._cached_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=self, deleted_at=None
+            )
+        return self._cached_member
+
     def resolve_role(self, info):
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=self, deleted_at=None
-        )
-        return org_member.role
+        return self._get_member(info).role
 
     def resolve_member_id(self, info):
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=self, deleted_at=None
-        )
-        return org_member.id
+        return self._get_member(info).id
 
     def resolve_keyring(self, info):
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=self, deleted_at=None
-        )
-        return org_member.wrapped_keyring
+        return self._get_member(info).wrapped_keyring
 
     def resolve_recovery(self, info):
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=self, deleted_at=None
-        )
-        return org_member.wrapped_recovery
+        return self._get_member(info).wrapped_recovery
 
     def resolve_identity_key(self, info):
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=self, deleted_at=None
-        )
-        return org_member.identity_key
+        return self._get_member(info).identity_key
 
     def resolve_plan_detail(self, info):
 
@@ -234,15 +226,18 @@ class OrganisationMemberType(DjangoObjectType):
         for key in user_env_keys:
             app_envs_map[key.environment.app.id].add(key.environment.id)
 
+        # Fetch all environments for all apps in one query
+        all_envs = Environment.objects.filter(app_id__in=app_ids).order_by("index")
+        envs_by_app = {}
+        for env in all_envs:
+            envs_by_app.setdefault(env.app_id, []).append(env)
+
         filtered_apps = []
         for app in apps:
-            # Fetch all environments for the current app
-            all_app_environments = Environment.objects.filter(app=app).order_by("index")
-            # Filter environments to only those the user has access to
             accessible_environment_ids = app_envs_map.get(app.id, set())
             app.filtered_environments = [
                 env
-                for env in all_app_environments
+                for env in envs_by_app.get(app.id, [])
                 if env.id in accessible_environment_ids
             ]
             filtered_apps.append(app)
@@ -618,7 +613,7 @@ class EnvironmentType(DjangoObjectType):
             env_key.user
             for env_key in EnvironmentKey.objects.filter(
                 environment=self, deleted_at=None, user__deleted_at=None
-            )
+            ).select_related("user")
         ]
 
     def resolve_syncs(self, info):
@@ -657,14 +652,16 @@ class AppType(DjangoObjectType):
             deleted_at=None,
         )
 
-        app_environments = Environment.objects.filter(app=self).order_by("index")
+        accessible_env_ids = set(
+            EnvironmentKey.objects.filter(
+                user=org_member, environment__app=self
+            ).values_list("environment_id", flat=True)
+        )
 
         return [
-            app_env
-            for app_env in app_environments
-            if EnvironmentKey.objects.filter(
-                user=org_member, environment_id=app_env.id
-            ).exists()
+            env
+            for env in Environment.objects.filter(app=self).order_by("index")
+            if env.id in accessible_env_ids
         ]
 
     def resolve_updated_at(self, info):
@@ -741,29 +738,28 @@ class ServiceAccountType(DjangoObjectType):
 
     def resolve_app_memberships(self, info):
         # Fetch all apps that this service account is related to
-        apps = self.apps.all()
+        apps = list(self.apps.all())
+        app_ids = [app.id for app in apps]
 
-        filtered_apps = []
+        accessible_env_ids = set(
+            EnvironmentKey.objects.filter(
+                service_account=self, environment__app_id__in=app_ids
+            ).values_list("environment_id", flat=True)
+        )
+
+        all_envs = Environment.objects.filter(app_id__in=app_ids).order_by("index")
+        envs_by_app = {}
+        for env in all_envs:
+            envs_by_app.setdefault(env.app_id, []).append(env)
+
         for app in apps:
-            # Get environments for the app
-            app_environments = Environment.objects.filter(app=app).order_by("index")
-
-            # Check which environments the service account has access to
-            accessible_environments = [
+            app.filtered_environments = [
                 env
-                for env in app_environments
-                if EnvironmentKey.objects.filter(
-                    service_account=self, environment=env
-                ).exists()
+                for env in envs_by_app.get(app.id, [])
+                if env.id in accessible_env_ids
             ]
 
-            # Manually override the 'environments' field for this app instance
-            app.filtered_environments = accessible_environments
-
-            # Add this app to the filtered list
-            filtered_apps.append(app)
-
-        return filtered_apps
+        return apps
 
     def resolve_network_policies(self, info):
         global_policies = NetworkAccessPolicy.objects.filter(
@@ -998,16 +994,11 @@ class PhaseLicenseType(graphene.ObjectType):
         return ActivatedPhaseLicense.objects.filter(id=self.id).exists()
 
     def resolve_organisation_owner(self, info):
-        if ActivatedPhaseLicense.objects.filter(id=self.id).exists():
-            activated_license = ActivatedPhaseLicense.objects.get(id=self.id)
-
-            owner_role = Role.objects.get(
-                organisation=activated_license.organisation, name__iexact="owner"
-            )
-
+        activated_license = ActivatedPhaseLicense.objects.filter(id=self.id).first()
+        if activated_license:
             return OrganisationMember.objects.get(
                 organisation=activated_license.organisation,
-                role=owner_role,
+                role__name__iexact="owner",
             )
 
 

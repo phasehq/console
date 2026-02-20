@@ -1,4 +1,5 @@
 import graphene
+from django.db import transaction
 from graphql import GraphQLError
 from api.models import (
     Organisation,
@@ -69,22 +70,23 @@ class CreateServiceAccountMutation(graphene.Mutation):
                 f"Service Accounts cannot be assigned the '{role.name}' role."
             )
 
-        service_account = ServiceAccount.objects.create(
-            name=name,
-            organisation=org,
-            role=role,
-            identity_key=identity_key,
-            server_wrapped_keyring=server_wrapped_keyring,
-            server_wrapped_recovery=server_wrapped_recovery,
-        )
-
-        for handler in handlers:
-            ServiceAccountHandler.objects.create(
-                service_account=service_account,
-                user_id=handler.member_id,
-                wrapped_keyring=handler.wrapped_keyring,
-                wrapped_recovery=handler.wrapped_recovery,
+        with transaction.atomic():
+            service_account = ServiceAccount.objects.create(
+                name=name,
+                organisation=org,
+                role=role,
+                identity_key=identity_key,
+                server_wrapped_keyring=server_wrapped_keyring,
+                server_wrapped_recovery=server_wrapped_recovery,
             )
+
+            for handler in handlers:
+                ServiceAccountHandler.objects.create(
+                    service_account=service_account,
+                    user_id=handler.member_id,
+                    wrapped_keyring=handler.wrapped_keyring,
+                    wrapped_recovery=handler.wrapped_recovery,
+                )
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
@@ -216,8 +218,7 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
                 "You are not a member of this organisation and cannot perform this operation"
             )
 
-        for account in org.service_accounts.all():
-            [handler.delete() for handler in account.handlers.all()]
+        ServiceAccountHandler.objects.filter(service_account__organisation=org).delete()
 
         for handler in handlers:
             service_account = ServiceAccount.objects.get(id=handler.service_account_id)
