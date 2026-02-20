@@ -250,44 +250,69 @@ const Sidebar = () => {
   ]
 
   return (
-    <div
-      className={clsx(
-        'h-screen flex flex-col pt-[64px] transition-all duration-300',
-        collapsed ? 'w-20' : 'w-72'
-      )}
-    >
-      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/70 dark:bg-neutral-800/20 text-black dark:text-white">
-        {/* Main navigation area */}
-        <div className="gap-4 p-4 grid grid-cols-1 w-full">
-          <OrgsMenu />
+    <>
+      {/* Desktop/tablet sidebar */}
+      <div
+        className={clsx(
+          'h-screen hidden md:flex flex-col pt-[64px] transition-all duration-300',
+          collapsed ? 'w-20' : 'w-72'
+        )}
+      >
+        <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/70 dark:bg-neutral-800/20 text-black dark:text-white">
+          {/* Main navigation area */}
+          <div className="gap-4 p-4 grid grid-cols-1 w-full">
+            <OrgsMenu />
+            {links.map((link) => (
+              <SidebarLink
+                key={link.name}
+                name={link.name}
+                href={link.href}
+                icon={link.icon}
+                active={link.active}
+                collapsed={collapsed}
+              />
+            ))}
+          </div>
+
+          {/* Bottom section with collapse/expand button */}
+          <div className="p-4 w-full">
+            <button
+              onClick={() => setUserPreference(collapsed ? 'expanded' : 'collapsed')}
+              className="flex items-center justify-center p-3 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? (
+                <FaAngleDoubleRight className="text-xl" />
+              ) : (
+                <FaAngleDoubleLeft className="text-xl" />
+              )}
+            </button>
+          </div>
+        </nav>
+      </div>
+
+      {/* Mobile bottom navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900">
+        <div className="flex items-center justify-around h-14">
           {links.map((link) => (
-            <SidebarLink
+            <Link
               key={link.name}
-              name={link.name}
               href={link.href}
-              icon={link.icon}
-              active={link.active}
-              collapsed={collapsed}
-            />
+              title={link.name}
+              aria-label={link.name}
+              className={clsx(
+                'flex items-center justify-center flex-1 h-full text-xl transition-colors',
+                link.active
+                  ? 'text-zinc-900 dark:text-zinc-100'
+                  : 'text-zinc-500 dark:text-zinc-400'
+              )}
+            >
+              {link.icon}
+            </Link>
           ))}
         </div>
-
-        {/* Bottom section with collapse/expand button */}
-        <div className="p-4 w-full">
-          <button
-            onClick={() => setUserPreference(collapsed ? 'expanded' : 'collapsed')}
-            className="flex items-center justify-center p-3 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {collapsed ? (
-              <FaAngleDoubleRight className="text-xl" />
-            ) : (
-              <FaAngleDoubleLeft className="text-xl" />
-            )}
-          </button>
-        </div>
       </nav>
-    </div>
+    </>
   )
 }
 
