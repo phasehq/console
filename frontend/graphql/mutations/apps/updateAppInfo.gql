@@ -1,0 +1,9 @@
+mutation UpdateAppInfoOp($id: ID!, $name: String, $description: String) {
+  updateAppInfo(id: $id, name: $name, description: $description) {
+    app {
+      id
+      name
+      description
+    }
+  }
+}

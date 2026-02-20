@@ -137,6 +137,7 @@ from .graphene.mutations.environment import (
     ReadSecretMutation,
     RenameEnvironmentMutation,
     SwapEnvironmentOrderMutation,
+    UpdateEnvironmentOrderMutation,
     UpdateMemberEnvScopeMutation,
 )
 from .graphene.mutations.syncing import (
@@ -172,7 +173,7 @@ from .graphene.mutations.app import (
     MemberType,
     RemoveAppMemberMutation,
     RotateAppKeysMutation,
-    UpdateAppNameMutation,
+    UpdateAppInfoMutation,
 )
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
@@ -1052,7 +1053,7 @@ class Mutation(graphene.ObjectType):
     create_app = CreateAppMutation.Field()
     rotate_app_keys = RotateAppKeysMutation.Field()
     delete_app = DeleteAppMutation.Field()
-    update_app_name = UpdateAppNameMutation.Field()
+    update_app_info = UpdateAppInfoMutation.Field()
     add_app_member = AddAppMemberMutation.Field()
     bulk_add_app_members = BulkAddAppMembersMutation.Field()
     remove_app_member = RemoveAppMemberMutation.Field()
@@ -1062,6 +1063,7 @@ class Mutation(graphene.ObjectType):
     delete_environment = DeleteEnvironmentMutation.Field()
     rename_environment = RenameEnvironmentMutation.Field()
     swap_environment_order = SwapEnvironmentOrderMutation.Field()
+    update_environment_order = UpdateEnvironmentOrderMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
 

@@ -691,8 +691,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     <section className="space-y-4 py-4">
       <div className="flex items-end justify-between">
         <div className="space-y-1">
-          <h1 className="h3 font-semibold text-2xl">Secrets</h1>
-          <p className="text-neutral-500">
+          <h1 className="h3 font-semibold text-xl" id="secrets">
+            Secrets
+          </h1>
+          <p className="text-neutral-500 text-sm">
             An overview of Secrets across all Environments in this App. Expand a row in the table
             below to compare and manage values across all Environments.
           </p>

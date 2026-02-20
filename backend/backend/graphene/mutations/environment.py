@@ -298,6 +298,44 @@ class SwapEnvironmentOrderMutation(graphene.Mutation):
         return SwapEnvironmentOrderMutation(ok=True)
 
 
+class UpdateEnvironmentOrderMutation(graphene.Mutation):
+    class Arguments:
+        app_id = graphene.ID(required=True)
+        environment_order = graphene.List(graphene.ID, required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, app_id, environment_order):
+        user = info.context.user
+        app = App.objects.get(id=app_id)
+        org = app.organisation
+
+        if not user_has_permission(user, "update", "Environments", org, True):
+            raise GraphQLError("You do not have permission to update environments")
+
+        if not can_use_custom_envs(org):
+            raise GraphQLError(
+                "Your Organisation doesn't have access to Custom Environments"
+            )
+
+        # Verify all IDs belong to this app
+        environments = Environment.objects.filter(app=app)
+        env_ids = set(str(e.id) for e in environments)
+        order_ids = set(str(id) for id in environment_order)
+
+        if env_ids != order_ids:
+            raise GraphQLError(
+                "The provided environment list doesn't match the app's environments"
+            )
+
+        # Bulk update indices
+        for index, env_id in enumerate(environment_order):
+            Environment.objects.filter(id=env_id, app=app).update(index=index)
+
+        return UpdateEnvironmentOrderMutation(ok=True)
+
+
 class CreateEnvironmentKeyMutation(graphene.Mutation):
     class Arguments:
         # id = graphene.ID(required=True)

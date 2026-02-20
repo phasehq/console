@@ -23,6 +23,7 @@
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "@types/react-icons": "^3.0.0",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@types/zxcvbn": "^4.4.4",
     "autoprefixer": "^10.4.17",
     "axios": "^1.13.5",
@@ -48,6 +49,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.0",
     "react-toastify": "^10.0.4",
     "reaviz": "^16.1.0",
     "sass": "^1.70.0",
@@ -75,7 +78,5 @@
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.1.2"
   },
-  "resolutions": {
-    "glob": "10.5.0"
-  }
+  "resolutions": {}
 }

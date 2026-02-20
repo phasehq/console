@@ -635,6 +635,7 @@ class AppType(DjangoObjectType):
         fields = (
             "id",
             "name",
+            "description",
             "identity_key",
             "wrapped_key_share",
             "created_at",

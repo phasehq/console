@@ -276,7 +276,9 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
       <div
         className={clsx(
           'flex',
-          variant === 'normal' ? 'justify-between items-start' : 'col-span-2 w-full lg:max-w-[24rem] pl-3'
+          variant === 'normal'
+            ? 'justify-between items-start'
+            : 'col-span-2 w-full lg:max-w-[24rem] pl-3'
         )}
       >
         <div className="space-y-0.5 w-full">
@@ -287,9 +289,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             )}
           >
             {variant === 'normal' ? (
-              <>
-                {name}
-              </>
+              <>{name}</>
             ) : (
               <Link
                 href={`/${organisation?.name}/apps/${app.id}`}
@@ -320,9 +320,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             </div>
           )}
         </div>
-        {variant === 'normal' && (
-          <EncryptionDot sseEnabled={app.sseEnabled!} />
-        )}
+        {variant === 'normal' && <EncryptionDot sseEnabled={app.sseEnabled!} />}
       </div>
 
       {variant === 'normal' ? (

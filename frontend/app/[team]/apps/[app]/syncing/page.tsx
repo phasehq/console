@@ -28,7 +28,7 @@ export default function Syncing({ params }: { params: { team: string; app: strin
     : false
 
   return (
-    <div className="w-full space-y-8 pt-8 text-black dark:text-white">
+    <div className="w-full space-y-8 pt-8 text-black dark:text-white px-8">
       {data?.sseEnabled === false && (
         <>
           <div className="flex flex-col gap-4 h-64 max-w-screen-md mx-auto items-center justify-center">
