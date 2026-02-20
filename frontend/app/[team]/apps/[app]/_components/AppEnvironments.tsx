@@ -10,6 +10,7 @@ import { ManageEnvironmentDialog } from '@/components/environments/ManageEnviron
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation } from '@apollo/client'
+import { LayoutGroup, motion } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useContext, useState } from 'react'
@@ -89,6 +90,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
         environmentOrder: localEnvOrder.map((e) => e.id),
       },
       refetchQueries: [{ query: GetAppEnvironments, variables: { appId } }],
+      awaitRefetchQueries: true,
     })
 
     setSaving(false)
@@ -141,111 +143,117 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
           )}
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 1080p:grid-cols-6 gap-4 pt-4">
-        {fetching && !appEnvironments?.length
-          ? [...Array(3)].map((_, index) => (
-              <EnvironmentCardSkeleton key={`env-skeleton-${index}`} />
-            ))
-          : null}
-        {(isReordering ? localEnvOrder : appEnvironments)?.map(
-          (env: EnvironmentType, index: number) => {
-            const envList = isReordering ? localEnvOrder : appEnvironments!
-            return (
-              <Card key={env.id} padding="p-3">
-                <div className="group">
-                  {/* Stretched link makes the entire card clickable (disabled during reordering) */}
-                  {!isReordering && (
-                    <Link
-                      href={`${pathname}/environments/${env.id}`}
-                      className="absolute inset-0 z-0"
-                      aria-label={`Open ${env.name} environment`}
-                    />
-                  )}
-                  <div className="flex gap-2 xl:gap-4">
-                    <div className="w-full min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="font-semibold text-base truncate min-w-0">{env.name}</div>
-                        {!isReordering && (
-                          <div className="relative z-10 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <ManageEnvironmentDialog environment={env} />
+      <LayoutGroup>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 1080p:grid-cols-6 gap-4 pt-4">
+          {fetching && !appEnvironments?.length
+            ? [...Array(3)].map((_, index) => (
+                <EnvironmentCardSkeleton key={`env-skeleton-${index}`} />
+              ))
+            : null}
+          {(isReordering ? localEnvOrder : appEnvironments)?.map(
+            (env: EnvironmentType, index: number) => {
+              const envList = isReordering ? localEnvOrder : appEnvironments!
+              return (
+                <motion.div key={env.id} layout layoutId={env.id} transition={{ duration: 0.2 }}>
+                  <Card padding="p-3">
+                    <div className="group">
+                      {/* Stretched link makes the entire card clickable (disabled during reordering) */}
+                      {!isReordering && (
+                        <Link
+                          href={`${pathname}/environments/${env.id}`}
+                          className="absolute inset-0 z-0"
+                          aria-label={`Open ${env.name} environment`}
+                        />
+                      )}
+                      <div className="flex gap-2 xl:gap-4">
+                        <div className="w-full min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-semibold text-base truncate min-w-0">
+                              {env.name}
+                            </div>
+                            {!isReordering && (
+                              <div className="relative z-10 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <ManageEnvironmentDialog environment={env} />
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      <div className="text-neutral-500 text-xs">
-                        {/* Text-based secrets and folder count on wider screens */}
-                        <div className="hidden lg:block">
-                          {env.secretCount} secrets{' '}
-                          {env.folderCount! > 0 ? `across ${env.folderCount} folders` : ''}
+                          <div className="text-neutral-500 text-xs">
+                            {/* Text-based secrets and folder count on wider screens */}
+                            <div className="hidden lg:block">
+                              {env.secretCount} secrets{' '}
+                              {env.folderCount! > 0 ? `across ${env.folderCount} folders` : ''}
+                            </div>
+                            {/* Icon-based secrets and folder count on narrower screens */}
+                            <div className="flex items-center gap-3 lg:hidden">
+                              <div
+                                className="flex items-center gap-1.5"
+                                title={`${env.secretCount} secrets`}
+                              >
+                                <FaKey className="text-sm" />
+                                <span>{env.secretCount}</span>
+                              </div>
+                              <div
+                                className="flex items-center gap-1.5"
+                                title={`${env.folderCount} folders`}
+                              >
+                                <FaFolder className="text-sm" />
+                                <span>{env.folderCount}</span>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        {/* Icon-based secrets and folder count on narrower screens */}
-                        <div className="flex items-center gap-3 lg:hidden">
-                          <div
-                            className="flex items-center gap-1.5"
-                            title={`${env.secretCount} secrets`}
-                          >
-                            <FaKey className="text-sm" />
-                            <span>{env.secretCount}</span>
+                      </div>
+                      {!isReordering && (
+                        <div className="flex items-center gap-1 text-xs text-emerald-500 mt-2">
+                          Explore <FaArrowRight />
+                        </div>
+                      )}
+                      {isReordering && (
+                        <div className="flex justify-between items-center mt-2">
+                          <div>
+                            {index !== 0 && (
+                              <Button
+                                variant="secondary"
+                                disabled={saving}
+                                title={`Move before ${envList[index - 1].name}`}
+                                onClick={() => handleLocalSwap(index, index - 1)}
+                              >
+                                <FaArrowLeft className="text-xs shrink-0 my-0.5" />
+                              </Button>
+                            )}
                           </div>
-                          <div
-                            className="flex items-center gap-1.5"
-                            title={`${env.folderCount} folders`}
-                          >
-                            <FaFolder className="text-sm" />
-                            <span>{env.folderCount}</span>
+                          <div>
+                            {index !== envList.length - 1 && (
+                              <Button
+                                variant="secondary"
+                                disabled={saving}
+                                title={`Move after ${envList[index + 1].name}`}
+                                onClick={() => handleLocalSwap(index, index + 1)}
+                              >
+                                <FaArrowRight className="text-xs shrink-0 my-0.5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
-                      </div>
+                      )}
                     </div>
-                  </div>
-                  {!isReordering && (
-                    <div className="flex items-center gap-1 text-xs text-emerald-500 mt-2">
-                      Explore <FaArrowRight />
-                    </div>
-                  )}
-                  {isReordering && (
-                    <div className="flex justify-between items-center mt-2">
-                      <div>
-                        {index !== 0 && (
-                          <Button
-                            variant="secondary"
-                            disabled={saving}
-                            title={`Move before ${envList[index - 1].name}`}
-                            onClick={() => handleLocalSwap(index, index - 1)}
-                          >
-                            <FaArrowLeft className="text-xs shrink-0 my-0.5" />
-                          </Button>
-                        )}
-                      </div>
-                      <div>
-                        {index !== envList.length - 1 && (
-                          <Button
-                            variant="secondary"
-                            disabled={saving}
-                            title={`Move after ${envList[index + 1].name}`}
-                            onClick={() => handleLocalSwap(index, index + 1)}
-                          >
-                            <FaArrowRight className="text-xs shrink-0 my-0.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            )
-          }
-        )}
+                  </Card>
+                </motion.div>
+              )
+            }
+          )}
 
-        {userCanCreateEnvironments && (
-          <Card>
-            <div className="flex flex-col w-full h-full min-w-0">
-              <div className="mx-auto my-auto max-w-full">
-                <CreateEnvironmentDialog appId={appId} />
+          {userCanCreateEnvironments && (
+            <Card>
+              <div className="flex flex-col w-full h-full min-w-0">
+                <div className="mx-auto my-auto max-w-full">
+                  <CreateEnvironmentDialog appId={appId} />
+                </div>
               </div>
-            </div>
-          </Card>
-        )}
-      </div>
+            </Card>
+          )}
+        </div>
+      </LayoutGroup>
     </section>
   )
 }
