@@ -11,13 +11,27 @@ import {
 } from '@/utils/secrets'
 import { EnvironmentType, SecretType, DynamicSecretType } from '@/apollo/graphql'
 
-// Polyfill APIs missing in jsdom
+// Polyfill APIs missing in jsdom — save originals so we can restore after
+const originalCrypto = globalThis.crypto
+const originalCreateObjectURL = URL.createObjectURL
+const originalRevokeObjectURL = URL.revokeObjectURL
+
 beforeAll(() => {
   Object.defineProperty(globalThis, 'crypto', {
     value: { randomUUID: () => '00000000-0000-0000-0000-000000000000' },
+    configurable: true,
   })
   URL.createObjectURL = jest.fn(() => 'blob:mock-url')
   URL.revokeObjectURL = jest.fn()
+})
+
+afterAll(() => {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: originalCrypto,
+    configurable: true,
+  })
+  URL.createObjectURL = originalCreateObjectURL
+  URL.revokeObjectURL = originalRevokeObjectURL
 })
 
 describe('formatEnvValue', () => {
@@ -133,7 +147,7 @@ describe('exportToEnvFile', () => {
     expect(anchor.download).toBe('MyApp.staging.backend.api.env')
   })
 
-  test('formats secret values with comments', () => {
+  test('generates correct .env content with comments and quoted values', async () => {
     const secrets = [
       { key: 'DB_HOST', value: 'localhost', comment: 'Database host' },
       { key: 'API_KEY', value: 'abc#123', comment: '' },
@@ -142,8 +156,13 @@ describe('exportToEnvFile', () => {
     exportToEnvFile(secrets, 'App', 'Dev')
 
     expect(URL.createObjectURL).toHaveBeenCalled()
-    const blobArg = (URL.createObjectURL as jest.Mock).mock.calls[0][0] as Blob
-    expect(blobArg).toBeInstanceOf(Blob)
+    const blob = (URL.createObjectURL as jest.Mock).mock.calls[0][0] as Blob
+    const text = await new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.readAsText(blob)
+    })
+    expect(text).toBe('#Database host\nDB_HOST=localhost\nAPI_KEY="abc#123"')
   })
 })
 
