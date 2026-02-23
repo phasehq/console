@@ -1,12 +1,16 @@
 const DOT_BASE = 'w-2 h-2 rounded-full shrink-0'
 
-export const PresentIndicator = () => <span className={`${DOT_BASE} bg-emerald-500`} />
-export const SameAsProdIndicator = () => <span className={`${DOT_BASE} bg-amber-500`} />
+export const PresentIndicator = () => (
+  <span aria-hidden="true" className={`${DOT_BASE} bg-emerald-500`} />
+)
+export const SameAsProdIndicator = () => (
+  <span aria-hidden="true" className={`${DOT_BASE} bg-amber-500`} />
+)
 export const BlankIndicator = () => (
-  <span className={`${DOT_BASE} bg-neutral-400 dark:bg-neutral-500`} />
+  <span aria-hidden="true" className={`${DOT_BASE} bg-neutral-400 dark:bg-neutral-500`} />
 )
 export const MissingIndicator = () => (
-  <span className={`${DOT_BASE} ring-2 ring-red-500 ring-inset`} />
+  <span aria-hidden="true" className={`${DOT_BASE} ring-2 ring-red-500 ring-inset`} />
 )
 
 export const SecretInfoLegend = () => (
