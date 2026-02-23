@@ -55,8 +55,20 @@ describe('formatEnvValue', () => {
     expect(formatEnvValue(' both ')).toBe('" both "')
   })
 
-  test('falls back to double quotes when value contains both quote types', () => {
-    expect(formatEnvValue(`"it's both"`)).toBe(`""it's both""`)
+  test('escapes inner quotes when value contains both quote types', () => {
+    expect(formatEnvValue(`"it's both"`)).toBe(`"\\"it's both\\""`)
+  })
+
+  test('does not escape backslashes when simple double-quoting suffices', () => {
+    // No " in the value, so it takes the simple double-quote path
+    expect(formatEnvValue(`path\\with#hash`)).toBe(`"path\\with#hash"`)
+  })
+
+  test('escapes backslashes and quotes in the both-quote-types fallback', () => {
+    // Starts with " (triggers needsQuoting), contains both " and ' (triggers escape path), has \
+    const val = `"it's a path\\to thing"`
+    const formatted = formatEnvValue(val)
+    expect(formatted).toBe(`"\\"it's a path\\\\to thing\\""`)
   })
 
   test('returns empty string unchanged', () => {
@@ -193,6 +205,22 @@ describe('formatEnvValue + processEnvFile round-trip', () => {
 
   test('URL with fragment', () => {
     roundTrip('CALLBACK', 'https://example.com/path#fragment')
+  })
+
+  test('value with both single and double quotes', () => {
+    roundTrip('MIXED', `"it's both"`)
+  })
+
+  test('value with backslashes', () => {
+    roundTrip('BACKSLASH', 'C:\\Users\\test')
+  })
+
+  test('value with backslashes and hash', () => {
+    roundTrip('COMPLEX', `path\\to#thing`)
+  })
+
+  test('value with both quote types and backslashes', () => {
+    roundTrip('GNARLY', `"it's a path\\to thing"`)
   })
 
   test('multiple secrets round-trip', () => {
