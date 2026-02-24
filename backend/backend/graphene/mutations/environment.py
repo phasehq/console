@@ -9,7 +9,7 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
-from api.utils.audit_logging import log_secret_event
+from api.utils.audit_logging import log_secret_event, log_secret_events_bulk
 from api.utils.secrets import create_environment_folder_structure, normalize_path_string
 from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
@@ -814,19 +814,21 @@ class BulkCreateSecretMutation(graphene.Mutation):
             secret.tags.set(tags)
             created_secrets.append(secret)
 
-            ip_address, user_agent = get_resolver_request_meta(info.context)
-            org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=org, deleted_at=None
-            )
-            log_secret_event(
-                secret,
-                SecretEvent.CREATE,
-                org_member,
-                None,
-                None,
-                ip_address,
-                user_agent,
-            )
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation=Environment.objects.get(id=secrets_data[0].env_id).app.organisation,
+            deleted_at=None,
+        )
+        log_secret_events_bulk(
+            created_secrets,
+            SecretEvent.CREATE,
+            org_member,
+            None,
+            None,
+            ip_address,
+            user_agent,
+        )
 
         return BulkCreateSecretMutation(secrets=created_secrets)
 
@@ -939,12 +941,15 @@ class BulkEditSecretMutation(graphene.Mutation):
             secret.save()
             updated_secrets.append(secret)
 
+        if updated_secrets:
             ip_address, user_agent = get_resolver_request_meta(info.context)
             org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=org, deleted_at=None
+                user=info.context.user,
+                organisation=updated_secrets[0].environment.app.organisation,
+                deleted_at=None,
             )
-            log_secret_event(
-                secret,
+            log_secret_events_bulk(
+                updated_secrets,
                 SecretEvent.UPDATE,
                 org_member,
                 None,
@@ -1020,12 +1025,15 @@ class BulkDeleteSecretMutation(graphene.Mutation):
             secret.save()
             deleted_secrets.append(secret)
 
+        if deleted_secrets:
             ip_address, user_agent = get_resolver_request_meta(info.context)
             org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=org, deleted_at=None
+                user=info.context.user,
+                organisation=deleted_secrets[0].environment.app.organisation,
+                deleted_at=None,
             )
-            log_secret_event(
-                secret,
+            log_secret_events_bulk(
+                deleted_secrets,
                 SecretEvent.DELETE,
                 org_member,
                 None,
@@ -1045,24 +1053,24 @@ class ReadSecretMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, ids):
+        secrets = []
         for id in ids:
             secret = Secret.objects.get(id=id)
             if not user_can_access_environment(
                 info.context.user.userId, secret.environment.id
             ):
                 raise GraphQLError("You don't have permission to perform this action")
+            secrets.append(secret)
 
-            env = secret.environment
-            org = env.app.organisation
-
+        if secrets:
             ip_address, user_agent = get_resolver_request_meta(info.context)
-
             org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=org, deleted_at=None
+                user=info.context.user,
+                organisation=secrets[0].environment.app.organisation,
+                deleted_at=None,
             )
-
-            log_secret_event(
-                secret,
+            log_secret_events_bulk(
+                secrets,
                 SecretEvent.READ,
                 org_member,
                 None,

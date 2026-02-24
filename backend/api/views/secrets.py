@@ -22,7 +22,7 @@ from api.utils.secrets import (
 from api.utils.access.permissions import (
     user_has_permission,
 )
-from api.utils.audit_logging import log_secret_event
+from api.utils.audit_logging import log_secret_event, log_secret_events_bulk
 
 from api.utils.crypto import encrypt_asymmetric, validate_encrypted_string
 from api.utils.rest import (
@@ -137,18 +137,17 @@ class E2EESecretsView(APIView):
         except:
             pass
 
-        secrets = Secret.objects.filter(**secrets_filter)
+        secrets = Secret.objects.filter(**secrets_filter).prefetch_related('tags')
 
-        for secret in secrets:
-            log_secret_event(
-                secret,
-                SecretEvent.READ,
-                request.auth["org_member"],
-                request.auth["service_token"],
-                request.auth["service_account_token"],
-                ip_address,
-                user_agent,
-            )
+        log_secret_events_bulk(
+            list(secrets),
+            SecretEvent.READ,
+            request.auth["org_member"],
+            request.auth["service_token"],
+            request.auth["service_account_token"],
+            ip_address,
+            user_agent,
+        )
 
         serializer = SecretSerializer(
             secrets, many=True, context={"org_member": request.auth["org_member"]}
@@ -294,6 +293,8 @@ class E2EESecretsView(APIView):
         ):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
+        created_secrets = []
+
         for secret in request_body["secrets"]:
 
             # Check that all encrypted fields are valid
@@ -334,16 +335,7 @@ class E2EESecretsView(APIView):
 
             secret_obj = Secret.objects.create(**secret_data)
             secret_obj.tags.set(tags)
-
-            log_secret_event(
-                secret_obj,
-                SecretEvent.CREATE,
-                request.auth["org_member"],
-                request.auth["service_token"],
-                request.auth["service_account_token"],
-                ip_address,
-                user_agent,
-            )
+            created_secrets.append(secret_obj)
 
             # If the request is authenticated as a user and an override is supplied
             if request.auth["org_member"] and "override" in secret:
@@ -352,6 +344,16 @@ class E2EESecretsView(APIView):
                     user=request.auth["org_member"],
                     value=secret["override"]["value"],
                 )
+
+        log_secret_events_bulk(
+            created_secrets,
+            SecretEvent.CREATE,
+            request.auth["org_member"],
+            request.auth["service_token"],
+            request.auth["service_account_token"],
+            ip_address,
+            user_agent,
+        )
 
         return Response(status=status.HTTP_200_OK)
 
@@ -370,6 +372,8 @@ class E2EESecretsView(APIView):
             request_body["secrets"], request.headers["environment"]
         ):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
+
+        updated_secrets = []
 
         for secret in request_body["secrets"]:
 
@@ -432,16 +436,7 @@ class E2EESecretsView(APIView):
             secret_obj.updated_at = timezone.now()
             secret_obj.tags.set(tags)
             secret_obj.save()
-
-            log_secret_event(
-                secret_obj,
-                SecretEvent.UPDATE,
-                request.auth["org_member"],
-                request.auth["service_token"],
-                request.auth["service_account_token"],
-                ip_address,
-                user_agent,
-            )
+            updated_secrets.append(secret_obj)
 
             # If the request is authenticated as a user and an override is supplied
             if request.auth["org_member"] and "override" in secret:
@@ -455,6 +450,16 @@ class E2EESecretsView(APIView):
                     },
                 )
 
+        log_secret_events_bulk(
+            updated_secrets,
+            SecretEvent.UPDATE,
+            request.auth["org_member"],
+            request.auth["service_token"],
+            request.auth["service_account_token"],
+            ip_address,
+            user_agent,
+        )
+
         return Response(status=status.HTTP_200_OK)
 
     def delete(self, request, *args, **kwargs):
@@ -463,27 +468,31 @@ class E2EESecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"])
+        secrets_to_delete = Secret.objects.filter(
+            id__in=request_body["secrets"]
+        ).prefetch_related('tags')
 
         if not secrets_to_delete.exists():
             return Response(status=status.HTTP_200_OK)
 
         env = secrets_to_delete[0].environment
 
+        deleted_secrets = []
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
             secret.deleted_at = timezone.now()
             secret.save()
+            deleted_secrets.append(secret)
 
-            log_secret_event(
-                secret,
-                SecretEvent.DELETE,
-                request.auth["org_member"],
-                request.auth["service_token"],
-                request.auth["service_account_token"],
-                ip_address,
-                user_agent,
-            )
+        log_secret_events_bulk(
+            deleted_secrets,
+            SecretEvent.DELETE,
+            request.auth["org_member"],
+            request.auth["service_token"],
+            request.auth["service_account_token"],
+            ip_address,
+            user_agent,
+        )
 
         return Response(status=status.HTTP_200_OK)
 
@@ -567,18 +576,17 @@ class PublicSecretsView(APIView):
             # Filter secrets based on these tags
             secrets_filter["tags__in"] = tags
 
-        secrets = Secret.objects.filter(**secrets_filter)
+        secrets = Secret.objects.filter(**secrets_filter).prefetch_related('tags')
 
-        for secret in secrets:
-            log_secret_event(
-                secret,
-                SecretEvent.READ,
-                request.auth["org_member"],
-                request.auth["service_token"],
-                request.auth["service_account_token"],
-                ip_address,
-                user_agent,
-            )
+        log_secret_events_bulk(
+            list(secrets),
+            SecretEvent.READ,
+            request.auth["org_member"],
+            request.auth["service_token"],
+            request.auth["service_account_token"],
+            ip_address,
+            user_agent,
+        )
 
         # Pre-compute crypto context for N+1 optimization
         crypto_context = get_environment_crypto_context(env)
@@ -797,16 +805,6 @@ class PublicSecretsView(APIView):
                 )
                 secret_obj.tags.set(tags)
 
-            log_secret_event(
-                secret_obj,
-                SecretEvent.CREATE,
-                request.auth["org_member"],
-                request.auth["service_token"],
-                request.auth["service_account_token"],
-                ip_address,
-                user_agent,
-            )
-
             # If the request is authenticated as a user and an override is supplied
             if request.auth["org_member"] and "override" in secret:
                 PersonalSecret.objects.create(
@@ -816,6 +814,16 @@ class PublicSecretsView(APIView):
                 )
 
             created_secrets.append(secret_obj)
+
+        log_secret_events_bulk(
+            created_secrets,
+            SecretEvent.CREATE,
+            request.auth["org_member"],
+            request.auth["service_token"],
+            request.auth["service_account_token"],
+            ip_address,
+            user_agent,
+        )
 
         # Pre-compute crypto context for N+1 optimization
         crypto_context = get_environment_crypto_context(env)
@@ -923,16 +931,6 @@ class PublicSecretsView(APIView):
 
             secret_obj.save()
 
-            log_secret_event(
-                secret_obj,
-                SecretEvent.UPDATE,
-                request.auth["org_member"],
-                request.auth["service_token"],
-                request.auth["service_account_token"],
-                ip_address,
-                user_agent,
-            )
-
             # If the request is authenticated as a user and an override is supplied
             if request.auth["org_member"] and "override" in secret:
                 PersonalSecret.objects.update_or_create(
@@ -946,6 +944,16 @@ class PublicSecretsView(APIView):
                 )
 
             updated_secrets.append(secret_obj)
+
+        log_secret_events_bulk(
+            updated_secrets,
+            SecretEvent.UPDATE,
+            request.auth["org_member"],
+            request.auth["service_token"],
+            request.auth["service_account_token"],
+            ip_address,
+            user_agent,
+        )
 
         # Pre-compute crypto context for N+1 optimization
         crypto_context = get_environment_crypto_context(env)
@@ -976,26 +984,30 @@ class PublicSecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"])
+        secrets_to_delete = Secret.objects.filter(
+            id__in=request_body["secrets"]
+        ).prefetch_related('tags')
 
         for secret in secrets_to_delete:
             if not Secret.objects.filter(id=secret.id).exists():
                 return JsonResponse({"error": "Secret does not exist"}, status=404)
 
+        deleted_secrets = []
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
             secret.deleted_at = timezone.now()
             secret.save()
+            deleted_secrets.append(secret)
 
-            log_secret_event(
-                secret,
-                SecretEvent.DELETE,
-                request.auth["org_member"],
-                request.auth["service_token"],
-                request.auth["service_account_token"],
-                ip_address,
-                user_agent,
-            )
+        log_secret_events_bulk(
+            deleted_secrets,
+            SecretEvent.DELETE,
+            request.auth["org_member"],
+            request.auth["service_token"],
+            request.auth["service_account_token"],
+            ip_address,
+            user_agent,
+        )
 
         return Response(
             {"message": f"Deleted {len(secrets_to_delete)} secrets"},
