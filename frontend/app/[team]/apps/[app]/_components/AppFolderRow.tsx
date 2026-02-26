@@ -32,7 +32,7 @@ const AppFolderRowBase = ({ appFolder, pathname }: AppFolderRowProps) => {
                 open ? 'font-bold' : 'font-medium'
               )}
             >
-              <FaFolder className="text-emerald-500" />
+              <FaFolder className="text-amber-500" />
               {fullPath}
               <FaChevronRight
                 className={clsx(

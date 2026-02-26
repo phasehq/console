@@ -29,7 +29,7 @@ const SecretFolderRowComponent = (props: { folder: SecretFolderType; handleDelet
         className="py-1 px-2 flex items-center justify-between w-full gap-8 text-lg group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease rounded-sm group"
       >
         <div className="flex items-center gap-3">
-          <FaFolder className="text-emerald-500" /> {folder.name}
+          <FaFolder className="text-amber-500" /> {folder.name}
         </div>
 
         <div className="grid grid-cols-2 gap-8 text-neutral-500 text-sm w-80">

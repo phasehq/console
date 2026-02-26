@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fa'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
 import { Button } from '@/components/common/Button'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
@@ -26,6 +26,9 @@ import { arraysEqual } from '@/utils/crypto'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
+import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
+import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
+import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 
 const INPUT_BASE_STYLE =
   'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
@@ -49,6 +52,7 @@ const EnvSecretComponent = ({
   updateEnvValue,
   addEnvValue,
   deleteEnvValue,
+  currentSecretKey,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
@@ -64,6 +68,7 @@ const EnvSecretComponent = ({
   updateEnvValue: (id: string, envId: string, value: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
+  currentSecretKey?: string
 }) => {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -75,6 +80,27 @@ const EnvSecretComponent = ({
   const [showValue, setShowValue] = useState<boolean>(
     valueIsNew || !serverEnvSecret || isEmptyValue || false
   )
+
+  // Secret reference autocomplete
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const handleValueChange = useCallback(
+    (v: string) => updateEnvValue(appSecretId, clientEnvSecret.env.id!, v),
+    [updateEnvValue, appSecretId, clientEnvSecret.env.id]
+  )
+
+  const autocomplete = useSecretReferenceAutocomplete({
+    value: clientEnvSecret.secret?.value ?? '',
+    isRevealed: showValue,
+    textareaRef,
+    onChange: handleValueChange,
+    currentSecretKey,
+  })
+
+  const secretValue = clientEnvSecret.secret?.value ?? ''
+  const highlightContent =
+    showValue && secretValue.includes('${') ? (
+      <SecretReferenceHighlight value={secretValue} />
+    ) : undefined
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
@@ -218,17 +244,33 @@ const EnvSecretComponent = ({
                 </div>
               )}
               <MaskedTextarea
+                ref={textareaRef}
                 className={clsx(
                   INPUT_BASE_STYLE,
                   inputTextColor(),
                   'rounded-sm focus:outline-none py-2'
                 )}
                 value={clientEnvSecret.secret.value}
-                onChange={(v) => updateEnvValue(appSecretId, clientEnvSecret.env.id!, v)}
+                onChange={(v) => {
+                  handleValueChange(v)
+                  autocomplete.handleChange()
+                }}
+                onKeyDown={autocomplete.handleKeyDown}
+                onSelect={autocomplete.handleSelect}
+                onBlur={autocomplete.handleBlur}
+                onFocus={autocomplete.handleFocus}
                 isRevealed={showValue}
                 expanded={true}
+                highlightContent={highlightContent}
               />
             </div>
+            <ReferenceAutocompleteDropdown
+              suggestions={autocomplete.suggestions}
+              activeIndex={autocomplete.activeIndex}
+              onSelect={autocomplete.acceptSuggestion}
+              onNavigate={autocomplete.navigateToSuggestion}
+              visible={autocomplete.isOpen}
+            />
             {clientEnvSecret.secret !== null && (
               <div className="flex items-center pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
                 <Button variant="outline" onClick={toggleShowValue}>
@@ -260,6 +302,7 @@ const areEnvSecretEqual = (
     prev.appSecretId === next.appSecretId &&
     prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
     prev.sameAsProd === next.sameAsProd &&
+    prev.currentSecretKey === next.currentSecretKey &&
     prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
     (p?.id ?? null) === (n?.id ?? null) &&
     (p?.value ?? '') === (n?.value ?? '') &&
@@ -547,6 +590,7 @@ const AppSecretRowComponent = ({
                         updateEnvValue={updateValue}
                         addEnvValue={addEnvValue}
                         deleteEnvValue={deleteEnvValue}
+                        currentSecretKey={clientAppSecret.key}
                       />
                     ))}
                   </div>
