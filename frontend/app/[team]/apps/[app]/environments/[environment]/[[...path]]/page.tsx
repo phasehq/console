@@ -82,6 +82,15 @@ import { CreateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/Creat
 import { DynamicSecretRow } from '@/ee/components/secrets/dynamic/DynamicSecretRow'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
+import {
+  ReferenceContext,
+  ReferenceValidationError,
+  secretIdKey,
+  validateSecretReferences,
+} from '@/utils/secretReferences'
+import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
+import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 
 export default function EnvironmentPath({
   params,
@@ -114,6 +123,8 @@ export default function EnvironmentPath({
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
 
   const [sort, setSort] = useState<SortOption>('-created')
 
@@ -199,6 +210,8 @@ export default function EnvironmentPath({
 
   useWarnIfUnsavedChanges(unsavedChanges)
 
+  const { orgApps: allOrgApps } = useOrgSecretKeys()
+
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
       appId: params.app,
@@ -220,6 +233,79 @@ export default function EnvironmentPath({
     return data?.folders ?? []
   }, [data?.folders])
 
+  const environment = data?.appEnvironments[0] as EnvironmentType
+
+  const referenceContext: ReferenceContext = useMemo(() => {
+    const secretKeys = clientSecrets.map((s) => s.key).filter((k) => k !== '')
+
+    const appName = environment?.app?.name
+    const currentAppData = allOrgApps.find((a) => a.name.toLowerCase() === appName?.toLowerCase())
+
+    const envSecretKeys: Record<string, string[]> = {
+      ...(currentAppData?.envSecretKeys ?? {}),
+    }
+    if (environment?.name) {
+      envSecretKeys[environment.name.toLowerCase()] = secretKeys
+    }
+
+    const envNames = (appEnvsData?.appEnvironments ?? []).map((e: EnvironmentType) => e.name)
+
+    const localFolderPaths = folders.map((f: SecretFolderType) =>
+      `${f.path}/${f.name}`.replace(/^\/+/, '')
+    )
+    const orgFolderPaths = Object.keys(currentAppData?.folderKeys ?? {})
+    const folderPaths = [...new Set([...localFolderPaths, ...orgFolderPaths])]
+
+    const folderSecretKeys = currentAppData?.folderKeys ?? {}
+    const envRootKeys: Record<string, string[]> = {
+      ...(currentAppData?.envRootKeys ?? {}),
+    }
+    // Override current env with client-side root keys when viewing root
+    if (environment?.name && secretPath === '/') {
+      envRootKeys[environment.name.toLowerCase()] = secretKeys
+    }
+
+    const orgApps = allOrgApps.filter((a) => a.name.toLowerCase() !== appName?.toLowerCase())
+
+    const deletedKeys = clientSecrets
+      .filter((s) => secretsToDelete.includes(s.id))
+      .map((s) => s.key)
+
+    // Build env ID mapping for navigation
+    const envIds: Record<string, string> = {}
+    for (const env of appEnvsData?.appEnvironments ?? []) {
+      envIds[(env as EnvironmentType).name.toLowerCase()] = (env as EnvironmentType).id
+    }
+
+    const secretIdLookup: Record<string, string> = {
+      ...(currentAppData?.secretIdLookup ?? {}),
+    }
+    // Override with client-side secret IDs for current env (includes newly decrypted secrets)
+    if (environment?.name) {
+      for (const s of clientSecrets) {
+        if (s.id && !s.id.startsWith('new-')) {
+          secretIdLookup[secretIdKey(environment.name, s.path || '/', s.key)] = s.id
+        }
+      }
+    }
+
+    return {
+      teamSlug: params.team,
+      appId: params.app,
+      envId: params.environment,
+      envIds,
+      secretIdLookup,
+      secretKeys,
+      envSecretKeys,
+      envRootKeys,
+      envNames,
+      folderPaths,
+      folderSecretKeys,
+      orgApps,
+      deletedKeys,
+    }
+  }, [clientSecrets, environment, appEnvsData, allOrgApps, folders, secretsToDelete, params])
+
   const savingAndFetching = isLoading || loading
 
   const [bulkProcessSecrets] = useMutation(BulkProcessSecrets)
@@ -231,7 +317,6 @@ export default function EnvironmentPath({
     return `/${params.team}/apps/${params.app}/environments/${env.id}${secretPath}`
   }
 
-  const environment = data?.appEnvironments[0] as EnvironmentType
   //const dynamicSecrets: DynamicSecretType[] = data?.dynamicSecrets ?? []
 
   const envLinks =
@@ -575,10 +660,39 @@ export default function EnvironmentPath({
       return false
     }
 
+    // Validate secret references
+    const activeSecrets = clientSecrets
+      .filter((s) => !secretsToDelete.includes(s.id))
+      .map((s) => ({
+        key: s.key,
+        envs: [
+          {
+            env: { id: environment.id, name: environment.name },
+            secret: { value: s.value },
+          },
+        ],
+      }))
+    const refErrors = validateSecretReferences(activeSecrets, [], referenceContext, secretsToDelete)
+    if (refErrors.length > 0) {
+      setRefWarnings(refErrors)
+      refWarningDialogRef.current?.openModal()
+      setIsloading(false)
+      return false
+    }
+
     await handleBulkUpdateSecrets()
 
     setTimeout(() => setIsloading(false), 500)
 
+    toast.success('Changes successfully deployed.')
+  }
+
+  const handleSaveWithBrokenRefs = async () => {
+    refWarningDialogRef.current?.closeModal()
+    setRefWarnings([])
+    setIsloading(true)
+    await handleBulkUpdateSecrets()
+    setTimeout(() => setIsloading(false), 500)
     toast.success('Changes successfully deployed.')
   }
 
@@ -918,6 +1032,7 @@ export default function EnvironmentPath({
   }
 
   return (
+    <SecretReferenceContext.Provider value={referenceContext}>
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
         <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
@@ -1062,6 +1177,12 @@ export default function EnvironmentPath({
               ref={importDialogRef}
             />
 
+            <BrokenReferencesDialog
+              ref={refWarningDialogRef}
+              warnings={refWarnings}
+              onSaveAnyway={handleSaveWithBrokenRefs}
+            />
+
             {!noSecrets && (
               <div className="flex items-center w-full">
                 <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
@@ -1174,5 +1295,6 @@ export default function EnvironmentPath({
         </div>
       )}
     </div>
+    </SecretReferenceContext.Provider>
   )
 }
