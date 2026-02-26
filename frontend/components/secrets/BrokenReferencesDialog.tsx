@@ -33,12 +33,12 @@ export const BrokenReferencesDialog = forwardRef<
               key={i}
               className="p-2 rounded bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700"
             >
-              <div className="font-mono text-xs">
-                <span className="font-semibold">{err.secretKey}</span>
+              <div className="text-xs">
+                <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">{err.secretKey}</span>
                 <span className="text-neutral-500"> in {err.envName}</span>
               </div>
-              <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
-                <span>{err.reference}</span>: {err.error}
+              <div className="text-xs text-neutral-600 dark:text-neutral-400">
+                <span className="font-mono">{err.reference}</span>: {err.error}
               </div>
             </li>
           ))}
