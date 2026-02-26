@@ -176,6 +176,10 @@ export const processEnvFile = (
         valueStr = parts.join('\n')
         // i now points at the line with the closing quote (or EOF)
       }
+      // Unescape escaped quotes and backslashes in double-quoted values
+      if (quote === '"') {
+        valueStr = valueStr.replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+      }
     } else {
       // Unquoted: strip inline comment (first #) if present
       const hashIdx = rest.indexOf('#')
@@ -240,6 +244,70 @@ export const duplicateKeysExist = (
   }
 
   return false // No duplicates
+}
+
+/**
+ * Formats a secret value for safe inclusion in a .env file.
+ * Wraps the value in quotes if it contains characters that would
+ * break parsing (e.g. #, newlines, leading quotes, or surrounding whitespace).
+ */
+export const formatEnvValue = (value: string): string => {
+  const needsQuoting =
+    value.includes('#') ||
+    value.includes('\n') ||
+    value.startsWith('"') ||
+    value.startsWith("'") ||
+    value !== value.trim()
+
+  if (!needsQuoting) return value
+
+  // Prefer double quotes; fall back to single if value contains "
+  if (!value.includes('"')) return `"${value}"`
+  if (!value.includes("'")) return `'${value}'`
+  // Value contains both quote types: escape inner \ and " before wrapping
+  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  return `"${escaped}"`
+}
+
+/**
+ * Exports an array of secrets as a downloadable .env file.
+ *
+ * @param secrets - The secrets to export
+ * @param appName - The application name (used in the filename)
+ * @param envName - The environment name (used in the filename)
+ * @param path - The secret path (used in the filename)
+ */
+export const exportToEnvFile = (
+  secrets: Pick<SecretType, 'key' | 'value' | 'comment'>[],
+  appName: string,
+  envName: string,
+  path: string = '/'
+) => {
+  const envContent = secrets
+    .map((secret) => {
+      const comment = secret.comment ? `#${secret.comment}\n` : ''
+      return `${comment}${secret.key}=${formatEnvValue(secret.value)}`
+    })
+    .join('\n')
+
+  const blob = new Blob([envContent], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+
+  const a = document.createElement('a')
+  a.href = url
+
+  if (path === '/') {
+    a.download = `${appName}.${envName.toLowerCase()}.env`
+  } else {
+    const formattedPath = path.toLowerCase().replace(/\//g, '.')
+    a.download = `${appName}.${envName.toLowerCase()}${formattedPath}.env`
+  }
+
+  document.body.appendChild(a)
+  a.click()
+
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 export const envFilePlaceholder = `# Paste your .env here

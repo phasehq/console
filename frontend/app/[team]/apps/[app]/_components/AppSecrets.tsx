@@ -791,7 +791,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               Collapse all
             </Button>
 
-            <div className="flex items-center gap-2 pl-2 border-l border-neutral-500/20">
+            <label className="flex items-center gap-2 pl-2 border-l border-neutral-500/20 cursor-pointer select-none">
               <Switch
                 checked={revealOnHover}
                 onChange={setRevealOnHover}
@@ -802,7 +802,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                   'relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset transition-colors'
                 )}
               >
-                <span className="sr-only">Reveal on hover</span>
                 <span
                   className={clsx(
                     revealOnHover ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500',
@@ -810,14 +809,11 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                   )}
                 />
               </Switch>
-              <span
-                className="flex items-center gap-1.5 text-sm text-neutral-500 cursor-pointer select-none"
-                onClick={() => setRevealOnHover(!revealOnHover)}
-              >
+              <span className="flex items-center gap-1.5 text-sm text-neutral-500">
                 <FaRegEye className={revealOnHover ? 'text-emerald-500' : ''} />
                 Reveal on hover
               </span>
-            </div>
+            </label>
           </div>
           <div className="flex justify-end pr-4 gap-4">
             <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
