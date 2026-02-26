@@ -156,7 +156,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
               return (
                 <motion.div key={env.id} layout layoutId={env.id} transition={{ duration: 0.2 }}>
                   <Card padding="p-3">
-                    <div className="group">
+                    <div className="group flex flex-col h-full">
                       {/* Stretched link makes the entire card clickable (disabled during reordering) */}
                       {!isReordering && (
                         <Link
@@ -204,7 +204,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                         </div>
                       </div>
                       {!isReordering && (
-                        <div className="flex items-center gap-1 text-xs text-emerald-500 mt-2">
+                        <div className="flex items-center gap-1 text-xs text-emerald-500 mt-auto pt-2">
                           Explore <FaArrowRight />
                         </div>
                       )}
