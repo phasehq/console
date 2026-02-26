@@ -449,12 +449,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
     // Validate secret references
     const activeSecrets = clientAppSecrets.filter((s) => !appSecretsToDelete.includes(s.id))
-    const refErrors = validateSecretReferences(
-      activeSecrets,
-      appEnvironments ?? [],
-      referenceContext,
-      appSecretsToDelete
-    )
+    const refErrors = validateSecretReferences(activeSecrets, referenceContext)
     if (refErrors.length > 0) {
       setRefWarnings(refErrors)
       refWarningDialogRef.current?.openModal()

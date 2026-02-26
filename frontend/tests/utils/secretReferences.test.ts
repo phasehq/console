@@ -840,16 +840,11 @@ describe('validateSecretReferences', () => {
       ],
     }))
 
-  const envs = [
-    { id: 'env-dev-id', name: 'Development' },
-    { id: 'env-stg-id', name: 'Staging' },
-  ]
-
   test('returns no errors for valid local references', () => {
     const secrets = makeSecrets([
       { key: 'CONN', envName: 'Development', value: '${DB_HOST}:${DB_PORT}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(0)
   })
 
@@ -857,7 +852,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'CONN', envName: 'Development', value: '${NONEXISTENT}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(1)
     expect(errors[0].secretKey).toBe('CONN')
     expect(errors[0].reference).toBe('${NONEXISTENT}')
@@ -869,7 +864,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'CONN', envName: 'Development', value: '${DB_HOST}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctxWithDeleted, [])
+    const errors = validateSecretReferences(secrets, ctxWithDeleted)
     expect(errors).toHaveLength(1)
     expect(errors[0].error).toContain('staged for deletion')
   })
@@ -878,7 +873,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'REF', envName: 'Development', value: '${staging.DB_HOST}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(0)
   })
 
@@ -886,7 +881,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'REF', envName: 'Development', value: '${nonexistent.DB_HOST}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(1)
     expect(errors[0].error).toContain('environment')
     expect(errors[0].error).toContain('does not exist')
@@ -896,7 +891,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'REF', envName: 'Development', value: '${staging.MISSING_KEY}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(1)
     expect(errors[0].error).toContain('does not exist in "staging"')
   })
@@ -905,7 +900,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'REF', envName: 'Development', value: '${OtherApp::development.OTHER_KEY}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(0)
   })
 
@@ -913,7 +908,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'REF', envName: 'Development', value: '${FakeApp::dev.KEY}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(1)
     expect(errors[0].error).toContain('app')
     expect(errors[0].error).toContain('does not exist')
@@ -923,7 +918,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'REF', envName: 'Development', value: '${OtherApp::fakeenv.KEY}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(1)
     expect(errors[0].error).toContain('environment')
     expect(errors[0].error).toContain('does not exist in app')
@@ -933,7 +928,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'REF', envName: 'Development', value: '${OtherApp::development.MISSING}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(1)
     expect(errors[0].error).toContain('does not exist in "OtherApp"')
   })
@@ -950,7 +945,7 @@ describe('validateSecretReferences', () => {
         ],
       },
     ]
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(0)
   })
 
@@ -961,7 +956,7 @@ describe('validateSecretReferences', () => {
         envs: [{ env: { id: 'env-1', name: 'Development' }, secret: null }],
       },
     ]
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(0)
   })
 
@@ -969,7 +964,7 @@ describe('validateSecretReferences', () => {
     const secrets = makeSecrets([
       { key: 'RAIL', envName: 'Development', value: '${{RAILWAY_VAR}}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(0)
   })
 
@@ -978,7 +973,7 @@ describe('validateSecretReferences', () => {
       { key: 'A', envName: 'Development', value: '${MISSING_1}' },
       { key: 'B', envName: 'Staging', value: '${MISSING_2}' },
     ])
-    const errors = validateSecretReferences(secrets, envs, ctx, [])
+    const errors = validateSecretReferences(secrets, ctx)
     expect(errors).toHaveLength(2)
     expect(errors[0].secretKey).toBe('A')
     expect(errors[1].secretKey).toBe('B')
