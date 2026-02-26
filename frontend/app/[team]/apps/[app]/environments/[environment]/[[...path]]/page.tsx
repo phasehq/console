@@ -672,7 +672,7 @@ export default function EnvironmentPath({
           },
         ],
       }))
-    const refErrors = validateSecretReferences(activeSecrets, [], referenceContext, secretsToDelete)
+    const refErrors = validateSecretReferences(activeSecrets, referenceContext)
     if (refErrors.length > 0) {
       setRefWarnings(refErrors)
       refWarningDialogRef.current?.openModal()

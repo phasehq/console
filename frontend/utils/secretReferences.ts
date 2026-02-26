@@ -761,9 +761,7 @@ function decomposePathAndKey(pathAndKey: string): { path: string; key: string } 
 
 export function validateSecretReferences(
   secrets: { key: string; envs: { env: { id?: string; name?: string }; secret: { value: string; stagedForDelete?: boolean } | null }[] }[],
-  _environments: { id: string; name: string }[],
-  context: ReferenceContext,
-  _deletedAppSecretIds: string[]
+  context: ReferenceContext
 ): ReferenceValidationError[] {
   const errors: ReferenceValidationError[] = []
 

@@ -55,6 +55,7 @@ export const ReferenceAutocompleteDropdown: React.FC<ReferenceAutocompleteDropdo
         ref={listRef}
         className="max-h-48 overflow-y-auto rounded-b-md bg-zinc-100 dark:bg-zinc-800 shadow-lg ring-1 ring-neutral-500/20 py-1"
         role="listbox"
+        aria-activedescendant={activeIndex >= 0 ? `ref-option-${activeIndex}` : undefined}
       >
         {suggestions.map((suggestion, index) => {
           const { icon, className: iconClass } = typeIcon[suggestion.type]
@@ -63,6 +64,7 @@ export const ReferenceAutocompleteDropdown: React.FC<ReferenceAutocompleteDropdo
           return (
             <li
               key={`${suggestion.insertText}-${index}`}
+              id={`ref-option-${index}`}
               ref={isActive ? activeItemRef : undefined}
               role="option"
               aria-selected={isActive}
