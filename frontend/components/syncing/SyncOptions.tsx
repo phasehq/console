@@ -90,7 +90,7 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
               <div className="p-4">
                 <div className="space-y-8 ">
                   <div>
-                    <h3 className="text-black dark:text-white text-2xl font-semibold">
+                    <h3 className="text-black dark:text-white text-lg font-semibold">
                       Create a new sync
                     </h3>
                     <div className="text-neutral-500">Select a service below to start syncing.</div>

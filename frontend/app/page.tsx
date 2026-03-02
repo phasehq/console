@@ -61,7 +61,7 @@ export default function Home() {
               <div className="flex justify-center">
                 <LogoWordMark className="w-32 fill-black dark:fill-white" />
               </div>
-              <p className="text-xl font-semibold text-neutral-500">Choose a workspace</p>
+              <p className="text-lg font-semibold text-neutral-500">Choose a workspace</p>
             </div>
             <div className="divide-y divide-neutral-500/40">
               {organisations!.map((org: OrganisationType) => (

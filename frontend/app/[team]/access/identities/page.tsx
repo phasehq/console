@@ -114,7 +114,7 @@ export default function IdentityPage() {
       {identities.length === 0 ? (
         <div className="space-y-8">
           <div>
-            <h3 className="text-black dark:text-white text-2xl font-semibold">
+            <h3 className="text-black dark:text-white text-lg font-semibold">
               Set up a new identity
             </h3>
             <div className="text-neutral-500">
@@ -143,7 +143,7 @@ export default function IdentityPage() {
       ) : (
         <div className="space-y-2">
           <div className="space-y-1">
-            <div className="text-xl font-semibold">External identities</div>
+            <div className="text-lg font-semibold">External identities</div>
             <div className="text-neutral-500">Manage identities used for external auth</div>
           </div>
           <div className="space-y-4">
@@ -175,7 +175,7 @@ export default function IdentityPage() {
                     return (
                       <tr key={idn.id} className="group">
                         <td className="text-zinc-900 dark:text-zinc-100 font-medium inline-flex items-center gap-2 break-word">
-                          <div className="text-2xl">
+                          <div className="text-xl">
                             <ProviderIcon providerId={providerInfo.iconId} />
                           </div>
                           {providerInfo.name}

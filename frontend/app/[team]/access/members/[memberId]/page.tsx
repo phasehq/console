@@ -152,7 +152,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <div className="flex items-center gap-4">
             <Avatar member={member} size="xl" />
             <div className="flex flex-col gap-1">
-              <h3 className="text-2xl font-semibold">
+              <h3 className="text-lg font-semibold">
                 {member.fullName || 'User'} {member.self && ' (You)'}{' '}
               </h3>
               <span className="text-neutral-500 text-sm">{member.email}</span>
@@ -182,7 +182,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
         <div className="pt-4 space-y-4 border-t border-neutral-500/40">
           <div>
-            <div className="text-xl font-semibold">Role</div>
+            <div className="text-lg font-semibold">Role</div>
             <div className="text-neutral-500">Manage the role for this member</div>
           </div>
           <div className="space-y-2">
@@ -205,7 +205,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <div className="pt-4 space-y-4 border-t border-neutral-500/40">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xl font-semibold">App Access</div>
+                <div className="text-lg font-semibold">App Access</div>
                 <div className="text-neutral-500">
                   Apps and Environments this member has access to
                 </div>
@@ -279,7 +279,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <div className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xl font-semibold">Network Access Policy</div>
+                <div className="text-lg font-semibold">Network Access Policy</div>
                 <div className="text-neutral-500">
                   Manage the network access policy for this Account
                 </div>
@@ -332,7 +332,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         {canViewTokensSection && (
           <div className="pt-4 space-y-4 border-t border-neutral-500/40">
             <div>
-              <div className="text-xl font-semibold">Personal Access Tokens</div>
+              <div className="text-lg font-semibold">Personal Access Tokens</div>
               <div className="text-neutral-500">Manage personal access tokens for this member</div>
             </div>
 
@@ -431,7 +431,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         {canDeleteMember && (
           <div className="pt-4 space-y-2 border-t border-neutral-500/40">
             <div>
-              <div className="text-xl font-semibold">Danger Zone</div>
+              <div className="text-lg font-semibold">Danger Zone</div>
               <div className="text-neutral-500">
                 This action is destructive and cannot be reversed
               </div>

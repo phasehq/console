@@ -247,7 +247,7 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
             setPlanType(index === 0 ? PlanTypeEnum.Pro : PlanTypeEnum.Enterprise)
           }
         >
-          <Tab.List className="flex justify-center gap-8 border-b border-neutral-500/40">
+          <Tab.List className="flex justify-center gap-4 border-b border-neutral-500/40">
             {activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr && (
               <Tab>
                 {({ selected }) => (

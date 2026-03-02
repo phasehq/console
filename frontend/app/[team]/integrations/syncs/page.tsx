@@ -157,7 +157,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
       {userCanReadIntegrations ? (
         <div className="space-y-4">
           <div className="border-b border-neutral-500/20 pb-4">
-            <h2 className="text-black dark:text-white text-xl font-medium">Syncs</h2>
+            <h2 className="text-black dark:text-white text-lg font-medium">Syncs</h2>
             <p className="text-neutral-500">View and manage secret syncs</p>
           </div>
 

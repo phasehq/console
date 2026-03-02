@@ -16,7 +16,7 @@ export const EditExternalIdentityDialog = ({ identity }: { identity: IdentityTyp
       case 'aws_iam':
         return (
           <div className="flex items-center gap-3">
-            <div className="text-2xl">
+            <div className="text-xl">
               <ProviderIcon providerId="aws" />
             </div>
             <div>

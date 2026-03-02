@@ -37,7 +37,7 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
   return (
     <div className="py-4">
       <div>
-        <div className="text-xl font-semibold">Access Tokens</div>
+        <div className="text-lg font-semibold">Access Tokens</div>
         <div className="text-neutral-500">Manage access tokens for this Service Account</div>
       </div>
 

@@ -172,7 +172,7 @@ export const CreateRenderSync = ({
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-1">
+        <div className="text-lg font-semibold text-black dark:text-white flex items-center gap-1">
           <SiRender />
           Render
         </div>
@@ -234,19 +234,19 @@ export const CreateRenderSync = ({
 
             <div className="flex justify-between items-center gap-4 py-8">
               <div className="border-b border-neutral-500/40 w-full"></div>
-              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
+              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
             </div>
 
             <div>
               <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-                <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 mb-4">
+                <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 mb-4">
                   {tabs.map((tab) => (
                     <Tab as={Fragment} key={tab.name}>
                       {({ selected }) => (
                         <div
                           className={clsx(
-                            'p-3 font-medium border-b focus:outline-none -mb-px',
+                            'p-2 text-xs font-medium border-b focus:outline-none -mb-px',
                             selected
                               ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
                               : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'

@@ -149,12 +149,12 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
       <div className="pt-4">
         <Tab.Group selectedIndex={tabIndex} onChange={handleTabChange}>
           {userCanCreateLockbox && (
-            <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+            <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
               <Tab as={Fragment}>
                 {({ selected }) => (
                   <div
                     className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold'
                         : ' border-transparent cursor-pointer'
@@ -168,7 +168,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                 {({ selected }) => (
                   <div
                     className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold'
                         : ' border-transparent cursor-pointer'

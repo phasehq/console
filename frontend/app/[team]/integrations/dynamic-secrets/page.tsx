@@ -79,7 +79,7 @@ export default function DynamicSecrets({ params }: { params: { team: string } })
       {userCanReadDynamicSecrets ? (
         <div className="space-y-4">
           <div className="border-b border-neutral-500/20 pb-2">
-            <h2 className="text-black dark:text-white text-xl font-medium">Dynamic Secrets</h2>
+            <h2 className="text-black dark:text-white text-lg font-medium">Dynamic Secrets</h2>
             <p className="text-neutral-500">View and manage dynamic secrets</p>
           </div>
 

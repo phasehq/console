@@ -64,7 +64,7 @@ export default function Members({ params }: { params: { team: string; app: strin
   return (
     <div className="w-full space-y-6 text-black dark:text-white">
       <div className="px-4">
-        <h2 className="text-xl font-bold">Members</h2>
+        <h2 className="text-lg font-bold">Members</h2>
         <div className="text-neutral-500">Manage access for human users in this App</div>
       </div>
       {userCanReadAppMembers ? (

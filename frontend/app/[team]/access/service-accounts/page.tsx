@@ -50,7 +50,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
     <section className="overflow-y-auto">
       <div className="w-full space-y-4 text-zinc-900 dark:text-zinc-100">
         <div>
-          <h2 className="text-xl font-semibold">{params.team} Service Accounts</h2>
+          <h2 className="text-lg font-semibold">{params.team} Service Accounts</h2>
           <p className="text-neutral-500">Manage service accounts.</p>
         </div>
         <div className="space-y-4">

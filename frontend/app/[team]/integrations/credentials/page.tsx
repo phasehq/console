@@ -84,7 +84,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
       {userCanReadIntegrationCredentials ? (
         <div className="space-y-4">
           <div className="border-b border-neutral-500/20 pb-4">
-            <h2 className="text-black dark:text-white text-xl font-medium">
+            <h2 className="text-black dark:text-white text-lg font-medium">
               Third-party integration credentials
             </h2>
             <p className="text-neutral-500">Manage stored credentials for third party services</p>

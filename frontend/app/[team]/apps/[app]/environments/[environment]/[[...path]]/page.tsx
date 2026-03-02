@@ -920,16 +920,16 @@ export default function EnvironmentPath({
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
-        <div className="flex flex-col py-4 px-8 bg-zinc-200 dark:bg-zinc-900">
-          <div className="flex items-center gap-8 justify-between w-full">
-            <div className="flex items-center gap-8">
+        <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
+          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
+            <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
               {envLinks.length > 1 ? (
                 <Menu as="div" className="relative group">
                   {({ open }) => (
                     <>
                       <Menu.Button as={Fragment}>
                         <div className="cursor-pointer flex items-center gap-2">
-                          <h3 className="font-semibold text-xl">{environment.name}</h3>
+                          <h3 className="font-semibold text-lg">{environment.name}</h3>
                           <FaChevronDown
                             className={clsx(
                               'transition transform ease',
@@ -975,7 +975,7 @@ export default function EnvironmentPath({
                   )}
                 </Menu>
               ) : (
-                <h3 className="font-semibold text-2xl">{environment.name}</h3>
+                <h3 className="font-semibold text-lg">{environment.name}</h3>
               )}
               <div className="flex items-center gap-2">
                 <FolderBreadcrumbLinks path={params.path} />
@@ -1000,7 +1000,7 @@ export default function EnvironmentPath({
                   </div>
                   <input
                     placeholder="Search keys or values"
-                    className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
+                    className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />

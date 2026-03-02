@@ -104,7 +104,7 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
   return (
     <div className="p-4 space-y-6">
       <div>
-        <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
+        <div className="text-lg font-semibold text-black dark:text-white flex items-center gap-2">
           <ProviderIcon providerId="hashicorp_nomad" />
           Hashicorp Nomad
         </div>
@@ -168,7 +168,7 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
 
             <div className="flex justify-between items-center gap-4 py-4">
               <div className="border-b border-neutral-500/40 w-full"></div>
-              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
+              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
             </div>
 

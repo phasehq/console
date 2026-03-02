@@ -150,7 +150,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
       <div className="flex items-center w-full justify-between p-2 group bg-neutral-100 dark:bg-neutral-800 rounded-lg ring-1 ring-inset ring-neutral-500/20">
         <div className="grid grid-cols-3 gap-8 w-full">
           <div className="flex items-center gap-4">
-            <FaUserShield className="text-neutral-500 text-2xl" />
+            <FaUserShield className="text-neutral-500 text-xl" />
             <div className="space-y-0">
               <div className="text-lg font-medium">{token.name}</div>
               <div className="flex items-center gap-8 text-sm text-neutral-500">
@@ -178,7 +178,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
       <section className="overflow-y-auto max-w-screen-xl">
         <div className="w-full space-y-8 py-8 text-black dark:text-white">
           <div className="space-y-1">
-            <h2 className="text-xl font-semibold">Personal Access Tokens</h2>
+            <h2 className="text-lg font-semibold">Personal Access Tokens</h2>
             <p className="text-neutral-500">
               Tokens used to authenticate your user account with the CLI, SDKs or API from personal
               devices. Used for development and manual configuration.
@@ -201,7 +201,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
                 </div>
               ) : (
                 <div className="p-40 flex flex-col items-center justify-center border border-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
-                  <div className="text-black dark:text-white font-semibold text-2xl">No tokens</div>
+                  <div className="text-black dark:text-white font-semibold text-xl">No tokens</div>
                   <div className="text-neutral-500 text-lg">
                     You haven&apos;t created any Personal Accesss Tokens yet. Create one to get
                     started.

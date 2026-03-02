@@ -76,7 +76,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
     return (
       <div className="py-8">
         {/* Server-side key management is required state */}
-        <div className="text-xl font-semibold mb-2">External Identities</div>
+        <div className="text-lg font-semibold mb-2">External Identities</div>
         <div className="text-neutral-500 mb-4">
           Manage which external identities are trusted for this account
         </div>
@@ -99,7 +99,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
     <div className="py-4">
       <div className="space-y-2">
         <div className="space-y-1">
-          <div className="text-xl font-semibold">External Identities</div>
+          <div className="text-lg font-semibold">External Identities</div>
           <div className="flex items-center justify-between">
             <div className="text-neutral-500">
               Manage which external identities are trusted for this account
@@ -193,7 +193,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
               <tbody className="divide-y divide-zinc-500/20">
                 {filteredIdentities.map((idn: any) => (
                   <tr key={idn.id} className="group text-zinc-900 dark:text-zinc-100">
-                    <td className="font-medium inline-flex items-center gap-1 break-word text-2xl">
+                    <td className="font-medium inline-flex items-center gap-1 break-word text-xl">
                       <ProviderIcon providerId="aws" />
                     </td>
                     <td className="px-6 py-2">

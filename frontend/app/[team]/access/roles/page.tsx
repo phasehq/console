@@ -39,7 +39,7 @@ export default function Roles({ params }: { params: { team: string } }) {
     <section className="overflow-y-auto">
       <div className="w-full space-y-4 text-black dark:text-white">
         <div className="space-y-1">
-          <h2 className="text-xl font-semibold">{params.team} Roles</h2>
+          <h2 className="text-lg font-semibold">{params.team} Roles</h2>
           <p className="text-neutral-500">Manage organisation roles.</p>
         </div>
         <div className="space-y-4">

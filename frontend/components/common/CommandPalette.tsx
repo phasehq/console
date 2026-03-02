@@ -391,7 +391,7 @@ const CommandPalette: React.FC = () => {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="w-full max-w-xl h-9 flex items-center gap-2 rounded-full bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm pl-4 pr-3 text-sm text-zinc-500  ring-1 ring-zinc-900/10 dark:ring-white/10 ring-inset transition hover:ring-zinc-900/20 dark:hover:ring-white/20 ui-not-focus-visible:outline-none"
+        className="w-full max-w-xl h-8 flex items-center gap-2 rounded-full bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm pl-3 pr-2.5 text-xs text-zinc-500  ring-1 ring-zinc-900/10 dark:ring-white/10 ring-inset transition hover:ring-zinc-900/20 dark:hover:ring-white/20 ui-not-focus-visible:outline-none"
       >
         <div>
           <FaSearch className="h-4 w-4 flex-shrink-0" />

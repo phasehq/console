@@ -159,8 +159,8 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
   return (
     <div className="pt-4 space-y-6">
       <div>
-        <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
-          <SiVercel className="text-2xl" />
+        <div className="text-lg font-semibold text-black dark:text-white flex items-center gap-2">
+          <SiVercel className="text-xl" />
           Vercel
         </div>
         <div className="text-neutral-500 text-sm">Sync an environment with Vercel.</div>
@@ -222,7 +222,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
 
             <div className="flex justify-between items-center gap-4 py-4">
               <div className="border-b border-neutral-500/40 w-full"></div>
-              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
+              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
             </div>
 

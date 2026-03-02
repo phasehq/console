@@ -143,7 +143,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
       </div>
       <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
         <div className="flex items-end justify-between">
-          <div className="text-2xl font-semibold flex items-center gap-2">
+          <div className="text-lg font-semibold flex items-center gap-2">
             <Avatar serviceAccount={account} size="xl" />
             <div>
               <h3 className="relative group w-full max-w-md">
@@ -197,7 +197,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         <div className="py-4 space-y-4">
           {/* Header Section */}
           <div>
-            <div className="text-xl font-semibold">Role</div>
+            <div className="text-lg font-semibold">Role</div>
             <div className="text-neutral-500">Manage the role for this account</div>
           </div>
 
@@ -218,7 +218,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         <div className="py-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xl font-semibold">App Access</div>
+              <div className="text-lg font-semibold">App Access</div>
               <div className="text-neutral-500">
                 Manage the Apps and Environments that this account has access to
               </div>
@@ -326,7 +326,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           <div className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xl font-semibold">Network Access Policy</div>
+                <div className="text-lg font-semibold">Network Access Policy</div>
                 <div className="text-neutral-500">
                   Manage the network access policy for this Account
                 </div>
@@ -382,7 +382,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         {userCanDeleteSA && (
           <div className="space-y-2 py-4">
             <div>
-              <div className="text-xl font-semibold">Danger Zone</div>
+              <div className="text-lg font-semibold">Danger Zone</div>
               <div className="text-neutral-500">
                 These actions are destructive and cannot be reversed
               </div>

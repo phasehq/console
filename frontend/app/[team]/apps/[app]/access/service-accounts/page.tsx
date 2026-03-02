@@ -59,7 +59,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
   return (
     <div className="w-full space-y-6 text-black dark:text-white">
       <div className="px-4">
-        <h2 className="text-xl font-bold">Service Accounts</h2>
+        <h2 className="text-lg font-bold">Service Accounts</h2>
         <div className="text-neutral-500">Manage access for service accounts in this App</div>
       </div>
       {userCanReadAppSA ? (
