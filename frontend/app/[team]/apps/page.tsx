@@ -55,7 +55,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
 
   return (
     <div
-      className="w-full p-3 sm:p-4 lg:p-6 text-black dark:text-white flex flex-col gap-3 sm:gap-4 overflow-y-auto h-[calc(100vh-64px)]"
+      className="w-full p-3 sm:p-4 lg:p-6 text-black dark:text-white flex flex-col gap-3 sm:gap-4 overflow-y-auto h-[calc(100vh-56px)]"
     >
       <div className="space-y-1">
         <h1 className="text-lg sm:text-xl font-bold capitalize col-span-4">Apps</h1>

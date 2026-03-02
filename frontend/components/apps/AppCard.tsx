@@ -161,7 +161,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
                 index === 4 && 'z-[4]'
               )}
             >
-              <Avatar showTitle={false} member={member!} size="md" />
+              <Avatar showTitle={false} member={member!} size="xs" />
             </div>
           ))}
           {surplusMemberCount > 0 && (
@@ -192,7 +192,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
                 index === 4 && 'z-[4]'
               )}
             >
-              <Avatar serviceAccount={account ?? undefined} size="md" />
+              <Avatar serviceAccount={account ?? undefined} size="xs" />
             </div>
           ))}
           {surplusServiceAccountsCount > 0 && (

@@ -111,10 +111,10 @@ const Sidebar = () => {
     const OrgLabel = ({ open }: { open?: boolean }) => (
       <div
         className={clsx(
-          'p-2 text-neutral-500 flex items-center transition-colors ease rounded-lg relative',
+          'text-neutral-500 flex items-center transition-colors ease rounded-lg relative',
           collapsed
-            ? `justify-center mb-[22px] ${planStyle()}`
-            : 'justify-between w-full bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10'
+            ? `p-1 justify-center mb-[22px] ${planStyle()}`
+            : 'p-2 justify-between w-full bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10'
         )}
       >
         {collapsed ? (
@@ -252,7 +252,7 @@ const Sidebar = () => {
   return (
     <div
       className={clsx(
-        'h-screen flex flex-col pt-[64px] transition-all duration-300',
+        'h-screen flex flex-col pt-14 transition-all duration-300',
         collapsed ? 'w-16' : 'w-64'
       )}
     >
@@ -273,16 +273,16 @@ const Sidebar = () => {
         </div>
 
         {/* Bottom section with collapse/expand button */}
-        <div className="p-3 w-full">
+        <div className="p-2 w-full">
           <button
             onClick={() => setUserPreference(collapsed ? 'expanded' : 'collapsed')}
-            className="flex items-center justify-center p-2 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
+            className="flex items-center justify-center p-1.5 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? (
-              <FaAngleDoubleRight className="text-lg" />
+              <FaAngleDoubleRight className="text-sm" />
             ) : (
-              <FaAngleDoubleLeft className="text-lg" />
+              <FaAngleDoubleLeft className="text-sm" />
             )}
           </button>
         </div>

@@ -110,7 +110,7 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_HOST_AUTH_METHOD: "trust"
     volumes:
-      - phase-postgres-data-dev:/var/lib/postgresql/data
+      - phase-postgres-data-dev-legacy:/var/lib/postgresql/data
     networks:
       - phase-net-dev
     healthcheck:
@@ -127,7 +127,7 @@ services:
       - phase-net-dev
 
 volumes:
-  phase-postgres-data-dev:
+  phase-postgres-data-dev-legacy:
     driver: local
 
 networks:

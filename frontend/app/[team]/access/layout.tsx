@@ -59,7 +59,7 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100vh-64px)]"
+      className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100vh-56px)]"
     >
       <div className="flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6">
         <h1 className="text-lg sm:text-xl font-bold">Access</h1>

@@ -48,7 +48,7 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 pb-0 sm:pb-0 lg:pb-0 text-black dark:text-white flex flex-col overflow-y-auto space-y-3 sm:space-y-4 lg:space-y-6 h-[calc(100vh-64px)]"
+      className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 pb-0 sm:pb-0 lg:pb-0 text-black dark:text-white flex flex-col overflow-y-auto space-y-3 sm:space-y-4 lg:space-y-6 h-[calc(100vh-56px)]"
     >
       <div>
         <h1 className="text-base sm:text-lg font-bold">Access</h1>

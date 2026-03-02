@@ -101,7 +101,7 @@ export const NavBar = () => {
   }, [navigationContext, tab])
 
   return (
-    <header className="pr-3 sm:pr-4 lg:pr-6 pl-3 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-xs bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
+    <header className="pr-3 sm:pr-4 lg:pr-6 pl-3 w-full h-14 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-xs bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
       <BreadCrumbs />
 
       <div className="flex justify-center w-full">

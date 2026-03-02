@@ -51,7 +51,7 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto space-y-3 h-[calc(100vh-64px)]"
+      className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto space-y-3 h-[calc(100vh-56px)]"
     >
       <div className="space-y-1">
         <h1 className="text-lg sm:text-xl font-semibold">{params.team} Integrations</h1>
