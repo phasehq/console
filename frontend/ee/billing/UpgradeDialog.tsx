@@ -240,7 +240,7 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
 
   if (billingPeriod === null)
     return (
-      <div className="space-y-8">
+      <div className="space-y-6">
         <Tab.Group
           selectedIndex={planType === PlanTypeEnum.Pro ? 0 : 1}
           onChange={(index) =>

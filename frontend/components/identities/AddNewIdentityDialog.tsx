@@ -55,7 +55,7 @@ export const AddNewIdentityDialog = forwardRef<
             : 'Select a provider below to set up a new identity'}
         </div>
         {!selectedProvider ? (
-          <div className="grid grid-cols-1 gap-8">
+          <div className="grid grid-cols-1 gap-6">
             <ProviderCards onProviderSelect={handleProviderSelect} />
           </div>
         ) : selectedProvider === 'aws_iam' ? (

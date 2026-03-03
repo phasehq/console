@@ -49,8 +49,8 @@ export const RemoveAccountConfirmDialog = ({
           </>
         }
       >
-        <div className="space-y-6 py-4">
-          <p className="text-neutral-500 inline-flex gap-2">
+        <div className="space-y-6 pt-4">
+          <p className="text-neutral-500 text-sm inline-flex gap-2">
             Are you sure you want to remove{' '}
             <div className="text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
               <Avatar serviceAccount={account} size="sm" />

@@ -150,7 +150,9 @@ const CreateServiceAccountTokenDialog = forwardRef(
         onClose={reset}
       >
         <div className="space-y-4 divide-y divide-neutral-500/40">
-          <div className="text-neutral-500 py-4">Create a new token for this service account</div>
+          <div className="text-neutral-500 text-sm py-1">
+            Create a new token for this service account
+          </div>
 
           {cliSAToken ? (
             <div className="space-y-6">
@@ -278,7 +280,7 @@ const CreateServiceAccountTokenDialog = forwardRef(
               </Tab.Group>
             </div>
           ) : (
-            <form className="space-y-6 py-4" onSubmit={handleCreateNewSAToken}>
+            <form className="space-y-6 pt-4" onSubmit={handleCreateNewSAToken}>
               <div className="space-y-2 w-full">
                 <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">
                   Token name
@@ -310,7 +312,7 @@ const CreateServiceAccountTokenDialog = forwardRef(
                     ))}
                   </div>
                 </RadioGroup>
-                <span className="text-sm text-neutral-500">{humanReadableExpiry(expiry)}</span>
+                <span className="text-xs text-neutral-500">{humanReadableExpiry(expiry)}</span>
               </div>
 
               <div className="flex items-center justify-between gap-4">

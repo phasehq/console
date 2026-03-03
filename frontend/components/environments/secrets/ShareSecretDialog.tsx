@@ -245,7 +245,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                         ></textarea>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-8">
+                      <div className="grid grid-cols-3 gap-6">
                         <div className="col-span-2">
                           <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
                             <RadioGroup.Label as={Fragment}>

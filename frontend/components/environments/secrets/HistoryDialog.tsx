@@ -215,11 +215,11 @@ export const HistoryDialog = ({
                       </Button>
                     </Dialog.Title>
 
-                    <div className="space-y-8 py-4">
+                    <div className="space-y-6 py-4">
                       <div className="max-h-[800px] overflow-y-auto px-2">
                         <div className="space-y-4 pb-4 border-l border-zinc-300 dark:border-zinc-700">
                           {secretHistory?.map((historyItem, index) => (
-                            <div key={historyItem!.timestamp} className="pb-8 space-y-2">
+                            <div key={historyItem!.timestamp} className="pb-6 space-y-2">
                               <div className="flex flex-row items-center gap-2 -ml-1">
                                 <span
                                   className={clsx(

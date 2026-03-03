@@ -117,7 +117,7 @@ const GenericDialog = forwardRef(
                 >
                   <Dialog.Panel
                     className={clsx(
-                      'w-full transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-5 text-left align-middle shadow-xl transition-all',
+                      'w-full transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-4 text-left align-middle shadow-xl transition-all',
                       sizeClass
                     )}
                   >

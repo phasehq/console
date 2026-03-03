@@ -124,7 +124,7 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
       onClose={handleClose}
     >
       <div className="space-y-6">
-        <p className="text-neutral-500 pt-4">
+        <p className="text-neutral-500 text-sm pt-4">
           Are you sure you want to delete this dynamic secret? This will delete the following
           secrets from your environment:
           <ul className="pt-2">
@@ -141,7 +141,7 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
 
         {activeLeases.length > 0 && (
           <div>
-            <p className="text-red-400 py-4 text-base">
+            <p className="text-red-400 py-4 text-sm">
               Warning: This dynamic secret has{' '}
               <span className="font-semibold">{activeLeases.length}</span> active lease
               {`${activeLeases.length !== 1 ? 's' : ''}`} which will immediately be revoked:

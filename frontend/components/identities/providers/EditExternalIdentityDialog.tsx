@@ -46,7 +46,7 @@ export const EditExternalIdentityDialog = ({ identity }: { identity: IdentityTyp
         </>
       }
     >
-      <div className="pt-6">
+      <div className="pt-4">
         {identity.provider === 'aws_iam' && (
           <AwsIamIdentityForm
             organisationId={organisation?.id || ''}

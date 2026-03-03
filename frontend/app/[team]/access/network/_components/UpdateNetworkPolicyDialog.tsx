@@ -76,7 +76,7 @@ export const UpdateNetworkAccessPolicyDialog = ({
         </>
       }
     >
-      <div className="text-neutral-500">Edit the allow-list of IP addresses or CIDR ranges</div>
+      <div className="text-neutral-500 text-sm">Edit the allow-list of IP addresses or CIDR ranges</div>
 
       <NetworkAccessPolicyForm
         initialName={policy.name}

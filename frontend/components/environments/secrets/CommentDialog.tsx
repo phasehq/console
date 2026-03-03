@@ -51,7 +51,7 @@ export const CommentDialog = (props: {
         }
         buttonProps={{ tabIndex: -1 }}
       >
-        <div className="py-4 ph-no-capture">
+        <div className="pt-4 ph-no-capture">
           <textarea
             rows={5}
             value={commentValue}

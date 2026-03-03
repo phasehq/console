@@ -50,7 +50,7 @@ export const DeleteUserTokenDialog = (props: { token: UserTokenType; organisatio
           </>
         }
       >
-        <div className="py-6">
+        <div className="pt-4">
           <p className="text-sm text-neutral-500">
             Are you sure you want to delete the token{' '}
             <span className="font-medium text-black dark:text-white">{token.name}</span>? This
