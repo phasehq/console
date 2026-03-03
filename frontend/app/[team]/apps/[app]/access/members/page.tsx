@@ -113,15 +113,17 @@ export default function Members({ params }: { params: { team: string; app: strin
             <tbody className="divide-y divide-neutral-500/20">
               {filteredMembers.map((member: OrganisationMemberType) => (
                 <tr className="group" key={member.id}>
-                  <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
-                    <Avatar member={member} size="lg" />
+                  <td className="px-6 py-2 whitespace-nowrap flex items-center gap-2">
+                    <Avatar member={member} size="md" />
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{member.fullName || member.email}</span>
+                        <span className="font-medium text-sm">
+                          {member.fullName || member.email}
+                        </span>
                         <RoleLabel role={member.role!} />
                       </div>
                       {member.fullName && (
-                        <span className="text-neutral-500 text-sm">{member.email}</span>
+                        <span className="text-neutral-500 text-2xs">{member.email}</span>
                       )}
                     </div>
                   </td>

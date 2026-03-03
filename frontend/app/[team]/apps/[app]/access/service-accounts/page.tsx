@@ -117,31 +117,31 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                   <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Environment Access
                   </th>
-                  {userCanRemoveAppSA && <th className="px-6 py-3"></th>}
+                  {userCanRemoveAppSA && <th className="px-6 py-2"></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-500/20">
                 {filteredAccounts.map((account: ServiceAccountType) => (
                   <tr className="group" key={account.id}>
-                    <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
-                      <Avatar serviceAccount={account} size="lg" />
+                    <td className="px-6 py-2 whitespace-nowrap flex items-center gap-2">
+                      <Avatar serviceAccount={account} size="md" />
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium">{account.name}</span>
+                          <span className="font-medium text-sm">{account.name}</span>
                           <RoleLabel role={account.role!} />
                         </div>
-                        <span className="text-neutral-500 text-sm font-mono">{account.id}</span>
+                        <span className="text-neutral-500 text-2xs font-mono">{account.id}</span>
                       </div>
                     </td>
 
-                    <td className="px-6 py-3">
+                    <td className="px-6 py-2">
                       <div className="flex items-center gap-2 ">
                         <ManageAccountAccessDialog appId={params.app} account={account} />
                       </div>
                     </td>
 
                     {userCanRemoveAppSA && (
-                      <td className="px-6 py-3">
+                      <td className="px-6 py-2">
                         <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
                           <RemoveAccountConfirmDialog appId={params.app} account={account} />
                         </div>
