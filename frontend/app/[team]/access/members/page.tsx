@@ -85,7 +85,7 @@ export default function Members({ params }: { params: { team: string } }) {
     )
 
   return (
-    <section>
+    <section className="px-3 sm:px-4 lg:px-6">
       <div className="w-full space-y-4 text-zinc-900 dark:text-zinc-100">
         <div>
           <h2 className="text-lg font-semibold">{params.team} Members</h2>

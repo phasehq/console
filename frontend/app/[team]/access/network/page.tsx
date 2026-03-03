@@ -42,7 +42,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
     allPolicies.filter((policy: NetworkAccessPolicyType) => policy.isGlobal) ?? []
 
   return (
-    <section className="overflow-y-auto space-y-8 divide-y divide-neutral-500/60">
+    <section className="overflow-y-auto space-y-8 divide-y divide-neutral-500/60 px-3 sm:px-4 lg:px-6">
       <div className="w-full space-y-2 text-zinc-900 dark:text-zinc-100">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">{params.team} Network Access Policies</h2>

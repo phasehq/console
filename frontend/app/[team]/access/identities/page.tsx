@@ -110,7 +110,7 @@ export default function IdentityPage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-6 px-3 sm:px-4 lg:px-6">
       {identities.length === 0 ? (
         <div className="space-y-8">
           <div>

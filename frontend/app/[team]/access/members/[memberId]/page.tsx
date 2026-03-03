@@ -138,7 +138,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
   const canDeleteThisMembersTokens = member.self || userCanDeleteMemberTokens
 
   return (
-    <section className="flex flex-col">
+    <section className="flex flex-col px-3 sm:px-4 lg:px-6">
       <div className="pb-4 px-4 md:px-6 pt-4">
         <Link
           href={`/${params.team}/access/members`}

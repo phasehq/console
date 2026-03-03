@@ -132,7 +132,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     )
 
   return (
-    <section className="overflow-y-auto">
+    <section className="overflow-y-auto px-3 sm:px-4 lg:px-6">
       <div className="pb-4">
         <Link
           href={`/${params.team}/access/service-accounts`}

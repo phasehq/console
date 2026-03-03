@@ -59,14 +59,14 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100vh-56px)]"
+      className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100vh-56px)]"
     >
-      <div className="flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6">
+      <div className="flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6 px-3 sm:px-4 lg:px-6">
         <h1 className="text-lg sm:text-xl font-bold">Access</h1>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
+        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
           {tabs.map((tab) => (
             <Tab as={Fragment} key={tab.name}>
               {({ selected }) => (

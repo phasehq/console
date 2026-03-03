@@ -36,7 +36,7 @@ export default function Roles({ params }: { params: { team: string } }) {
   const ownerRole = roleData?.roles.find((role: RoleType) => role.name === 'Owner')
 
   return (
-    <section className="overflow-y-auto">
+    <section className="overflow-y-auto px-3 sm:px-4 lg:px-6">
       <div className="w-full space-y-4 text-black dark:text-white">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">{params.team} Roles</h2>
