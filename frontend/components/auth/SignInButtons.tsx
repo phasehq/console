@@ -12,6 +12,7 @@ import {
   JumpCloudLogo,
   EntraIDLogo,
   AuthentikLogo,
+  AutheliaLogo,
   OktaLogo,
 } from '../common/logos'
 import { toast } from 'react-toastify'
@@ -69,6 +70,11 @@ const providerButtons: ProviderButton[] = [
     id: 'authentik',
     name: 'Authentik',
     icon: AuthentikLogo,
+  },
+  {
+    id: 'authelia',
+    name: 'Authelia',
+    icon: AutheliaLogo,
   },
   {
     id: 'okta-oidc',

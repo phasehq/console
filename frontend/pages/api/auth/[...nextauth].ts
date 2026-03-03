@@ -182,6 +182,32 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     }
   }
 
+  if (process.env.AUTHELIA_CLIENT_ID && process.env.AUTHELIA_URL) {
+    const clientSecret = getSecret('AUTHELIA_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        OIDCProvider({
+          id: 'authelia',
+          name: 'Authelia',
+          type: 'oauth',
+          clientId: process.env.AUTHELIA_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: process.env.AUTHELIA_URL,
+          wellKnown: `${process.env.AUTHELIA_URL}/.well-known/openid-configuration`,
+          authorization: { params: { scope: 'openid email profile' } },
+          profile: (profile) => {
+            return {
+              id: profile.sub,
+              name: profile.name,
+              email: profile.email,
+              image: profile.picture,
+            }
+          },
+        })
+      )
+    }
+  }
+
   if (process.env.OKTA_OIDC_CLIENT_ID && process.env.OKTA_OIDC_ISSUER) {
     const clientSecret = getSecret('OKTA_OIDC_CLIENT_SECRET')
     if (clientSecret) {
@@ -250,6 +276,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               account.provider === 'jumpcloud-oidc' ||
               account.provider === 'entra-id-oidc' ||
               account.provider === 'authentik' ||
+              account.provider === 'authelia' ||
               account.provider === 'okta-oidc'
             ) {
               const { access_token, id_token } = account

@@ -7,6 +7,7 @@ from django.views.decorators.http import require_POST
 from api.utils.syncing.auth import store_oauth_token
 
 from api.authentication.providers.authentik.views import AuthentikOpenIDConnectAdapter
+from api.authentication.providers.authelia.views import AutheliaOpenIDConnectAdapter
 from backend.utils.secrets import get_secret
 from api.serializers import (
     ServiceAccountTokenSerializer,
@@ -111,6 +112,13 @@ class EntraIDLoginView(SocialLoginView):
 class AuthentikLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = AuthentikOpenIDConnectAdapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
+class AutheliaLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = AutheliaOpenIDConnectAdapter
     callback_url = settings.OAUTH_REDIRECT_URI
     client_class = OAuth2Client
 
