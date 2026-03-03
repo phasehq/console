@@ -695,7 +695,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     <section className="space-y-4">
       <div className="flex items-end justify-between">
         <div className="space-y-1">
-          <h1 className="h3 font-semibold text-xl" id="secrets">
+          <h1 className="h3 font-semibold text-lg" id="secrets">
             Secrets
           </h1>
           <p className="text-neutral-500 text-sm">
