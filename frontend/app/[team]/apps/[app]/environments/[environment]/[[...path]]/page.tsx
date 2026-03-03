@@ -1064,7 +1064,7 @@ export default function EnvironmentPath({
 
             {!noSecrets && (
               <div className="flex items-center w-full">
-                <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
+                <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
                 </div>
                 <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
@@ -1120,13 +1120,13 @@ export default function EnvironmentPath({
                 <div
                   ref={secretToHighlight === secret.id ? highlightedRef : null}
                   className={clsx(
-                    'flex items-start gap-2 py-1 px-3 rounded-md',
+                    'flex items-start gap-2 py-0.5 px-3 rounded-md',
                     secretToHighlight === secret.id &&
                       'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
                   )}
                   key={secret.id}
                 >
-                  <div className="text-neutral-500 font-mono w-5 h-10 flex items-center">
+                  <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">
                     {index + 1}
                   </div>
                   <SecretRow
