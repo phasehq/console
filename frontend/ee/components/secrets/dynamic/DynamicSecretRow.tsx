@@ -33,7 +33,7 @@ export const DynamicSecretRow = ({
           ))}
         </div>
       </div>
-      <div className="w-2/3 pl-4 pr-2 relative group">
+      <div className="w-2/3 pl-9 pr-2 relative group">
         <div className="absolute flex flex-col gap-1 pointer-events-none group-hover:opacity-0 transition ease pl-2 pt-1.5">
           {keyMap.map((k) => (
             <MaskedTextarea
@@ -51,11 +51,9 @@ export const DynamicSecretRow = ({
           <div className="flex items-center gap-2">
             <ManageLeasesDialog secret={secret} />
             <UpdateDynamicSecretDialog secret={secret} environment={environment} />
+            <DeleteDynamicSecretDialog secret={secret} />
           </div>
         </div>
-      </div>
-      <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center">
-        <DeleteDynamicSecretDialog secret={secret} />
       </div>
     </div>
   )
