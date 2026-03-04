@@ -123,7 +123,7 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
       onOpen={handleOpen}
       onClose={handleClose}
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
         <p className="text-neutral-500 text-sm pt-4">
           Are you sure you want to delete this dynamic secret? This will delete the following
           secrets from your environment:

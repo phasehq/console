@@ -341,7 +341,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
             </div>
           </div>
         )}
-        <div className="flex justify-between mt-6">
+        <div className="flex justify-between mt-4">
           <Button variant="secondary" type="button" onClick={prevStep} disabled={activeStep === 0}>
             Back
           </Button>

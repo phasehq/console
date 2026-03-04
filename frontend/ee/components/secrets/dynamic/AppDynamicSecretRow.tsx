@@ -104,7 +104,7 @@ export const AppDynamicSecretRow = ({
       >
         <td
           className={clsx(
-            'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 text-2xs 2xl:text-sm',
+            'px-2 py-0.5 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 text-2xs 2xl:text-sm',
             isExpanded ? 'font-bold' : 'font-medium'
           )}
         >
@@ -118,7 +118,7 @@ export const AppDynamicSecretRow = ({
           />
         </td>
         {appDynamicSecret.envs.map((env) => (
-          <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
+          <td key={env.env.id} className="px-6 py-0.5 whitespace-nowrap">
             <div className="flex items-center justify-center" title={tooltipText(env)}>
               {env.dynamicSecret !== null ? (
                 <PresentIndicator />

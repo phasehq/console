@@ -228,15 +228,15 @@ export const CreateDynamicSecretDialog = forwardRef<
         <div className="cursor-pointer" key={provider.id} onClick={() => setProvider(provider)}>
           <Card>
             <div>
-              <div className="flex items-center gap-2 ">
-                <div className="text-5xl">
+              <div className="flex items-center gap-3">
+                <div className="text-2xl">
                   <ProviderIcon providerId={provider.id} />
                 </div>
                 <div>
-                  <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     {provider.name}
                   </div>
-                  <div className="text-neutral-500">
+                  <div className="text-neutral-500 text-2xs">
                     Set up a dynamic secret for {provider.name}
                   </div>
                 </div>
@@ -251,12 +251,12 @@ export const CreateDynamicSecretDialog = forwardRef<
   return (
     <GenericDialog ref={dialogRef} title={`Set up a Dynamic Secret`}>
       {!environment.app.sseEnabled ? (
-        <div className="space-y-6">
-          <div className="py-4">
-            <div className="text-lg font-semibold text-black dark:text-white">
+        <div className="space-y-4 pt-4">
+          <div>
+            <div className="text-sm font-semibold text-black dark:text-white">
               Server-side encryption (SSE)
             </div>
-            <div className="text-neutral-500">
+            <div className="text-neutral-500 text-2xs">
               Server-side encryption is required to use Dynamic Secrets. Click the button below to
               enable SSE.
             </div>
@@ -267,8 +267,8 @@ export const CreateDynamicSecretDialog = forwardRef<
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="text-neutral-500">Configure a new dynamic secret</div>
+        <div className="space-y-4 pt-4">
+          <div className="text-neutral-500 text-xs">Configure a new dynamic secret</div>
 
           {!provider && <ProviderMenu />}
           {provider && (
@@ -433,7 +433,7 @@ export const CreateDynamicSecretDialog = forwardRef<
                 </div>
               )}
 
-              <div className="flex justify-between mt-6">
+              <div className="flex justify-between mt-4">
                 <Button
                   variant="secondary"
                   type="button"
