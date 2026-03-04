@@ -196,7 +196,7 @@ const EnvSecretComponent = ({
 
       {clientEnvSecret.secret === null ? (
         <div className="flex items-center gap-2">
-          <span className="text-red-500 font-mono uppercase">missing</span>
+          <span className="text-red-500 font-mono uppercase text-xs">missing</span>
           <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
             <FaPlus />
             Add value
@@ -453,7 +453,7 @@ const AppSecretRowComponent = ({
             >
               <button
                 onClick={toggleAccordion}
-                className="relative flex items-center justify-center"
+                className="relative flex items-center justify-center text-xs"
               >
                 <FaChevronRight
                   className={clsx(
@@ -514,10 +514,7 @@ const AppSecretRowComponent = ({
                 className="px-6 whitespace-nowrap group cursor-pointer"
                 onClick={toggleAccordion}
               >
-                <div
-                  className="flex items-center justify-center"
-                  title={tooltipText(env)}
-                >
+                <div className="flex items-center justify-center" title={tooltipText(env)}>
                   {env.secret !== null ? (
                     env.secret.value.length === 0 ? (
                       <BlankIndicator />
