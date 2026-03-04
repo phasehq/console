@@ -34,7 +34,7 @@ export const ManageSyncDialog = (props: { sync: EnvironmentSyncType; button: Rea
         {button}
       </div>
       <GenericDialog ref={dialogRef} title="Manage sync" size="md">
-        <div className="pt-4 max-h-[80vh] overflow-y-auto">
+        <div className="pt-4">
           <div className="flex col-span-2 gap-3 items-center justify-between p-3 border border-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md">
             <div className="flex flex-col text-sm">
               <span className="text-black dark:text-white font-semibold">
