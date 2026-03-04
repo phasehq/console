@@ -37,7 +37,7 @@ export const EnvironmentPageSkeleton = () => {
 
           {/* Table header */}
           <div className="flex items-center w-full">
-            <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
+            <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
               key
             </div>
             <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">

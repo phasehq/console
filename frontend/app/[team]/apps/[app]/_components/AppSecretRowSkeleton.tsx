@@ -10,7 +10,7 @@ interface AppSecretRowSkeletonProps {
 export const AppSecretRowSkeleton = ({ index, envCount = 3 }: AppSecretRowSkeletonProps) => {
   return (
     <tr className="group divide-x divide-neutral-500/20 border-l border-neutral-500/20 bg-zinc-100 dark:bg-zinc-800">
-      <td className="px-2 py-2 whitespace-nowrap font-mono flex items-center gap-2">
+      <td className="px-2 py-0.5 whitespace-nowrap font-mono flex items-center gap-2">
         {/* Row number */}
         <span className="text-neutral-500 font-mono w-5 text-center">{index + 1}</span>
         {/* Secret key */}
@@ -20,7 +20,7 @@ export const AppSecretRowSkeleton = ({ index, envCount = 3 }: AppSecretRowSkelet
       </td>
       {/* Environment status indicators */}
       {[...Array(envCount)].map((_, i) => (
-        <td key={i} className="px-6 py-2 whitespace-nowrap">
+        <td key={i} className="px-6 whitespace-nowrap">
           <div className="flex items-center justify-center">
             <div className={clsx(shimmer, 'w-4 h-4')} />
           </div>
