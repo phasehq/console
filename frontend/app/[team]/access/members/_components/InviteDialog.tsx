@@ -508,7 +508,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   <p className="text-neutral-500 text-sm">
                     Invite link{inviteLinks.length > 1 ? 's have' : ' has'} been sent by email. You
                     can also copy the invite link{inviteLinks.length > 1 ? 's' : ''} for each user
-                    and share them manually. Invites expire in 72 hours.
+                    and share them manually. Invites expire in 14 days.
                   </p>
                 </div>
                 <Alert variant="info" icon={true} size="sm">
