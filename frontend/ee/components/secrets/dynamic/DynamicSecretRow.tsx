@@ -33,7 +33,7 @@ export const DynamicSecretRow = ({
           ))}
         </div>
       </div>
-      <div className="w-2/3 pl-9 pr-2 relative group">
+      <div className="w-2/3 pl-5 pr-2 relative group">
         <div className="absolute flex flex-col gap-1 pointer-events-none group-hover:opacity-0 transition ease pl-2 pt-1.5">
           {keyMap.map((k) => (
             <MaskedTextarea
