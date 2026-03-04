@@ -2,11 +2,11 @@ import { SecretType, SecretEventType, ApiSecretEventEventTypeChoices } from '@/a
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
 import { GetSecretHistory } from '@/graphql/queries/secrets/getSecretHistory.gql'
-import { useState, Fragment, useEffect, useContext } from 'react'
-import { FaHistory, FaKey, FaRobot, FaTimes } from 'react-icons/fa'
+import { useState, useEffect, useContext, useRef } from 'react'
+import { FaHistory, FaKey } from 'react-icons/fa'
 import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 import { Button } from '../../common/Button'
-import { Dialog, Transition } from '@headlessui/react'
+import GenericDialog from '@/components/common/GenericDialog'
 import { Avatar } from '../../common/Avatar'
 import { useLazyQuery } from '@apollo/client'
 import {
@@ -30,11 +30,10 @@ export const HistoryDialog = ({
   const [getHistory, { loading }] = useLazyQuery(GetSecretHistory, {
     fetchPolicy: 'cache-and-network',
   })
-  const [isOpen, setIsOpen] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [clientSecret, setClientSecret] = useState<SecretType | null>(null)
 
-  const closeModal = () => setIsOpen(false)
-  const openModal = () => setIsOpen(true)
+  const dialogRef = useRef<{ closeModal: () => void }>(null)
 
   const decryptHistoryEvent = async (event: SecretEventType, envKeyring: EnvKeyring) => {
     const decryptedEvent = { ...event }
@@ -99,9 +98,9 @@ export const HistoryDialog = ({
       }
     }
 
-    if (keyring && isOpen) fetchAndDecryptHistory()
+    if (keyring && isDialogOpen) fetchAndDecryptHistory()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyring, isOpen, secret, getHistory])
+  }, [keyring, isDialogOpen, secret, getHistory])
 
   const getEventTypeColor = (eventType: ApiSecretEventEventTypeChoices) => {
     if (eventType === ApiSecretEventEventTypeChoices.C) return 'bg-emerald-500'
@@ -120,14 +119,14 @@ export const HistoryDialog = ({
   const eventCreatedBy = (log: SecretEventType) => {
     if (log.user)
       return (
-        <div className="flex items-center gap-1 text-sm">
+        <div className="flex items-center gap-1 text-xs">
           <Avatar member={log.user} size="sm" />
           {log.user.fullName || log.user.email}
         </div>
       )
     else if (log.serviceToken)
       return (
-        <div className="flex items-center gap-1 text-sm">
+        <div className="flex items-center gap-1 text-xs">
           <FaKey /> {log.serviceToken ? log.serviceToken.name : 'Service token'}
         </div>
       )
@@ -135,7 +134,7 @@ export const HistoryDialog = ({
       return (
         <div
           className={clsx(
-            'flex items-center gap-1 text-sm',
+            'flex items-center gap-1 text-xs',
             log.serviceAccount.deletedAt && 'grayscale'
           )}
         >
@@ -156,113 +155,82 @@ export const HistoryDialog = ({
   const secretHistory = clientSecret?.history
 
   return (
-    <>
-      <div className="flex items-center justify-center">
-        <Button variant="outline" onClick={openModal} title="View secret history" tabIndex={-1}>
+    <GenericDialog
+      ref={dialogRef}
+      title="View secret history"
+      dialogTitle={
+        <div>
+          <h3 className="text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">
+            <span className="font-mono ph-no-capture">
+              {secret.key}
+            </span>{' '}
+            history
+          </h3>
+          <div className="text-neutral-500 text-xs">
+            View the chronological history of changes made to this secret.
+          </div>
+        </div>
+      }
+      buttonVariant="outline"
+      buttonContent={
+        <>
           <span className="py-1">
             <FaHistory className="shrink-0" />
           </span>
           <span className="hidden 2xl:block text-xs">History</span>
-        </Button>
-      </div>
-
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeModal}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                {loading || !secretHistory ? (
-                  <div>
-                    <Spinner size="sm" />
-                  </div>
-                ) : (
-                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                    <Dialog.Title as="div" className="flex w-full justify-between items-start">
-                      <div>
-                        <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                          <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture">
-                            {secret.key}
-                          </span>{' '}
-                          history
-                        </h3>
-                        <div className="text-neutral-500 text-sm">
-                          View the chronological history of changes made to this secret.
-                        </div>
-                      </div>
-
-                      <Button variant="text" onClick={closeModal}>
-                        <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                      </Button>
-                    </Dialog.Title>
-
-                    <div className="space-y-6 py-4">
-                      <div className="max-h-[800px] overflow-y-auto px-2">
-                        <div className="space-y-4 pb-4 border-l border-zinc-300 dark:border-zinc-700">
-                          {secretHistory?.map((historyItem, index) => (
-                            <div key={historyItem!.timestamp} className="pb-6 space-y-2">
-                              <div className="flex flex-row items-center gap-2 -ml-1">
-                                <span
-                                  className={clsx(
-                                    'h-2 w-2 rounded-full',
-                                    getEventTypeColor(historyItem!.eventType)
-                                  )}
-                                ></span>
-                                <div className="text-zinc-800 dark:text-zinc-200 font-semibold">
-                                  {getEventTypeText(historyItem!.eventType)}
-                                </div>
-                                <div
-                                  className="text-neutral-500 text-sm"
-                                  title={new Date(historyItem!.timestamp).toLocaleTimeString()}
-                                >
-                                  {relativeTimeFromDates(new Date(historyItem!.timestamp))}
-                                </div>
-                                <span className="text-neutral-500 text-sm">by</span>
-
-                                <div className="text-zinc-900 dark:text-zinc-100">
-                                  {eventCreatedBy(historyItem!)}
-                                </div>
-                              </div>
-                              {index > 0 && (
-                                <SecretPropertyDiffs
-                                  secret={clientSecret}
-                                  historyItem={historyItem!}
-                                  index={index}
-                                  handlePropertyChange={handlePropertyChange}
-                                  onRestore={closeModal}
-                                />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+        </>
+      }
+      buttonProps={{ tabIndex: -1 }}
+      onOpen={() => setIsDialogOpen(true)}
+      onClose={() => setIsDialogOpen(false)}
+    >
+      {loading || !secretHistory ? (
+        <div className="py-8 flex justify-center">
+          <Spinner size="sm" />
+        </div>
+      ) : (
+        <div className="space-y-4 py-4">
+          <div className="max-h-[800px] overflow-y-auto px-2">
+            <div className="space-y-4 pb-4 border-l border-zinc-300 dark:border-zinc-700">
+              {secretHistory?.map((historyItem, index) => (
+                <div key={historyItem!.timestamp} className="pb-4 space-y-2">
+                  <div className="flex flex-row items-center gap-2 -ml-1">
+                    <span
+                      className={clsx(
+                        'h-2 w-2 rounded-full',
+                        getEventTypeColor(historyItem!.eventType)
+                      )}
+                    ></span>
+                    <div className="text-zinc-800 dark:text-zinc-200 font-medium text-xs">
+                      {getEventTypeText(historyItem!.eventType)}
                     </div>
-                  </Dialog.Panel>
-                )}
-              </Transition.Child>
+                    <div
+                      className="text-neutral-500 text-xs"
+                      title={new Date(historyItem!.timestamp).toLocaleTimeString()}
+                    >
+                      {relativeTimeFromDates(new Date(historyItem!.timestamp))}
+                    </div>
+                    <span className="text-neutral-500 text-xs">by</span>
+
+                    <div className="text-zinc-900 dark:text-zinc-100">
+                      {eventCreatedBy(historyItem!)}
+                    </div>
+                  </div>
+                  {index > 0 && (
+                    <SecretPropertyDiffs
+                      secret={clientSecret}
+                      historyItem={historyItem!}
+                      index={index}
+                      handlePropertyChange={handlePropertyChange}
+                      onRestore={() => dialogRef.current?.closeModal()}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        </Dialog>
-      </Transition>
-    </>
+        </div>
+      )}
+    </GenericDialog>
   )
 }

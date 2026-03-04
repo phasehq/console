@@ -1,14 +1,15 @@
-import { Dialog, Switch, Transition } from '@headlessui/react'
+import { Switch } from '@headlessui/react'
 import { Button } from '../../common/Button'
 import { EnvironmentType, Maybe, PersonalSecretType } from '@/apollo/graphql'
 import { encryptAsymmetric } from '@/utils/crypto'
 import { useMutation } from '@apollo/client'
 import clsx from 'clsx'
-import { useState, useEffect, Fragment } from 'react'
-import { FaUserEdit, FaTimes, FaTrash } from 'react-icons/fa'
+import { useState, useEffect, useRef } from 'react'
+import { FaUserEdit, FaTrash } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { CreateNewPersonalSecret } from '@/graphql/mutations/environments/createPersonalSecret.gql'
 import { RemovePersonalSecret } from '@/graphql/mutations/environments/removePersonalSecret.gql'
+import GenericDialog from '@/components/common/GenericDialog'
 
 export const OverrideDialog = (props: {
   secretId: string
@@ -18,6 +19,8 @@ export const OverrideDialog = (props: {
 }) => {
   const { secretId, secretName, environment, override } = props
 
+  const dialogRef = useRef<{ closeModal: () => void }>(null)
+
   const [createOverride, { loading: createLoading }] = useMutation(CreateNewPersonalSecret)
   const [removeOverride, { loading: removeLoading }] = useMutation(RemovePersonalSecret)
 
@@ -25,7 +28,6 @@ export const OverrideDialog = (props: {
   const [isActive, setIsActive] = useState<boolean>(override ? override.isActive : true)
 
   const [saved, setSaved] = useState<boolean>(true)
-  const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const reset = () => {
     setValue(override?.value || '')
@@ -35,14 +37,6 @@ export const OverrideDialog = (props: {
   const clear = () => {
     setValue('')
     setIsActive(true)
-  }
-
-  const closeModal = () => {
-    setIsOpen(false)
-  }
-
-  const openModal = () => {
-    setIsOpen(true)
   }
 
   const valueUpdated = () => {
@@ -75,7 +69,8 @@ export const OverrideDialog = (props: {
     })
     clear()
     toast.success('Removed personal secret')
-    closeModal()
+    setSaved(true)
+    dialogRef.current?.closeModal()
   }
 
   const handleUpdateOverride = async () => {
@@ -92,145 +87,105 @@ export const OverrideDialog = (props: {
     })
     toast.success('Saved personal secret')
     setSaved(true)
-    closeModal()
-  }
-
-  const handleClose = () => {
-    if (saveRequired && !saved) reset()
-    closeModal()
+    dialogRef.current?.closeModal()
   }
 
   const activeOverride = override && override?.isActive
 
   return (
-    <>
-      <div className="flex items-center justify-center">
-        <Button
-          variant="outline"
-          tabIndex={-1}
-          onClick={openModal}
-          title={
-            activeOverride ? 'A Personal Secret is overriding this value' : 'Override this value'
-          }
-        >
+    <GenericDialog
+      ref={dialogRef}
+      title={
+        activeOverride ? 'A Personal Secret is overriding this value' : 'Override this value'
+      }
+      dialogTitle={
+        <div>
+          <h3 className="text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">
+            Override{' '}
+            <span className="font-mono ph-no-capture">
+              {secretName}
+            </span>
+          </h3>
+          <div className="text-neutral-500 text-xs">
+            Override this value with a Personal Secret. This value will only be visible
+            to you, and will not alter the value of this secret for other users or 3rd
+            party services.
+          </div>
+        </div>
+      }
+      buttonVariant="outline"
+      buttonContent={
+        <>
           <span className="py-1">
             <FaUserEdit className={clsx('shrink-0', activeOverride && 'text-amber-500')} />
           </span>
           <span className={clsx('hidden 2xl:block text-xs', activeOverride && 'text-amber-500')}>
             Override
           </span>
-        </Button>
+        </>
+      }
+      buttonProps={{ tabIndex: -1 }}
+      onClose={() => {
+        if (saveRequired && !saved) reset()
+      }}
+    >
+      <div className="space-y-4 py-4">
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-black dark:text-white">
+            Override Value
+          </div>
+          <textarea
+            rows={5}
+            value={value}
+            className="w-full ph-no-capture font-mono"
+            onChange={(e) => setValue(e.target.value)}
+          ></textarea>
+        </div>
+        <div className="flex items-center justify-start gap-2">
+          <div className="text-xs text-black dark:text-white font-medium">
+            Activate Secret Override
+          </div>
+          <Switch
+            checked={isActive}
+            onChange={toggleIsActive}
+            className={`${
+              isActive
+                ? 'bg-emerald-400/10 ring-emerald-400/20'
+                : 'bg-neutral-500/40 ring-neutral-500/30'
+            } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+          >
+            <span className="sr-only">Set as active</span>
+            <span
+              className={`${
+                isActive ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-black'
+              } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+            ></span>
+          </Switch>
+        </div>
       </div>
 
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={handleClose}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/25 backdrop-blur-md" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
-                  <Dialog.Title as="div" className="flex w-full justify-between items-start">
-                    <div>
-                      <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                        Override{' '}
-                        <span className="text-zinc-700 dark:text-zinc-200 font-mono ph-no-capture">
-                          {secretName}
-                        </span>{' '}
-                      </h3>
-                      <div className="text-neutral-500 text-sm">
-                        Override this value with a Personal Secret. This value will only be visible
-                        to you, and will not alter the value of this secret for other users or 3rd
-                        party services.
-                      </div>
-                    </div>
-
-                    <Button variant="text" onClick={handleClose}>
-                      <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
-                    </Button>
-                  </Dialog.Title>
-
-                  <div className="space-y-4 py-6">
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium text-black dark:text-white">
-                        Override Value
-                      </div>
-                      <textarea
-                        rows={5}
-                        value={value}
-                        className="w-full ph-no-capture font-mono"
-                        onChange={(e) => setValue(e.target.value)}
-                      ></textarea>
-                    </div>
-                    <div className="flex items-center justify-start gap-2">
-                      <div className="text-sm text-black dark:text-white font-medium">
-                        Activate Secret Override
-                      </div>
-                      <Switch
-                        checked={isActive}
-                        onChange={toggleIsActive}
-                        className={`${
-                          isActive
-                            ? 'bg-emerald-400/10 ring-emerald-400/20'
-                            : 'bg-neutral-500/40 ring-neutral-500/30'
-                        } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
-                      >
-                        <span className="sr-only">Set as active</span>
-                        <span
-                          className={`${
-                            isActive ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-black'
-                          } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
-                        ></span>
-                      </Switch>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      {override && (
-                        <Button
-                          variant="danger"
-                          onClick={handleDeleteOverride}
-                          isLoading={removeLoading}
-                        >
-                          <FaTrash />
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                    <Button
-                      variant="primary"
-                      onClick={handleUpdateOverride}
-                      isLoading={createLoading}
-                      disabled={!saveRequired}
-                    >
-                      Save
-                    </Button>
-                  </div>
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
-    </>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          {override && (
+            <Button
+              variant="danger"
+              onClick={handleDeleteOverride}
+              isLoading={removeLoading}
+            >
+              <FaTrash />
+              Remove
+            </Button>
+          )}
+        </div>
+        <Button
+          variant="primary"
+          onClick={handleUpdateOverride}
+          isLoading={createLoading}
+          disabled={!saveRequired}
+        >
+          Save
+        </Button>
+      </div>
+    </GenericDialog>
   )
 }

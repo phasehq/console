@@ -126,7 +126,7 @@ const GenericDialog = forwardRef(
                       className="flex w-full justify-between gap-2 items-start"
                     >
                       {dialogTitle || (
-                        <h3 className="text-base font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-words">
+                        <h3 className="text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-words">
                           {title}
                         </h3>
                       )}

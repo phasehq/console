@@ -234,7 +234,7 @@ const EnvSecretComponent = ({
                 className={clsx(
                   INPUT_BASE_STYLE,
                   inputTextColor(),
-                  'rounded-sm focus:outline-none py-2 pl-2'
+                  'rounded-sm focus:outline-none'
                 )}
                 value={clientEnvSecret.secret.value}
                 onChange={(v) => updateEnvValue(appSecretId, clientEnvSecret.env.id!, v)}

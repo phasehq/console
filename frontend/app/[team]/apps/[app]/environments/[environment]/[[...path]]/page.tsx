@@ -1067,8 +1067,8 @@ export default function EnvironmentPath({
                 <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
                 </div>
-                <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
-                  value
+                <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between">
+                  <span className="uppercase tracking-wider">value</span>
                   <div className="flex items-center gap-4">
                     <Button variant="outline" onClick={toggleGlobalReveal}>
                       <div className="flex items-center gap-2">

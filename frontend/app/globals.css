@@ -122,7 +122,8 @@ a {
 }
 
 @layer components {
-  input {
+  input,
+  textarea {
     @apply px-2 py-1.5 text-sm focus:outline-none;
   }
 

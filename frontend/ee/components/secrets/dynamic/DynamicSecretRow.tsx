@@ -17,7 +17,7 @@ export const DynamicSecretRow = ({
   const keyMap: KeyMap[] = (secret.keyMap as KeyMap[]) ?? []
 
   const KEY_BASE_STYLE =
-    'w-full font-mono custom bg-transparent transition ease p-1 ph-no-capture rounded-lg text-2xs 2xl:text-sm'
+    'w-full font-mono custom bg-transparent transition ease p-0.5 ph-no-capture rounded-lg text-2xs 2xl:text-sm'
 
   return (
     <div className="flex w-full gap-2 rounded-lg group">
@@ -25,7 +25,7 @@ export const DynamicSecretRow = ({
         <div className="text-2xs text-emerald-500 flex items-center gap-1 bg-emerald-400/10 rounded-full w-min whitespace-nowrap px-1">
           <FaBolt /> {secret.name}
         </div>
-        <div className={clsx('flex flex-col gap-1 group relative pl-10')}>
+        <div className={clsx('flex flex-col gap-0.5 group relative pl-10')}>
           {keyMap.map((key) => (
             <div key={key.id} className={KEY_BASE_STYLE}>
               {String(key.keyName).toUpperCase()}
@@ -33,8 +33,8 @@ export const DynamicSecretRow = ({
           ))}
         </div>
       </div>
-      <div className="w-2/3 pl-8 pr-2 relative group">
-        <div className="absolute flex flex-col gap-1 pointer-events-none group-hover:opacity-0 transition ease pl-2 pt-3">
+      <div className="w-2/3 pl-4 pr-2 relative group">
+        <div className="absolute flex flex-col gap-1 pointer-events-none group-hover:opacity-0 transition ease pl-2 pt-1.5">
           {keyMap.map((k) => (
             <MaskedTextarea
               className={clsx(KEY_BASE_STYLE)}
