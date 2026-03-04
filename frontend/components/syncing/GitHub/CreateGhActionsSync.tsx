@@ -187,11 +187,11 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-lg font-semibold text-black dark:text-white flex items-center gap-2">
+        <div className="text-sm font-semibold text-black dark:text-white flex items-center gap-2">
           <SiGithub />
           GitHub Actions
         </div>
-        <div className="text-neutral-500 text-sm">Sync an environment with GitHub Actions.</div>
+        <div className="text-neutral-500 text-2xs">Sync an environment with GitHub Actions.</div>
       </div>
 
       <form onSubmit={handleSubmit}>

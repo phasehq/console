@@ -78,7 +78,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const path = JSON.parse(sync.options)['path']
 
     return (
-      <div className="flex gap-2 text-xs text-neutral-500">
+      <div className="flex gap-2 text-neutral-500">
         {engine}data/{path}
       </div>
     )
@@ -87,7 +87,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const namespace = JSON.parse(sync.options)['namespace']
 
     return (
-      <div className="flex gap-2 text-xs text-neutral-500">
+      <div className="flex gap-2 text-neutral-500">
         {path}@{namespace || 'default'}
       </div>
     )
@@ -97,7 +97,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const isProtected = JSON.parse(sync.options)['protected']
 
     return (
-      <div className="flex gap-2 text-xs text-neutral-500 items-center">
+      <div className="flex gap-2 text-neutral-500 items-center">
         {path}
         {isMasked && <FaEyeSlash title="Masked" />}
         {isProtected && <FaLock title="Protected" />}
@@ -109,7 +109,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const service: RailwayResourceInput | undefined = JSON.parse(sync.options)['service']
 
     return (
-      <div className="flex gap-2 text-xs text-neutral-500">
+      <div className="flex gap-2 text-neutral-500">
         {project.name} {service ? ` - ${service.name}` : ''} ({environment.name})
       </div>
     )
@@ -120,7 +120,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const secretType = JSON.parse(sync.options)['secret_type']
 
     return (
-      <div className="flex gap-2 items-center text-xs text-neutral-500">
+      <div className="flex gap-2 items-center text-neutral-500">
         {team?.name && `${team.name} / `} {project.name} ({environment})
         {secretType === 'encrypted' && <FaLock title="Encrypted" />}
         {secretType === 'sensitive' && <FaEyeSlash title="Sensitive" />}
@@ -128,6 +128,6 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     )
   } else if (sync.serviceInfo?.id?.includes('render')) {
     const resourceName: string = JSON.parse(sync.options)['resource_name']
-    return <div className="flex gap-2 text-xs text-neutral-500">{resourceName}</div>
+    return <div className="flex gap-2 text-neutral-500">{resourceName}</div>
   } else return <>{sync.serviceInfo?.id}</>
 }

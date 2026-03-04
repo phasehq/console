@@ -30,14 +30,14 @@ export const ProviderCard = (props: { provider: ProviderType }) => {
 
   return (
     <Card>
-      <div className="flex flex-auto gap-4 cursor-pointer">
-        <div className="text-4xl">
+      <div className="flex flex-auto gap-3 cursor-pointer">
+        <div className="text-2xl">
           <ProviderIcon providerId={provider.id} />
         </div>
-        <div className="flex flex-col gap-6 text-left">
+        <div className="flex flex-col gap-3 text-left">
           <div>
-            <div className="text-black dark:text-white text-lg font-semibold">{provider.name}</div>
-            <div className="text-neutral-500 text-sm">
+            <div className="text-black dark:text-white text-sm font-semibold">{provider.name}</div>
+            <div className="text-neutral-500 text-2xs">
               Set up authentication credentials to sync with {provider.name}.
             </div>
           </div>
@@ -179,7 +179,7 @@ export const CreateProviderCredentials = (props: {
       <form className="space-y-6" onSubmit={handleSubmit}>
         {provider && (
           <div className="border-b border-neutral-500/20 pb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-lg">
+            <div className="flex items-center gap-2 text-base">
               <ProviderIcon providerId={provider.id} />
               <span className="font-semibold text-black dark:text-white">{provider.name}</span>
             </div>
@@ -193,7 +193,7 @@ export const CreateProviderCredentials = (props: {
         )}
 
         {provider === null && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {providers
               .filter((provider) => provider.id !== 'aws_assume_role')
               .map((provider) => (

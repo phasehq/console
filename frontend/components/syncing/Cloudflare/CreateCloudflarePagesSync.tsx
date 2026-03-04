@@ -105,11 +105,11 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
   return (
     <div className="p-4 space-y-6">
       <div>
-        <div className="text-lg font-semibold text-black dark:text-white flex items-center gap-1">
+        <div className="text-sm font-semibold text-black dark:text-white flex items-center gap-1">
           <SiCloudflarepages />
           Cloudflare Pages
         </div>
-        <div className="text-neutral-500 text-sm">Sync an environment with Cloudflare pages.</div>
+        <div className="text-neutral-500 text-2xs">Sync an environment with Cloudflare pages.</div>
       </div>
 
       <form onSubmit={handleSubmit}>

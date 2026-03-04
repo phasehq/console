@@ -116,11 +116,11 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
   return (
     <div className="p-4 space-y-6">
       <div>
-        <div className="text-lg font-semibold flex items-center gap-2">
+        <div className="text-sm font-semibold flex items-center gap-2">
           <LiaAws />
           AWS Secrets Manager
         </div>
-        <div className="text-neutral-500">Sync an environment with AWS Secrets Manager.</div>
+        <div className="text-neutral-500 text-2xs">Sync an environment with AWS Secrets Manager.</div>
       </div>
       <form onSubmit={handleSubmit}>
         {!credentialsValid && (

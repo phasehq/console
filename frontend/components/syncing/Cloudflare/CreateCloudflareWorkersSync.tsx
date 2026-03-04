@@ -97,11 +97,11 @@ export const CreateCloudflareWorkersSync = (props: { appId: string; closeModal: 
   return (
     <div className="p-4 space-y-6">
       <div>
-        <div className="text-lg font-semibold text-black dark:text-white flex items-center gap-1">
+        <div className="text-sm font-semibold text-black dark:text-white flex items-center gap-1">
           <SiCloudflareworkers />
           Cloudflare Workers
         </div>
-        <div className="text-neutral-500 text-sm">Sync an environment with Cloudflare workers.</div>
+        <div className="text-neutral-500 text-2xs">Sync an environment with Cloudflare workers.</div>
       </div>
 
       <form onSubmit={handleSubmit}>
