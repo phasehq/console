@@ -259,7 +259,9 @@ const Sidebar = () => {
       <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/70 dark:bg-neutral-800/20 text-black dark:text-white">
         {/* Main navigation area */}
         <div className="gap-3 p-3 grid grid-cols-1 w-full">
-          <OrgsMenu />
+          <div className={clsx(collapsed ? 'mb-2' : '')}>
+            <OrgsMenu />
+          </div>
           {links.map((link) => (
             <SidebarLink
               key={link.name}
