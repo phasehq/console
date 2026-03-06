@@ -114,10 +114,10 @@ export default function IdentityPage() {
       {identities.length === 0 ? (
         <div className="space-y-8">
           <div>
-            <h3 className="text-black dark:text-white text-lg font-semibold">
+            <h3 className="text-black dark:text-white text-base font-medium">
               Set up a new identity
             </h3>
-            <div className="text-neutral-500">
+            <div className="text-neutral-500 text-sm">
               Third party identity platforms can be used to authenticate clients and provision
               access tokens. Select a provider below to get started.
             </div>
@@ -142,9 +142,9 @@ export default function IdentityPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="space-y-1">
-            <div className="text-lg font-semibold">External identities</div>
-            <div className="text-neutral-500">Manage identities used for external auth</div>
+          <div>
+            <div className="text-base font-medium">External identities</div>
+            <div className="text-neutral-500 text-sm">Manage identities used for external auth</div>
           </div>
           <div className="space-y-4">
             {canCreateIdentities && (
@@ -174,19 +174,19 @@ export default function IdentityPage() {
                     const providerInfo = getProviderInfo(idn.provider)
                     return (
                       <tr key={idn.id} className="group">
-                        <td className="text-zinc-900 dark:text-zinc-100 font-medium inline-flex items-center gap-2 break-word">
-                          <div className="text-xl">
+                        <td className="text-zinc-900 dark:text-zinc-100 text-sm font-medium inline-flex items-center gap-2 break-word">
+                          <div className="text-sm">
                             <ProviderIcon providerId={providerInfo.iconId} />
                           </div>
                           {providerInfo.name}
                         </td>
-                        <td className="px-6 py-4 text-zinc-900 dark:text-zinc-100 font-medium">
+                        <td className="px-6 py-2 text-zinc-900 dark:text-zinc-100 text-sm font-medium">
                           {idn.name}
                         </td>
-                        <td className="px-6 py-4 text-neutral-500 max-w-xl truncate">
+                        <td className="px-6 py-2 text-neutral-500 text-xs max-w-xl truncate">
                           {idn.description}
                         </td>
-                        <td className="px-6 py-4 flex items-center justify-end gap-2">
+                        <td className="px-6 py-2 flex items-center justify-end gap-2">
                           <div className="opacity-0 group-hover:opacity-100 transition ease flex gap-2">
                             {canUpdateIdentities && <EditExternalIdentityDialog identity={idn} />}
                             <DeleteExternalIdentityDialog identity={idn} />

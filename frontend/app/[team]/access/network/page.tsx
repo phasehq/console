@@ -44,9 +44,9 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
   return (
     <section className="overflow-y-auto space-y-8 divide-y divide-neutral-500/60 px-3 sm:px-4 lg:px-6">
       <div className="w-full space-y-2 text-zinc-900 dark:text-zinc-100">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold">{params.team} Network Access Policies</h2>
-          <p className="text-neutral-500">Manage organisation Network Access Policies.</p>
+        <div>
+          <h2 className="text-base font-medium">{params.team} Network Access Policies</h2>
+          <p className="text-neutral-500 text-sm">Manage organisation Network Access Policies.</p>
         </div>
         <div className="space-y-4">
           {userCanCreateNetworkPolicies && allPolicies.length > 0 && (
@@ -163,9 +163,9 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
 
       {allPolicies.length > 0 && (
         <div className="w-full space-y-2 text-zinc-900 dark:text-zinc-100 py-8">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold">Global Policies</h2>
-            <p className="text-neutral-500">
+          <div>
+            <h2 className="text-base font-medium">Global Policies</h2>
+            <p className="text-neutral-500 text-sm">
               Manage Network Access Policies that are applied globally to all user and service
               accounts across the organisation.
             </p>

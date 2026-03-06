@@ -38,9 +38,9 @@ export default function Roles({ params }: { params: { team: string } }) {
   return (
     <section className="overflow-y-auto px-3 sm:px-4 lg:px-6">
       <div className="w-full space-y-4 text-black dark:text-white">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold">{params.team} Roles</h2>
-          <p className="text-neutral-500">Manage organisation roles.</p>
+        <div>
+          <h2 className="text-base font-medium">{params.team} Roles</h2>
+          <p className="text-neutral-500 text-sm">Manage organisation roles.</p>
         </div>
         <div className="space-y-4">
           {userCanCreateRoles && (
@@ -65,26 +65,26 @@ export default function Roles({ params }: { params: { team: string } }) {
                 {roleData?.roles.map((role: RoleType) => (
                   <tr key={role.id} className="group">
                     <td>
-                      <RoleLabel role={role} size="md" />
+                      <RoleLabel role={role} size="sm" />
                     </td>
 
-                    <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        <div className="font-semibold flex items-center gap-2">
+                    <td className="px-6 py-2">
+                      <div className="space-y-0.5">
+                        <div className="text-sm font-medium flex items-center gap-2">
                           {role.name}{' '}
                           {role.isDefault && (
                             <FaLock
                               title="This role is managed by Phase and cannot be edited"
-                              className="text-neutral-500"
+                              className="text-neutral-500 text-xs"
                             />
                           )}
                         </div>
 
-                        <div className="text-neutral-500 text-sm">{role.description}</div>
+                        <div className="text-neutral-500 text-xs">{role.description}</div>
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
+                    <td className="px-6 py-2 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
                       <ManageRoleDialog role={role} ownerRole={ownerRole} />
                       {!role.isDefault && userCanDeleteRoles && <DeleteRoleDialog role={role} />}
                     </td>

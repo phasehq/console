@@ -147,15 +147,15 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <FaChevronLeft /> Back to members
         </Link>
       </div>
-      <div className="flex-grow overflow-y-auto px-4 md:px-6 space-y-8 pb-8">
+      <div className="flex-grow overflow-y-auto px-4 md:px-6 space-y-6 pb-8">
         <div className="pt-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <Avatar member={member} size="xl" />
-            <div className="flex flex-col gap-1">
-              <h3 className="text-lg font-semibold">
+            <div className="flex flex-col gap-0.5">
+              <h3 className="text-base font-medium">
                 {member.fullName || 'User'} {member.self && ' (You)'}{' '}
               </h3>
-              <span className="text-neutral-500 text-sm">{member.email}</span>
+              <span className="text-neutral-500 text-xs">{member.email}</span>
               {member.lastLogin ? (
                 <span
                   className="text-neutral-500 text-xs flex items-center gap-1 cursor-help"
@@ -180,13 +180,13 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           </div>
         </div>
 
-        <div className="pt-4 space-y-4 border-t border-neutral-500/40">
+        <div className="pt-4 space-y-3 border-t border-neutral-500/40">
           <div>
-            <div className="text-lg font-semibold">Role</div>
-            <div className="text-neutral-500">Manage the role for this member</div>
+            <div className="text-base font-medium">Role</div>
+            <div className="text-neutral-500 text-sm">Manage the role for this member</div>
           </div>
           <div className="space-y-2">
-            <div className="text-lg w-max">
+            <div className="text-sm w-max">
               <RoleSelector
                 member={member}
                 organisationId={organisation.id}
@@ -194,7 +194,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
               />
             </div>
             <div className="flex flex-col gap-1">
-              <div className="text-sm text-neutral-500">
+              <div className="text-xs text-neutral-500">
                 {member.role?.description || 'No description available for this role'}
               </div>
             </div>
@@ -202,11 +202,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         </div>
 
         {userCanReadAppMemberships && (
-          <div className="pt-4 space-y-4 border-t border-neutral-500/40">
+          <div className="pt-4 space-y-3 border-t border-neutral-500/40">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-lg font-semibold">App Access</div>
-                <div className="text-neutral-500">
+                <div className="text-base font-medium">App Access</div>
+                <div className="text-neutral-500 text-sm">
                   Apps and Environments this member has access to
                 </div>
               </div>
@@ -224,11 +224,11 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                 member.appMemberships.map((app: AppMembershipType) => (
                   <div
                     key={app?.id}
-                    className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-2 group"
+                    className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100">
+                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
                           {app?.name}
                         </div>
                         <SseLabel sseEnabled={Boolean(app?.sseEnabled)} />
@@ -247,7 +247,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                       <div className="text-2xs uppercase tracking-widest text-neutral-500 mb-1">
                         Environments
                       </div>
-                      <div className="text-sm text-zinc-700 dark:text-zinc-300">
+                      <div className="text-xs text-zinc-700 dark:text-zinc-300">
                         {app?.environments?.map((env) => env?.name).join(' + ') || '-'}
                       </div>
                     </div>
@@ -258,9 +258,8 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                         href={`/${params.team}/apps/${app?.id}/access/members?manageAccount=${member.id}`}
                         title={`Manage ${member.fullName || member.email}'s access to ${app?.name}`}
                       >
-                        <Button variant="secondary" className="flex items-center gap-2">
-                          <FaCog className="h-4 w-4" />
-                          <span>Manage</span>
+                        <Button variant="secondary" icon={FaCog}>
+                          Manage
                         </Button>
                       </Link>
                     </div>
@@ -279,8 +278,8 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <div className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-lg font-semibold">Network Access Policy</div>
-                <div className="text-neutral-500">
+                <div className="text-base font-medium">Network Access Policy</div>
+                <div className="text-neutral-500 text-sm">
                   Manage the network access policy for this Account
                 </div>
               </div>
@@ -290,12 +289,12 @@ export default function MemberDetail({ params }: { params: { team: string; membe
             </div>
 
             {member.networkPolicies?.length! > 0 ? (
-              <div className="divide-y divide-neutral-500/20 py-6">
+              <div className="divide-y divide-neutral-500/20 py-4">
                 {member.networkPolicies?.map((policy) => (
-                  <div key={policy.id} className="flex items-center justify-between gap-8 py-4">
+                  <div key={policy.id} className="flex items-center justify-between gap-8 py-2">
                     <div className="flex items-center gap-2">
-                      <FaNetworkWired className="text-neutral-500 shrink-0" />
-                      <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                      <FaNetworkWired className="text-neutral-500 shrink-0 text-xs" />
+                      <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
                         {policy.name}
                       </div>
                     </div>
@@ -330,10 +329,12 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         )}
 
         {canViewTokensSection && (
-          <div className="pt-4 space-y-4 border-t border-neutral-500/40">
+          <div className="pt-4 space-y-3 border-t border-neutral-500/40">
             <div>
-              <div className="text-lg font-semibold">Personal Access Tokens</div>
-              <div className="text-neutral-500">Manage personal access tokens for this member</div>
+              <div className="text-base font-medium">Personal Access Tokens</div>
+              <div className="text-neutral-500 text-sm">
+                Manage personal access tokens for this member
+              </div>
             </div>
 
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
@@ -344,16 +345,16 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                   return (
                     <div
                       key={token!.id}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-2 group"
+                      className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-1.5 px-2 group"
                     >
-                      <div className="md:col-span-4 space-y-1">
+                      <div className="md:col-span-4 space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <FaKey className="text-neutral-500 flex-shrink-0" />
-                          <span className="font-medium text-lg text-zinc-900 dark:text-zinc-100 truncate">
+                          <FaKey className="text-neutral-500 flex-shrink-0 text-xs" />
+                          <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">
                             {token!.name}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 text-sm text-neutral-500">
+                        <div className="flex items-center gap-1 text-xs text-neutral-500">
                           <span className="text-neutral-500 text-xs flex items-center">
                             Token ID:
                           </span>
@@ -369,7 +370,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                         </div>
                       </div>
 
-                      <div className="md:col-span-4 text-neutral-500 text-sm flex  justify-center">
+                      <div className="md:col-span-4 text-neutral-500 text-xs flex justify-center">
                         <div
                           className="whitespace-nowrap"
                           title={new Date(token?.createdAt).toLocaleString()}
@@ -381,7 +382,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                       <div className="md:col-span-3 space-y-2">
                         <div
                           className={clsx(
-                            'flex items-center gap-1 text-sm ',
+                            'flex items-center gap-1 text-xs',
                             isExpired ? 'text-red-500' : 'text-neutral-500'
                           )}
                           title={
@@ -431,16 +432,16 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         {canDeleteMember && (
           <div className="pt-4 space-y-2 border-t border-neutral-500/40">
             <div>
-              <div className="text-lg font-semibold">Danger Zone</div>
-              <div className="text-neutral-500">
+              <div className="text-base font-medium">Danger Zone</div>
+              <div className="text-neutral-500 text-sm">
                 This action is destructive and cannot be reversed
               </div>
             </div>
 
-            <div className="flex justify-between items-center ring-1 ring-inset ring-red-500/40 bg-red-400/10 rounded-lg p-4">
+            <div className="flex justify-between items-center ring-1 ring-inset ring-red-500/40 bg-red-400/10 rounded-lg p-3">
               <div>
-                <div className="font-medium text-red-400">Remove member</div>
-                <div className="text-neutral-500">
+                <div className="font-medium text-sm text-red-400">Remove member</div>
+                <div className="text-neutral-500 text-xs">
                   Permanently remove this member from the organisation.
                 </div>
               </div>

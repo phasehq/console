@@ -281,8 +281,8 @@ const CreateServiceAccountTokenDialog = forwardRef(
             </div>
           ) : (
             <form className="space-y-6 pt-4" onSubmit={handleCreateNewSAToken}>
-              <div className="space-y-2 w-full">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">
+              <div className="w-full">
+                <label className="block text-neutral-500 text-xs mb-2" htmlFor="name">
                   Token name
                 </label>
                 <input required id="name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -291,7 +291,7 @@ const CreateServiceAccountTokenDialog = forwardRef(
               <div>
                 <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
                   <RadioGroup.Label as={Fragment}>
-                    <label className="block text-gray-700 text-sm font-bold mb-2">Expiry</label>
+                    <label className="block text-neutral-500 text-xs mb-2">Expiry</label>
                   </RadioGroup.Label>
                   <div className="flex flex-wrap items-center gap-2">
                     {tokenExpiryOptions.map((option) => (
