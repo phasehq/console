@@ -155,10 +155,10 @@ export default function Integrations({ params }: { params: { team: string } }) {
   return (
     <div className="w-full space-y-8 md:space-y-10  text-black dark:text-white">
       {userCanReadIntegrations ? (
-        <div className="space-y-4">
+        <div className="space-y-2">
           <div className="border-b border-neutral-500/20 pb-4">
-            <h2 className="text-black dark:text-white text-lg font-medium">Syncs</h2>
-            <p className="text-neutral-500">View and manage secret syncs</p>
+            <h2 className="text-black dark:text-white text-base font-medium">Syncs</h2>
+            <p className="text-neutral-500 text-sm">View and manage secret syncs</p>
           </div>
 
           {!noSyncs && userCanCreateIntegrations && (
@@ -170,7 +170,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
           {noApps && (
             <div className="flex flex-col items-center text-center gap-4 p-16">
               <div>
-                <div className="font-semibold text-black dark:text-white text-xl">No Apps</div>
+                <div className="font-medium text-black dark:text-white text-sm">No Apps</div>
                 <div className="text-neutral-500">
                   You don&apos;t have access to any Apps. Create a new app, or contact your
                   organistion admin for access to start syncing.

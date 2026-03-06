@@ -79,8 +79,8 @@ export default function DynamicSecrets({ params }: { params: { team: string } })
       {userCanReadDynamicSecrets ? (
         <div className="space-y-4">
           <div className="border-b border-neutral-500/20 pb-2">
-            <h2 className="text-black dark:text-white text-lg font-medium">Dynamic Secrets</h2>
-            <p className="text-neutral-500">View and manage dynamic secrets</p>
+            <h2 className="text-black dark:text-white text-base font-medium">Dynamic Secrets</h2>
+            <p className="text-neutral-500 text-sm">View and manage dynamic secrets</p>
           </div>
 
           {/* Grouped display */}
@@ -88,7 +88,7 @@ export default function DynamicSecrets({ params }: { params: { team: string } })
             <div className="space-y-8 divide-y divide-neutral-400/20">
               {Object.entries(groupedSecrets).map(([appId, appGroup]) => (
                 <div key={appId} className="space-y-1 py-4">
-                  <div className="font-semibold text-lg">{appGroup.appName}</div>
+                  <div className="font-medium text-sm">{appGroup.appName}</div>
                   <div className="flex flex-row gap-8 flex-1">
                     {Object.entries(appGroup.environments)
                       .sort(
@@ -98,7 +98,7 @@ export default function DynamicSecrets({ params }: { params: { team: string } })
                       )
                       .map(([envId, envGroup]) => (
                         <div key={envId} className="flex flex-col gap-2 min-w-[160px]">
-                          <div className="font-medium text-base text-neutral-700 dark:text-neutral-300 mb-2">
+                          <div className="font-medium text-xs text-neutral-700 dark:text-neutral-300 mb-2">
                             {envGroup.envName}
                           </div>
                           {envGroup.secrets.map((secret) => (
