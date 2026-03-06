@@ -285,9 +285,16 @@ function SecretRow(props: {
             inputTextColor()
           )}
           value={secret.key}
-          onChange={(e) =>
+          onChange={(e) => {
+            const { selectionStart } = e.target
             handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
-          }
+            requestAnimationFrame(() => {
+              if (keyInputRef.current) {
+                keyInputRef.current.selectionStart = selectionStart
+                keyInputRef.current.selectionEnd = selectionStart
+              }
+            })
+          }}
         />
         {keyActionMenu}
       </div>

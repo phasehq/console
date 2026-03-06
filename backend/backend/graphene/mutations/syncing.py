@@ -251,7 +251,10 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
             sync_options["kms_id"] = kms_id
 
         existing_syncs = EnvironmentSync.objects.filter(
-            environment__app_id=env.app.id, service=service_id, deleted_at=None
+            environment__app_id=env.app.id,
+            service=service_id,
+            authentication_id=credential_id,
+            deleted_at=None,
         )
 
         for es in existing_syncs:
@@ -334,7 +337,11 @@ class CreateGitHubActionsSync(graphene.Mutation):
 
         for es in existing_syncs:
             # Block duplicate org syncs to the same org regardless of visibility
-            if org_sync and es.options.get("org") == owner and es.options.get("org_sync"):
+            if (
+                org_sync
+                and es.options.get("org") == owner
+                and es.options.get("org_sync")
+            ):
                 raise GraphQLError(
                     "A sync already exists for this GitHub organization!"
                 )

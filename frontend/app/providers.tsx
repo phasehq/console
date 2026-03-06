@@ -11,6 +11,7 @@ import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 import { initializePostHog } from '@/utils/posthog'
 import { isCloudHosted } from '@/utils/appConfig'
+import { printConsoleBranding } from '@/utils/console'
 import { useEffect } from 'react'
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     if (isCloudHosted()) {
       initializePostHog()
     }
+
+    printConsoleBranding()
   }, [])
 
   return (

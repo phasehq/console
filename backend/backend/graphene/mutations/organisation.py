@@ -139,7 +139,7 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
             user=info.context.user, organisation_id=org_id, deleted_at=None
         )
 
-        expiry = timezone.now() + timedelta(days=3)
+        expiry = timezone.now() + timedelta(days=14)
         created_invites = []
 
         if not can_add_account(org, len(invites)):

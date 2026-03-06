@@ -5,7 +5,11 @@ import { EnvironmentType, DynamicSecretType } from '@/apollo/graphql'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { FaCheckCircle, FaChevronRight, FaExternalLinkAlt, FaTimesCircle } from 'react-icons/fa'
+import { FaChevronRight, FaExternalLinkAlt } from 'react-icons/fa'
+import {
+  MissingIndicator,
+  PresentIndicator,
+} from '@/app/[team]/apps/[app]/_components/SecretInfoLegend'
 import { Disclosure, Transition } from '@headlessui/react'
 import { FaBolt } from 'react-icons/fa6'
 
@@ -117,9 +121,9 @@ export const AppDynamicSecretRow = ({
           <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
             <div className="flex items-center justify-center" title={tooltipText(env)}>
               {env.dynamicSecret !== null ? (
-                <FaCheckCircle className="text-emerald-500 shrink-0" />
+                <PresentIndicator />
               ) : (
-                <FaTimesCircle className="text-red-500 shrink-0" />
+                <MissingIndicator />
               )}
             </div>
           </td>

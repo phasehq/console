@@ -70,9 +70,7 @@ const nextConfig = {
         ]
   },
   output: 'standalone',
-  experimental: {
-    esmExternals: 'loose',
-  },
+  experimental: {},
   webpack: (config, options) => {
     config.module.rules.push({
       test: /\.(graphql|gql)/,

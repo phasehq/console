@@ -2,9 +2,10 @@
 import { memo } from 'react'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaChevronRight, FaFolder, FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
+import { FaChevronRight, FaFolder } from 'react-icons/fa'
 import { AppFolder } from '../types'
 import { EnvFolder } from './EnvFolder'
+import { PresentIndicator, MissingIndicator } from './SecretInfoLegend'
 import { SecretFolderType, EnvironmentType } from '@/apollo/graphql'
 
 type AppFolderRowProps = { appFolder: AppFolder; pathname: string }
@@ -44,11 +45,7 @@ const AppFolderRowBase = ({ appFolder, pathname }: AppFolderRowProps) => {
             {appFolder.envs.map((env) => (
               <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
                 <div className="flex items-center justify-center" title={tooltipText(env)}>
-                  {env.folder !== null ? (
-                    <FaCheckCircle className="text-emerald-500 shrink-0" />
-                  ) : (
-                    <FaTimesCircle className="text-red-500 shrink-0" />
-                  )}
+                  {env.folder !== null ? <PresentIndicator /> : <MissingIndicator />}
                 </div>
               </td>
             ))}

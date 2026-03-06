@@ -3,6 +3,7 @@ import json
 import base64
 import os
 from django.shortcuts import redirect
+from django.views.decorators.http import require_POST
 from api.utils.syncing.auth import store_oauth_token
 
 from api.authentication.providers.authentik.views import AuthentikOpenIDConnectAdapter
@@ -121,6 +122,7 @@ class OktaLoginView(SocialLoginView):
     client_class = OAuth2Client
 
 
+@require_POST
 def logout_view(request):
     logout(request)
     return JsonResponse({"message": "Logged out"})

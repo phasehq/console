@@ -59,7 +59,7 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full p-8 pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col oveflow-y-auto"
+      className="w-full p-8 pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto"
       style={{ height: 'calc(100vh - 64px)' }}
     >
       <div className="flex items-center gap-2 pb-8">
