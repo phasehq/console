@@ -231,7 +231,7 @@ export const CreateAzureKeyVaultSync = (props: { appId: string; closeModal: () =
               <Input value={path} setValue={setPath} label="Path" />
             </div>
 
-            <div className="flex justify-between items-center gap-4 py-8">
+            <div className="flex justify-between items-center gap-4 py-4">
               <div className="border-b border-neutral-500/40 w-full"></div>
               <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
@@ -427,7 +427,7 @@ export const CreateAzureKeyVaultSync = (props: { appId: string; closeModal: () =
           </div>
         )}
         {credentialsValid && (
-          <label className="flex items-center gap-2 pt-4 cursor-pointer text-sm text-neutral-500">
+          <label className="flex items-center gap-2 pt-8 cursor-pointer text-sm text-neutral-500">
             <input
               type="checkbox"
               checked={consentGiven}
