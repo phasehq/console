@@ -1,0 +1,32 @@
+mutation CreateNewAzureKeyVaultSync(
+  $envId: ID!
+  $path: String!
+  $credentialId: ID!
+  $vaultUri: String!
+  $syncMode: String!
+  $secretName: String
+) {
+  createAzureKeyVaultSync(
+    envId: $envId
+    path: $path
+    credentialId: $credentialId
+    vaultUri: $vaultUri
+    syncMode: $syncMode
+    secretName: $secretName
+  ) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}

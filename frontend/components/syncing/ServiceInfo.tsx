@@ -129,5 +129,15 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
   } else if (sync.serviceInfo?.id?.includes('render')) {
     const resourceName: string = JSON.parse(sync.options)['resource_name']
     return <div className="flex gap-2 text-xs text-neutral-500">{resourceName}</div>
+  } else if (sync.serviceInfo?.id?.includes('azure_key_vault')) {
+    const options = JSON.parse(sync.options)
+    const vaultUri = options['vault_uri']
+    const syncMode = options['sync_mode']
+    const vaultName = vaultUri.replace('https://', '').replace('.vault.azure.net', '')
+    return (
+      <div className="flex gap-2 text-xs text-neutral-500">
+        {vaultName} ({syncMode === 'blob' ? options['secret_name'] : 'individual'})
+      </div>
+    )
   } else return <>{sync.serviceInfo?.id}</>
 }

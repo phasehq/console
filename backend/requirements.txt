@@ -5,6 +5,8 @@ attrs==22.2.0
 autobahn==23.1.2
 Automat==22.10.0
 autopep8==2.0.2
+azure-identity==1.21.0
+azure-keyvault-secrets==4.9.0
 boto3==1.35.0
 botocore==1.35.0
 certifi==2024.7.4
