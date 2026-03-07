@@ -263,40 +263,6 @@ class DeleteEnvironmentMutation(graphene.Mutation):
         return DeleteEnvironmentMutation(ok=True)
 
 
-class SwapEnvironmentOrderMutation(graphene.Mutation):
-    class Arguments:
-        environment1_id = graphene.ID(required=True)
-        environment2_id = graphene.ID(required=True)
-
-    ok = graphene.Boolean()
-
-    @classmethod
-    def mutate(cls, root, info, environment1_id, environment2_id):
-        user = info.context.user
-
-        with transaction.atomic():
-            environment1 = Environment.objects.select_for_update().get(id=environment1_id)
-            environment2 = Environment.objects.select_for_update().get(id=environment2_id)
-            org = environment1.app.organisation
-
-            if not user_has_permission(
-                info.context.user, "update", "Environments", org, True
-            ):
-                raise GraphQLError("You do not have permission to update environments")
-
-            if not can_use_custom_envs(org):
-                raise GraphQLError(
-                    "Your Organisation doesn't have access to Custom Environments"
-                )
-
-            environment1.index, environment2.index = environment2.index, environment1.index
-
-            environment1.save(update_fields=["index"])
-            environment2.save(update_fields=["index"])
-
-        return SwapEnvironmentOrderMutation(ok=True)
-
-
 class UpdateEnvironmentOrderMutation(graphene.Mutation):
     class Arguments:
         app_id = graphene.ID(required=True)
