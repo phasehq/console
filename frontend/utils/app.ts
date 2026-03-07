@@ -1,4 +1,3 @@
-import { ApolloClient, ApolloQueryResult } from '@apollo/client'
 import {
   ApiEnvironmentEnvTypeChoices,
   AppType,
@@ -13,6 +12,7 @@ import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnv
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
+import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import {
   getUserKxPublicKey,
   getUserKxPrivateKey,
@@ -31,6 +31,36 @@ import {
 import { graphQlClient as client } from '@/apollo/client'
 
 const APP_VERSION = 1
+
+const EXAMPLE_APP_README = `## Example App
+
+This is an example application with some dummy secrets to help you get started with Phase.
+
+### App Readme
+
+App readmes support markdown rendering — making them a great place for developer documentation, runbooks, and notes.
+
+### What you can do here
+
+- Write onboarding docs for your team
+- Document environment-specific configuration
+- Add links to related resources and dashboards
+
+### Code blocks
+
+\`\`\`bash
+# Install the Phase CLI
+curl -fsSL https://pkg.phase.dev/install.sh | bash
+\`\`\`
+
+\`\`\`bash
+# Initialize and pull secrets
+phase init
+phase secrets list
+\`\`\`
+
+> You can edit this readme in **Settings**.
+`
 
 // Define the KeyringType interface
 export interface KeyringType {
@@ -375,6 +405,10 @@ export async function createApplication({
 
   if (withExampleSecrets) {
     await createExampleSecrets(newAppId, keyring)
+    await client.mutate({
+      mutation: UpdateAppInfoOp,
+      variables: { id: newAppId, description: EXAMPLE_APP_README },
+    })
   }
 
   await client.query({

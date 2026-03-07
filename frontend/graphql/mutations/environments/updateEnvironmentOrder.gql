@@ -1,0 +1,5 @@
+mutation UpdateEnvOrder($appId: ID!, $environmentOrder: [ID]!) {
+  updateEnvironmentOrder(appId: $appId, environmentOrder: $environmentOrder) {
+    ok
+  }
+}

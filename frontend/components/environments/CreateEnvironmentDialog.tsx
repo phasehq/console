@@ -110,8 +110,8 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       <UpsellDialog
         title={`Upgrade to ${isCloudHosted() ? 'Pro' : 'Enterprise'} to create custom environments`}
         buttonLabel={
-          <>
-            <FaPlus /> New Environment{' '}
+          <span className="flex items-center gap-2 truncate">
+            <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>{' '}
             <PlanLabel
               plan={
                 organisation?.plan === ApiOrganisationPlanChoices.Fr
@@ -121,7 +121,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
                   : ApiOrganisationPlanChoices.En
               }
             />
-          </>
+          </span>
         }
         buttonVariant="outline"
       />
@@ -134,8 +134,8 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       onClose={() => {}}
       buttonVariant={'outline'}
       buttonContent={
-        <div className="flex items-center gap-2">
-          <FaPlus /> New Environment
+        <div className="flex items-center gap-2 truncate">
+          <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>
         </div>
       }
       initialFocus={inputRef}

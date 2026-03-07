@@ -63,6 +63,7 @@ import { escapeRegExp } from 'lodash'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
   duplicateKeysExist,
+  exportToEnvFile,
   normalizeKey,
   processEnvFile,
   SortOption,
@@ -634,35 +635,8 @@ export default function EnvironmentPath({
     filteredDynamicSecrets.length === 0
 
   const downloadEnvFile = () => {
-    const envContent = serverSecrets
-      .map((secret) => {
-        const comment = secret.comment ? `#${secret.comment}\n` : ''
-        return `${comment}${secret.key}=${secret.value}`
-      })
-      .join('\n')
-
-    const blob = new Blob([envContent], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-
-    const a = document.createElement('a')
-    a.href = url
-
-    // Check if secretPath is root or not and form the filename accordingly
-    if (secretPath === '/') {
-      a.download = `${environment.app.name}.${environment.name.toLowerCase()}.env`
-    } else {
-      // Replace all slashes with dots
-      const formattedSecretPath = secretPath.toLowerCase().replace(/\//g, '.')
-      a.download = `${environment.app.name}.${environment.name.toLowerCase()}${formattedSecretPath}.env`
-    }
-
+    exportToEnvFile(serverSecrets, environment.app.name, environment.name, secretPath)
     logGlobalReveals()
-
-    document.body.appendChild(a)
-    a.click()
-
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
   }
 
   const NewFolderMenu = () => {
@@ -919,7 +893,7 @@ export default function EnvironmentPath({
 
   if (!userCanReadEnvironments || !userCanReadSecrets)
     return (
-      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
+      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center px-8">
         <EmptyState
           title="Access restricted"
           subtitle="You don't have the permissions required to view Secrets in this app."
@@ -946,7 +920,7 @@ export default function EnvironmentPath({
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
-        <div className="flex flex-col py-4 bg-zinc-200 dark:bg-zinc-900">
+        <div className="flex flex-col py-4 px-8 bg-zinc-200 dark:bg-zinc-900">
           <div className="flex items-center gap-8 justify-between w-full">
             <div className="flex items-center gap-8">
               {envLinks.length > 1 ? (

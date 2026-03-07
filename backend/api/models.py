@@ -143,6 +143,7 @@ class App(models.Model):
         Organisation, related_name="apps", on_delete=models.CASCADE
     )
     name = models.CharField(max_length=64)
+    description = models.TextField(null=True, blank=True)
     identity_key = models.CharField(max_length=256)
     app_version = models.IntegerField(null=False, blank=False, default=1)
     app_token = models.CharField(max_length=64)

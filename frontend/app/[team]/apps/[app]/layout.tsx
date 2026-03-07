@@ -34,7 +34,7 @@ export default function AppLayout({
 
   const [tabs, setTabs] = useState([
     {
-      name: 'Secrets',
+      name: 'Home',
       link: '',
     },
     {
@@ -70,14 +70,14 @@ export default function AppLayout({
 
   return (
     <div
-      className="w-full p-8 pb-0 text-black dark:text-white flex flex-col overflow-y-auto"
+      className="w-full pt-8 text-black dark:text-white flex flex-col overflow-y-auto"
       style={{ height: 'calc(100vh - 64px)' }}
     >
       {loading && (
-        <div className="dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
+        <div className="px-8 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
       {app && (
-        <div className="flex items-baseline justify-between pb-6">
+        <div className="flex items-baseline justify-between pb-6 px-8">
           <div className="flex items-baseline gap-3 group">
             <h1 className="text-3xl font-bold">{app.name}</h1>
             <div className="opacity-0 group-hover:opacity-100 transition ease">
@@ -93,7 +93,7 @@ export default function AppLayout({
       )}
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+        <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 px-8">
           {tabs.map((tab) => (
             <Tab as={Fragment} key={tab.name}>
               {({ selected }) => (
