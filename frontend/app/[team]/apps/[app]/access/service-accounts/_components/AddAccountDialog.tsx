@@ -226,6 +226,10 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
           query: GetAppServiceAccounts,
           variables: { appId: appId },
         },
+        ...selectedAccounts.map((a) => ({
+          query: GetAppEnvironments,
+          variables: { appId: appId, memberId: a.id, memberType: MemberType.Service },
+        })),
       ],
     })
 
