@@ -107,27 +107,28 @@ class OrganisationType(DjangoObjectType):
             "pricing_version",
         )
 
-    def _get_member(self, info):
-        if not hasattr(self, "_cached_member"):
-            self._cached_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=self, deleted_at=None
+    @staticmethod
+    def _get_member(org, info):
+        if not hasattr(org, "_cached_member"):
+            org._cached_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=org, deleted_at=None
             )
-        return self._cached_member
+        return org._cached_member
 
     def resolve_role(self, info):
-        return self._get_member(info).role
+        return OrganisationType._get_member(self, info).role
 
     def resolve_member_id(self, info):
-        return self._get_member(info).id
+        return OrganisationType._get_member(self, info).id
 
     def resolve_keyring(self, info):
-        return self._get_member(info).wrapped_keyring
+        return OrganisationType._get_member(self, info).wrapped_keyring
 
     def resolve_recovery(self, info):
-        return self._get_member(info).wrapped_recovery
+        return OrganisationType._get_member(self, info).wrapped_recovery
 
     def resolve_identity_key(self, info):
-        return self._get_member(info).identity_key
+        return OrganisationType._get_member(self, info).identity_key
 
     def resolve_plan_detail(self, info):
 
