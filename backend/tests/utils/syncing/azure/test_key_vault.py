@@ -243,7 +243,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
         secrets = [("DB_HOST", "localhost", ""), ("DB_PORT", "5432", "")]
         success, result = sync_azure_kv_individual(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
         )
 
         self.assertTrue(success)
@@ -257,7 +257,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
         # MY_KEY and MY-KEY both map to MY-KEY
         secrets = [("MY_KEY", "v1", ""), ("MY-KEY", "v2", "")]
         success, result = sync_azure_kv_individual(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
         )
 
         self.assertFalse(success)
@@ -285,7 +285,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
         secrets = []  # No Phase secrets
         success, result = sync_azure_kv_individual(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
         )
 
         self.assertTrue(success)
@@ -314,7 +314,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
         secrets = [("MY_SECRET", "val", "")]
         success, result = sync_azure_kv_individual(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
         )
 
         self.assertTrue(success)
@@ -343,7 +343,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
         secrets = [("MY_SECRET", "val", "")]
         success, result = sync_azure_kv_individual(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
         )
 
         self.assertTrue(success)
@@ -370,7 +370,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
         secrets = []
         success, result = sync_azure_kv_individual(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
         )
 
         self.assertTrue(success)
@@ -387,7 +387,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
         secrets = [("KEY", "val", "")]
         success, result = sync_azure_kv_individual(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
         )
 
         self.assertFalse(success)
@@ -403,7 +403,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
         secrets = [("KEY", "val", "")]
         success, result = sync_azure_kv_individual(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
         )
 
         self.assertFalse(success)
@@ -430,7 +430,7 @@ class TestSyncAzureKvBlob(unittest.TestCase):
 
         secrets = [("DB_HOST", "localhost", ""), ("DB_PORT", "5432", "")]
         success, result = sync_azure_kv_blob(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net", "my-blob"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net", "my-blob"
         )
 
         self.assertTrue(success)
@@ -460,7 +460,7 @@ class TestSyncAzureKvBlob(unittest.TestCase):
 
         secrets = [("KEY", "val", "")]
         success, result = sync_azure_kv_blob(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net", "my-blob"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net", "my-blob"
         )
 
         self.assertTrue(success)
@@ -484,7 +484,7 @@ class TestSyncAzureKvBlob(unittest.TestCase):
 
         secrets = [("KEY_WITH_QUOTES", 'value "with" quotes', ""), ("SPECIAL", "a\nb\\c", "")]
         success, result = sync_azure_kv_blob(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net", "my-blob"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net", "my-blob"
         )
 
         self.assertTrue(success)
@@ -510,7 +510,7 @@ class TestSyncAzureKvBlob(unittest.TestCase):
 
         secrets = []
         success, result = sync_azure_kv_blob(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net", "my-blob"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net", "my-blob"
         )
 
         self.assertTrue(success)
@@ -528,7 +528,7 @@ class TestSyncAzureKvBlob(unittest.TestCase):
 
         secrets = [("KEY", "val", "")]
         success, result = sync_azure_kv_blob(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net", "my-blob"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net", "my-blob"
         )
 
         self.assertFalse(success)
@@ -544,7 +544,7 @@ class TestSyncAzureKvBlob(unittest.TestCase):
 
         secrets = [("KEY", "val", "")]
         success, result = sync_azure_kv_blob(
-            secrets, "tid", "cid", "csecret", "https://vault.azure.net", "my-blob"
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net", "my-blob"
         )
 
         self.assertFalse(success)

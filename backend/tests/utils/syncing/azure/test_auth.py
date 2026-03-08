@@ -30,11 +30,11 @@ class TestGetKvClient(unittest.TestCase):
     def test_returns_client_with_correct_params(self, mock_sc):
         mock_sc.return_value = "mock_client"
         mock_cred = MagicMock()
-        result = get_kv_client(mock_cred, "https://vault.azure.net")
+        result = get_kv_client(mock_cred, "https://myvault.vault.azure.net")
 
         self.assertEqual(result, "mock_client")
         mock_sc.assert_called_once_with(
-            vault_url="https://vault.azure.net",
+            vault_url="https://myvault.vault.azure.net",
             credential=mock_cred,
         )
 
@@ -115,7 +115,7 @@ class TestValidateAzureCredentials(unittest.TestCase):
         mock_client.list_properties_of_secrets.return_value = mock_iter
         mock_get_client.return_value = mock_client
 
-        result = validate_azure_credentials("cred-id", "https://vault.azure.net")
+        result = validate_azure_credentials("cred-id", "https://myvault.vault.azure.net")
 
         self.assertTrue(result)
 
@@ -152,7 +152,7 @@ class TestValidateAzureCredentials(unittest.TestCase):
 
         with patch("api.models.ProviderCredentials") as mock_pc:
             mock_pc.objects.get.return_value = mock_cred_obj
-            result = validate_azure_credentials("cred-id", "https://vault.azure.net")
+            result = validate_azure_credentials("cred-id", "https://myvault.vault.azure.net")
 
         self.assertFalse(result)
 
@@ -190,7 +190,7 @@ class TestValidateAzureCredentials(unittest.TestCase):
 
         with patch("api.models.ProviderCredentials") as mock_pc:
             mock_pc.objects.get.return_value = mock_cred_obj
-            result = validate_azure_credentials("cred-id", "https://vault.azure.net")
+            result = validate_azure_credentials("cred-id", "https://myvault.vault.azure.net")
 
         self.assertTrue(result)
 
