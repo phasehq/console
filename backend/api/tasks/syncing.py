@@ -544,9 +544,10 @@ def perform_render_service_sync(environment_sync):
 
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_azure_kv_sync(environment_sync):
-    credentials = {}
-    if environment_sync.authentication:
-        credentials = get_azure_credential(environment_sync)
+    if not environment_sync.authentication:
+        raise ValueError("Azure KV sync requires authentication credentials")
+
+    credentials = get_azure_credential(environment_sync)
 
     options = environment_sync.options
     sync_mode = options.get("sync_mode", "individual")
