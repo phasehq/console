@@ -138,7 +138,6 @@ from .graphene.mutations.environment import (
     EditSecretMutation,
     ReadSecretMutation,
     RenameEnvironmentMutation,
-    SwapEnvironmentOrderMutation,
     UpdateEnvironmentOrderMutation,
     UpdateMemberEnvScopeMutation,
 )
@@ -534,7 +533,7 @@ class Query(graphene.ObjectType):
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
             user=info.context.user, deleted_at=None
-        )
+        ).select_related("organisation")
 
         return [membership.organisation for membership in memberships]
 
@@ -653,22 +652,21 @@ class Query(graphene.ObjectType):
         app_environments = Environment.objects.filter(**filter).order_by("index")
 
         if member_type == MemberType.USER:
-            return [
-                app_env
-                for app_env in app_environments
-                if EnvironmentKey.objects.filter(
-                    user=org_member, environment_id=app_env.id
-                ).exists()
-            ]
-
+            key_filter = {"user": org_member}
         else:
-            return [
-                app_env
-                for app_env in app_environments
-                if EnvironmentKey.objects.filter(
-                    service_account=org_member, environment_id=app_env.id
-                ).exists()
-            ]
+            key_filter = {"service_account": org_member}
+
+        accessible_env_ids = set(
+            EnvironmentKey.objects.filter(
+                environment__app_id=app_id, **key_filter
+            ).values_list("environment_id", flat=True)
+        )
+
+        return [
+            app_env
+            for app_env in app_environments
+            if app_env.id in accessible_env_ids
+        ]
 
     def resolve_app_users(root, info, app_id):
         app = App.objects.get(id=app_id)
@@ -1072,7 +1070,6 @@ class Mutation(graphene.ObjectType):
     create_environment = CreateEnvironmentMutation.Field()
     delete_environment = DeleteEnvironmentMutation.Field()
     rename_environment = RenameEnvironmentMutation.Field()
-    swap_environment_order = SwapEnvironmentOrderMutation.Field()
     update_environment_order = UpdateEnvironmentOrderMutation.Field()
     create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
