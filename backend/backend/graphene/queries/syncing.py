@@ -5,7 +5,6 @@ from api.utils.crypto import (
     get_server_keypair,
 )
 
-logger = logging.getLogger(__name__)
 from api.models import (
     App,
     Environment,
@@ -39,6 +38,8 @@ from api.utils.syncing.render.main import (
 )
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_server_public_key(root, info):
