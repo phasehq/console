@@ -24,6 +24,13 @@ def _retry_on_rate_limit(func, *args, max_retries=3, **kwargs):
         except HttpResponseError as e:
             if e.status_code == 429 and attempt < max_retries:
                 wait_time = 2**attempt
+                if e.response and hasattr(e.response, "headers"):
+                    retry_after = e.response.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            wait_time = int(retry_after)
+                        except (ValueError, TypeError):
+                            pass
                 logger.warning(
                     "Azure KV rate limited (attempt %d/%d), waiting %ds",
                     attempt + 1,
