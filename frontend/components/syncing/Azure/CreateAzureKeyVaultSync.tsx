@@ -134,32 +134,41 @@ export const CreateAzureKeyVaultSync = (props: { appId: string; closeModal: () =
           return false
         }
 
-        await createAzureKvSync({
-          variables: {
-            envId: phaseEnv?.id,
-            path,
-            credentialId: credential.id,
-            vaultUri,
-            syncMode: 'blob',
-            secretName,
-          },
-          refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
-        })
+        try {
+          await createAzureKvSync({
+            variables: {
+              envId: phaseEnv?.id,
+              path,
+              credentialId: credential.id,
+              vaultUri,
+              syncMode: 'blob',
+              secretName,
+            },
+            refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
+          })
+          toast.success('Created new Sync!')
+          closeModal()
+        } catch (e: any) {
+          toast.error(e.message ?? 'Failed to create sync')
+        }
       } else {
-        await createAzureKvSync({
-          variables: {
-            envId: phaseEnv?.id,
-            path,
-            credentialId: credential.id,
-            vaultUri,
-            syncMode: 'individual',
-          },
-          refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
-        })
+        try {
+          await createAzureKvSync({
+            variables: {
+              envId: phaseEnv?.id,
+              path,
+              credentialId: credential.id,
+              vaultUri,
+              syncMode: 'individual',
+            },
+            refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
+          })
+          toast.success('Created new Sync!')
+          closeModal()
+        } catch (e: any) {
+          toast.error(e.message ?? 'Failed to create sync')
+        }
       }
-
-      toast.success('Created new Sync!')
-      closeModal()
     }
   }
 
@@ -352,7 +361,7 @@ export const CreateAzureKeyVaultSync = (props: { appId: string; closeModal: () =
                                   onChange={(event) => setKvSecretQuery(event.target.value)}
                                   required
                                   displayValue={(secret: AzureKeyVaultSecretType) =>
-                                    secret?.name!
+                                    secret?.name ?? ''
                                   }
                                   placeholder="Search secrets..."
                                 />
