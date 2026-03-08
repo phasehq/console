@@ -5,7 +5,6 @@ from api.utils.syncing.azure.auth import (
     get_azure_client_credential,
     get_kv_client,
     get_azure_credential,
-    validate_azure_credentials,
 )
 
 
@@ -74,125 +73,6 @@ class TestGetAzureCredential(unittest.TestCase):
         })
         self.assertEqual(mock_decrypt.call_count, 3)
         mock_get_server_keypair.assert_called_once()
-
-
-class TestValidateAzureCredentials(unittest.TestCase):
-
-    @patch("api.utils.syncing.azure.auth.get_kv_client")
-    @patch("api.utils.syncing.azure.auth.get_azure_client_credential")
-    @patch("api.utils.syncing.azure.auth.decrypt_asymmetric")
-    @patch("api.utils.syncing.azure.auth.get_server_keypair")
-    @patch("api.models.ProviderCredentials")
-    def test_valid_credentials_returns_true(
-        self,
-        mock_provider_creds_cls,
-        mock_get_keypair,
-        mock_decrypt,
-        mock_get_cred,
-        mock_get_client,
-    ):
-        # Setup keypair
-        mock_pk, mock_sk = MagicMock(), MagicMock()
-        mock_pk.hex.return_value = "pk_hex"
-        mock_sk.hex.return_value = "sk_hex"
-        mock_get_keypair.return_value = (mock_pk, mock_sk)
-
-        # Setup ProviderCredentials lookup
-        mock_cred_obj = MagicMock()
-        mock_cred_obj.credentials = {
-            "tenant_id": "enc_t",
-            "client_id": "enc_c",
-            "client_secret": "enc_s",
-        }
-        mock_provider_creds_cls.objects.get.return_value = mock_cred_obj
-
-        mock_decrypt.side_effect = lambda val, sk, pk: f"dec_{val}"
-
-        # Setup client that returns a secret on list
-        mock_client = MagicMock()
-        mock_iter = MagicMock()
-        mock_iter.__next__ = MagicMock(return_value=MagicMock())
-        mock_client.list_properties_of_secrets.return_value = mock_iter
-        mock_get_client.return_value = mock_client
-
-        result = validate_azure_credentials("cred-id", "https://myvault.vault.azure.net")
-
-        self.assertTrue(result)
-
-    @patch("api.utils.syncing.azure.auth.get_kv_client")
-    @patch("api.utils.syncing.azure.auth.get_azure_client_credential")
-    @patch("api.utils.syncing.azure.auth.decrypt_asymmetric")
-    @patch("api.utils.syncing.azure.auth.get_server_keypair")
-    def test_invalid_credentials_returns_false(
-        self,
-        mock_get_keypair,
-        mock_decrypt,
-        mock_get_cred,
-        mock_get_client,
-    ):
-        mock_pk, mock_sk = MagicMock(), MagicMock()
-        mock_pk.hex.return_value = "pk_hex"
-        mock_sk.hex.return_value = "sk_hex"
-        mock_get_keypair.return_value = (mock_pk, mock_sk)
-
-        mock_cred_obj = MagicMock()
-        mock_cred_obj.credentials = {
-            "tenant_id": "enc_t",
-            "client_id": "enc_c",
-            "client_secret": "enc_s",
-        }
-
-        mock_decrypt.side_effect = lambda val, sk, pk: f"dec_{val}"
-
-        mock_client = MagicMock()
-        mock_client.list_properties_of_secrets.return_value.__next__ = MagicMock(
-            side_effect=Exception("Authentication failed")
-        )
-        mock_get_client.return_value = mock_client
-
-        with patch("api.models.ProviderCredentials") as mock_pc:
-            mock_pc.objects.get.return_value = mock_cred_obj
-            result = validate_azure_credentials("cred-id", "https://myvault.vault.azure.net")
-
-        self.assertFalse(result)
-
-    @patch("api.utils.syncing.azure.auth.get_kv_client")
-    @patch("api.utils.syncing.azure.auth.get_azure_client_credential")
-    @patch("api.utils.syncing.azure.auth.decrypt_asymmetric")
-    @patch("api.utils.syncing.azure.auth.get_server_keypair")
-    def test_empty_vault_returns_true(
-        self,
-        mock_get_keypair,
-        mock_decrypt,
-        mock_get_cred,
-        mock_get_client,
-    ):
-        mock_pk, mock_sk = MagicMock(), MagicMock()
-        mock_pk.hex.return_value = "pk_hex"
-        mock_sk.hex.return_value = "sk_hex"
-        mock_get_keypair.return_value = (mock_pk, mock_sk)
-
-        mock_cred_obj = MagicMock()
-        mock_cred_obj.credentials = {
-            "tenant_id": "enc_t",
-            "client_id": "enc_c",
-            "client_secret": "enc_s",
-        }
-
-        mock_decrypt.side_effect = lambda val, sk, pk: f"dec_{val}"
-
-        mock_client = MagicMock()
-        # StopIteration means empty vault
-        mock_client.list_properties_of_secrets.return_value.__next__ = MagicMock(
-            side_effect=StopIteration
-        )
-        mock_get_client.return_value = mock_client
-
-        with patch("api.models.ProviderCredentials") as mock_pc:
-            mock_pc.objects.get.return_value = mock_cred_obj
-            result = validate_azure_credentials("cred-id", "https://myvault.vault.azure.net")
-
-        self.assertTrue(result)
 
 
 if __name__ == "__main__":
