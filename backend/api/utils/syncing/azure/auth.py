@@ -1,6 +1,12 @@
+import logging
+from django.conf import settings
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from azure.identity import ClientSecretCredential
 from azure.keyvault.secrets import SecretClient
+
+# Suppress verbose Azure SDK HTTP logging unless in debug mode
+if not settings.DEBUG:
+    logging.getLogger("azure").setLevel(logging.WARNING)
 
 
 def get_azure_credential(environment_sync):
