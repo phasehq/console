@@ -1,5 +1,6 @@
 from api.tasks.syncing import trigger_sync_tasks
 from api.utils.secrets import normalize_path_string
+from api.utils.syncing.azure.key_vault import validate_vault_uri
 
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
@@ -789,6 +790,16 @@ class CreateAzureKeyVaultSync(graphene.Mutation):
         cls, root, info, env_id, path, credential_id, vault_uri, sync_mode, secret_name=None
     ):
         service_id = "azure_key_vault"
+
+        # Validate sync_mode
+        if sync_mode not in ("individual", "blob"):
+            raise GraphQLError("Invalid sync mode. Must be 'individual' or 'blob'.")
+
+        # Validate and normalize vault_uri
+        try:
+            vault_uri = validate_vault_uri(vault_uri)
+        except ValueError as e:
+            raise GraphQLError(str(e))
 
         env = Environment.objects.get(id=env_id)
 

@@ -335,7 +335,9 @@ def resolve_azure_kv_secrets(root, info, credential_id, vault_uri):
             get_azure_client_credential,
             get_kv_client,
         )
-        from api.utils.syncing.azure.key_vault import list_kv_secrets
+        from api.utils.syncing.azure.key_vault import list_kv_secrets, validate_vault_uri
+
+        vault_uri = validate_vault_uri(vault_uri)
 
         tenant_id = decrypt_asymmetric(
             credential.credentials["tenant_id"], sk.hex(), pk.hex()

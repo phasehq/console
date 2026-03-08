@@ -43,6 +43,9 @@ def get_kv_client(credential, vault_uri):
 def validate_azure_credentials(credential_id, vault_uri):
     """Validate Azure credentials by attempting to list secrets in the vault."""
     from api.models import ProviderCredentials
+    from api.utils.syncing.azure.key_vault import validate_vault_uri
+
+    vault_uri = validate_vault_uri(vault_uri)
 
     pk, sk = get_server_keypair()
     cred = ProviderCredentials.objects.get(id=credential_id)

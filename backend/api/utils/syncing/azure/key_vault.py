@@ -1,3 +1,4 @@
+import re
 import json
 import time
 import logging
@@ -8,6 +9,31 @@ from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from .auth import get_azure_client_credential, get_kv_client
 
 logger = logging.getLogger(__name__)
+
+AZURE_KV_URI_PATTERN = re.compile(
+    r"^https://[a-zA-Z](?!.*--)[a-zA-Z0-9-]{1,22}[a-zA-Z0-9]\.vault\."
+    r"(azure\.net"            # Public cloud
+    r"|usgovcloudapi\.net"    # US Government
+    r"|azure\.cn"             # China (21Vianet)
+    r")/?$"
+)
+
+
+def validate_vault_uri(vault_uri):
+    """Validate and normalize an Azure Key Vault URI.
+
+    Supports all Azure cloud environments (public, government, China, Germany).
+    Returns the normalized URI (trailing slash stripped).
+    Raises ValueError if the URI is invalid.
+    """
+    if not vault_uri:
+        raise ValueError("Vault URI is required")
+    vault_uri = vault_uri.rstrip("/")
+    if not AZURE_KV_URI_PATTERN.match(vault_uri + "/"):
+        raise ValueError(
+            "Invalid Vault URI. Expected format: https://<vault-name>.vault.azure.net"
+        )
+    return vault_uri
 
 
 class AzureKeyVaultSecretType(ObjectType):
@@ -127,6 +153,8 @@ def sync_azure_kv_individual(
         tuple: (bool, dict) indicating success/failure and a message.
     """
     try:
+        vault_uri = validate_vault_uri(vault_uri)
+
         # Build Phase secret map with name transformation
         phase_secrets = {}
         for key, value, _comment in secrets:
@@ -185,6 +213,8 @@ def sync_azure_kv_blob(
         tuple: (bool, dict) indicating success/failure and a message.
     """
     try:
+        vault_uri = validate_vault_uri(vault_uri)
+
         secrets_dict = {k: v for k, v, _ in secrets}
         blob = json.dumps(secrets_dict)
 

@@ -133,7 +133,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const options = JSON.parse(sync.options)
     const vaultUri = options['vault_uri']
     const syncMode = options['sync_mode']
-    const vaultName = vaultUri.replace('https://', '').replace('.vault.azure.net', '')
+    const vaultName = vaultUri.replace('https://', '').replace(/\.vault\..+$/, '')
     return (
       <div className="flex gap-2 text-xs text-neutral-500">
         {vaultName} ({syncMode === 'blob' ? options['secret_name'] : 'individual'})
