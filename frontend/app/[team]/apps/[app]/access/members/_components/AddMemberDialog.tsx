@@ -227,6 +227,10 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
           query: GetAppMembers,
           variables: { appId: appId },
         },
+        ...selectedMembers.map((m) => ({
+          query: GetAppEnvironments,
+          variables: { appId: appId, memberId: m.id },
+        })),
       ],
     })
 

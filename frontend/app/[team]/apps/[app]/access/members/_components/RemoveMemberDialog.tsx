@@ -1,5 +1,6 @@
 import RemoveMemberFromApp from '@/graphql/mutations/apps/removeAppMember.gql'
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { useMutation } from '@apollo/client'
 import { Fragment, useRef, useState } from 'react'
 import { OrganisationMemberType } from '@/apollo/graphql'
@@ -31,6 +32,10 @@ export const RemoveMemberConfirmDialog = ({
         {
           query: GetAppMembers,
           variables: { appId: appId },
+        },
+        {
+          query: GetAppEnvironments,
+          variables: { appId: appId, memberId: member.id },
         },
       ],
     })
