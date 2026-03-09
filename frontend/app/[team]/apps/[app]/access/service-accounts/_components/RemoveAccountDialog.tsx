@@ -2,6 +2,7 @@
 
 import RemoveMemberFromApp from '@/graphql/mutations/apps/removeAppMember.gql'
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { useMutation } from '@apollo/client'
 import { useRef } from 'react'
 import { ServiceAccountType, MemberType } from '@/apollo/graphql'
@@ -31,6 +32,10 @@ export const RemoveAccountConfirmDialog = ({
         {
           query: GetAppServiceAccounts,
           variables: { appId: appId },
+        },
+        {
+          query: GetAppEnvironments,
+          variables: { appId: appId, memberId: account.id, memberType: MemberType.Service },
         },
       ],
     })

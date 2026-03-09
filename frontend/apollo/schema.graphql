@@ -1165,7 +1165,6 @@ type Mutation {
   ): CreateEnvironmentMutation
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
-  swapEnvironmentOrder(environment1Id: ID!, environment2Id: ID!): SwapEnvironmentOrderMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
   createEnvironmentKey(
     envId: ID!
@@ -1571,10 +1570,6 @@ type DeleteEnvironmentMutation {
 
 type RenameEnvironmentMutation {
   environment: EnvironmentType
-}
-
-type SwapEnvironmentOrderMutation {
-  ok: Boolean
 }
 
 type UpdateEnvironmentOrderMutation {
