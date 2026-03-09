@@ -70,7 +70,18 @@ class TestRetryOnRateLimit(unittest.TestCase):
         self.assertEqual(mock_sleep.call_count, 3)
 
     @patch("api.utils.syncing.azure.key_vault.time.sleep")
-    def test_raises_immediately_on_non_429(self, mock_sleep):
+    def test_retries_on_409_conflict(self, mock_sleep):
+        error_409 = HttpResponseError(message="conflict")
+        error_409.status_code = 409
+
+        func = MagicMock(side_effect=[error_409, "ok"])
+        result = _retry_on_rate_limit(func, "arg1")
+        self.assertEqual(result, "ok")
+        self.assertEqual(func.call_count, 2)
+        mock_sleep.assert_called_once_with(1)  # 2^0
+
+    @patch("api.utils.syncing.azure.key_vault.time.sleep")
+    def test_raises_immediately_on_non_retryable_error(self, mock_sleep):
         error_403 = HttpResponseError(message="forbidden")
         error_403.status_code = 403
 
