@@ -40,6 +40,7 @@ export default function Members({ params }: { params: { team: string; app: strin
   const { data, loading } = useQuery(GetAppMembers, {
     variables: { appId: params.app },
     skip: !userCanReadAppMembers,
+    fetchPolicy: 'cache-and-network',
   })
 
   const { data: session } = useSession()
