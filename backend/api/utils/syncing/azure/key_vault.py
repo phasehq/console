@@ -4,7 +4,7 @@ import time
 import logging
 import graphene
 from graphene import ObjectType
-from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
+from azure.core.exceptions import HttpResponseError
 
 from .auth import get_azure_client_credential, get_kv_client
 
@@ -22,7 +22,7 @@ AZURE_KV_URI_PATTERN = re.compile(
 def validate_vault_uri(vault_uri):
     """Validate and normalize an Azure Key Vault URI.
 
-    Supports all Azure cloud environments (public, government, China, Germany).
+    Supports Azure cloud environments: public, US Government, and China (21Vianet).
     Returns the normalized URI (trailing slash stripped).
     Raises ValueError if the URI is invalid.
     """
@@ -43,12 +43,12 @@ class AzureKeyVaultSecretType(ObjectType):
 
 
 def _retry_on_rate_limit(func, *args, max_retries=3, **kwargs):
-    """Retry a function call with exponential backoff on 429 rate limit errors."""
+    """Retry a function call with exponential backoff on 429 rate limit and 409 conflict errors."""
     for attempt in range(max_retries + 1):
         try:
             return func(*args, **kwargs)
         except HttpResponseError as e:
-            if e.status_code == 429 and attempt < max_retries:
+            if e.status_code in (429, 409) and attempt < max_retries:
                 wait_time = 2**attempt
                 if e.response and hasattr(e.response, "headers"):
                     retry_after = e.response.headers.get("Retry-After")
@@ -58,7 +58,8 @@ def _retry_on_rate_limit(func, *args, max_retries=3, **kwargs):
                         except (ValueError, TypeError):
                             pass
                 logger.warning(
-                    "Azure KV rate limited (attempt %d/%d), waiting %ds",
+                    "Azure KV retryable error %d (attempt %d/%d), waiting %ds",
+                    e.status_code,
                     attempt + 1,
                     max_retries,
                     wait_time,
