@@ -1,3 +1,5 @@
+import re
+
 from api.tasks.syncing import trigger_sync_tasks
 from api.utils.secrets import normalize_path_string
 from api.utils.syncing.azure.key_vault import validate_vault_uri
@@ -817,6 +819,9 @@ class CreateAzureKeyVaultSync(graphene.Mutation):
 
         if sync_mode == "blob" and not secret_name:
             raise GraphQLError("Secret name is required for blob sync mode")
+
+        if secret_name and not re.match(r'^[a-zA-Z0-9-]+$', secret_name):
+            raise GraphQLError("Secret name can only contain alphanumeric characters and hyphens")
 
         sync_options = {
             "vault_uri": vault_uri,
