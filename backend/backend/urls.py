@@ -4,6 +4,7 @@ from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
 from api.views.graphql import PrivateGraphQLView
+from api.views.apps import PublicAppsView, PublicAppDetailView
 from api.views.environments import PublicEnvironmentsView, PublicEnvironmentDetailView
 from api.views.secrets import E2EESecretsView, PublicSecretsView
 from api.views.auth import (
@@ -45,6 +46,8 @@ urlpatterns = [
 public_urls = [
     path("public/", root_endpoint),
     path("public/v1/secrets/", PublicSecretsView.as_view()),
+    path("public/v1/apps/", PublicAppsView.as_view()),
+    path("public/v1/apps/<app_id>/", PublicAppDetailView.as_view()),
     path("public/v1/environments/", PublicEnvironmentsView.as_view()),
     path("public/v1/environments/<env_id>/", PublicEnvironmentDetailView.as_view()),
     path(

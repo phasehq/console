@@ -52,6 +52,15 @@ class PlanBasedRateThrottle(SimpleRateThrottle):
                         new_rate = self.get_rate_for_plan(plan)
                     except AttributeError:
                         pass
+                else:
+                    # Org-only mode fallback (e.g. apps CRUD API)
+                    org = request.auth.get("organisation")
+                    if org:
+                        try:
+                            plan = org.plan
+                            new_rate = self.get_rate_for_plan(plan)
+                        except AttributeError:
+                            pass
 
         # Update the throttle configuration for this specific request
         self.rate = new_rate

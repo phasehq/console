@@ -8,6 +8,7 @@ from api.utils.secrets import (
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from .models import (
+    App,
     CustomUser,
     Environment,
     EnvironmentKey,
@@ -215,6 +216,12 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_type(self, obj):
         return "static"
+
+
+class AppSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = App
+        fields = ["id", "name", "description", "sse_enabled", "created_at", "updated_at"]
 
 
 class EnvironmentSerializer(serializers.ModelSerializer):

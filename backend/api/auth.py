@@ -154,9 +154,32 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                         except Environment.DoesNotExist:
                             raise exceptions.NotFound("Environment not found")
                     else:
-                        raise exceptions.AuthenticationFailed(
-                            "Missing app_id parameter"
-                        )
+                        # Check URL kwargs for app_id
+                        # (used by detail endpoints like /apps/<app_id>/)
+                        app_id_from_url = None
+                        if (
+                            hasattr(request, "resolver_match")
+                            and request.resolver_match
+                        ):
+                            app_id_from_url = (
+                                request.resolver_match.kwargs.get("app_id")
+                            )
+
+                        if app_id_from_url:
+                            App = apps.get_model("api", "App")
+                            try:
+                                app = App.objects.select_related(
+                                    "organisation"
+                                ).get(id=app_id_from_url)
+                            except App.DoesNotExist:
+                                raise exceptions.NotFound(
+                                    f"App with ID {app_id_from_url} not found"
+                                )
+                            auth["app"] = app
+                        else:
+                            # Org-only mode: no app, no env
+                            # Organisation resolved from token below
+                            auth["org_only"] = True
 
         auth["environment"] = env
 
@@ -175,7 +198,10 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             auth["org_member"] = org_member
             user = org_member.user
 
-            if env:
+            if auth.get("org_only"):
+                # Org-only mode: resolve organisation from the member
+                auth["organisation"] = org_member.organisation
+            elif env:
                 if not user_can_access_environment(user.userId, env.id):
                     raise exceptions.PermissionDenied(
                         "User cannot access this environment"
@@ -211,7 +237,10 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 auth["service_account"] = service_account
                 auth["service_account_token"] = service_token
 
-                if env:
+                if auth.get("org_only"):
+                    # Org-only mode: resolve organisation from the SA
+                    auth["organisation"] = service_account.organisation
+                elif env:
                     if not service_account_can_access_environment(
                         service_account.id, env.id
                     ):
