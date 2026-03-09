@@ -93,12 +93,12 @@ export const CreateAzureKeyVaultSync = (props: { appId: string; closeModal: () =
 
     if (credential === null) {
       toast.error('Please select credentials to use for this sync')
-      return false
+      return
     }
 
     if (!vaultUri) {
       toast.error('Please enter a Vault URI')
-      return false
+      return
     }
 
     if (!credentialsValid) {
@@ -112,26 +112,26 @@ export const CreateAzureKeyVaultSync = (props: { appId: string; closeModal: () =
 
         if (error || !secretsData) {
           toast.error('Failed to connect to Azure Key Vault. Check your credentials and Vault URI.')
-          return false
+          return
         }
 
         setKvSecrets(secretsData.azureKvSecrets ?? [])
         setCredentialsValid(true)
-      } catch {
+      } catch (error) {
+        console.error('Azure KV credential validation failed:', error)
         toast.error('Failed to connect to Azure Key Vault. Check your credentials and Vault URI.')
-        return false
       }
     } else {
       if (syncMode === 'blob') {
         const secretName = createNewSecret ? newSecretName : kvSecret?.name
         if (!secretName) {
           toast.error('Please select or enter a secret name for blob mode')
-          return false
+          return
         }
 
         if (createNewSecret && !AZ_KV_SECRET_NAME_REGEX.test(secretName)) {
           toast.error('Secret name can only contain alphanumeric characters and hyphens')
-          return false
+          return
         }
 
         try {
