@@ -9,6 +9,7 @@ type Pattern = {
 
 interface CardProps {
   pattern?: Pattern
+  padding?: string
   children: ReactNode
 }
 
@@ -55,7 +56,7 @@ function CardPattern({ mouseX, mouseY, squares }: CardPatternProps) {
   )
 }
 
-export function Card({ pattern, children }: CardProps) {
+export function Card({ pattern, padding = 'p-4', children }: CardProps) {
   let mouseX = useMotionValue(0)
   let mouseY = useMotionValue(0)
 
@@ -83,7 +84,7 @@ export function Card({ pattern, children }: CardProps) {
     >
       <CardPattern squares={defaultPattern.squares} mouseX={mouseX} mouseY={mouseY} />
       <div className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-zinc-900/7.5 group-hover:ring-zinc-900/10 dark:ring-white/10 dark:group-hover:ring-white/20" />
-      <div className="p-4 relative rounded-2xl w-full">{children}</div>
+      <div className={`${padding} relative rounded-2xl w-full`}>{children}</div>
     </div>
   )
 }

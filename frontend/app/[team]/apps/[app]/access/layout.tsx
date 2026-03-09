@@ -48,7 +48,7 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full py-8 pb-0 text-black dark:text-white flex flex-col oveflow-y-auto space-y-8"
+      className="w-full px-8 py-8 pb-0 text-black dark:text-white flex flex-col overflow-y-auto space-y-8"
       style={{ height: 'calc(100vh - 64px)' }}
     >
       <div>

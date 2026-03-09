@@ -893,7 +893,7 @@ export default function EnvironmentPath({
 
   if (!userCanReadEnvironments || !userCanReadSecrets)
     return (
-      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center">
+      <div className="h-full max-h-screen overflow-y-auto w-full flex items-center justify-center px-8">
         <EmptyState
           title="Access restricted"
           subtitle="You don't have the permissions required to view Secrets in this app."
@@ -920,7 +920,7 @@ export default function EnvironmentPath({
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
-        <div className="flex flex-col py-4 bg-zinc-200 dark:bg-zinc-900">
+        <div className="flex flex-col py-4 px-8 bg-zinc-200 dark:bg-zinc-900">
           <div className="flex items-center gap-8 justify-between w-full">
             <div className="flex items-center gap-8">
               {envLinks.length > 1 ? (

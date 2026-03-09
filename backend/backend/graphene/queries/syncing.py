@@ -7,6 +7,7 @@ from api.models import (
     Environment,
     EnvironmentSync,
     Organisation,
+    OrganisationMember,
     ProviderCredentials,
     ServerEnvironmentKey,
 )
@@ -368,13 +369,18 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
         ):
             return []
 
-        return [
-            sync
-            for sync in EnvironmentSync.objects.filter(
-                environment__app__organisation_id=org_id, deleted_at=None
+        org_member = OrganisationMember.objects.get(
+            user_id=info.context.user.userId, organisation_id=org_id, deleted_at=None
+        )
+        accessible_app_ids = set(org_member.apps.values_list("id", flat=True))
+
+        return list(
+            EnvironmentSync.objects.filter(
+                environment__app__organisation_id=org_id,
+                environment__app_id__in=accessible_app_ids,
+                deleted_at=None,
             )
-            if user_can_access_app(info.context.user.userId, sync.environment.app.id)
-        ]
+        )
 
     # If neither app_id, env_id, nor org_id is provided
     else:

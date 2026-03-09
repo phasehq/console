@@ -123,15 +123,16 @@ class RotateAppKeysMutation(graphene.Mutation):
         return RotateAppKeysMutation(app=app)
 
 
-class UpdateAppNameMutation(graphene.Mutation):
+class UpdateAppInfoMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
-        name = graphene.String(required=True)
+        name = graphene.String(required=False)
+        description = graphene.String(required=False)
 
     app = graphene.Field(AppType)
 
     @classmethod
-    def mutate(cls, root, info, id, name):
+    def mutate(cls, root, info, id, name=None, description=None):
         user = info.context.user
         app = App.objects.get(id=id)
 
@@ -143,18 +144,26 @@ class UpdateAppNameMutation(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to update Apps")
 
-        # Validate name is not blank
-        if not name or name.strip() == "":
-            raise GraphQLError("App name cannot be blank")
+        if name is not None:
+            # Validate name is not blank
+            if not name or name.strip() == "":
+                raise GraphQLError("App name cannot be blank")
 
-        # Validate name length
-        if len(name) > 64:
-            raise GraphQLError("App name cannot exceed 64 characters")
+            # Validate name length
+            if len(name) > 64:
+                raise GraphQLError("App name cannot exceed 64 characters")
 
-        app.name = name
+            app.name = name
+
+        if description is not None:
+            if len(description) > 10000:
+                raise GraphQLError("App description cannot exceed 10,000 characters")
+
+            app.description = description
+
         app.save()
 
-        return UpdateAppNameMutation(app=app)
+        return UpdateAppInfoMutation(app=app)
 
 
 class DeleteAppMutation(graphene.Mutation):

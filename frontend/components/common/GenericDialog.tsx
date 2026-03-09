@@ -71,7 +71,7 @@ const GenericDialog = forwardRef(
     return (
       <>
         {buttonContent && (
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center max-w-full">
             <Button
               variant={buttonVariant}
               onClick={openModal}
@@ -126,7 +126,7 @@ const GenericDialog = forwardRef(
                       className="flex w-full justify-between gap-2 items-start"
                     >
                       {dialogTitle || (
-                        <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-all">
+                        <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-words">
                           {title}
                         </h3>
                       )}

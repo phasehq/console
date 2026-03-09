@@ -81,7 +81,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   }
 
   const computedClassName = clsx(
-    'inline-flex justify-center items-center overflow-hidden font-medium transition-all ease-in-out whitespace-nowrap',
+    'inline-flex justify-center items-center max-w-full overflow-hidden font-medium transition-all ease-in-out whitespace-nowrap',
     sizeStyles[size].text,
     sizeStyles[size].gap,
     variantStyles[variant],

@@ -1,5 +1,6 @@
 import re
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
 from api.utils.access.permissions import (
@@ -144,49 +145,50 @@ class CreateEnvironmentMutation(graphene.Mutation):
             else:
                 index = 0
 
-        environment = Environment.objects.create(
-            app=app,
-            name=environment_data.name,
-            env_type=environment_data.env_type,
-            index=index,
-            identity_key=environment_data.identity_key,
-            wrapped_seed=environment_data.wrapped_seed,
-            wrapped_salt=environment_data.wrapped_salt,
-        )
+        with transaction.atomic():
+            environment = Environment.objects.create(
+                app=app,
+                name=environment_data.name,
+                env_type=environment_data.env_type,
+                index=index,
+                identity_key=environment_data.identity_key,
+                wrapped_seed=environment_data.wrapped_seed,
+                wrapped_salt=environment_data.wrapped_salt,
+            )
 
-        org_owner = OrganisationMember.objects.get(
-            organisation=environment.app.organisation,
-            role__name="Owner",
-            deleted_at=None,
-        )
+            org_owner = OrganisationMember.objects.get(
+                organisation=environment.app.organisation,
+                role__name="Owner",
+                deleted_at=None,
+            )
 
-        # Add the org owner to the environment
-        EnvironmentKey.objects.create(
-            environment=environment,
-            user=org_owner,
-            identity_key=environment_data.identity_key,
-            wrapped_seed=environment_data.wrapped_seed,
-            wrapped_salt=environment_data.wrapped_salt,
-        )
-
-        # Add admins to the environment
-        for key in admin_keys:
+            # Add the org owner to the environment
             EnvironmentKey.objects.create(
                 environment=environment,
-                user_id=key.user_id,
-                wrapped_seed=key.wrapped_seed,
-                wrapped_salt=key.wrapped_salt,
-                identity_key=key.identity_key,
+                user=org_owner,
+                identity_key=environment_data.identity_key,
+                wrapped_seed=environment_data.wrapped_seed,
+                wrapped_salt=environment_data.wrapped_salt,
             )
 
-        # Add Server keys if provided
-        if wrapped_seed and wrapped_salt:
-            ServerEnvironmentKey.objects.create(
-                environment=environment,
-                identity_key=environment_data.identity_key,
-                wrapped_seed=wrapped_seed,
-                wrapped_salt=wrapped_salt,
-            )
+            # Add admins to the environment
+            for key in admin_keys:
+                EnvironmentKey.objects.create(
+                    environment=environment,
+                    user_id=key.user_id,
+                    wrapped_seed=key.wrapped_seed,
+                    wrapped_salt=key.wrapped_salt,
+                    identity_key=key.identity_key,
+                )
+
+            # Add Server keys if provided
+            if wrapped_seed and wrapped_salt:
+                ServerEnvironmentKey.objects.create(
+                    environment=environment,
+                    identity_key=environment_data.identity_key,
+                    wrapped_seed=wrapped_seed,
+                    wrapped_salt=wrapped_salt,
+                )
 
         return CreateEnvironmentMutation(environment=environment)
 
@@ -261,23 +263,20 @@ class DeleteEnvironmentMutation(graphene.Mutation):
         return DeleteEnvironmentMutation(ok=True)
 
 
-class SwapEnvironmentOrderMutation(graphene.Mutation):
+class UpdateEnvironmentOrderMutation(graphene.Mutation):
     class Arguments:
-        environment1_id = graphene.ID(required=True)
-        environment2_id = graphene.ID(required=True)
+        app_id = graphene.ID(required=True)
+        environment_order = graphene.List(graphene.ID, required=True)
 
     ok = graphene.Boolean()
 
     @classmethod
-    def mutate(cls, root, info, environment1_id, environment2_id):
+    def mutate(cls, root, info, app_id, environment_order):
         user = info.context.user
-        environment1 = Environment.objects.get(id=environment1_id)
-        environment2 = Environment.objects.get(id=environment2_id)
-        org = environment1.app.organisation
+        app = App.objects.get(id=app_id)
+        org = app.organisation
 
-        if not user_has_permission(
-            info.context.user, "update", "Environments", org, True
-        ):
+        if not user_has_permission(user, "update", "Environments", org, True):
             raise GraphQLError("You do not have permission to update environments")
 
         if not can_use_custom_envs(org):
@@ -285,17 +284,21 @@ class SwapEnvironmentOrderMutation(graphene.Mutation):
                 "Your Organisation doesn't have access to Custom Environments"
             )
 
-        # Temporarily store the index of environment1
-        temp_index = environment1.index
+        # Verify all IDs belong to this app
+        environments = Environment.objects.filter(app=app)
+        env_ids = set(str(e.id) for e in environments)
+        order_ids = set(str(id) for id in environment_order)
 
-        # Swap the indices
-        environment1.index = environment2.index
-        environment2.index = temp_index
+        if env_ids != order_ids:
+            raise GraphQLError(
+                "The provided environment list doesn't match the app's environments"
+            )
 
-        environment1.save()
-        environment2.save()
+        # Bulk update indices
+        for index, env_id in enumerate(environment_order):
+            Environment.objects.filter(id=env_id, app=app).update(index=index)
 
-        return SwapEnvironmentOrderMutation(ok=True)
+        return UpdateEnvironmentOrderMutation(ok=True)
 
 
 class CreateEnvironmentKeyMutation(graphene.Mutation):
@@ -398,22 +401,23 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                     "This service account does not have access to this app"
                 )
 
-        # delete all existing keys for this member
-        EnvironmentKey.objects.filter(**key_to_delete_filter).delete()
+        with transaction.atomic():
+            # delete all existing keys for this member
+            EnvironmentKey.objects.filter(**key_to_delete_filter).delete()
 
-        # set new keys
-        for key in env_keys:
+            # set new keys
+            for key in env_keys:
 
-            EnvironmentKey.objects.create(
-                environment_id=key.env_id,
-                user_id=key.user_id if member_type == MemberType.USER else None,
-                service_account_id=(
-                    key.user_id if member_type == MemberType.SERVICE else None
-                ),
-                wrapped_seed=key.wrapped_seed,
-                wrapped_salt=key.wrapped_salt,
-                identity_key=key.identity_key,
-            )
+                EnvironmentKey.objects.create(
+                    environment_id=key.env_id,
+                    user_id=key.user_id if member_type == MemberType.USER else None,
+                    service_account_id=(
+                        key.user_id if member_type == MemberType.SERVICE else None
+                    ),
+                    wrapped_seed=key.wrapped_seed,
+                    wrapped_salt=key.wrapped_salt,
+                    identity_key=key.identity_key,
+                )
 
         return UpdateMemberEnvScopeMutation(app=app)
 

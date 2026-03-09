@@ -18,6 +18,7 @@ import {
   FaCloudUploadAlt,
   FaFolder,
   FaPlus,
+  FaRegEye,
   FaSearch,
   FaTimesCircle,
   FaUndo,
@@ -26,6 +27,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
+import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
 import { userHasPermission } from '@/utils/access/permissions'
 import {
@@ -102,6 +104,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const [appSecretsToDelete, setAppSecretsToDelete] = useState<string[]>([])
 
   const [expandedSecrets, setExpandedSecrets] = useState<string[]>([])
+
+  const [revealOnHover, setRevealOnHover] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState<string>('')
 
@@ -688,11 +692,13 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   }
 
   return (
-    <section className="space-y-4 py-4">
+    <section className="space-y-4">
       <div className="flex items-end justify-between">
         <div className="space-y-1">
-          <h1 className="h3 font-semibold text-2xl">Secrets</h1>
-          <p className="text-neutral-500">
+          <h1 className="h3 font-semibold text-xl" id="secrets">
+            Secrets
+          </h1>
+          <p className="text-neutral-500 text-sm">
             An overview of Secrets across all Environments in this App. Expand a row in the table
             below to compare and manage values across all Environments.
           </p>
@@ -784,6 +790,30 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <FaAngleDoubleUp />
               Collapse all
             </Button>
+
+            <label className="flex items-center gap-2 pl-2 border-l border-neutral-500/20 cursor-pointer select-none">
+              <Switch
+                checked={revealOnHover}
+                onChange={setRevealOnHover}
+                className={clsx(
+                  revealOnHover
+                    ? 'bg-emerald-400/10 ring-emerald-400/20'
+                    : 'bg-neutral-500/40 ring-neutral-500/30',
+                  'relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset transition-colors'
+                )}
+              >
+                <span
+                  className={clsx(
+                    revealOnHover ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500',
+                    'inline-block h-4 w-4 transform rounded-full transition-transform'
+                  )}
+                />
+              </Switch>
+              <span className="flex items-center gap-1.5 text-sm text-neutral-500">
+                <FaRegEye className={revealOnHover ? 'text-emerald-500' : ''} />
+                Reveal on hover
+              </span>
+            </label>
           </div>
           <div className="flex justify-end pr-4 gap-4">
             <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
@@ -814,7 +844,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                     {appEnvironments?.map((env: EnvironmentType) => (
                       <th
                         key={env.id}
-                        className="group text-center text-2xs 2xl:text-sm font-semibold uppercase tracking-widest py-2"
+                        className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2 w-px whitespace-nowrap"
                       >
                         <Link href={`${pathname}/environments/${env.id}`}>
                           <Button variant="outline">
@@ -867,6 +897,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       updateValue={handleUpdateSecretValue}
                       deleteKey={handleStageClientSecretForDelete}
                       stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
+                      revealOnHover={revealOnHover}
                     />
                   ))}
                 </tbody>
