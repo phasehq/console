@@ -38,7 +38,7 @@ export const ProviderCard = (props: { provider: ProviderType }) => {
           <div>
             <div className="text-black dark:text-white text-lg font-semibold">{provider.name}</div>
             <div className="text-neutral-500 text-sm">
-              Set up authentication credentials to sync with {provider.name}.
+              Set up authentication credentials to integrate with {provider.name}.
             </div>
           </div>
           <div className="text-emerald-500 flex items-center gap-1 font-medium text-sm">

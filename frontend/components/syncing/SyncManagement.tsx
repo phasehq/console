@@ -122,7 +122,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Resource</div>
         <div className="font-semibold text-black dark:text-white">
-          <ServiceInfo sync={sync} />
+          <ServiceInfo sync={sync} showMetadata />
         </div>
 
         <div className="text-neutral-500 uppercase tracking-widest text-sm">Automatic syncing</div>

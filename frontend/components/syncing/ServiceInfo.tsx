@@ -1,8 +1,8 @@
 import { EnvironmentSyncType, RailwayResourceInput, VercelProjectType } from '@/apollo/graphql'
 import { FaEyeSlash, FaLock } from 'react-icons/fa'
 
-export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
-  const { sync } = props
+export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: boolean }) => {
+  const { sync, showMetadata } = props
 
   if (sync.serviceInfo?.id?.includes('cloudflare_pages')) {
     return (
@@ -129,5 +129,18 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
   } else if (sync.serviceInfo?.id?.includes('render')) {
     const resourceName: string = JSON.parse(sync.options)['resource_name']
     return <div className="flex gap-2 text-xs text-neutral-500">{resourceName}</div>
+  } else if (sync.serviceInfo?.id?.includes('azure_key_vault')) {
+    const options = JSON.parse(sync.options)
+    const vaultUri = options['vault_uri']
+    const syncMode = options['sync_mode']
+    const vaultName = vaultUri.replace('https://', '').replace(/\.vault\..+$/, '')
+    return (
+      <div className="flex flex-col gap-1 text-xs text-neutral-500">
+        <div>
+          {vaultName} ({syncMode === 'blob' ? options['secret_name'] : 'individual'})
+        </div>
+        {showMetadata && <code className="text-2xs">{vaultUri}</code>}
+      </div>
+    )
   } else return <>{sync.serviceInfo?.id}</>
 }
