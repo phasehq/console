@@ -137,6 +137,17 @@ def _transform_secret_name(name):
     return name.replace("_", "-")
 
 
+def _http_error_hint(status_code):
+    """Return a user-facing hint based on the HTTP status code."""
+    hints = {
+        400: "The secret name or value may contain invalid characters.",
+        401: "Check that your credentials are valid and not expired.",
+        403: "Check that the service principal has access to this vault.",
+        404: "The vault was not found. Check the vault URI.",
+    }
+    return hints.get(status_code, "Check credentials and vault permissions.")
+
+
 def sync_azure_kv_individual(
     secrets, tenant_id, client_id, client_secret, vault_uri
 ):
@@ -175,12 +186,18 @@ def sync_azure_kv_individual(
 
         # Sync each Phase secret
         for kv_name, value in phase_secrets.items():
-            if kv_name in deleted_secrets:
-                _retry_on_rate_limit(recover_kv_secret, client, kv_name)
-            _retry_on_rate_limit(set_kv_secret, client, kv_name, value)
-            # Re-enable if it was previously disabled
-            if kv_name in existing_secrets and not existing_secrets[kv_name]:
-                _retry_on_rate_limit(enable_kv_secret, client, kv_name)
+            try:
+                if kv_name in deleted_secrets:
+                    _retry_on_rate_limit(recover_kv_secret, client, kv_name)
+                _retry_on_rate_limit(set_kv_secret, client, kv_name, value)
+                # Re-enable if it was previously disabled
+                if kv_name in existing_secrets and not existing_secrets[kv_name]:
+                    _retry_on_rate_limit(enable_kv_secret, client, kv_name)
+            except HttpResponseError as e:
+                logger.error("Azure KV failed to set secret '%s': %s", kv_name, str(e))
+                return False, {
+                    "message": f"Failed to sync secret '{kv_name}' (HTTP {e.status_code}). {_http_error_hint(e.status_code)}"
+                }
 
         # Disable KV secrets not in Phase (both enabled and disabled are tracked)
         for kv_name, is_enabled in existing_secrets.items():
@@ -193,7 +210,7 @@ def sync_azure_kv_individual(
 
     except HttpResponseError as e:
         logger.error("Azure KV individual sync error: %s", str(e))
-        return False, {"message": f"Azure Key Vault sync failed (HTTP {e.status_code}). Check credentials and vault permissions."}
+        return False, {"message": f"Azure Key Vault sync failed (HTTP {e.status_code}). {_http_error_hint(e.status_code)}"}
     except Exception as e:
         logger.error("Azure KV individual sync unexpected error: %s", str(e))
         return False, {"message": "An unexpected error occurred during Azure Key Vault sync."}
@@ -241,7 +258,7 @@ def sync_azure_kv_blob(
 
     except HttpResponseError as e:
         logger.error("Azure KV blob sync error: %s", str(e))
-        return False, {"message": f"Azure Key Vault sync failed (HTTP {e.status_code}). Check credentials and vault permissions."}
+        return False, {"message": f"Azure Key Vault sync failed (HTTP {e.status_code}). {_http_error_hint(e.status_code)}"}
     except Exception as e:
         logger.error("Azure KV blob sync unexpected error: %s", str(e))
         return False, {"message": "An unexpected error occurred during Azure Key Vault sync."}
