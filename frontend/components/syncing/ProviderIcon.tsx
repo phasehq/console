@@ -12,6 +12,7 @@ import {
   SiRender,
 } from 'react-icons/si'
 import { LiaAws } from 'react-icons/lia'
+import { VscAzure } from 'react-icons/vsc'
 
 export const ProviderIcon = (props: { providerId: string }) => {
   const { providerId } = props
@@ -41,5 +42,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
   if (id.includes('vercel')) return <SiVercel className="shrink-0 text-[#000000] dark:text-white" />
 
   if (id.includes('render')) return <SiRender className="shrink-0 text-[#000000] dark:text-white" />
+
+  if (id.includes('azure')) return <VscAzure className="shrink-0 text-[#0078D4]" />
+
   else return <FaCube />
 }

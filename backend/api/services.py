@@ -86,6 +86,14 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    AZURE = {
+        "id": "azure",
+        "name": "Azure",
+        "expected_credentials": ["tenant_id", "client_id", "client_secret"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
@@ -177,6 +185,13 @@ class ServiceConfig:
         "name": "Render",
         "provider": Providers.RENDER,
         "resource_type": "service",
+    }
+
+    AZURE_KEY_VAULT = {
+        "id": "azure_key_vault",
+        "name": "Azure Key Vault",
+        "provider": Providers.AZURE,
+        "resource_type": "secret",
     }
 
     @classmethod
