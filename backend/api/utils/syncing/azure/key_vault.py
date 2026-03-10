@@ -194,7 +194,7 @@ def sync_azure_kv_individual(
                 if kv_name in existing_secrets and not existing_secrets[kv_name]:
                     _retry_on_rate_limit(enable_kv_secret, client, kv_name)
             except HttpResponseError as e:
-                logger.error("Azure KV failed to set secret '%s': HTTP %s", kv_name, e.status_code)
+                logger.error("Azure KV sync error for secret: HTTP %s", e.status_code)
                 return False, {
                     "message": f"Failed to sync secret '{kv_name}' (HTTP {e.status_code}). {_http_error_hint(e.status_code)}"
                 }
