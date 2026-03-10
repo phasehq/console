@@ -389,6 +389,37 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
     @patch("api.utils.syncing.azure.key_vault.get_kv_client")
     @patch("api.utils.syncing.azure.key_vault.get_azure_client_credential")
+    @patch("api.utils.syncing.azure.key_vault.list_all_kv_secrets")
+    @patch("api.utils.syncing.azure.key_vault.list_deleted_kv_secrets")
+    @patch("api.utils.syncing.azure.key_vault.set_kv_secret")
+    @patch("api.utils.syncing.azure.key_vault.time.sleep")
+    def test_per_secret_error_identifies_failing_secret(
+        self,
+        mock_sleep,
+        mock_set,
+        mock_list_deleted,
+        mock_list_all,
+        mock_get_cred,
+        mock_get_client,
+    ):
+        mock_list_all.return_value = {}
+        mock_list_deleted.return_value = []
+
+        error = HttpResponseError(message="bad request")
+        error.status_code = 400
+        mock_set.side_effect = [None, error]  # first succeeds, second fails
+
+        secrets = [("GOOD_KEY", "val1", ""), ("BAD_KEY", "val2", "")]
+        success, result = sync_azure_kv_individual(
+            secrets, "tid", "cid", "csecret", "https://myvault.vault.azure.net"
+        )
+
+        self.assertFalse(success)
+        self.assertIn("BAD-KEY", result["message"])
+        self.assertIn("invalid characters", result["message"])
+
+    @patch("api.utils.syncing.azure.key_vault.get_kv_client")
+    @patch("api.utils.syncing.azure.key_vault.get_azure_client_credential")
     def test_http_response_error_returns_sanitized_message(
         self, mock_get_cred, mock_get_client
     ):
@@ -403,6 +434,7 @@ class TestSyncAzureKvIndividual(unittest.TestCase):
 
         self.assertFalse(success)
         self.assertIn("HTTP 403", result["message"])
+        self.assertIn("service principal", result["message"])
         self.assertNotIn("detailed azure internal error", result["message"])
 
     @patch("api.utils.syncing.azure.key_vault.get_kv_client")
@@ -544,6 +576,7 @@ class TestSyncAzureKvBlob(unittest.TestCase):
 
         self.assertFalse(success)
         self.assertIn("HTTP 401", result["message"])
+        self.assertIn("credentials", result["message"])
         self.assertNotIn("detailed azure internal error", result["message"])
 
     @patch("api.utils.syncing.azure.key_vault.get_kv_client")
