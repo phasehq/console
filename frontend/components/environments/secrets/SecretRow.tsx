@@ -177,18 +177,8 @@ function SecretRow(props: {
   }
 
   const typeBadge = () => {
-    if (isSealed)
-      return (
-        <span className="text-2xs px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
-          <FaLock className="text-3xs" /> SEALED
-        </span>
-      )
-    if (isConfig)
-      return (
-        <span className="text-2xs px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
-          <FaCog className="text-3xs" /> CONFIG
-        </span>
-      )
+    if (isSealed) return <FaLock className="text-red-500 dark:text-red-400" />
+    if (isConfig) return <FaCog className="text-blue-500 dark:text-blue-400" />
     return null
   }
 

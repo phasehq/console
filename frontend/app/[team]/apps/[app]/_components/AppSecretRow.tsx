@@ -535,16 +535,8 @@ const AppSecretRowComponent = ({
 
                 <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
                   <div className="flex items-center gap-1 group-hover:hidden">
-                    {isSealed && (
-                      <span className="text-2xs px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
-                        <FaLock className="text-3xs" /> SEALED
-                      </span>
-                    )}
-                    {isConfig && (
-                      <span className="text-2xs px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
-                        <FaCog className="text-3xs" /> CONFIG
-                      </span>
-                    )}
+                    {isSealed && <FaLock className="text-red-500 dark:text-red-400" />}
+                    {isConfig && <FaCog className="text-blue-500 dark:text-blue-400" />}
                   </div>
                   <div className="hidden group-hover:flex gap-1 items-center" onClick={(e) => e.stopPropagation()}>
                     {!stagedForDelete && userCanUpdateSecrets && (
