@@ -468,6 +468,7 @@ class SecretType(DjangoObjectType):
             "version",
             "tags",
             "comment",
+            "type",
             "created_at",
             "updated_at",
             "history",
@@ -475,6 +476,11 @@ class SecretType(DjangoObjectType):
             "environment",
         )
         # interfaces = (relay.Node, )
+
+    def resolve_value(self, info):
+        if self.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_history(self, info):
         user = info.context.user
