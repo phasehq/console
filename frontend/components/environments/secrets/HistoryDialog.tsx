@@ -41,7 +41,12 @@ export const HistoryDialog = ({
     const { publicKey, privateKey } = envKeyring
 
     decryptedEvent.key = await decryptAsymmetric(event.key, privateKey, publicKey)
-    decryptedEvent.value = await decryptAsymmetric(event.value, privateKey, publicKey)
+
+    if (event.value) {
+      decryptedEvent.value = await decryptAsymmetric(event.value, privateKey, publicKey)
+    } else {
+      decryptedEvent.value = ''
+    }
 
     if (decryptedEvent.comment) {
       decryptedEvent.comment = await decryptAsymmetric(event.comment, privateKey, publicKey)

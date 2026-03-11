@@ -423,7 +423,13 @@ class SecretEventType(DjangoObjectType):
             "user_agent",
             "environment",
             "path",
+            "type",
         )
+
+    def resolve_value(self, info):
+        if self.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_user(self, info):
         # use the precomputed permission flag; return None if not allowed

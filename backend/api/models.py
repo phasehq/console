@@ -937,6 +937,11 @@ class SecretEvent(models.Model):
     version = models.IntegerField(default=1)
     tags = models.ManyToManyField(SecretTag)
     comment = models.TextField()
+    type = models.CharField(
+        max_length=10,
+        choices=Secret.SECRET_TYPE_CHOICES,
+        default="secret",
+    )
     event_type = models.CharField(
         max_length=1,
         choices=EVENT_TYPES,
