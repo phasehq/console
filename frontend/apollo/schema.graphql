@@ -269,6 +269,7 @@ type SecretEventType {
   version: Int!
   tags: [SecretTagType!]!
   comment: String!
+  type: ApiSecretTypeChoices!
   eventType: ApiSecretEventEventTypeChoices!
   timestamp: DateTime!
   ipAddress: String

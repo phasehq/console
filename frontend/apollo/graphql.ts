@@ -2346,6 +2346,7 @@ export type SecretEventType = {
   serviceToken?: Maybe<ServiceTokenType>;
   tags: Array<SecretTagType>;
   timestamp: Scalars['DateTime']['output'];
+  type: ApiSecretTypeChoices;
   user?: Maybe<OrganisationMemberType>;
   userAgent?: Maybe<Scalars['String']['output']>;
   value: Scalars['String']['output'];
