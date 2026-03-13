@@ -9,6 +9,7 @@ from api.utils.rest import (
 from api.models import DynamicSecret, Environment, Secret
 from api.utils.access.permissions import (
     service_account_can_access_environment,
+    user_can_access_app,
     user_can_access_environment,
 )
 from rest_framework import authentication, exceptions
@@ -99,30 +100,92 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
             # Try resolving env from query params
             else:
-                try:
-                    app_id = request.GET.get("app_id")
-                    env_name = request.GET.get("env")
-                    if not app_id:
-                        raise exceptions.AuthenticationFailed(
-                            "Missing app_id parameter"
-                        )
-                    if not env_name:
-                        raise exceptions.AuthenticationFailed("Missing env parameter")
-                    # Pre-fetch app and organisation
-                    env = Environment.objects.select_related("app__organisation").get(
-                        app_id=app_id, name__iexact=env_name
-                    )
-                except Environment.DoesNotExist:
-                    # Check if the app exists to give a more specific error
+                app_id = request.GET.get("app_id")
+                env_name = request.GET.get("env")
+
+                if app_id and env_name:
+                    # Resolve environment from app_id + env name
+                    try:
+                        env = Environment.objects.select_related(
+                            "app__organisation"
+                        ).get(app_id=app_id, name__iexact=env_name)
+                    except Environment.DoesNotExist:
+                        App = apps.get_model("api", "App")
+                        if not App.objects.filter(id=app_id).exists():
+                            raise exceptions.NotFound(
+                                f"App with ID {app_id} not found"
+                            )
+                        else:
+                            raise exceptions.NotFound(
+                                f"Environment '{env_name}' not found in App {app_id}"
+                            )
+
+                elif app_id and not env_name:
+                    # App-only mode: resolve app directly (no environment needed)
                     App = apps.get_model("api", "App")
-                    if not App.objects.filter(id=app_id).exists():
-                        raise exceptions.NotFound(f"App with ID {app_id} not found")
-                    else:
+                    try:
+                        app = App.objects.select_related("organisation").get(
+                            id=app_id
+                        )
+                    except App.DoesNotExist:
                         raise exceptions.NotFound(
-                            f"Environment '{env_name}' not found in App {app_id}"
+                            f"App with ID {app_id} not found"
+                        )
+                    auth["app"] = app
+
+                else:
+                    # No app_id in query params — check URL kwargs for env_id
+                    # (used by detail endpoints like /environments/<env_id>/)
+                    env_id_from_url = None
+                    if (
+                        hasattr(request, "resolver_match")
+                        and request.resolver_match
+                    ):
+                        env_id_from_url = (
+                            request.resolver_match.kwargs.get("env_id")
                         )
 
+                    if env_id_from_url:
+                        try:
+                            env_lookup = Environment.objects.select_related(
+                                "app__organisation"
+                            ).get(id=env_id_from_url)
+                            auth["app"] = env_lookup.app
+                        except Environment.DoesNotExist:
+                            raise exceptions.NotFound("Environment not found")
+                    else:
+                        # Check URL kwargs for app_id
+                        # (used by detail endpoints like /apps/<app_id>/)
+                        app_id_from_url = None
+                        if (
+                            hasattr(request, "resolver_match")
+                            and request.resolver_match
+                        ):
+                            app_id_from_url = (
+                                request.resolver_match.kwargs.get("app_id")
+                            )
+
+                        if app_id_from_url:
+                            App = apps.get_model("api", "App")
+                            try:
+                                app = App.objects.select_related(
+                                    "organisation"
+                                ).get(id=app_id_from_url)
+                            except App.DoesNotExist:
+                                raise exceptions.NotFound(
+                                    f"App with ID {app_id_from_url} not found"
+                                )
+                            auth["app"] = app
+                        else:
+                            # Org-only mode: no app, no env
+                            # Organisation resolved from token below
+                            auth["org_only"] = True
+
         auth["environment"] = env
+
+        # When env is resolved, also populate auth["app"] for convenience
+        if env is not None:
+            auth["app"] = env.app
 
         if token_type == "User":
             try:
@@ -135,10 +198,26 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             auth["org_member"] = org_member
             user = org_member.user
 
-            if not user_can_access_environment(user.userId, env.id):
-                raise exceptions.PermissionDenied("User cannot access this environment")
+            if auth.get("org_only"):
+                # Org-only mode: resolve organisation from the member
+                auth["organisation"] = org_member.organisation
+            elif env:
+                if not user_can_access_environment(user.userId, env.id):
+                    raise exceptions.PermissionDenied(
+                        "User cannot access this environment"
+                    )
+            else:
+                # App-only mode
+                if not user_can_access_app(user.userId, auth["app"].id):
+                    raise exceptions.PermissionDenied(
+                        "User cannot access this app"
+                    )
 
         elif token_type == "Service":
+            if env is None:
+                raise exceptions.AuthenticationFailed(
+                    "Service tokens require an environment context"
+                )
             service_token = get_service_token(auth_token)
             auth["service_token"] = service_token
             user = service_token.created_by.user
@@ -158,22 +237,43 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 auth["service_account"] = service_account
                 auth["service_account_token"] = service_token
 
-                if not service_account_can_access_environment(
-                    service_account.id, env.id
-                ):
-                    raise exceptions.AuthenticationFailed(
-                        "Service account cannot access this environment"
-                    )
+                if auth.get("org_only"):
+                    # Org-only mode: resolve organisation from the SA
+                    auth["organisation"] = service_account.organisation
+                elif env:
+                    if not service_account_can_access_environment(
+                        service_account.id, env.id
+                    ):
+                        raise exceptions.AuthenticationFailed(
+                            "Service account cannot access this environment"
+                        )
+                else:
+                    # App-only mode: check SA is a member of this app
+                    if not auth["app"].service_accounts.filter(
+                        id=service_account.id, deleted_at=None
+                    ).exists():
+                        raise exceptions.AuthenticationFailed(
+                            "Service account cannot access this app"
+                        )
+            except exceptions.AuthenticationFailed:
+                raise
+            except exceptions.NotFound:
+                raise
             except Exception as ex:
                 # Distinguish between ServiceAccount not found and other potential errors
                 ServiceAccount = apps.get_model("api", "ServiceAccount")
                 try:
                     # Attempt to get the service account again to confirm if it exists
                     get_service_account_from_token(auth_token)
-                    # If it exists, the error was likely the environment access check
-                    raise exceptions.AuthenticationFailed(
-                        "Service account cannot access this environment"
-                    )
+                    # If it exists, the error was likely the access check
+                    if env:
+                        raise exceptions.AuthenticationFailed(
+                            "Service account cannot access this environment"
+                        )
+                    else:
+                        raise exceptions.AuthenticationFailed(
+                            "Service account cannot access this app"
+                        )
                 except ServiceAccount.DoesNotExist:
                     raise exceptions.NotFound("Service account not found")
                 except (
@@ -181,7 +281,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 ) as ex:  # Catch any other unexpected error during the re-check
                     logger.debug(f"Authentication error: {ex}")
                     raise exceptions.AuthenticationFailed(
-                        f"Authentication error. Please check your authentication token or App / Environment access."
+                        "Authentication error. Please check your authentication token or App / Environment access."
                     )
 
         return (user, auth)
