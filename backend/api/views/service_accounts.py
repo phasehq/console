@@ -493,10 +493,15 @@ class PublicServiceAccountAccessView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            env_ids = app_entry.get("environments", [])
-            if not isinstance(env_ids, list):
+            env_ids = app_entry.get("environments")
+            if env_ids is None or not isinstance(env_ids, list):
                 return Response(
-                    {"error": f"'environments' for app '{app_id}' must be a list of environment IDs."},
+                    {"error": f"Each app entry must have an 'environments' list of environment IDs."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if len(env_ids) == 0:
+                return Response(
+                    {"error": f"'environments' for app '{app_id}' must not be empty. To revoke all access, remove the app from the list."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
