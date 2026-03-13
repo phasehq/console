@@ -19,6 +19,66 @@ from djangorestframework_camel_case.render import CamelCaseJSONRenderer
 
 logger = logging.getLogger(__name__)
 
+# Derive valid permission classes and actions from the Owner role (which has full access to everything)
+_owner = default_roles["Owner"]
+VALID_ORG_PERMISSIONS = {
+    resource: set(actions) for resource, actions in _owner["permissions"].items()
+}
+VALID_APP_PERMISSIONS = {
+    resource: set(actions) for resource, actions in _owner["app_permissions"].items()
+}
+
+
+def _validate_permissions(permissions):
+    """
+    Validate the shape of a permissions object against the Owner role template.
+    Returns (None) on success, or (error_string) on failure.
+    """
+    if not isinstance(permissions, dict):
+        return "Permissions must be a JSON object."
+
+    allowed_keys = {"permissions", "app_permissions", "global_access"}
+    unknown_keys = set(permissions.keys()) - allowed_keys
+    if unknown_keys:
+        return f"Unknown top-level keys: {', '.join(sorted(unknown_keys))}. Allowed keys: permissions, app_permissions, global_access."
+
+    # Validate global_access
+    if "global_access" in permissions:
+        if not isinstance(permissions["global_access"], bool):
+            return "global_access must be a boolean."
+
+    # Validate org-level permissions
+    org_perms = permissions.get("permissions")
+    if org_perms is not None:
+        if not isinstance(org_perms, dict):
+            return "permissions must be a JSON object."
+        for resource, actions in org_perms.items():
+            if resource not in VALID_ORG_PERMISSIONS:
+                return f"Unknown org permission class: '{resource}'. Valid classes: {', '.join(sorted(VALID_ORG_PERMISSIONS.keys()))}."
+            if not isinstance(actions, list):
+                return f"Actions for '{resource}' must be an array."
+            valid_actions = VALID_ORG_PERMISSIONS[resource]
+            for action in actions:
+                if action not in valid_actions:
+                    return f"Unknown action '{action}' for org permission class '{resource}'. Valid actions: {', '.join(sorted(valid_actions))}."
+
+    # Validate app-level permissions
+    app_perms = permissions.get("app_permissions")
+    if app_perms is not None:
+        if not isinstance(app_perms, dict):
+            return "app_permissions must be a JSON object."
+        for resource, actions in app_perms.items():
+            if resource not in VALID_APP_PERMISSIONS:
+                return f"Unknown app permission class: '{resource}'. Valid classes: {', '.join(sorted(VALID_APP_PERMISSIONS.keys()))}."
+            if not isinstance(actions, list):
+                return f"Actions for '{resource}' must be an array."
+            valid_actions = VALID_APP_PERMISSIONS[resource]
+            for action in actions:
+                if action not in valid_actions:
+                    return f"Unknown action '{action}' for app permission class '{resource}'. Valid actions: {', '.join(sorted(valid_actions))}."
+
+    return None
+
 
 def _get_role_permissions(role):
     """Get permissions for a role — from default_roles dict if default, otherwise from the stored JSONField."""
@@ -123,6 +183,13 @@ class PublicRolesView(APIView):
         if not permissions or not isinstance(permissions, dict):
             return Response(
                 {"error": "Missing required field: permissions (must be a JSON object)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        perm_error = _validate_permissions(permissions)
+        if perm_error:
+            return Response(
+                {"error": perm_error},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -285,6 +352,12 @@ class PublicRoleDetailView(APIView):
             if not isinstance(permissions, dict):
                 return Response(
                     {"error": "Permissions must be a JSON object."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            perm_error = _validate_permissions(permissions)
+            if perm_error:
+                return Response(
+                    {"error": perm_error},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             role.permissions = permissions
