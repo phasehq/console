@@ -7,6 +7,12 @@ from api.views.graphql import PrivateGraphQLView
 from api.views.apps import PublicAppsView, PublicAppDetailView
 from api.views.environments import PublicEnvironmentsView, PublicEnvironmentDetailView
 from api.views.secrets import E2EESecretsView, PublicSecretsView
+from api.views.service_accounts import (
+    PublicServiceAccountsView,
+    PublicServiceAccountDetailView,
+    PublicServiceAccountAccessView,
+)
+from api.views.roles import PublicRolesView, PublicRoleDetailView
 from api.views.auth import (
     logout_view,
     health_check,
@@ -50,6 +56,11 @@ public_urls = [
     path("public/v1/apps/<app_id>/", PublicAppDetailView.as_view()),
     path("public/v1/environments/", PublicEnvironmentsView.as_view()),
     path("public/v1/environments/<env_id>/", PublicEnvironmentDetailView.as_view()),
+    path("public/v1/service-accounts/", PublicServiceAccountsView.as_view()),
+    path("public/v1/service-accounts/<sa_id>/", PublicServiceAccountDetailView.as_view()),
+    path("public/v1/service-accounts/<sa_id>/access/", PublicServiceAccountAccessView.as_view()),
+    path("public/v1/roles/", PublicRolesView.as_view()),
+    path("public/v1/roles/<role_id>/", PublicRoleDetailView.as_view()),
     path(
         "public/v1/secrets/dynamic/",
         include("ee.integrations.secrets.dynamic.rest.urls"),
