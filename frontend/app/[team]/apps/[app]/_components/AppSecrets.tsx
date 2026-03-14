@@ -54,6 +54,14 @@ import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
 import { AppFolderRow } from './AppFolderRow'
 import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
+import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
+import {
+  validateSecretReferences,
+  ReferenceContext,
+  ReferenceValidationError,
+} from '@/utils/secretReferences'
+import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
+import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -114,6 +122,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const [isLoading, setIsLoading] = useState(false)
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
 
   const savingAndFetching = bulkUpdatePending || isLoading
 
@@ -151,6 +161,64 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       userCanReadSecrets,
       unsavedChanges ? 0 : 10000 // Poll every 10 seconds
     )
+
+  // Fetch and decrypt all org secret keys for cross-app reference autocomplete/validation
+  const { orgApps: allOrgApps } = useOrgSecretKeys()
+
+  // Build stabilized reference context for autocomplete
+  const secretKeysFingerprint = clientAppSecrets.map((s) => s.key).join('\0')
+  const referenceContext: ReferenceContext = useMemo(() => {
+    const secretKeys = clientAppSecrets.map((s) => s.key).filter((k) => k !== '')
+
+    const envSecretKeys: Record<string, string[]> = {}
+    for (const env of appEnvironments ?? []) {
+      envSecretKeys[env.name.toLowerCase()] = clientAppSecrets
+        .filter((s) => s.envs.some((e) => e.env.id === env.id && e.secret !== null))
+        .map((s) => s.key)
+        .filter((k) => k !== '')
+    }
+
+    const envNames = (appEnvironments ?? []).map((e) => e.name)
+
+    const folderPaths = appFolders.map((f) => `${f.path}/${f.name}`.replace(/^\/+/, ''))
+
+    // Exclude the current app from cross-app suggestions
+    const currentAppName = data?.apps?.[0]?.name?.toLowerCase()
+    const orgApps = allOrgApps.filter((a) => a.name.toLowerCase() !== currentAppName)
+
+    // Extract folder-qualified and root-level secret keys for the current app
+    const currentAppData = allOrgApps.find((a) => a.name.toLowerCase() === currentAppName)
+    const folderSecretKeys = currentAppData?.folderKeys ?? {}
+    const envRootKeys = currentAppData?.envRootKeys ?? {}
+
+    const deletedKeys = clientAppSecrets
+      .filter((s) => appSecretsToDelete.includes(s.id))
+      .map((s) => s.key)
+
+    // Build env ID mapping for navigation
+    const envIds: Record<string, string> = {}
+    for (const env of appEnvironments ?? []) {
+      envIds[env.name.toLowerCase()] = env.id
+    }
+
+    const secretIdLookup = currentAppData?.secretIdLookup ?? {}
+
+    return {
+      teamSlug: team,
+      appId: app,
+      envIds,
+      secretIdLookup,
+      secretKeys,
+      envSecretKeys,
+      envRootKeys,
+      envNames,
+      folderPaths,
+      folderSecretKeys,
+      orgApps,
+      deletedKeys,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secretKeysFingerprint, appEnvironments, appFolders, allOrgApps, data, appSecretsToDelete])
 
   const filteredFolders = useMemo(() => {
     if (searchQuery === '') return appFolders
@@ -379,10 +447,29 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       return false
     }
 
+    // Validate secret references
+    const activeSecrets = clientAppSecrets.filter((s) => !appSecretsToDelete.includes(s.id))
+    const refErrors = validateSecretReferences(activeSecrets, referenceContext)
+    if (refErrors.length > 0) {
+      setRefWarnings(refErrors)
+      refWarningDialogRef.current?.openModal()
+      setIsLoading(false)
+      return false
+    }
+
     await handleBulkUpdateSecrets()
 
     setIsLoading(false)
 
+    toast.success('Changes successfully deployed.')
+  }
+
+  const handleSaveWithBrokenRefs = async () => {
+    refWarningDialogRef.current?.closeModal()
+    setRefWarnings([])
+    setIsLoading(true)
+    await handleBulkUpdateSecrets()
+    setIsLoading(false)
     toast.success('Changes successfully deployed.')
   }
 
@@ -692,7 +779,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   }
 
   return (
-    <section className="space-y-4">
+    <SecretReferenceContext.Provider value={referenceContext}>
+      <section className="space-y-4">
       <div className="flex items-end justify-between">
         <div className="space-y-1">
           <h1 className="h3 font-semibold text-lg" id="secrets">
@@ -770,6 +858,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           ref={importDialogRef}
         />
       )}
+
+      <BrokenReferencesDialog
+        ref={refWarningDialogRef}
+        warnings={refWarnings}
+        onSaveAnyway={handleSaveWithBrokenRefs}
+      />
 
       {(filteredSecrets.length > 0 || filteredDynamicSecrets.length > 0) && (
         <div className="flex items-center justify-between">
@@ -1013,5 +1107,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         </EmptyState>
       )}
     </section>
+    </SecretReferenceContext.Provider>
   )
 }

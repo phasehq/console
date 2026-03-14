@@ -1,5 +1,5 @@
 import { EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useContext, useEffect, useRef, useState, memo } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, memo } from 'react'
 import {
   FaEyeSlash,
   FaEye,
@@ -23,6 +23,9 @@ import { Switch } from '@headlessui/react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
+import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
+import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
+import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
 
 function SecretRow(props: {
@@ -65,6 +68,27 @@ function SecretRow(props: {
   const [expanded, setExpanded] = useState(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const stableValueChange = useCallback(
+    (value: string) => {
+      handlePropertyChange(secret.id, 'value', value)
+    },
+    [handlePropertyChange, secret.id]
+  )
+
+  const autocomplete = useSecretReferenceAutocomplete({
+    value: secret.value,
+    isRevealed,
+    textareaRef,
+    onChange: stableValueChange,
+    currentSecretKey: secret.key,
+  })
+
+  const highlightContent =
+    isRevealed && secret.value.includes('${') ? (
+      <SecretReferenceHighlight value={secret.value} />
+    ) : undefined
 
   const [readSecret] = useMutation(LogSecretReads)
 
@@ -268,7 +292,7 @@ function SecretRow(props: {
   )
 
   return (
-    <div className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10', rowBgColor())}>
+    <div className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10 focus-within:z-20', rowBgColor())}>
       <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}
@@ -322,19 +346,39 @@ function SecretRow(props: {
           </div>
         )}
 
-        <MaskedTextarea
-          className={clsx(
-            INPUT_BASE_STYLE,
-            inputTextColor(),
-            'w-full group-hover:rounded-tr-none'
-          )}
-          value={secret.value}
-          onChange={(v) => handleValueChange(v)}
-          isRevealed={isRevealed}
-          expanded={expanded}
-          onFocus={() => setExpanded(true)}
-          disabled={stagedForDelete || !userCanUpdateSecrets}
-        />
+        <div className="relative flex-1 z-20">
+          <MaskedTextarea
+            ref={textareaRef}
+            className={clsx(
+              INPUT_BASE_STYLE,
+              inputTextColor(),
+              'w-full group-hover:rounded-tr-none'
+            )}
+            value={secret.value}
+            onChange={(v) => {
+              handleValueChange(v)
+              autocomplete.handleChange()
+            }}
+            onKeyDown={autocomplete.handleKeyDown}
+            onSelect={autocomplete.handleSelect}
+            onBlur={autocomplete.handleBlur}
+            isRevealed={isRevealed}
+            expanded={expanded}
+            onFocus={() => {
+              setExpanded(true)
+              autocomplete.handleFocus()
+            }}
+            disabled={stagedForDelete || !userCanUpdateSecrets}
+            highlightContent={highlightContent}
+          />
+          <ReferenceAutocompleteDropdown
+            suggestions={autocomplete.suggestions}
+            activeIndex={autocomplete.activeIndex}
+            onSelect={autocomplete.acceptSuggestion}
+            onNavigate={autocomplete.navigateToSuggestion}
+            visible={autocomplete.isOpen}
+          />
+        </div>
         {valueActionMenu}
       </div>
     </div>
