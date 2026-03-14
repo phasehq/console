@@ -719,6 +719,9 @@ class CreateSecretMutation(graphene.Mutation):
                 "You don't have permission to create secrets in this organisation"
             )
 
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
         tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
         path = (
@@ -976,6 +979,9 @@ class DeleteSecretMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have permission to delete secrets in this organisation"
             )
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
 
         secret.updated_at = timezone.now()
         secret.deleted_at = timezone.now()
