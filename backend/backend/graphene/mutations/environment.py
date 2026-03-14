@@ -505,15 +505,15 @@ class DeleteUserTokenMutation(graphene.Mutation):
     def mutate(cls, root, info, token_id):
         user = info.context.user
         token = UserToken.objects.get(id=token_id)
-        org = token.user.organisation
 
-        if user_is_org_member(user.userId, org.id):
-            token.deleted_at = timezone.now()
-            token.save()
+        # Verify the token belongs to the requesting user
+        if token.user.user != user:
+            raise GraphQLError("You don't have permission to delete this token")
 
-            return DeleteUserTokenMutation(ok=True)
-        else:
-            raise GraphQLError("You don't have permission to perform this action")
+        token.deleted_at = timezone.now()
+        token.save()
+
+        return DeleteUserTokenMutation(ok=True)
 
 
 class CreateServiceTokenMutation(graphene.Mutation):
