@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from django.test import RequestFactory
 from api.views.lockbox import LockboxView
+from api.models import Lockbox as RealLockbox
 
 
 class TestLockboxViewCounting:
@@ -11,7 +12,7 @@ class TestLockboxViewCounting:
     @patch("api.views.lockbox.LockboxSerializer")
     def test_get_increments_view_count_atomically(self, MockSerializer, MockLockbox):
         """GET should atomically increment the view count."""
-        from django.db.models import F
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
 
         mock_box = MagicMock()
         mock_box.id = "box-123"
@@ -44,6 +45,8 @@ class TestLockboxViewCounting:
     @patch("api.views.lockbox.Lockbox")
     def test_get_rejects_when_view_limit_reached(self, MockLockbox):
         """GET should return 403 when allowed_views is exhausted."""
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
+
         mock_box = MagicMock()
         mock_box.id = "box-123"
         mock_box.allowed_views = 1
@@ -67,6 +70,8 @@ class TestLockboxViewCounting:
         self, MockSerializer, MockLockbox
     ):
         """GET should allow reads when allowed_views is None (unlimited)."""
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
+
         mock_box = MagicMock()
         mock_box.id = "box-123"
         mock_box.allowed_views = None
@@ -92,8 +97,9 @@ class TestLockboxViewCounting:
     @patch("api.views.lockbox.Lockbox")
     def test_get_returns_404_for_nonexistent_box(self, MockLockbox):
         """GET should return 404 for missing lockboxes."""
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
+
         mock_qs = MagicMock()
-        from api.models import Lockbox as RealLockbox
         mock_qs.get.side_effect = RealLockbox.DoesNotExist
         MockLockbox.objects.select_for_update.return_value = mock_qs
 
