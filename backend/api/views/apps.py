@@ -12,8 +12,9 @@ from api.utils.crypto import (
     split_secret_hex,
     wrap_share_hex,
 )
+from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
-from api.utils.rest import METHOD_TO_ACTION
+from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_add_app, can_use_custom_envs
@@ -245,6 +246,24 @@ class PublicAppsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Audit log
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"name": app.name},
+            new_values={"name": app.name, "description": app.description or ""},
+            description=f"Created app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         serializer = AppSerializer(app)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -303,6 +322,10 @@ class PublicAppDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        old_values, new_values = build_change_values(
+            app, ["name", "description"], request.data
+        )
+
         if name is not None:
             if not name or str(name).strip() == "":
                 return Response(
@@ -326,11 +349,33 @@ class PublicAppDetailView(APIView):
 
         app.save()
 
+        # Audit log
+        if old_values:
+            actor_type, actor_id, actor_meta = get_actor_info(request)
+            ip_address, user_agent = get_resolver_request_meta(request)
+            log_audit_event(
+                organisation=app.organisation,
+                event_type="U",
+                resource_type="app",
+                resource_id=app.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_meta,
+                resource_metadata={"name": app.name},
+                old_values=old_values,
+                new_values=new_values,
+                description=f"Updated app '{app.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         serializer = AppSerializer(app)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def delete(self, request, app_id, *args, **kwargs):
         app = request.auth["app"]
+        app_name = app.name
+        org = app.organisation
 
         if CLOUD_HOSTED:
             from backend.api.kv import delete as kv_delete, purge as kv_purge
@@ -348,5 +393,23 @@ class PublicAppDetailView(APIView):
         app.wrapped_key_share = ""
         app.save()
         app.delete()
+
+        # Audit log
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="D",
+            resource_type="app",
+            resource_id=app_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"name": app_name},
+            old_values={"name": app_name},
+            description=f"Deleted app '{app_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return Response(status=status.HTTP_204_NO_CONTENT)

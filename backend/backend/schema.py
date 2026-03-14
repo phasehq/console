@@ -5,6 +5,7 @@ from api.utils.syncing.github.actions import GitHubRepoType, GitHubOrgType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.models import AuditEvent
 from api.utils.database import get_approximate_count
 from ee.integrations.secrets.dynamic.graphene.mutations import (
     DeleteDynamicSecretMutation,
@@ -187,6 +188,8 @@ from .graphene.mutations.organisation import (
 from .graphene.types import (
     ActivatedPhaseLicenseType,
     AppType,
+    AuditEventType,
+    AuditLogsResponseType,
     ChartDataPointType,
     EnvironmentKeyType,
     EnvironmentSyncType,
@@ -309,6 +312,19 @@ class Query(graphene.ObjectType):
         member_id=graphene.ID(),
         member_type=MemberType(),
         environment_id=graphene.ID(),
+    )
+
+    audit_logs = graphene.Field(
+        AuditLogsResponseType,
+        organisation_id=graphene.ID(required=True),
+        start=graphene.BigInt(),
+        end=graphene.BigInt(),
+        resource_type=graphene.String(),
+        resource_id=graphene.ID(),
+        event_types=graphene.List(graphene.String),
+        actor_id=graphene.ID(),
+        offset=graphene.Int(),
+        limit=graphene.Int(),
     )
 
     app_activity_chart = graphene.List(
@@ -831,6 +847,64 @@ class Query(graphene.ObjectType):
             ).count()
 
         return SecretLogsResponseType(logs=kms_logs, count=count)
+
+    def resolve_audit_logs(
+        root,
+        info,
+        organisation_id,
+        start=0,
+        end=0,
+        resource_type=None,
+        resource_id=None,
+        event_types=None,
+        actor_id=None,
+        offset=0,
+        limit=50,
+    ):
+        user = info.context.user
+
+        org = Organisation.objects.get(id=organisation_id)
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=org, deleted_at=None
+        )
+
+        if not user_has_permission(user, "read", "Logs", org, False):
+            raise GraphQLError("You don't have permission to view audit logs.")
+
+        # Clamp limit
+        limit = min(max(1, limit), 200)
+        offset = max(0, offset)
+
+        # Time range
+        if end == 0:
+            end_dt = timezone.now()
+        else:
+            end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+        if start == 0:
+            start_dt = end_dt - timedelta(days=30)
+        else:
+            start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
+
+        # Build filter
+        filters = {
+            "organisation": org,
+            "timestamp__gte": start_dt,
+            "timestamp__lte": end_dt,
+        }
+        if resource_type:
+            filters["resource_type"] = resource_type
+        if resource_id:
+            filters["resource_id"] = str(resource_id)
+        if event_types:
+            filters["event_type__in"] = event_types
+        if actor_id:
+            filters["actor_id"] = str(actor_id)
+
+        qs = AuditEvent.objects.filter(**filters).order_by("-timestamp")
+        count = get_approximate_count(qs)
+        logs = qs[offset : offset + limit]
+
+        return AuditLogsResponseType(logs=logs, count=count)
 
     def resolve_secret_logs(
         root,

@@ -6,7 +6,8 @@ from api.auth import PhaseTokenAuthentication
 from api.models import Organisation, OrganisationMember, Role, ServiceAccount
 from api.utils.access.permissions import user_has_permission
 from api.utils.access.roles import default_roles
-from api.utils.rest import METHOD_TO_ACTION
+from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
+from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 
@@ -216,6 +217,24 @@ class PublicRolesView(APIView):
             permissions=permissions,
         )
 
+        # Audit log
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="role",
+            resource_id=role.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"name": role.name},
+            new_values={"name": role.name, "permissions": permissions},
+            description=f"Created role '{role.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return Response(
             _serialize_role(role, include_permissions=True),
             status=status.HTTP_201_CREATED,
@@ -302,6 +321,10 @@ class PublicRoleDetailView(APIView):
         color = request.data.get("color")
         permissions = request.data.get("permissions")
 
+        old_values, new_values = build_change_values(
+            role, ["name", "description", "color", "permissions"], request.data
+        )
+
         if name is None and description is None and color is None and permissions is None:
             return Response(
                 {"error": "At least one field must be provided."},
@@ -364,6 +387,26 @@ class PublicRoleDetailView(APIView):
 
         role.save()
 
+        # Audit log
+        if old_values:
+            actor_type, actor_id, actor_meta = get_actor_info(request)
+            ip_address, user_agent = get_resolver_request_meta(request)
+            log_audit_event(
+                organisation=org,
+                event_type="U",
+                resource_type="role",
+                resource_id=role.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_meta,
+                resource_metadata={"name": role.name},
+                old_values=old_values,
+                new_values=new_values,
+                description=f"Updated role '{role.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         return Response(
             _serialize_role(role, include_permissions=True),
             status=status.HTTP_200_OK,
@@ -399,6 +442,25 @@ class PublicRoleDetailView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        role_name = role.name
         role.delete()
+
+        # Audit log
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="D",
+            resource_type="role",
+            resource_id=role_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"name": role_name},
+            old_values={"name": role_name},
+            description=f"Deleted role '{role_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -13,6 +13,7 @@ from api.views.service_accounts import (
     PublicServiceAccountAccessView,
 )
 from api.views.roles import PublicRolesView, PublicRoleDetailView
+from api.views.audit import PublicAuditLogsView
 from api.views.auth import (
     logout_view,
     health_check,
@@ -61,6 +62,7 @@ public_urls = [
     path("public/v1/service-accounts/<sa_id>/access/", PublicServiceAccountAccessView.as_view()),
     path("public/v1/roles/", PublicRolesView.as_view()),
     path("public/v1/roles/<role_id>/", PublicRoleDetailView.as_view()),
+    path("public/v1/audit-logs/", PublicAuditLogsView.as_view()),
     path(
         "public/v1/secrets/dynamic/",
         include("ee.integrations.secrets.dynamic.rest.urls"),

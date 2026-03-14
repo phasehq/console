@@ -23,6 +23,17 @@ type Query {
     memberType: MemberType
     environmentId: ID
   ): SecretLogsResponseType
+  auditLogs(
+    organisationId: ID!
+    start: BigInt
+    end: BigInt
+    resourceType: String
+    resourceId: ID
+    eventTypes: [String]
+    actorId: ID
+    offset: Int
+    limit: Int
+  ): AuditLogsResponseType
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(
     appId: ID
@@ -840,6 +851,28 @@ scalar BigInt
 
 type SecretLogsResponseType {
   logs: [SecretEventType]
+  count: Int
+}
+
+type AuditEventType {
+  id: String!
+  eventType: String!
+  resourceType: String!
+  resourceId: String!
+  actorType: String!
+  actorId: String!
+  actorMetadata: JSONString
+  resourceMetadata: JSONString
+  oldValues: JSONString
+  newValues: JSONString
+  description: String!
+  ipAddress: String
+  userAgent: String!
+  timestamp: DateTime!
+}
+
+type AuditLogsResponseType {
+  logs: [AuditEventType]
   count: Int
 }
 

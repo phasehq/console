@@ -28,7 +28,8 @@ from api.utils.crypto import (
     wrap_share_hex,
 )
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
-from api.utils.rest import METHOD_TO_ACTION
+from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
+from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
 from api.utils.service_accounts import generate_server_managed_sa_keys
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
@@ -248,6 +249,24 @@ class PublicServiceAccountsView(APIView):
         full_token = f"pss_service:v2:{token_value}:{kx_pub}:{share_a}:{wrap_key}"
         bearer_token = f"ServiceAccount {token_value}"
 
+        # Audit log — SA creation
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="sa",
+            resource_id=sa.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"name": sa.name},
+            new_values={"name": sa.name, "role": role.name},
+            description=f"Created service account '{sa.name}' with role '{role.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         response_data = _serialize_sa(sa)
         response_data["token"] = full_token
         response_data["bearer_token"] = bearer_token
@@ -319,6 +338,9 @@ class PublicServiceAccountDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        old_name = sa.name
+        old_role_name = sa.role.name if sa.role else None
+
         name = request.data.get("name")
         role_id = request.data.get("role_id")
 
@@ -357,6 +379,35 @@ class PublicServiceAccountDetailView(APIView):
             sa.role = role
 
         sa.save()
+
+        # Audit log
+        old_vals = {}
+        new_vals = {}
+        if name is not None and old_name != sa.name:
+            old_vals["name"] = old_name
+            new_vals["name"] = sa.name
+        if role_id is not None and old_role_name != (sa.role.name if sa.role else None):
+            old_vals["role"] = old_role_name
+            new_vals["role"] = sa.role.name if sa.role else None
+        if old_vals:
+            actor_type, actor_id, actor_meta = get_actor_info(request)
+            ip_address, user_agent = get_resolver_request_meta(request)
+            log_audit_event(
+                organisation=sa.organisation,
+                event_type="U",
+                resource_type="sa",
+                resource_id=sa.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_meta,
+                resource_metadata={"name": sa.name},
+                old_values=old_vals,
+                new_values=new_vals,
+                description=f"Updated service account '{sa.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         return Response(_serialize_sa_detail(sa), status=status.HTTP_200_OK)
 
     def delete(self, request, sa_id, *args, **kwargs):
@@ -367,12 +418,32 @@ class PublicServiceAccountDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        sa_name = sa.name
+        org = sa.organisation
         sa.delete()
 
         if CLOUD_HOSTED:
             from ee.billing.stripe import update_stripe_subscription_seats
 
-            update_stripe_subscription_seats(sa.organisation)
+            update_stripe_subscription_seats(org)
+
+        # Audit log
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="D",
+            resource_type="sa",
+            resource_id=sa_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"name": sa_name},
+            old_values={"name": sa_name},
+            description=f"Deleted service account '{sa_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -628,5 +699,29 @@ class PublicServiceAccountAccessView(APIView):
 
                     if new_env_keys:
                         EnvironmentKey.objects.bulk_create(new_env_keys)
+
+        # Audit log — access change
+        access_changes = {}
+        if apps_to_add:
+            access_changes["apps_granted"] = list(apps_to_add)
+        if apps_to_remove:
+            access_changes["apps_revoked"] = list(apps_to_remove)
+        if access_changes or desired_env_map:
+            actor_type, actor_id, actor_meta = get_actor_info(request)
+            ip_address, user_agent = get_resolver_request_meta(request)
+            log_audit_event(
+                organisation=org,
+                event_type="A",
+                resource_type="sa",
+                resource_id=sa.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_meta,
+                resource_metadata={"name": sa.name},
+                new_values=access_changes or {"access_updated": True},
+                description=f"Updated access for service account '{sa.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return Response(_serialize_sa_detail(sa), status=status.HTTP_200_OK)

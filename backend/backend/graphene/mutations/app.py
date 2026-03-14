@@ -16,6 +16,8 @@ from api.models import (
     ServiceAccount,
 )
 from backend.graphene.types import AppType, MemberType
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.rest import get_resolver_request_meta
 from django.conf import settings
 from django.db.models import Q
 
@@ -85,6 +87,22 @@ class CreateAppMutation(graphene.Mutation):
         for admin in org_admins:
             admin.apps.add(app)
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name},
+            description=f"Created app '{name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateAppMutation(app=app)
 
 
@@ -144,6 +162,9 @@ class UpdateAppInfoMutation(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to update Apps")
 
+        old_name = app.name
+        old_description = app.description
+
         if name is not None:
             # Validate name is not blank
             if not name or name.strip() == "":
@@ -162,6 +183,33 @@ class UpdateAppInfoMutation(graphene.Mutation):
             app.description = description
 
         app.save()
+
+        old_values = {}
+        new_values = {}
+        if name is not None and name != old_name:
+            old_values["name"] = old_name
+            new_values["name"] = name
+        if description is not None and description != old_description:
+            old_values["description"] = old_description
+            new_values["description"] = description
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="U",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app.name},
+            old_values=old_values or None,
+            new_values=new_values or None,
+            description=f"Updated app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return UpdateAppInfoMutation(app=app)
 
@@ -197,9 +245,29 @@ class DeleteAppMutation(graphene.Mutation):
             if not deleted or not purged:
                 raise GraphQLError("Failed to delete app keys. Please try again.")
 
+        app_name = app.name
+        app_id = app.id
+        app_org = app.organisation
+
         app.wrapped_key_share = ""
         app.save()
         app.delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app_org,
+            event_type="D",
+            resource_type="app",
+            resource_id=app_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app_name},
+            description=f"Deleted app '{app_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteAppMutation(ok=True)
 
@@ -266,6 +334,24 @@ class BulkAddAppMembersMutation(graphene.Mutation):
 
                 EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        member_ids = [m.member_id for m in members]
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="A",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app.name},
+            new_values={"members_added": member_ids},
+            description=f"Added {len(members)} member(s) to app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return BulkAddAppMembersMutation(app=app)
 
 
@@ -322,6 +408,23 @@ class AddAppMemberMutation(graphene.Mutation):
             }
 
             EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="A",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app.name},
+            new_values={"member_id": str(member_id), "member_type": member_type.value if hasattr(member_type, 'value') else str(member_type)},
+            description=f"Added member to app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return AddAppMemberMutation(app=app)
 
@@ -380,5 +483,22 @@ class RemoveAppMemberMutation(graphene.Mutation):
             EnvironmentKey.objects.filter(
                 environment__app=app, service_account_id=member_id
             ).delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="A",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app.name},
+            old_values={"member_id": str(member_id), "member_type": member_type.value if hasattr(member_type, 'value') else str(member_type)},
+            description=f"Removed member from app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return RemoveAppMemberMutation(app=app)

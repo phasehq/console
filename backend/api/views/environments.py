@@ -8,8 +8,9 @@ from api.utils.access.permissions import (
     user_can_access_environment,
     service_account_can_access_environment,
 )
+from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
-from api.utils.rest import METHOD_TO_ACTION
+from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_add_environment, can_use_custom_envs
@@ -131,6 +132,24 @@ class PublicEnvironmentsView(APIView):
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Audit log
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="C",
+            resource_type="env",
+            resource_id=environment.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"name": environment.name, "app_id": str(app.id), "app_name": app.name},
+            new_values={"name": environment.name, "env_type": environment.env_type},
+            description=f"Created environment '{environment.name}' in app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         serializer = EnvironmentSerializer(environment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -264,8 +283,29 @@ class PublicEnvironmentDetailView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        old_name = env.name
         env.name = name
         env.save()
+
+        # Audit log
+        if old_name != name:
+            actor_type, actor_id, actor_meta = get_actor_info(request)
+            ip_address, user_agent = get_resolver_request_meta(request)
+            log_audit_event(
+                organisation=app.organisation,
+                event_type="U",
+                resource_type="env",
+                resource_id=env.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_meta,
+                resource_metadata={"name": name, "app_id": str(app.id), "app_name": app.name},
+                old_values={"name": old_name},
+                new_values={"name": name},
+                description=f"Renamed environment '{old_name}' to '{name}' in app '{app.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         serializer = EnvironmentSerializer(env)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -287,5 +327,25 @@ class PublicEnvironmentDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        env_name = env.name
         env.delete()
+
+        # Audit log
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="D",
+            resource_type="env",
+            resource_id=env_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"name": env_name, "app_id": str(app.id), "app_name": app.name},
+            old_values={"name": env_name},
+            description=f"Deleted environment '{env_name}' from app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return Response(status=status.HTTP_204_NO_CONTENT)
