@@ -118,7 +118,7 @@ export const ModifySubscriptionDialog = () => {
       buttonVariant="secondary"
       title="Modify Subscription"
     >
-      <div className="space-y-8">
+      <div className="space-y-6">
         <div className="text-neutral-500 py-1">
           Modify your subscription plan or billing period. Your organisation is currently on the{' '}
           <PlanLabel plan={activeOrganisation?.plan!} /> plan billed{' '}

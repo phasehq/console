@@ -170,7 +170,7 @@ export const KeyManagementDialog = ({
       }
       dialogTitle={
         <div className="flex w-full justify-between items-center pr-4">
-          <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
+          <h3 className="text-sm font-medium leading-6 text-black dark:text-white">
             Key Management Settings
           </h3>
 
@@ -192,15 +192,15 @@ export const KeyManagementDialog = ({
       {' '}
       {userCanManageKeys ? (
         <form className="space-y-6" onSubmit={handleSave}>
-          <p className="text-neutral-500 text-sm">
+          <p className="text-neutral-500 text-xs">
             Choose where and how keys are managed for this Service Account
           </p>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Client-side option */}
             <label
               className={clsx(
-                'flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-colors ease ring-1 ring-inset',
+                'flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ease ring-1 ring-inset',
                 selectedMode === 'client'
                   ? 'bg-emerald-400/10 ring-emerald-400/30'
                   : 'ring-neutral-500/20 hover:bg-neutral-50 dark:hover:bg-neutral-800'
@@ -230,7 +230,7 @@ export const KeyManagementDialog = ({
               <div className="flex-1">
                 <div
                   className={clsx(
-                    'flex items-center gap-2 font-medium',
+                    'flex items-center gap-2 text-sm font-medium',
                     selectedMode === 'client'
                       ? 'text-emerald-600 dark:text-emerald-400'
                       : 'text-black dark:text-white'
@@ -243,7 +243,7 @@ export const KeyManagementDialog = ({
                   />
                   Client-side key management
                 </div>
-                <p className="text-sm text-neutral-500 mt-1">
+                <p className="text-xs text-neutral-500 mt-1">
                   Handle all cryptographic operations such as token generation on the client with
                   end-to-end encryption. Requires manual intervention.
                 </p>
@@ -253,7 +253,7 @@ export const KeyManagementDialog = ({
             {/* Server-side option */}
             <label
               className={clsx(
-                'flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-colors ease ring-1 ring-inset',
+                'flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ease ring-1 ring-inset',
                 selectedMode === 'server'
                   ? 'bg-sky-400/10 ring-sky-400/30'
                   : 'ring-neutral-500/20 hover:bg-neutral-50 dark:hover:bg-neutral-800'
@@ -283,7 +283,7 @@ export const KeyManagementDialog = ({
               <div className="flex-1">
                 <div
                   className={clsx(
-                    'flex items-center gap-2 font-medium',
+                    'flex items-center gap-2 text-sm font-medium',
                     selectedMode === 'server'
                       ? 'text-sky-600 dark:text-sky-400'
                       : 'text-black dark:text-white'
@@ -296,7 +296,7 @@ export const KeyManagementDialog = ({
                   />
                   Server-side key management
                 </div>
-                <p className="text-sm text-neutral-500 mt-1">
+                <p className="text-xs text-neutral-500 mt-1">
                   Allow the server to manage keys on behalf of the Service Account. Enables
                   automated operations, token generation, and API access without manual
                   intervention.

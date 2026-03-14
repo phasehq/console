@@ -32,10 +32,10 @@ const Accordion: React.FC<AccordionProps> = ({
             ) : (
               <div
                 className={clsx(
-                  'p-2 flex justify-between items-center gap-8 transition ease w-full'
+                  'p-2 flex justify-between items-center gap-6 transition ease w-full'
                 )}
               >
-                <div className="py-4 text-sm text-left">
+                <div className="py-3 text-xs text-left">
                   <div className="text-zinc-900 dark:text-zinc-100 font-medium">{title}</div>
                   {description && <div className="text-neutral-500">{description}</div>}
                 </div>

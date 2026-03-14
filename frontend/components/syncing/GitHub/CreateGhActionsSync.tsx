@@ -187,11 +187,11 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-2xl font-semibold text-black dark:text-white flex items-center gap-2">
+        <div className="text-sm font-semibold text-black dark:text-white flex items-center gap-2">
           <SiGithub />
           GitHub Actions
         </div>
-        <div className="text-neutral-500 text-sm">Sync an environment with GitHub Actions.</div>
+        <div className="text-neutral-500 text-2xs">Sync an environment with GitHub Actions.</div>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -249,7 +249,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
             <div className="flex justify-between items-center gap-4 py-4">
               <div className="border-b border-neutral-500/40 w-full"></div>
-              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
+              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
             </div>
 
@@ -267,12 +267,12 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                     }
                   }}
                 >
-                  <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20 text-zinc-900 dark:text-zinc-100">
+                  <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 text-zinc-900 dark:text-zinc-100">
                     <Tab as={Fragment}>
                       {({ selected }) => (
                         <div
                           className={clsx(
-                            'p-3 font-medium border-b focus:outline-none',
+                            'p-2 text-xs font-medium border-b focus:outline-none',
                             selected
                               ? 'border-emerald-500 font-semibold'
                               : 'border-transparent cursor-pointer'
@@ -286,7 +286,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                       {({ selected }) => (
                         <div
                           className={clsx(
-                            'p-3 font-medium border-b focus:outline-none',
+                            'p-2 text-xs font-medium border-b focus:outline-none',
                             selected
                               ? 'border-emerald-500 font-semibold'
                               : 'border-transparent cursor-pointer'

@@ -177,7 +177,7 @@ export const CreateServiceAccountDialog = () => {
       ref={dialogRef}
     >
       <form onSubmit={handleCreateServiceAccount}>
-        <div className="grid grid-cols-2 gap-8">
+        <div className="grid grid-cols-2 gap-6">
           <Input value={name} setValue={setName} label="Account name" required maxLength={32} />
           <div className="space-y-1 w-full">
             <label className="block text-neutral-500 text-sm mb-2" htmlFor="role">
@@ -222,7 +222,7 @@ export const CreateServiceAccountDialog = () => {
             </Listbox>
           </div>
         </div>
-        <div className="flex justify-end items-center gap-2 pt-8">
+        <div className="flex justify-end items-center gap-2 pt-6">
           <Button type="submit" variant="primary" isLoading={createPending}>
             Create Service Account
           </Button>

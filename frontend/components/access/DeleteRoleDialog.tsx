@@ -39,7 +39,7 @@ export const DeleteRoleDialog = ({ role }: { role: RoleType }) => {
       ref={dialogRef}
     >
       <div className="space-y-4">
-        <div className="text-neutral-500">Are you sure you want to delete this role?</div>
+        <div className="text-neutral-500 text-sm">Are you sure you want to delete this role?</div>
         <div className="flex justify-end">
           <Button variant="danger" onClick={handleDelete}>
             <FaTrash /> Delete

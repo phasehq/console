@@ -65,7 +65,7 @@ export const NavBar = () => {
     return (
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         <Link href="/" className="shrink-0">
-          <LogoMark className="size-8 fill-black dark:fill-white" />
+          <LogoMark className="size-7 fill-black dark:fill-white" />
         </Link>
 
         {breadcrumbs.map((crumb, index) => (
@@ -101,14 +101,14 @@ export const NavBar = () => {
   }, [navigationContext, tab])
 
   return (
-    <header className="pr-8 pl-4 w-full h-16 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-sm bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
+    <header className="pr-3 sm:pr-4 lg:pr-6 pl-3 w-full h-12 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-xs bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
       <BreadCrumbs />
 
       <div className="flex justify-center w-full">
         <CommandPalette />
       </div>
 
-      <div className="flex gap-4 items-center justify-end">
+      <div className="flex gap-3 items-center justify-end">
         <StatusIndicator />
         <Link href="https://docs.phase.dev" target="_blank" className="hidden lg:block">
           <Button variant="secondary">Docs</Button>

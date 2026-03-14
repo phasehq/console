@@ -39,7 +39,7 @@ export const Checkbox = (props: {
         {checked && <FaCheck className={clsx('text-white', styles.icon)} />}
       </div>
       {label && (
-        <span className="text-sm text-neutral-500 text-left select-none">{label}</span>
+        <span className="text-xs text-neutral-500 text-left select-none">{label}</span>
       )}
     </button>
   )

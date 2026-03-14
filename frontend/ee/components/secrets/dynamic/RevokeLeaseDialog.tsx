@@ -58,9 +58,9 @@ export const RevokeLeaseDialog = ({
       }
     >
       <div className="space-y-4">
-        <div className="text-neutral-500">Revoke the lease for these dynamic secrets</div>
+        <div className="text-neutral-500 text-xs">Revoke the lease for these dynamic secrets</div>
 
-        <div className="py-4 space-y-2">
+        <div className="pt-4 space-y-2">
           <div className="text-zinc-900 dark:text-zinc-100 text-sm">
             <p>Are you sure you want to revoke this lease?</p>
             <p>

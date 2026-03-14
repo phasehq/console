@@ -73,20 +73,20 @@ export const ProgrammaticAccessMenu = () => {
                     <div className="text-neutral-800 dark:text-neutral-200 text-xs font-semibold truncate">
                       One-click secret access
                     </div>
-                    <div className="text-neutral-500 text-2xs break-words">
+                    <div className="text-neutral-500 text-2xs truncate">
                       Generate a command + token one-liner to fetch secrets from app:{' '}
-                      <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
+                      <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold">
                         {env?.app.name}
                       </span>{' '}
                       in environment:{' '}
-                      <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
+                      <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold">
                         {env?.name}
                       </span>
                       {pathString && (
                         <>
                           {' '}
                           at path:{' '}
-                          <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold break-all">
+                          <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold">
                             {displayPathString}
                           </span>
                         </>
