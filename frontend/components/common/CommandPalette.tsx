@@ -440,7 +440,7 @@ const CommandPalette: React.FC = () => {
                   aria-hidden="true"
                 />
                 <Combobox.Input
-                  className="w-full custom caret-emerald-400 border-0 rounded-xl bg-transparent pl-12 pr-4 py-3 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 focus:ring-0"
+                  className="w-full custom caret-emerald-400 border-0 rounded-xl bg-transparent pl-12 pr-4 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 focus:ring-0"
                   placeholder="Type a command or search..."
                   onChange={(event) => debouncedSetQuery(event.target.value)}
                 />
@@ -474,25 +474,25 @@ const CommandPalette: React.FC = () => {
                           <Combobox.Option key={item.id} value={item} as={Fragment}>
                             {({ active }) => (
                               <li
-                                className={`flex cursor-default select-none items-center gap-4 justify-between px-3 py-2 ${
+                                className={`flex cursor-default select-none items-center gap-3 justify-between px-3 py-1.5 ${
                                   active ? 'bg-zinc-300/50 dark:bg-zinc-700/50' : ''
                                 }`}
                               >
-                                <div className="flex items-center gap-4">
-                                  <div className="flex h-6 w-6 items-center justify-center text-zinc-900 dark:text-zinc-100">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-5 w-5 items-center justify-center text-sm text-zinc-900 dark:text-zinc-100">
                                     {item.icon}
                                   </div>
                                   <div>
                                     <div
                                       className={clsx(
-                                        'font-medium text-zinc-900 dark:text-zinc-100 text-sm',
+                                        'font-medium text-zinc-900 dark:text-zinc-100 text-xs',
                                         group.name === 'Secrets' ? 'font-mono' : ''
                                       )}
                                     >
                                       {highlightMatch(item.name, query)}
                                     </div>
 
-                                    <div className="text-zinc-500 dark:text-zinc-400 text-xs">
+                                    <div className="text-zinc-500 dark:text-zinc-400 text-2xs">
                                       {highlightMatch(item.description, query)}
                                     </div>
                                   </div>
