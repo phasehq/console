@@ -375,6 +375,13 @@ class E2EESecretsView(APIView):
 
             secret_obj = Secret.objects.get(id=secret["id"])
 
+            # Verify the secret belongs to the authenticated environment
+            if secret_obj.environment_id != env.id:
+                return JsonResponse(
+                    {"error": "Secret does not belong to the authenticated environment"},
+                    status=403,
+                )
+
             tags = SecretTag.objects.filter(
                 name__in=secret["tags"], organisation=env.app.organisation
             )
@@ -406,7 +413,6 @@ class E2EESecretsView(APIView):
                     )
 
             secret_data = {
-                "environment": env,
                 "key": secret["key"],
                 "key_digest": secret["keyDigest"],
                 "value": secret["value"],
@@ -459,16 +465,16 @@ class E2EESecretsView(APIView):
 
     def delete(self, request, *args, **kwargs):
 
+        env = request.auth["environment"]
+
         request_body = json.loads(request.body)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"])
+        secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"], environment=env)
 
         if not secrets_to_delete.exists():
             return Response(status=status.HTTP_200_OK)
-
-        env = secrets_to_delete[0].environment
 
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
@@ -873,6 +879,13 @@ class PublicSecretsView(APIView):
 
             secret_obj = Secret.objects.get(id=secret["id"])
 
+            # Verify the secret belongs to the authenticated environment
+            if secret_obj.environment_id != env.id:
+                return Response(
+                    {"error": "Secret does not belong to the authenticated environment"},
+                    status=403,
+                )
+
             if "key" not in secret:
                 secret["key"] = secret_obj.key
                 secret["keyDigest"] = secret_obj.key_digest
@@ -888,7 +901,6 @@ class PublicSecretsView(APIView):
                 secret["comment"] = secret_obj.comment
 
             secret_data = {
-                "environment": env,
                 "key": secret["key"],
                 "key_digest": secret["keyDigest"],
                 "value": secret["value"],
@@ -976,11 +988,7 @@ class PublicSecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"])
-
-        for secret in secrets_to_delete:
-            if not Secret.objects.filter(id=secret.id).exists():
-                return JsonResponse({"error": "Secret does not exist"}, status=404)
+        secrets_to_delete = Secret.objects.filter(id__in=request_body["secrets"], environment=env)
 
         for secret in secrets_to_delete:
             secret.updated_at = timezone.now()
