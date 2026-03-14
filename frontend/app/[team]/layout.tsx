@@ -56,7 +56,7 @@ export default function RootLayout({
       {showNav && <Sidebar />}
       <div className="grid h-screen">
         <div></div>
-        <div className={clsx('overflow-auto', showNav && 'mt-14 min-h-[calc(100vh-56px)]')}>
+        <div className={clsx('overflow-auto', showNav && 'mt-12 min-h-[calc(100vh-48px)]')}>
           {children}
         </div>
       </div>
