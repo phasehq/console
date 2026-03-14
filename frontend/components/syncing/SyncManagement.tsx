@@ -106,27 +106,33 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
   )
 
   return (
-    <div className="space-y-4 py-4">
-      <div className="grid grid-cols-2 w-full gap-4">
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">App</div>
-        <div className="font-semibold text-black dark:text-white">{sync.environment.app.name}</div>
+    <div className="space-y-3 pt-4">
+      <div className="grid grid-cols-2 w-full gap-3">
+        <div className="text-neutral-500 uppercase tracking-widest text-2xs">App</div>
+        <div className="font-medium text-sm text-black dark:text-white">
+          {sync.environment.app.name}
+        </div>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Environment</div>
-        <div className="font-semibold text-black dark:text-white">{sync.environment.name}</div>
+        <div className="text-neutral-500 uppercase tracking-widest text-2xs">Environment</div>
+        <div className="font-medium text-sm text-black dark:text-white">
+          {sync.environment.name}
+        </div>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Path</div>
-        <code className="font-semibold text-black dark:text-white">{sync.path}</code>
+        <div className="text-neutral-500 uppercase tracking-widest text-2xs">Path</div>
+        <code className="font-medium text-sm text-black dark:text-white">{sync.path}</code>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Service</div>
-        <div className="font-semibold text-black dark:text-white">{sync.serviceInfo?.name}</div>
+        <div className="text-neutral-500 uppercase tracking-widest text-2xs">Service</div>
+        <div className="font-medium text-sm text-black dark:text-white">
+          {sync.serviceInfo?.name}
+        </div>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Resource</div>
-        <div className="font-semibold text-black dark:text-white">
+        <div className="text-neutral-500 uppercase tracking-widest text-2xs">Resource</div>
+        <div className="font-medium text-sm text-black dark:text-white">
           <ServiceInfo sync={sync} showMetadata />
         </div>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Automatic syncing</div>
-        <div className="flex items-center gap-2 text-black dark:text-white">
+        <div className="text-neutral-500 uppercase tracking-widest text-2xs">Automatic syncing</div>
+        <div className="flex items-center gap-2 text-sm text-black dark:text-white">
           <div
             className={clsx(
               'h-2 w-2 rounded-full',
@@ -144,25 +150,25 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
                 isActive
                   ? 'bg-emerald-400/10 ring-emerald-400/20'
                   : 'bg-neutral-500/40 ring-neutral-500/30'
-              } relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset`}
+              } relative inline-flex h-5 w-9 items-center rounded-full ring-1 ring-inset`}
             >
               <span className="sr-only">Active</span>
               <span
                 className={`${
-                  isActive ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-black'
-                } flex items-center justify-center h-4 w-4 transform rounded-full transition`}
+                  isActive ? 'translate-x-5 bg-emerald-400' : 'translate-x-0.5 bg-black'
+                } flex items-center justify-center h-3.5 w-3.5 transform rounded-full transition`}
               ></span>
             </Switch>
           )}
         </div>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Created</div>
-        <div className="font-semibold text-black dark:text-white">
+        <div className="text-neutral-500 uppercase tracking-widest text-2xs">Created</div>
+        <div className="font-medium text-sm text-black dark:text-white">
           {relativeTimeFromDates(new Date(sync.createdAt))}
         </div>
 
-        <div className="text-neutral-500 uppercase tracking-widest text-sm">Last sync</div>
-        <div className="font-semibold flex items-center gap-2 text-black dark:text-white">
+        <div className="text-neutral-500 uppercase tracking-widest text-2xs">Last sync</div>
+        <div className="font-medium text-sm flex items-center gap-2 text-black dark:text-white">
           <SyncStatusIndicator status={sync.status} showLabel />
           {sync.status !== ApiEnvironmentSyncStatusChoices.InProgress &&
             relativeTimeFromDates(new Date(sync.lastSync))}
@@ -191,7 +197,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
             )}
           </div>
           {credential === null && (
-            <div className="py-3">
+            <div className="py-2">
               <FaExclamationTriangle
                 className="text-amber-500"
                 title="No authentication credentials assigned to this sync"
@@ -200,7 +206,7 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
           )}
         </div>
 
-        <div className="col-span-2 flex items-center justify-between gap-4 pt-4 border-t border-neutral-500/40">
+        <div className="col-span-2 flex items-center justify-between gap-4 pt-3 border-t border-neutral-500/40">
           <div>{userCanDeleteSyncs && <DeleteSyncDialog sync={sync} />}</div>
           <Button
             variant="primary"

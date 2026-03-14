@@ -56,7 +56,7 @@ export const DeleteExternalIdentityDialog = ({ identity }: { identity: IdentityT
       }
     >
       <div className="space-y-6">
-        <p className="text-neutral-500 py-4 inline-flex items-center gap-1">
+        <p className="text-neutral-500 text-sm py-4 inline-flex items-center gap-1">
           Are you sure you want to delete the{' '}
           <span>
             <ProviderIcon providerId={identity.provider} />

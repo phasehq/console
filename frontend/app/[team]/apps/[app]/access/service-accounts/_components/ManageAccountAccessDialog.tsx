@@ -185,7 +185,7 @@ export const ManageAccountAccessDialog = ({
   return (
     <>
       <div className="flex items-center gap-2">
-        <span className="text-zinc-900 dark:text-zinc-100 text-sm font-medium">
+        <span className="text-zinc-900 dark:text-zinc-100 text-2xs font-medium">
           {envScope.map((env) => env.name).join(' + ')}
         </span>
 

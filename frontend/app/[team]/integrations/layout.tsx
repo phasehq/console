@@ -51,23 +51,22 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full p-8 pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto space-y-4"
-      style={{ height: 'calc(100vh - 64px)' }}
+      className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto space-y-3 h-[calc(100vh-56px)]"
     >
       <div className="space-y-1">
-        <h1 className="text-3xl font-semibold">{params.team} Integrations</h1>
+        <h1 className="text-lg sm:text-xl font-semibold">{params.team} Integrations</h1>
         <p className="text-neutral-500">Manage integrations with third party services</p>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
           {tabs.map((tab) => (
             <Tab as={Fragment} key={tab.name}>
               {({ selected }) => (
                 <Link
                   href={`/${params.team}/integrations/${tab.link}`}
                   className={clsx(
-                    'p-3 font-medium border-b -mb-px focus:outline-none transition ease',
+                    'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease',
                     selected
                       ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
                       : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'

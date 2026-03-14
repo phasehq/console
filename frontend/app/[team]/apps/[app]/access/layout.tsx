@@ -48,24 +48,23 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full px-8 py-8 pb-0 text-black dark:text-white flex flex-col overflow-y-auto space-y-8"
-      style={{ height: 'calc(100vh - 64px)' }}
+      className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 pb-0 sm:pb-0 lg:pb-0 text-black dark:text-white flex flex-col overflow-y-auto space-y-3 sm:space-y-4 lg:space-y-6 h-[calc(100vh-56px)]"
     >
       <div>
-        <h1 className="text-2xl font-bold">Access</h1>
+        <h1 className="text-base sm:text-lg font-bold">Access</h1>
         <div className="text-neutral-500">Manage user and service account access in this App</div>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <div className="grid grid-cols-[max-content_1fr] gap-8 h-full divide-x divide-neutral-500/40">
-          <Tab.List className="flex flex-col gap-4 w-full ">
+        <div className="grid grid-cols-[max-content_1fr] gap-3 sm:gap-4 lg:gap-6 h-full divide-x divide-neutral-500/40">
+          <Tab.List className="flex flex-col gap-2 w-full ">
             {tabs.map((tab) => (
               <Tab as={Fragment} key={tab.name}>
                 {({ selected }) => (
                   <Link
                     href={`/${params.team}/apps/${params.app}/access/${tab.link}`}
                     className={clsx(
-                      'p-3 font-medium border-l rounded-r-lg focus:outline-none transition ease',
+                      'p-2 text-xs font-medium border-l rounded-r-lg focus:outline-none transition ease',
                       selected
                         ? 'border-emerald-500 font-semibold bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
                         : ' border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'

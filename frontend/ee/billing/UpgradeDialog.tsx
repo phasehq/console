@@ -240,14 +240,14 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
 
   if (billingPeriod === null)
     return (
-      <div className="space-y-8">
+      <div className="space-y-6">
         <Tab.Group
           selectedIndex={planType === PlanTypeEnum.Pro ? 0 : 1}
           onChange={(index) =>
             setPlanType(index === 0 ? PlanTypeEnum.Pro : PlanTypeEnum.Enterprise)
           }
         >
-          <Tab.List className="flex justify-center gap-8 border-b border-neutral-500/40">
+          <Tab.List className="flex justify-center gap-4 border-b border-neutral-500/40">
             {activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr && (
               <Tab>
                 {({ selected }) => (

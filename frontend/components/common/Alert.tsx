@@ -17,8 +17,8 @@ export const Alert = (props: {
   }
 
   const sizeStyles = {
-    sm: 'px-2 py-1 text-sm gap-2',
-    md: 'p-4 text-base gap-4',
+    sm: 'px-2 py-1 text-xs gap-2',
+    md: 'p-3 text-sm gap-3',
   }
 
   const variantIcons = {
@@ -31,7 +31,7 @@ export const Alert = (props: {
   return (
     <div
       className={clsx(
-        'rounded-lg ring-1 ring-inset p-4 flex items-center',
+        'rounded-lg ring-1 ring-inset p-3 flex items-center',
         variantStyles[props.variant],
         props.size ? sizeStyles[props.size] : sizeStyles['md']
       )}
