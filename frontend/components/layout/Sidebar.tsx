@@ -141,7 +141,7 @@ const Sidebar = () => {
             )}
           />
         )}
-        {collapsed && (
+        {collapsed && !open && (
           <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap z-50">
             {activeOrganisation?.name}
           </div>
@@ -170,7 +170,7 @@ const Sidebar = () => {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute z-20 left-0 shadow-2xl top-16 mt-2 w-64 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+              <Menu.Items className={clsx("absolute z-20 shadow-2xl divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none", collapsed ? "left-full ml-2 top-0 w-56 origin-top-left" : "left-0 top-full mt-1 w-full origin-top-left")}>
                 <div className="px-1 py-1">
                   {organisations?.map((org: OrganisationType) => (
                     <Menu.Item key={org.id}>
