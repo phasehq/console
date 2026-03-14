@@ -12,16 +12,6 @@ export const getBox = async (boxId: string) => {
   return res.json()
 }
 
-export const updateBoxViewCount = async (boxId: string) => {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/lockbox/${boxId}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'omit',
-  })
-}
-
 export const boxExpiryString = (expiresAt?: number, allowedViews?: Maybe<number>) => {
   if (!expiresAt && !allowedViews) {
     return 'This box will never expire'

@@ -5,11 +5,12 @@ from api.models import (
     Lockbox,
 )
 
+from django.db import transaction
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 
-from django.db.models import Q
+from django.db.models import Q, F
 
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -39,25 +40,18 @@ class LockboxView(APIView):
 
     def get(self, request, box_id):
         try:
-            box = Lockbox.objects.get(
-                Q(id=box_id)
-                & (Q(expires_at__gte=timezone.now()) | Q(expires_at__isnull=True))
-            )
-            if box.allowed_views is None or box.views < box.allowed_views:
-                serializer = LockboxSerializer(box)
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            else:
-                return HttpResponse(status=status.HTTP_403_FORBIDDEN)
-
-        except Lockbox.DoesNotExist:
-            return HttpResponse(status=status.HTTP_404_NOT_FOUND)
-
-    def put(self, request, box_id):
-        try:
-            box = Lockbox.objects.get(id=box_id)
-            box.views += 1
-            box.save()
-            return HttpResponse(status=status.HTTP_200_OK)
+            with transaction.atomic():
+                box = Lockbox.objects.select_for_update().get(
+                    Q(id=box_id)
+                    & (Q(expires_at__gte=timezone.now()) | Q(expires_at__isnull=True))
+                )
+                if box.allowed_views is None or box.views < box.allowed_views:
+                    serializer = LockboxSerializer(box)
+                    # Atomically increment view count on read
+                    Lockbox.objects.filter(id=box_id).update(views=F("views") + 1)
+                    return Response(serializer.data, status=status.HTTP_200_OK)
+                else:
+                    return HttpResponse(status=status.HTTP_403_FORBIDDEN)
 
         except Lockbox.DoesNotExist:
             return HttpResponse(status=status.HTTP_404_NOT_FOUND)
