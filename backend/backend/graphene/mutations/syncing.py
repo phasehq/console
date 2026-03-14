@@ -1,5 +1,8 @@
+import re
+
 from api.tasks.syncing import trigger_sync_tasks
 from api.utils.secrets import normalize_path_string
+from api.utils.syncing.azure.key_vault import validate_vault_uri
 
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
@@ -771,6 +774,86 @@ class CreateVercelSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateVercelSync(sync=sync)
+
+
+class CreateAzureKeyVaultSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        vault_uri = graphene.String()
+        sync_mode = graphene.String()
+        secret_name = graphene.String(required=False)
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls, root, info, env_id, path, credential_id, vault_uri, sync_mode, secret_name=None
+    ):
+        service_id = "azure_key_vault"
+
+        # Validate sync_mode
+        if sync_mode not in ("individual", "blob"):
+            raise GraphQLError("Invalid sync mode. Must be 'individual' or 'blob'.")
+
+        # Validate and normalize vault_uri
+        try:
+            vault_uri = validate_vault_uri(vault_uri)
+        except ValueError as e:
+            raise GraphQLError(str(e))
+
+        env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        if sync_mode == "blob" and not secret_name:
+            raise GraphQLError("Secret name is required for blob sync mode")
+
+        if secret_name and not re.match(r'^[a-zA-Z0-9-]+$', secret_name):
+            raise GraphQLError("Secret name can only contain alphanumeric characters and hyphens")
+
+        sync_options = {
+            "vault_uri": vault_uri,
+            "sync_mode": sync_mode,
+        }
+
+        if sync_mode == "blob":
+            sync_options["secret_name"] = secret_name
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id,
+            service=service_id,
+            deleted_at=None,
+        )
+
+        for es in existing_syncs:
+            if es.options == sync_options:
+                raise GraphQLError(
+                    "A sync already exists for this Azure Key Vault configuration!"
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateAzureKeyVaultSync(sync=sync)
 
 
 class DeleteSync(graphene.Mutation):

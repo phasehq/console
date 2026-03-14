@@ -21,14 +21,14 @@ const ServiceCard = (props: { service: Service }) => {
 
   return (
     <Card>
-      <div className="flex flex-auto gap-3 cursor-pointer">
-        <div className="text-2xl">{service.icon}</div>
+      <div className="flex flex-auto gap-3 cursor-pointer h-full">
+        <div className="text-2xl shrink-0">{service.icon}</div>
         <div className="flex flex-col justify-center gap-3">
           <div>
             <div className="text-black dark:text-white text-sm font-semibold">{service.name}</div>
             <div className="text-neutral-500 text-2xs">Sync an environment with {service.name}.</div>
           </div>
-          <div className="text-emerald-500 flex items-center gap-2 text-sm">
+          <div className="text-emerald-500 flex items-center gap-2 text-sm mt-auto">
             Sync <FaArrowRight />
           </div>
         </div>
