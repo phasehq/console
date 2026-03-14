@@ -21,14 +21,14 @@ const ServiceCard = (props: { service: Service }) => {
 
   return (
     <Card>
-      <div className="flex flex-auto gap-4 cursor-pointer">
-        <div className="text-4xl">{service.icon}</div>
-        <div className="flex flex-col justify-center gap-6">
+      <div className="flex flex-auto gap-3 cursor-pointer h-full">
+        <div className="text-2xl shrink-0">{service.icon}</div>
+        <div className="flex flex-col justify-center gap-3">
           <div>
-            <div className="text-black dark:text-white text-lg font-semibold">{service.name}</div>
-            <div className="text-neutral-500 text-sm">Sync an environment with {service.name}.</div>
+            <div className="text-black dark:text-white text-sm font-semibold">{service.name}</div>
+            <div className="text-neutral-500 text-2xs">Sync an environment with {service.name}.</div>
           </div>
-          <div className="text-emerald-500 flex items-center gap-2">
+          <div className="text-emerald-500 flex items-center gap-2 text-sm mt-auto">
             Sync <FaArrowRight />
           </div>
         </div>
@@ -88,15 +88,15 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
           >
             <Disclosure.Panel>
               <div className="p-4">
-                <div className="space-y-8 ">
+                <div className="space-y-6">
                   <div>
-                    <h3 className="text-black dark:text-white text-2xl font-semibold">
+                    <h3 className="text-black dark:text-white text-base font-semibold">
                       Create a new sync
                     </h3>
-                    <div className="text-neutral-500">Select a service below to start syncing.</div>
+                    <div className="text-neutral-500 text-sm">Select a service below to start syncing.</div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                     {syncOptions.map((service: Service) => (
                       <div key={service.name}>
                         <CreateSyncDialog

@@ -21,7 +21,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
     <div className="space-y-2 w-full">
       {label && (
         <label
-          className={clsx('block text-neutral-500 text-sm mb-2', labelClassName)}
+          className={clsx('block text-neutral-500 text-xs mb-2', labelClassName)}
           htmlFor={props.id}
         >
           {label}
@@ -44,7 +44,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
         />
         {secret && (
           <button
-            className="bg-zinc-100 dark:bg-zinc-800 px-4 text-neutral-500 rounded-md"
+            className="bg-zinc-100 dark:bg-zinc-800 px-3 text-neutral-500 rounded-md"
             type="button"
             onClick={() => setShowValue(!showValue)}
             tabIndex={-1}

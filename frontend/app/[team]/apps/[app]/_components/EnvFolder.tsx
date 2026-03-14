@@ -14,10 +14,10 @@ const EnvFolderBase = ({ envFolder, pathname }: EnvFolderProp) => {
   return (
     <div className="py-2 px-4">
       {envFolder.folder === null ? (
-        <span className="text-red-500 font-mono">missing</span>
+        <span className="text-red-500 font-mono uppercase text-xs">missing</span>
       ) : (
         <Link
-          className="flex items-center gap-2 group font-medium text-sm tracking-wider"
+          className="flex items-center gap-2 group font-medium text-xs"
           href={`${pathname}/environments/${envFolder.env.id}${envFolder.folder ? `/${fullPath}` : ''}`}
           title={
             envFolder.folder
@@ -26,7 +26,7 @@ const EnvFolderBase = ({ envFolder, pathname }: EnvFolderProp) => {
           }
         >
           <div>
-            <div className="text-gray-500">{envFolder.env.name}</div>
+            <div className="text-zinc-900 dark:text-zinc-100 opacity-60">{envFolder.env.name}</div>
             <div className="text-emerald-500 group-hover:text-emerald-600 transition ease flex items-center gap-2">
               <FaFolder />
               {fullPath}

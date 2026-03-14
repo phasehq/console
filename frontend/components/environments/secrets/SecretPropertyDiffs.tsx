@@ -41,7 +41,7 @@ export const SecretPropertyDiffs = ({
   return (
     <>
       {historyItem!.key !== previousItem.key && (
-        <div className="pl-3 font-mono break-all ">
+        <div className="pl-3 font-mono text-xs break-all ">
           <span className="text-neutral-500 mr-2">KEY:</span>
           <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture">
             {previousItem.key}
@@ -53,7 +53,7 @@ export const SecretPropertyDiffs = ({
       )}
 
       {historyItem!.value !== previousItem.value && (
-        <div className="pl-3 font-mono space-y-1 break-all">
+        <div className="pl-3 font-mono text-xs space-y-1 break-all">
           <div className="flex items-center gap-2">
             <span className="text-neutral-500 mr-2">VALUE:</span>
           </div>
@@ -83,7 +83,7 @@ export const SecretPropertyDiffs = ({
       )}
 
       {historyItem!.comment !== previousItem.comment && (
-        <div className="pl-3 font-mono break-all">
+        <div className="pl-3 font-mono text-xs break-all">
           <span className="text-neutral-500 mr-2">COMMENT:</span>
           <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture">
             {previousItem.comment}
@@ -95,7 +95,7 @@ export const SecretPropertyDiffs = ({
       )}
 
       {historyItem!.path !== previousItem.path && (
-        <div className="pl-3 font-mono break-all">
+        <div className="pl-3 font-mono text-xs break-all">
           <span className="text-neutral-500 mr-2">PATH:</span>
           <s className="bg-red-200 dark:bg-red-950 text-red-500 ph-no-capture">
             {previousItem.path}
@@ -107,7 +107,7 @@ export const SecretPropertyDiffs = ({
       )}
 
       {!areTagsAreSame(historyItem!.tags, previousItem.tags) && (
-        <div className="pl-3 font-mono break-all">
+        <div className="pl-3 font-mono text-xs break-all">
           <span className="text-neutral-500 mr-2">TAGS:</span>
           <div className="inline-flex gap-2">
             {getRemovedTags().map((tag) => (

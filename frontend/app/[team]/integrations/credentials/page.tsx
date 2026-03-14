@@ -82,12 +82,12 @@ export default function Integrations({ params }: { params: { team: string } }) {
   return (
     <div className="w-full space-y-8 md:space-y-10 text-black dark:text-white">
       {userCanReadIntegrationCredentials ? (
-        <div className="space-y-4">
+        <div className="space-y-2">
           <div className="border-b border-neutral-500/20 pb-4">
-            <h2 className="text-black dark:text-white text-xl font-medium">
+            <h2 className="text-black dark:text-white text-base font-medium">
               Third-party integration credentials
             </h2>
-            <p className="text-neutral-500">Manage stored credentials for third party services</p>
+            <p className="text-neutral-500 text-sm">Manage stored credentials for third party services</p>
           </div>
 
           <div
@@ -97,7 +97,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
           >
             {noCredentials && (
               <div>
-                <div className="font-semibold text-black dark:text-white text-xl">
+                <div className="font-medium text-black dark:text-white text-sm">
                   No integration credentials
                 </div>
                 <div className="text-neutral-500">

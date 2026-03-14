@@ -1,5 +1,6 @@
 import RemoveMemberFromApp from '@/graphql/mutations/apps/removeAppMember.gql'
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { useMutation } from '@apollo/client'
 import { Fragment, useRef, useState } from 'react'
 import { OrganisationMemberType } from '@/apollo/graphql'
@@ -32,6 +33,10 @@ export const RemoveMemberConfirmDialog = ({
           query: GetAppMembers,
           variables: { appId: appId },
         },
+        {
+          query: GetAppEnvironments,
+          variables: { appId: appId, memberId: member.id },
+        },
       ],
     })
     toast.success('Removed member from app', { autoClose: 2000 })
@@ -53,8 +58,8 @@ export const RemoveMemberConfirmDialog = ({
           </>
         }
       >
-        <div className="space-y-6 py-4">
-          <p className="text-neutral-500 inline-flex gap-2">
+        <div className="space-y-6 pt-5">
+          <p className="text-neutral-500 text-sm inline-flex gap-2">
             Are you sure you want to remove{' '}
             <div className="text-zinc-900 dark:text-zinc-100 flex items-center">
               <Avatar member={member} size="sm" /> {member.fullName || member.email}

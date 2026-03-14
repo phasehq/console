@@ -18,7 +18,7 @@ export const SyncCard = (props: {
   return (
     <div
       className={clsx(
-        'grid grid-cols-1 sm:grid-cols-2 gap-4 items-center justify-between py-2 px-4 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium',
+        'grid grid-cols-1 sm:grid-cols-2 gap-4 items-center justify-between py-1.5 px-4 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-xs font-medium',
         showManageButton ? 'xl:grid-cols-6' : 'xl:grid-cols-4'
       )}
     >
@@ -40,15 +40,15 @@ export const SyncCard = (props: {
       >
         <div className="flex flex-col">
           {showAppName && (
-            <span className="text-black dark:text-white font-semibold">
+            <span className="text-black dark:text-white font-medium">
               {sync.environment.app.name}{' '}
             </span>
           )}
           <span
             className={clsx(
               showAppName
-                ? 'tracking-wider text-sm text-neutral-500'
-                : 'text-black dark:text-white font-semibold'
+                ? 'tracking-wider text-xs text-neutral-500'
+                : 'text-black dark:text-white font-medium'
             )}
           >
             {sync.environment.name}
@@ -56,13 +56,12 @@ export const SyncCard = (props: {
         </div>
 
         <div>
-          <FaAngleDoubleRight className="text-neutral-500 text-xl justify-self-end" />
+          <FaAngleDoubleRight className="text-neutral-500 text-sm justify-self-end" />
         </div>
 
         <div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-1.5 items-center">
             <ProviderIcon providerId={sync.serviceInfo?.id!} />
-
             <div>{sync.serviceInfo?.name}</div>
           </div>
           <ServiceInfo sync={sync} />
