@@ -1,4 +1,4 @@
-import { EnvironmentType, SecretType } from '@/apollo/graphql'
+import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { useContext, useEffect, useRef, useState, memo } from 'react'
 import {
   FaEyeSlash,
@@ -7,6 +7,8 @@ import {
   FaTrashAlt,
   FaCompressArrowsAlt,
   FaExpandArrowsAlt,
+  FaLock,
+  FaCog,
 } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
@@ -23,6 +25,7 @@ import { Switch } from '@headlessui/react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
+import { TypeSelector } from './TypeSelector'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
 
 function SecretRow(props: {
@@ -57,11 +60,25 @@ function SecretRow(props: {
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
     !canonicalSecret
 
-  const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
+  const isSealed = secret.type === ApiSecretTypeChoices.Sealed
+  const isConfig = secret.type === ApiSecretTypeChoices.Config
+  const isNewSecret = canonicalSecret === undefined
+  // Only lock when the server version is sealed (so users can still change type before saving)
+  const isSealedAndSaved = canonicalSecret?.type === ApiSecretTypeChoices.Sealed
+
+  const isBoolean = !isSealedAndSaved && ['true', 'false'].includes(secret.value.toLowerCase())
 
   const booleanValue = secret.value.toLowerCase() === 'true'
 
-  const [isRevealed, setIsRevealed] = useState<boolean>(canonicalSecret === undefined)
+  // Config: revealed by default. Sealed (saved): never revealed. New secrets: revealed.
+  const getInitialRevealState = () => {
+    if (isNewSecret) return true
+    if (isSealedAndSaved) return false
+    if (isConfig) return true
+    return false
+  }
+
+  const [isRevealed, setIsRevealed] = useState<boolean>(getInitialRevealState())
   const [expanded, setExpanded] = useState(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
@@ -69,6 +86,7 @@ function SecretRow(props: {
   const [readSecret] = useMutation(LogSecretReads)
 
   const handleRevealSecret = async () => {
+    if (isSealedAndSaved) return
     setIsRevealed(true)
     if (canonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
   }
@@ -77,7 +95,10 @@ function SecretRow(props: {
 
   const isMultiLine = secret.value.includes('\n')
 
-  const handleHideSecret = () => setIsRevealed(false)
+  const handleHideSecret = () => {
+    if (isSealedAndSaved) return
+    setIsRevealed(false)
+  }
 
   // Reveal boolean values on mount for boolean secrets
   useEffect(() => {
@@ -97,9 +118,14 @@ function SecretRow(props: {
 
   // Handle global reveal
   useEffect(() => {
+    if (isSealedAndSaved) return // Sealed secrets: always masked
+    if (isConfig) {
+      setIsRevealed(true) // Config: always revealed
+      return
+    }
     if (!isBoolean || globallyRevealed) setIsRevealed(globallyRevealed)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globallyRevealed, isBoolean])
+  }, [globallyRevealed, isBoolean, isSealedAndSaved, isConfig])
 
   const handleToggleBoolean = () => {
     const toggledValue = toggleBooleanKeepingCase(secret.value)
@@ -107,6 +133,7 @@ function SecretRow(props: {
   }
 
   const toggleReveal = () => {
+    if (isSealedAndSaved) return
     isRevealed ? handleHideSecret() : handleRevealSecret()
   }
 
@@ -124,6 +151,7 @@ function SecretRow(props: {
       secret.key !== canonicalSecret.key ||
       secret.value !== canonicalSecret.value ||
       secret.comment !== canonicalSecret.comment ||
+      secret.type !== canonicalSecret.type ||
       !areTagsAreSame(secret.tags, canonicalSecret.tags)
     )
   }
@@ -142,14 +170,22 @@ function SecretRow(props: {
   }
 
   const handleValueChange = (value: string) => {
+    if (isSealedAndSaved) return
     handlePropertyChange(secret.id, 'value', value)
 
     if (value.includes('\n') && !expanded) setExpanded(true)
   }
 
+  const typeBadge = () => {
+    if (isSealed) return <FaLock className="text-red-500 dark:text-red-400" />
+    if (isConfig) return <FaCog className="text-blue-500 dark:text-blue-400" />
+    return null
+  }
+
   const keyActionMenu = (
     <>
       <div className="flex items-center gap-1 absolute right-1 top-1/2 -translate-y-1/2 opacity-100 group-hover:opacity-0 text-2xs">
+        {typeBadge()}
         <div className="flex items-center gap-0.5">
           {secret.tags.map((tag) => (
             <FaCircle key={`tag-indicator-${tag.id}`} className="text-[8px]" color={tag.color} />
@@ -165,6 +201,13 @@ function SecretRow(props: {
           'transition ease'
         )}
       >
+        {!stagedForDelete && userCanUpdateSecrets && (
+          <TypeSelector
+            currentType={secret.type}
+            onChange={(type) => handlePropertyChange(secret.id, 'type', type)}
+            disabled={isSealedAndSaved}
+          />
+        )}
         <div
           className={clsx(
             secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
@@ -219,7 +262,7 @@ function SecretRow(props: {
       )}
 
       <div className="">
-        {!isBoolean && (
+        {!isBoolean && !isSealedAndSaved && (
           <Button
             variant="outline"
             tabIndex={-1}
@@ -230,6 +273,11 @@ function SecretRow(props: {
             <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
           </Button>
         )}
+        {isSealedAndSaved && (
+          <span className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1" title="This secret is sealed and cannot be revealed">
+            <FaLock /> Sealed
+          </span>
+        )}
       </div>
 
       {!stagedForDelete && (
@@ -238,7 +286,7 @@ function SecretRow(props: {
         </div>
       )}
 
-      {canonicalSecret && !stagedForDelete && (
+      {canonicalSecret && !stagedForDelete && !isSealedAndSaved && (
         <div className={clsx((!secret.override || !secret.override.isActive) && '')}>
           <OverrideDialog
             secretName={secret.key}
@@ -249,7 +297,7 @@ function SecretRow(props: {
         </div>
       )}
 
-      {canonicalSecret && (
+      {canonicalSecret && !isSealedAndSaved && (
         <div className="">
           <ShareSecretDialog secret={secret} />
         </div>
@@ -328,12 +376,13 @@ function SecretRow(props: {
             inputTextColor(),
             'w-full group-hover:rounded-tr-none'
           )}
-          value={secret.value}
+          value={isSealedAndSaved ? '' : secret.value}
           onChange={(v) => handleValueChange(v)}
           isRevealed={isRevealed}
           expanded={expanded}
           onFocus={() => setExpanded(true)}
-          disabled={stagedForDelete || !userCanUpdateSecrets}
+          disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
+          placeholder={isSealedAndSaved ? 'Sealed' : undefined}
         />
         {valueActionMenu}
       </div>
