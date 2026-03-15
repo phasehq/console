@@ -310,7 +310,7 @@ const Onboard = () => {
         <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-40">
           <form
             onSubmit={incrementStep}
-            className="space-y-8 p-8 border border-violet-200/10 rounded-lg bg-zinc-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
+            className="space-y-8 p-4 border border-violet-200/10 rounded-lg bg-zinc-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
           >
             <div className="flex flex-col w-full">
               {step >= 0 && (

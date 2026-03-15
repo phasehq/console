@@ -15,7 +15,7 @@ export const LeaseHistoryDialog = ({ lease }: { lease: DynamicSecretLeaseType })
       }
     >
       <div className="space-y-4">
-        <div className="text-neutral-500 text-sm">
+        <div className="text-neutral-500 text-xs">
           Chronological history of events related to this lease
         </div>
         <LeaseEventTimeline lease={lease} className="max-h-[80vh] overflow-y-auto" />

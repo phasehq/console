@@ -141,7 +141,7 @@ const MultiEnvImportDialog = forwardRef(
     return (
       <GenericDialog title="Import secrets" ref={dialogRef} onClose={reset}>
         <div className="space-y-4">
-          <p className="text-neutral-500">
+          <p className="text-neutral-500 text-sm">
             Drop, select or paste your .env here to import secrets into your environment
           </p>
 

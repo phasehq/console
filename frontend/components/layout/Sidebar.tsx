@@ -42,14 +42,14 @@ const SidebarLink = ({
       <div className="relative group">
         <div
           className={clsx(
-            'flex items-center gap-2 text-sm h-12 px-3 transition ease rounded-lg font-semibold whitespace-nowrap',
-            collapsed ? 'justify-start' : '',
+            'flex items-center gap-2 text-xs h-10 px-3 transition ease rounded-lg font-semibold whitespace-nowrap',
+            collapsed ? 'justify-center' : '',
             active
               ? 'bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
               : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
           )}
         >
-          <div className="text-xl">{icon}</div>
+          <div className="text-lg">{icon}</div>
 
           <Transition
             as="div"
@@ -66,7 +66,7 @@ const SidebarLink = ({
           </Transition>
         </div>
         {collapsed && (
-          <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-sm whitespace-nowrap z-50">
+          <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap z-50">
             {name}
           </div>
         )}
@@ -111,15 +111,15 @@ const Sidebar = () => {
     const OrgLabel = ({ open }: { open?: boolean }) => (
       <div
         className={clsx(
-          'p-2 text-neutral-500 flex items-center transition-colors ease rounded-lg relative',
+          'text-neutral-500 flex items-center transition-colors ease rounded-lg relative',
           collapsed
-            ? `justify-center mb-[22px] ${planStyle()}`
-            : 'justify-between w-full bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10'
+            ? `p-1 justify-center mb-[22px] ${planStyle()}`
+            : 'p-2 justify-between w-full bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10'
         )}
       >
         {collapsed ? (
           <div className="w-8 h-8 flex items-center justify-center">
-            <span className="font-bold text-xl">
+            <span className="font-bold text-lg">
               {activeOrganisation?.name?.[0]?.toUpperCase()}
             </span>
           </div>
@@ -128,7 +128,7 @@ const Sidebar = () => {
             <div>
               <PlanLabel plan={activeOrganisation?.plan!} />
             </div>
-            <span className="truncate font-semibold tracking-wider text-lg">
+            <span className="truncate font-semibold tracking-wider text-base">
               {activeOrganisation?.name}
             </span>
           </div>
@@ -141,8 +141,8 @@ const Sidebar = () => {
             )}
           />
         )}
-        {collapsed && (
-          <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-sm whitespace-nowrap z-50">
+        {collapsed && !open && (
+          <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap z-50">
             {activeOrganisation?.name}
           </div>
         )}
@@ -170,7 +170,7 @@ const Sidebar = () => {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute z-20 left-0 shadow-2xl top-16 mt-2 w-64 origin-bottom-left divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+              <Menu.Items className={clsx("absolute z-20 shadow-2xl divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none", collapsed ? "left-full ml-2 top-0 w-56 origin-top-left" : "left-0 top-full mt-1 w-full origin-top-left")}>
                 <div className="px-1 py-1">
                   {organisations?.map((org: OrganisationType) => (
                     <Menu.Item key={org.id}>
@@ -188,7 +188,7 @@ const Sidebar = () => {
                               <div>
                                 <PlanLabel plan={org?.plan!} />
                               </div>
-                              <span className="truncate text-left font-medium text-base">
+                              <span className="truncate text-left font-medium text-sm">
                                 {org.name}
                               </span>
                             </div>
@@ -252,14 +252,16 @@ const Sidebar = () => {
   return (
     <div
       className={clsx(
-        'h-screen flex flex-col pt-[64px] transition-all duration-300',
-        collapsed ? 'w-20' : 'w-72'
+        'h-screen flex flex-col pt-12 transition-all duration-300',
+        collapsed ? 'w-16' : 'w-64'
       )}
     >
       <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/70 dark:bg-neutral-800/20 text-black dark:text-white">
         {/* Main navigation area */}
-        <div className="gap-4 p-4 grid grid-cols-1 w-full">
-          <OrgsMenu />
+        <div className="gap-3 p-3 grid grid-cols-1 w-full">
+          <div className={clsx(collapsed ? 'mb-2' : '')}>
+            <OrgsMenu />
+          </div>
           {links.map((link) => (
             <SidebarLink
               key={link.name}
@@ -273,16 +275,16 @@ const Sidebar = () => {
         </div>
 
         {/* Bottom section with collapse/expand button */}
-        <div className="p-4 w-full">
+        <div className="p-2 w-full">
           <button
             onClick={() => setUserPreference(collapsed ? 'expanded' : 'collapsed')}
-            className="flex items-center justify-center p-3 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
+            className="flex items-center justify-center p-1.5 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? (
-              <FaAngleDoubleRight className="text-xl" />
+              <FaAngleDoubleRight className="text-sm" />
             ) : (
-              <FaAngleDoubleLeft className="text-xl" />
+              <FaAngleDoubleLeft className="text-sm" />
             )}
           </button>
         </div>

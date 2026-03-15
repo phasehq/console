@@ -138,7 +138,7 @@ function SecretRow(props: {
   }
 
   const INPUT_BASE_STYLE =
-    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg'
+    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-sm'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -184,11 +184,11 @@ function SecretRow(props: {
 
   const keyActionMenu = (
     <>
-      <div className="flex items-center gap-1 absolute right-1 inset-y-0 opacity-100 group-hover:opacity-0 text-2xs">
+      <div className="flex items-center gap-1 absolute right-1 top-1/2 -translate-y-1/2 opacity-100 group-hover:opacity-0 text-2xs">
         {typeBadge()}
         <div className="flex items-center gap-0.5">
           {secret.tags.map((tag) => (
-            <FaCircle key={`tag-indicator-${tag.id}`} color={tag.color} />
+            <FaCircle key={`tag-indicator-${tag.id}`} className="text-[8px]" color={tag.color} />
           ))}
         </div>
         <div>{secret.comment.length > 0 && <FaHashtag className="text-emerald-500" />}</div>
@@ -197,7 +197,7 @@ function SecretRow(props: {
         className={clsx(
           'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
           'bg-zinc-200 dark:bg-zinc-700',
-          'z-10 group-hover:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 opacity-0 group-hover:opacity-100',
+          'z-10 group-hover:z-10 absolute -right-px -top-9 translate-y-9 group-hover:translate-y-0 opacity-0 group-hover:opacity-100',
           'transition ease'
         )}
       >
@@ -244,7 +244,7 @@ function SecretRow(props: {
   const valueActionMenu = (
     <div
       className={clsx(
-        'flex gap-1 items-start pt-1 rounded-t-lg right-px px-1 transition ease',
+        'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
         'bg-zinc-200 dark:bg-zinc-700',
         'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 translate-y-9 group-hover:translate-y-0'
       )}
@@ -346,7 +346,7 @@ function SecretRow(props: {
         />
         {keyActionMenu}
       </div>
-      <div className="w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease p-px">
+      <div className="w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease">
         {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
@@ -374,7 +374,7 @@ function SecretRow(props: {
           className={clsx(
             INPUT_BASE_STYLE,
             inputTextColor(),
-            'w-full p-2 group-hover:rounded-tr-none'
+            'w-full group-hover:rounded-tr-none'
           )}
           value={isSealedAndSaved ? '' : secret.value}
           onChange={(v) => handleValueChange(v)}

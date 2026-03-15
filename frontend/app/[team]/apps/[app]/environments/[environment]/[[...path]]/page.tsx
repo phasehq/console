@@ -940,16 +940,16 @@ export default function EnvironmentPath({
   return (
     <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
       {keyring !== null && !loading && (
-        <div className="flex flex-col py-4 px-8 bg-zinc-200 dark:bg-zinc-900">
-          <div className="flex items-center gap-8 justify-between w-full">
-            <div className="flex items-center gap-8">
+        <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
+          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
+            <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
               {envLinks.length > 1 ? (
                 <Menu as="div" className="relative group">
                   {({ open }) => (
                     <>
                       <Menu.Button as={Fragment}>
                         <div className="cursor-pointer flex items-center gap-2">
-                          <h3 className="font-semibold text-xl">{environment.name}</h3>
+                          <h3 className="font-semibold text-lg">{environment.name}</h3>
                           <FaChevronDown
                             className={clsx(
                               'transition transform ease',
@@ -995,7 +995,7 @@ export default function EnvironmentPath({
                   )}
                 </Menu>
               ) : (
-                <h3 className="font-semibold text-2xl">{environment.name}</h3>
+                <h3 className="font-semibold text-lg">{environment.name}</h3>
               )}
               <div className="flex items-center gap-2">
                 <FolderBreadcrumbLinks path={params.path} />
@@ -1020,7 +1020,7 @@ export default function EnvironmentPath({
                   </div>
                   <input
                     placeholder="Search keys or values"
-                    className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500"
+                    className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -1084,11 +1084,11 @@ export default function EnvironmentPath({
 
             {!noSecrets && (
               <div className="flex items-center w-full">
-                <div className="px-9 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
+                <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                   key
                 </div>
-                <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-2/3 flex items-center justify-between">
-                  value
+                <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between">
+                  <span className="uppercase tracking-wider">value</span>
                   <div className="flex items-center gap-4">
                     <Button variant="outline" onClick={toggleGlobalReveal}>
                       <div className="flex items-center gap-2">
@@ -1140,13 +1140,13 @@ export default function EnvironmentPath({
                 <div
                   ref={secretToHighlight === secret.id ? highlightedRef : null}
                   className={clsx(
-                    'flex items-start gap-2 py-1 px-3 rounded-md',
+                    'flex items-start gap-2 py-0.5 px-3 rounded-md',
                     secretToHighlight === secret.id &&
                       'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
                   )}
                   key={secret.id}
                 >
-                  <div className="text-neutral-500 font-mono w-5 h-10 flex items-center">
+                  <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">
                     {index + 1}
                   </div>
                   <SecretRow

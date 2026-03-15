@@ -14,7 +14,7 @@ interface AvatarProps {
   member?: OrganisationMemberType
   serviceAccount?: ServiceAccountType
   user?: GenericUser
-  size?: 'sm' | 'md' | 'lg' | 'xl' // Define the size prop with the correct type
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' // Define the size prop with the correct type
   showTitle?: boolean
 }
 
@@ -22,6 +22,7 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
   const [useFallBack, setUseFallBack] = useState(false)
 
   const sizes = {
+    xs: 'h-6 w-6 text-[9px]',
     sm: 'h-5 w-5 text-[10px]',
     md: 'h-8 w-8 text-2xs',
     lg: 'h-12 w-12 text-base',

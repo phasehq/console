@@ -149,12 +149,12 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
       <div className="pt-4">
         <Tab.Group selectedIndex={tabIndex} onChange={handleTabChange}>
           {userCanCreateLockbox && (
-            <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+            <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
               <Tab as={Fragment}>
                 {({ selected }) => (
                   <div
                     className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold'
                         : ' border-transparent cursor-pointer'
@@ -168,7 +168,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                 {({ selected }) => (
                   <div
                     className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold'
                         : ' border-transparent cursor-pointer'
@@ -184,8 +184,8 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
             <Tab.Panel>
               <div className="space-y-4 pt-4">
                 <div>
-                  <div className="font-semibold text-black dark:text-white">Permalink</div>
-                  <div className="text-neutral-500 text-sm">
+                  <div className="text-xs font-medium text-black dark:text-white">Permalink</div>
+                  <div className="text-neutral-500 text-xs">
                     Share the permalink to this secret to with your team on Phase. Only users with
                     access to this Environment will be able to open this link.
                   </div>
@@ -203,18 +203,18 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
               <Tab.Panel>
                 <div className="space-y-2 pt-4">
                   <div>
-                    <div className="font-semibold text-black dark:text-white">
+                    <div className="text-xs font-medium text-black dark:text-white">
                       Share with Lockbox
                     </div>
-                    <div className="text-neutral-500 text-sm">
+                    <div className="text-neutral-500 text-xs">
                       Create a link to share this secret via Phase Lockbox with Zero-Trust
                       encryption. Any user with the link will be able to view this secret.
                     </div>
                   </div>
 
                   {box ? (
-                    <div className="space-y-6">
-                      <div className="text-neutral-800 dark:text-neutral-100 flex items-center gap-2 text-sm font-medium">
+                    <div className="space-y-4">
+                      <div className="text-neutral-800 dark:text-neutral-100 flex items-center gap-2 text-xs font-medium">
                         <FaInfoCircle />{' '}
                         {boxExpiryString(expiry.getExpiry() || undefined, allowedViews)}
                       </div>
@@ -228,10 +228,10 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                       </div>
                     </div>
                   ) : (
-                    <form className="space-y-6" onSubmit={handleSubmit}>
+                    <form className="space-y-4" onSubmit={handleSubmit}>
                       <div className="space-y-0 w-full">
                         <label
-                          className="block text-gray-700 text-sm font-bold mb-2"
+                          className="block text-gray-700 text-xs font-semibold mb-2"
                           htmlFor="secret"
                         >
                           Secret
@@ -245,11 +245,11 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                         ></textarea>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-8">
+                      <div className="grid grid-cols-3 gap-6">
                         <div className="col-span-2">
                           <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
                             <RadioGroup.Label as={Fragment}>
-                              <label className="block text-gray-700 text-sm font-bold mb-2">
+                              <label className="block text-gray-700 text-xs font-semibold mb-2">
                                 Expiry
                               </label>
                             </RadioGroup.Label>
@@ -259,7 +259,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                                   {({ active, checked }) => (
                                     <div
                                       className={clsx(
-                                        'flex items-center gap-2 py-0.5 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full text-sm',
+                                        'flex items-center gap-1.5 py-0.5 px-2 cursor-pointer bg-zinc-800 border border-zinc-800  rounded-full text-xs',
                                         active && 'border-zinc-700',
                                         checked && 'bg-zinc-700'
                                       )}
@@ -280,7 +280,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
 
                         <div className="relative">
                           <label
-                            className="block text-gray-700 text-sm font-bold mb-2"
+                            className="block text-gray-700 text-xs font-semibold mb-2"
                             htmlFor="secret"
                           >
                             Maximum allowed views
@@ -289,7 +289,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                             {({ open }) => (
                               <>
                                 <Listbox.Button as={Fragment} aria-required>
-                                  <div className="p-2 flex items-center justify-between  rounded-md h-10 cursor-pointer bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100">
+                                  <div className="p-1.5 flex items-center justify-between rounded-md h-8 cursor-pointer bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-xs">
                                     {allowedViews || 'Unlimited'}
                                     <FaChevronDown
                                       className={clsx(
@@ -306,7 +306,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                                         {({ active, selected }) => (
                                           <div
                                             className={clsx(
-                                              'flex items-center gap-2 p-2 cursor-pointer rounded-full text-sm text-zinc-900 dark:text-zinc-100',
+                                              'flex items-center gap-2 p-1.5 cursor-pointer rounded-full text-xs text-zinc-900 dark:text-zinc-100',
                                               active && 'bg-zinc-400 dark:bg-zinc-700'
                                             )}
                                           >
@@ -323,7 +323,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                         </div>
                       </div>
 
-                      <div className="text-sm text-neutral-500 flex items-center gap-2">
+                      <div className="text-xs text-neutral-500 flex items-center gap-2">
                         <FaInfoCircle />{' '}
                         {boxExpiryString(expiry.getExpiry() || undefined, allowedViews)}
                       </div>

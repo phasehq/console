@@ -209,12 +209,12 @@ export const SetupAWSAuth = (props: {
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
           <Tab as={Fragment}>
             {({ selected }) => (
               <div
                 className={clsx(
-                  'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                  'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                   selected
                     ? 'border-emerald-500 font-semibold text-emerald-500'
                     : ' border-transparent cursor-pointer'
@@ -229,7 +229,7 @@ export const SetupAWSAuth = (props: {
             {({ selected }) => (
               <div
                 className={clsx(
-                  'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                  'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                   selected
                     ? 'border-emerald-500 font-semibold text-emerald-500'
                     : ' border-transparent cursor-pointer'
