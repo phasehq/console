@@ -1,6 +1,7 @@
 from django.urls import path, include
 from .views.auth import (
     AuthentikLoginView,
+    AutheliaLoginView,
     GitHubEnterpriseLoginView,
     GoogleLoginView,
     GitHubLoginView,
@@ -24,5 +25,6 @@ urlpatterns = [
     path("jumpcloud-oidc/", JumpCloudLoginView.as_view(), name="jumpcloud-oidc"),
     path("entra-id-oidc/", EntraIDLoginView.as_view(), name="microsoft"),
     path("authentik/", AuthentikLoginView.as_view(), name="authentik"),
+    path("authelia/", AutheliaLoginView.as_view(), name="authelia"),
     path("okta-oidc/", OktaLoginView.as_view(), name="okta-oidc"),
 ]
