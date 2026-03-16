@@ -28,12 +28,12 @@ export default function IntegrationsHomeCard(props: { organisation: Organisation
 
   return (
     <Card>
-      <div className="p-8 flex flex-col gap-y-20 justify-between">
+      <div className="p-3 sm:p-4 lg:p-6 flex flex-col gap-y-6 sm:gap-y-8 lg:gap-y-10 justify-between">
         <FaProjectDiagram
-          size={'32'}
+          size={'24'}
           className="text-neutral-800 dark:text-neutral-300 group-hover:text-emerald-500 transition-colors duration-300"
         />
-        <div className="flex w-full justify-between text-4xl ">
+        <div className="flex w-full justify-between text-lg sm:text-xl lg:text-2xl">
           <h2 className="font-semibold group-hover:text-emerald-500 transition-colors duration-300">
             Integrations
           </h2>

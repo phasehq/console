@@ -28,12 +28,12 @@ export default function Syncing({ params }: { params: { team: string; app: strin
     : false
 
   return (
-    <div className="w-full space-y-8 pt-8 text-black dark:text-white">
+    <div className="w-full space-y-3 sm:space-y-4 lg:space-y-6 pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white px-3 sm:px-4 lg:px-6">
       {data?.sseEnabled === false && (
         <>
           <div className="flex flex-col gap-4 h-64 max-w-screen-md mx-auto items-center justify-center">
             <div className="space-y-1 text-center">
-              <div className="text-black dark:text-white text-2xl font-semibold">Enable Secret Syncing</div>
+              <div className="text-black dark:text-white text-sm font-medium">Enable Secret Syncing</div>
               <p className="text-neutral-500">
                 Server-side encryption (SSE) is not yet enabled for this app. SSE is required to allow
                 automatic syncing of secrets.
@@ -62,8 +62,8 @@ export default function Syncing({ params }: { params: { team: string; app: strin
             />
           )}
           {data.syncs && data.syncs.length > 0 && (
-            <div className="flex flex-col gap-4 border-b border-neutral-500/40 pb-8">
-              <div className="text-2xl font-semibold pb-4">Active Syncs</div>
+            <div className="flex flex-col gap-2 border-b border-neutral-500/40 pb-8">
+              <div className="text-sm font-medium pb-4">Active Syncs</div>
               {data.syncs.map((sync: EnvironmentSyncType) => (
                 <SyncCard key={sync.id} sync={sync} showAppName={false} showManageButton={true} />
               ))}

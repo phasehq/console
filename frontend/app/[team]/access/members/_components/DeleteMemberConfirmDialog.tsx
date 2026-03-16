@@ -70,8 +70,8 @@ export const DeleteMemberConfirmDialog = (props: {
         }
         buttonVariant="danger"
       >
-        <div className="space-y-6 p-4">
-          <p className="text-neutral-500">
+        <div className="space-y-6 pt-4">
+          <p className="text-neutral-500 text-sm">
             Are you sure you want to remove{' '}
             <span className="text-zinc-900 dark:text-zinc-100">
               {member.fullName || member.email}

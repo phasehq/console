@@ -12,9 +12,10 @@ import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import Link from 'next/link'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { userHasPermission } from '@/utils/access/permissions'
-import { UpdateAppNameOp } from '@/graphql/mutations/apps/updateAppName.gql'
+import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
+import { AppDescriptionEditor } from './_components/AppDescriptionEditor'
 
 export default function AppSettings({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -44,7 +45,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
     ? userHasPermission(organisation.role?.permissions, 'Apps', 'update')
     : false
 
-  const [updateAppName] = useMutation(UpdateAppNameOp)
+  const [updateAppName] = useMutation(UpdateAppInfoOp)
 
   const nameUpdated = app ? app.name !== name : false
 
@@ -53,24 +54,24 @@ export default function AppSettings({ params }: { params: { team: string; app: s
       toast.error("You don't have the permissions required to update Apps")
       return
     }
-    
+
     if (!name || name.trim() === '') {
-      toast.error("App name cannot be blank")
+      toast.error('App name cannot be blank')
       return
     }
-    
+
     await updateAppName({
       variables: {
         id: app.id,
         name,
       },
       refetchQueries: [
-        { 
-          query: GetAppDetail, 
+        {
+          query: GetAppDetail,
           variables: {
-            organisationId: organisation?.id, 
-            appId: params.app
-          } 
+            organisationId: organisation?.id,
+            appId: params.app,
+          },
         },
       ],
     })
@@ -85,59 +86,61 @@ export default function AppSettings({ params }: { params: { team: string; app: s
   }, [app])
 
   return (
-    <div className="max-w-screen-lg mx-auto space-y-10 divide-y divide-neutral-500/40 p-8 w-full text-black dark:text-white mt-6">
-      <h1 className="text-3xl font-semibold">Settings</h1>
+    <div className="max-w-screen-lg mx-auto space-y-4 sm:space-y-6 lg:space-y-8 divide-y divide-neutral-500/40 p-3 sm:p-4 lg:p-6 w-full text-black dark:text-white mt-3 sm:mt-4">
+      <h1 className="text-base sm:text-lg font-semibold">Settings</h1>
       {app && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-2xl font-semibold">App</h2>
+            <h2 className="text-base sm:text-lg font-semibold">App</h2>
             <p className="text-neutral-500">App name and information</p>
           </div>
           <div className="flex items-center gap-4">
-            <FaCube className="shrink-0 text-neutral-500" size={60} />
-            <div className="flex flex-col gap-1 w-full">
-              <h3 className="relative group w-full max-w-md">
-                <input
-                  className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-2xl font-medium"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  readOnly={!userCanUpdateApps}
-                  maxLength={64}
-                />
-                {nameUpdated ? (
-                  <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
-                    <Button variant="secondary" onClick={resetName}>
-                      <span className="text-2xs">Discard</span>
-                    </Button>
+            <FaCube className="shrink-0 text-neutral-500" size={40} />
+            <div className="flex items-start justify-between w-full">
+              <div className="flex flex-col gap-1 w-full">
+                <h3 className="relative group w-full max-w-md">
+                  <input
+                    className="custom bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-50/80 dark:hover:bg-neutral-900/50 rounded-lg transition ease w-full text-lg font-semibold"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    readOnly={!userCanUpdateApps}
+                    maxLength={64}
+                  />
+                  {nameUpdated ? (
+                    <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
+                      <Button variant="secondary" onClick={resetName}>
+                        <span className="text-2xs">Discard</span>
+                      </Button>
+                      <Button variant="primary" onClick={updateName}>
+                        <span className="text-2xs">Save</span>
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center inset-y-0 gap-1 absolute right-2 opacity-50 group-hover:opacity-100 transition ease ">
+                      <FaEdit className="text-neutral-500 text-base" />
+                    </div>
+                  )}
+                </h3>
 
-                    <Button variant="primary" onClick={updateName}>
-                      <span className="text-2xs">Save</span>
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center inset-y-0 gap-1 absolute right-2 opacity-0 group-hover:opacity-100 transition ease ">
-                    <FaEdit className="text-neutral-500 text-base" />
-                  </div>
-                )}
-              </h3>
-
-              <div className="flex items-center gap-4 text-neutral-500">
-                <div className="text-base ">Created</div>
-                <span>{readableDate}</span>
+                <div className="flex items-center gap-4 group relative">
+                  <CopyButton value={app.id} buttonVariant="ghost">
+                    <span className="text-neutral-500 text-sm font-mono">{app.id}</span>
+                  </CopyButton>
+                </div>
               </div>
-              <div className="flex items-center gap-4 group relative">
-                <span className="text-neutral-500 text-sm font-mono">{app.id}</span>
-                <CopyButton value={app.id} />
+              <div className="flex items-center gap-4 text-neutral-500 text-xs justify-end whitespace-nowrap">
+                Created {readableDate}
               </div>
             </div>
           </div>
+          <AppDescriptionEditor app={app} canUpdate={userCanUpdateApps} />
         </div>
       )}
 
       {app && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-2xl font-semibold text-black dark:text-white">Encryption</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">Encryption</h2>
             <p className="text-neutral-500">Manage the encryption mode used for this App</p>
           </div>
 
@@ -197,7 +200,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
       {userCanDeleteApps && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-2xl font-semibold text-black dark:text-white">Danger Zone</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">Danger Zone</h2>
             <p className="text-neutral-500">These actions may result in permanent loss of data</p>
           </div>
           <div className="flex items-center justify-between p-3 rounded-lg ring-1 ring-inset ring-red-500/40 bg-red-400/10 ">

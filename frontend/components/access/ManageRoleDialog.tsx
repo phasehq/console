@@ -429,7 +429,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
         </div>
 
         {allowEdit && (
-          <div className="flex justify-end items-center gap-2 pt-8">
+          <div className="flex justify-end items-center gap-2 pt-6">
             <Button
               type="submit"
               variant="primary"

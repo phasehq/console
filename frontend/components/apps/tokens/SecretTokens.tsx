@@ -258,7 +258,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
     <div className="space-y-6 pb-6 divide-y-2 divide-neutral-500/40">
       <div className="space-y-4 py-4">
         <div>
-          <h3 className="text-2xl font-semibold border-neutral-500/40">Service tokens</h3>
+          <h3 className="text-lg font-semibold border-neutral-500/40">Service tokens</h3>
           <p className="text-neutral-500">
             Tokens used to authenticate this app with the CLI, SDKs or API from automated machines.
             Used for CI and production environments.
@@ -298,7 +298,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
           </div>
         ) : (
           <div className="p-40 flex flex-col items-center justify-center border border-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
-            <div className="text-black dark:text-white font-semibold text-2xl">No tokens</div>
+            <div className="text-black dark:text-white font-semibold text-xl">No tokens</div>
             <div className="text-neutral-500 text-lg">
               You haven&apos;t created any Service Tokens yet. Create one to get started.
             </div>

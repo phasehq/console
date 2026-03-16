@@ -45,8 +45,8 @@ const variantStyles: Record<ButtonVariant, string> = {
 }
 
 const sizeStyles: Record<ButtonSize, { text: string; icon: string; gap: string }> = {
-  md: { text: 'text-sm', icon: 'size-4', gap: 'gap-1' },
-  lg: { text: 'text-base', icon: 'size-6', gap: 'gap-2' },
+  md: { text: 'text-xs', icon: 'size-3.5', gap: 'gap-1' },
+  lg: { text: 'text-sm', icon: 'size-5', gap: 'gap-2' },
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -81,7 +81,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   }
 
   const computedClassName = clsx(
-    'inline-flex justify-center items-center overflow-hidden font-medium transition-all ease-in-out whitespace-nowrap',
+    'inline-flex justify-center items-center max-w-full overflow-hidden font-medium transition-all ease-in-out whitespace-nowrap',
     sizeStyles[size].text,
     sizeStyles[size].gap,
     variantStyles[variant],

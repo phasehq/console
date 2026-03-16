@@ -34,16 +34,16 @@ export default function Logs({ params }: { params: { team: string; app: string }
     )
 
   return (
-    <div className="h-screen overflow-y-auto w-full text-black dark:text-white flex flex-col">
+    <div className="h-screen overflow-y-auto w-full text-black dark:text-white flex flex-col px-3 sm:px-4 lg:px-6">
       {organisation?.role!.name!.toLowerCase() === 'owner' ? (
         <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-          <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+          <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
             {tabs.map((tab) => (
               <Tab as={Fragment} key={tab.label}>
                 {({ selected }) => (
                   <div
                     className={clsx(
-                      'p-3 font-medium border-b focus:outline-none',
+                      'p-2 text-xs font-medium border-b focus:outline-none',
                       selected
                         ? 'border-emerald-500 font-semibold'
                         : ' border-transparent cursor-pointer'

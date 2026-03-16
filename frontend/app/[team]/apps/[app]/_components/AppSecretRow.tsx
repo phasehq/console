@@ -4,9 +4,7 @@ import { Disclosure, Switch, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
   FaChevronRight,
-  FaCircle,
   FaCheckCircle,
-  FaTimesCircle,
   FaExternalLinkAlt,
   FaRegEye,
   FaRegEyeSlash,
@@ -26,6 +24,12 @@ import { arraysEqual } from '@/utils/crypto'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
+import {
+  PresentIndicator,
+  SameAsProdIndicator,
+  BlankIndicator,
+  MissingIndicator,
+} from './SecretInfoLegend'
 import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
 import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
 import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
@@ -52,6 +56,7 @@ const EnvSecretComponent = ({
   updateEnvValue,
   addEnvValue,
   deleteEnvValue,
+  revealOnHover,
   currentSecretKey,
 }: {
   clientEnvSecret: {
@@ -68,6 +73,7 @@ const EnvSecretComponent = ({
   updateEnvValue: (id: string, envId: string, value: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
+  revealOnHover?: boolean
   currentSecretKey?: string
 }) => {
   const pathname = usePathname()
@@ -187,7 +193,14 @@ const EnvSecretComponent = ({
   )
 
   return (
-    <div className={`px-4 rounded-md ${bgColor()}`}>
+    <div
+      className={clsx(
+        'px-4 py-2 rounded-md group transition-colors',
+        bgColor(),
+        !stagedForDelete && 'hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
+      )}
+      onMouseEnter={revealOnHover && !showValue ? handleRevealSecret : undefined}
+    >
       <div>
         {valueIsNew ? (
           <EnvLabel />
@@ -209,7 +222,7 @@ const EnvSecretComponent = ({
 
       {clientEnvSecret.secret === null ? (
         <div className="flex items-center gap-2">
-          <span className="text-red-500 font-mono uppercase">missing</span>
+          <span className="text-red-500 font-mono uppercase text-xs">missing</span>
           <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
             <FaPlus />
             Add value
@@ -217,7 +230,7 @@ const EnvSecretComponent = ({
         </div>
       ) : (
         <div className="flex justify-between items-center w-full">
-          <div className="relative w-full group">
+          <div className="relative w-full">
             <div className="flex items-center gap-2">
               {isBoolean && !stagedForDelete && (
                 <div className="flex items-center px-2">
@@ -248,7 +261,7 @@ const EnvSecretComponent = ({
                 className={clsx(
                   INPUT_BASE_STYLE,
                   inputTextColor(),
-                  'rounded-sm focus:outline-none py-2'
+                  'rounded-sm focus:outline-none'
                 )}
                 value={clientEnvSecret.secret.value}
                 onChange={(v) => {
@@ -272,7 +285,7 @@ const EnvSecretComponent = ({
               visible={autocomplete.isOpen}
             />
             {clientEnvSecret.secret !== null && (
-              <div className="flex items-center pt-1 gap-2 absolute inset-y-0 right-2 opacity-0 group-hover:opacity-100 transition ease">
+              <div className="flex items-center gap-2 absolute inset-y-0 right-0 pl-32 pr-2 opacity-0 group-hover:opacity-100 transition ease bg-gradient-to-r from-transparent via-zinc-100/90 to-zinc-100 dark:via-zinc-800/90 dark:to-zinc-800 group-hover:via-zinc-200/90 group-hover:to-zinc-200 dark:group-hover:via-zinc-700/90 dark:group-hover:to-zinc-700">
                 <Button variant="outline" onClick={toggleShowValue}>
                   {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
                   {showValue ? 'Hide' : 'Show'}
@@ -302,6 +315,7 @@ const areEnvSecretEqual = (
     prev.appSecretId === next.appSecretId &&
     prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
     prev.sameAsProd === next.sameAsProd &&
+    prev.revealOnHover === next.revealOnHover &&
     prev.currentSecretKey === next.currentSecretKey &&
     prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
     (p?.id ?? null) === (n?.id ?? null) &&
@@ -326,6 +340,7 @@ interface AppSecretRowProps {
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteKey: (id: string) => void
+  revealOnHover?: boolean
 }
 
 const AppSecretRowComponent = ({
@@ -341,6 +356,7 @@ const AppSecretRowComponent = ({
   addEnvValue,
   deleteEnvValue,
   deleteKey,
+  revealOnHover,
 }: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -355,9 +371,16 @@ const AppSecretRowComponent = ({
 
   const toggleAccordion = () => (isExpanded ? handleClose() : handleOpen())
 
-  const handleUpdateKey = (k: string) => {
-    const sanitizedK = k.replace(/ /g, '_').toUpperCase()
+  const handleUpdateKey = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { selectionStart } = e.target
+    const sanitizedK = e.target.value.replace(/ /g, '_').toUpperCase()
     updateKey(clientAppSecret.id, sanitizedK)
+    requestAnimationFrame(() => {
+      if (keyInputRef.current) {
+        keyInputRef.current.selectionStart = selectionStart
+        keyInputRef.current.selectionEnd = selectionStart
+      }
+    })
   }
 
   // Permisssions
@@ -473,7 +496,7 @@ const AppSecretRowComponent = ({
             >
               <button
                 onClick={toggleAccordion}
-                className="relative flex items-center justify-center"
+                className="relative flex items-center justify-center text-xs"
               >
                 <FaChevronRight
                   className={clsx(
@@ -507,7 +530,7 @@ const AppSecretRowComponent = ({
                         : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500'
                   )}
                   value={clientAppSecret.key}
-                  onChange={(e) => handleUpdateKey(e.target.value)}
+                  onChange={handleUpdateKey}
                   onClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
                 />
@@ -534,23 +557,17 @@ const AppSecretRowComponent = ({
                 className="px-6 whitespace-nowrap group cursor-pointer"
                 onClick={toggleAccordion}
               >
-                <div
-                  className="flex items-center justify-center text-sm xl:text-base"
-                  title={tooltipText(env)}
-                >
+                <div className="flex items-center justify-center" title={tooltipText(env)}>
                   {env.secret !== null ? (
                     env.secret.value.length === 0 ? (
-                      <FaCircle className="text-neutral-500 shrink-0" />
+                      <BlankIndicator />
+                    ) : secretIsSameAsProd(env) ? (
+                      <SameAsProdIndicator />
                     ) : (
-                      <FaCheckCircle
-                        className={clsx(
-                          'shrink-0',
-                          secretIsSameAsProd(env) ? 'text-amber-500' : 'text-emerald-500'
-                        )}
-                      />
+                      <PresentIndicator />
                     )
                   ) : (
-                    <FaTimesCircle className="text-red-500 shrink-0" />
+                    <MissingIndicator />
                   )}
                 </div>
               </td>
@@ -590,6 +607,7 @@ const AppSecretRowComponent = ({
                         updateEnvValue={updateValue}
                         addEnvValue={addEnvValue}
                         deleteEnvValue={deleteEnvValue}
+                        revealOnHover={revealOnHover}
                         currentSecretKey={clientAppSecret.key}
                       />
                     ))}
@@ -607,6 +625,7 @@ const AppSecretRowComponent = ({
 const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) => {
   if (prev.isExpanded !== next.isExpanded) return false
   if (prev.stagedForDelete !== next.stagedForDelete) return false
+  if (prev.revealOnHover !== next.revealOnHover) return false
   if (prev.clientAppSecret.id !== next.clientAppSecret.id) return false
   if (prev.clientAppSecret.key !== next.clientAppSecret.key) return false
 

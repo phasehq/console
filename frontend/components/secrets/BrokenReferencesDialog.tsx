@@ -27,23 +27,23 @@ export const BrokenReferencesDialog = forwardRef<
           {warnings.length} broken reference{warnings.length !== 1 ? 's' : ''} found. These
           references may not resolve correctly at runtime.
         </Alert>
-        <ul className="max-h-60 overflow-y-auto space-y-2">
+        <ul className="max-h-60 overflow-y-auto space-y-1.5">
           {warnings.map((err, i) => (
             <li
               key={i}
-              className="p-2 rounded bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700"
+              className="p-1.5 rounded bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700"
             >
-              <div className="text-xs">
-                <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">{err.secretKey}</span>
+              <div className="text-2xs 2xl:text-xs">
+                <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{err.secretKey}</span>
                 <span className="text-neutral-500"> in {err.envName}</span>
               </div>
-              <div className="text-xs text-neutral-600 dark:text-neutral-400">
+              <div className="text-2xs 2xl:text-xs text-neutral-600 dark:text-neutral-400">
                 <span className="font-mono">{err.reference}</span>: {err.error}
               </div>
             </li>
           ))}
         </ul>
-        <div className="flex justify-end gap-3 pt-2">
+        <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={() => dialogRef.current?.closeModal()}>
             Go back
           </Button>

@@ -79,7 +79,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             </span>
           )}
         </div>
-        <div className="lg:flex items-center gap-1 text-base hidden">{children}</div>
+        <div className="lg:flex items-center gap-1 text-sm hidden">{children}</div>
       </div>
     )
 
@@ -106,22 +106,22 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
   const CondensedAppMetaCounts = () => {
     return (
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 text-xs text-neutral-500">
+        <div className="flex items-center gap-1 text-2xs text-neutral-500">
           <FaUsers />
           {members.length}
         </div>
 
-        <div className="flex items-center gap-1 text-xs text-neutral-500">
+        <div className="flex items-center gap-1 text-2xs text-neutral-500">
           <FaRobot />
           {serviceAccounts.length}
         </div>
 
-        <div className="flex items-center gap-1 text-xs text-neutral-500">
+        <div className="flex items-center gap-1 text-2xs text-neutral-500">
           <BsListColumnsReverse />
           {environments.length}
         </div>
 
-        <div className="flex items-center gap-1 text-xs text-neutral-500">
+        <div className="flex items-center gap-1 text-2xs text-neutral-500">
           <FaProjectDiagram />
           {totalSyncCount}
         </div>
@@ -134,7 +134,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
       <div
         className={clsx(
           variant === 'compact'
-            ? 'col-span-5 hidden lg:grid grid-cols-5 justify-stretch gap-4'
+            ? 'col-span-5 hidden lg:grid grid-cols-5 justify-stretch gap-2'
             : 'flex items-center justify-between gap-2 w-full'
         )}
       >
@@ -161,7 +161,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
                 index === 4 && 'z-[4]'
               )}
             >
-              <Avatar showTitle={false} member={member!} size="md" />
+              <Avatar showTitle={false} member={member!} size="xs" />
             </div>
           ))}
           {surplusMemberCount > 0 && (
@@ -192,7 +192,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
                 index === 4 && 'z-[4]'
               )}
             >
-              <Avatar serviceAccount={account ?? undefined} size="md" />
+              <Avatar serviceAccount={account ?? undefined} size="xs" />
             </div>
           ))}
           {surplusServiceAccountsCount > 0 && (
@@ -212,7 +212,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={env!.id}
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800  transition ease  ring-1 ring-inset ring-zinc-500/20 rounded-full size-8 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
+                'bg-zinc-100 dark:bg-zinc-800  transition ease  ring-1 ring-inset ring-zinc-500/20 rounded-full size-6 flex items-center justify-center shrink-0 text-zinc-800 dark:text-zinc-200 text-2xs font-semibold',
                 variant === 'compact' && 'group-hover:bg-zinc-50 group-hover:dark:bg-zinc-700',
                 index !== 0 && '-ml-3',
                 index === 1 && 'z-[1]',
@@ -241,7 +241,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             <div
               key={providerId}
               className={clsx(
-                'text-2xl transition ease',
+                'text-base transition ease',
                 variant === 'compact' && 'group-hover:saturate-50'
               )}
             >
@@ -256,7 +256,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
         </AppMetaCategory>
 
         {variant === 'compact' && (
-          <div className="text-xs text-neutral-500 hidden lg:block">
+          <div className="text-2xs text-neutral-500 hidden lg:block">
             {app.updatedAt && relativeTimeFromDates(new Date(app.updatedAt))}
           </div>
         )}
@@ -270,26 +270,26 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
         'flex w-full',
         variant === 'normal'
           ? 'flex-col gap-8 justify-between rounded-xl'
-          : 'gap-6 lg:gap-10 grid grid-cols-2 lg:grid-cols-7 justify-stretch items-center py-1'
+          : 'gap-4 lg:gap-6 grid grid-cols-2 lg:grid-cols-7 justify-stretch items-center py-1'
       )}
     >
       <div
         className={clsx(
           'flex',
-          variant === 'normal' ? 'justify-between items-start' : 'col-span-2 w-full lg:max-w-[24rem] pl-3'
+          variant === 'normal'
+            ? 'justify-between items-start'
+            : 'col-span-2 w-full lg:max-w-[24rem] pl-2'
         )}
       >
         <div className="space-y-0.5 w-full">
           <div
             className={clsx(
               'font-semibold text-zinc-700 dark:text-zinc-100 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease flex items-center gap-2',
-              variant === 'normal' ? 'text-2xl' : 'text-lg'
+              variant === 'normal' ? 'text-xl' : 'text-sm'
             )}
           >
             {variant === 'normal' ? (
-              <>
-                {name}
-              </>
+              <>{name}</>
             ) : (
               <Link
                 href={`/${organisation?.name}/apps/${app.id}`}
@@ -320,9 +320,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             </div>
           )}
         </div>
-        {variant === 'normal' && (
-          <EncryptionDot sseEnabled={app.sseEnabled!} />
-        )}
+        {variant === 'normal' && <EncryptionDot sseEnabled={app.sseEnabled!} />}
       </div>
 
       {variant === 'normal' ? (

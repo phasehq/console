@@ -39,7 +39,13 @@ export const CommentDialog = (props: {
       <GenericDialog
         ref={dialogRef}
         title={comment || `Update ${secretName} comment`}
-        dialogTitle={`Update ${secretName} comment`}
+        dialogTitle={
+          <h3 className="text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">
+            Update{' '}
+            <span className="font-mono ph-no-capture">{secretName}</span>{' '}
+            comment
+          </h3>
+        }
         buttonVariant="outline"
         buttonContent={
           <div className="py-1 2xl:py-0 flex items-center gap-1">
@@ -51,7 +57,7 @@ export const CommentDialog = (props: {
         }
         buttonProps={{ tabIndex: -1 }}
       >
-        <div className="py-4 ph-no-capture">
+        <div className="pt-4 ph-no-capture">
           <textarea
             rows={5}
             value={commentValue}
@@ -61,7 +67,7 @@ export const CommentDialog = (props: {
           ></textarea>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-3">
           <Button variant="secondary" onClick={handleClose}>
             Done
           </Button>

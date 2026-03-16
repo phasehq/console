@@ -5,7 +5,11 @@ import { EnvironmentType, DynamicSecretType } from '@/apollo/graphql'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { FaCheckCircle, FaChevronRight, FaExternalLinkAlt, FaTimesCircle } from 'react-icons/fa'
+import { FaChevronRight, FaExternalLinkAlt } from 'react-icons/fa'
+import {
+  MissingIndicator,
+  PresentIndicator,
+} from '@/app/[team]/apps/[app]/_components/SecretInfoLegend'
 import { Disclosure, Transition } from '@headlessui/react'
 import { FaBolt } from 'react-icons/fa6'
 
@@ -59,7 +63,7 @@ export const AppDynamicSecretRow = ({
     return (
       <div className="py-2 px-4">
         {envDS.dynamicSecret === null ? (
-          <span className="text-red-500 font-mono uppercase">missing</span>
+          <span className="text-red-500 font-mono uppercase text-xs">missing</span>
         ) : (
           <Link
             className="flex items-center gap-2 group"
@@ -100,7 +104,7 @@ export const AppDynamicSecretRow = ({
       >
         <td
           className={clsx(
-            'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 text-2xs 2xl:text-sm',
+            'px-2 py-1.5 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 text-2xs 2xl:text-sm',
             isExpanded ? 'font-bold' : 'font-medium'
           )}
         >
@@ -114,12 +118,12 @@ export const AppDynamicSecretRow = ({
           />
         </td>
         {appDynamicSecret.envs.map((env) => (
-          <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
+          <td key={env.env.id} className="px-6 py-1.5 whitespace-nowrap">
             <div className="flex items-center justify-center" title={tooltipText(env)}>
               {env.dynamicSecret !== null ? (
-                <FaCheckCircle className="text-emerald-500 shrink-0" />
+                <PresentIndicator />
               ) : (
-                <FaTimesCircle className="text-red-500 shrink-0" />
+                <MissingIndicator />
               )}
             </div>
           </td>

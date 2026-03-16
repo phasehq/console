@@ -50,6 +50,7 @@ type Query {
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
   renderServices(credentialId: ID): [RenderServiceType]
   renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
+  azureKvSecrets(credentialId: ID, vaultUri: String): [AzureKeyVaultSecretType]
   testVercelCreds(credentialId: ID): Boolean
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
@@ -671,6 +672,7 @@ type OrganisationMemberInviteType {
 type AppType {
   id: String!
   name: String!
+  description: String
   identityKey: String!
   appVersion: Int!
   appToken: String!
@@ -908,6 +910,12 @@ type RenderEnvGroupType {
   name: String!
 }
 
+type AzureKeyVaultSecretType {
+  name: String
+  updatedOn: DateTime
+  contentType: String
+}
+
 type AWSValidationResultType {
   valid: Boolean!
   message: String!
@@ -991,7 +999,7 @@ type Mutation {
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
   deleteApp(id: ID!): DeleteAppMutation
-  updateAppName(id: ID!, name: String!): UpdateAppNameMutation
+  updateAppInfo(description: String, id: ID!, name: String): UpdateAppInfoMutation
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
   bulkAddAppMembers(appId: ID!, members: [AppMemberInputType]!): BulkAddAppMembersMutation
   removeAppMember(appId: ID, memberId: ID, memberType: MemberType): RemoveAppMemberMutation
@@ -999,7 +1007,7 @@ type Mutation {
   createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
-  swapEnvironmentOrder(environment1Id: ID!, environment2Id: ID!): SwapEnvironmentOrderMutation
+  updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
@@ -1039,6 +1047,7 @@ type Mutation {
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
   createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
+  createAzureKeyVaultSync(credentialId: ID, envId: ID, path: String, secretName: String, syncMode: String, vaultUri: String): CreateAzureKeyVaultSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
@@ -1131,7 +1140,7 @@ type DeleteAppMutation {
   ok: Boolean
 }
 
-type UpdateAppNameMutation {
+type UpdateAppInfoMutation {
   app: AppType
 }
 
@@ -1186,7 +1195,7 @@ type RenameEnvironmentMutation {
   environment: EnvironmentType
 }
 
-type SwapEnvironmentOrderMutation {
+type UpdateEnvironmentOrderMutation {
   ok: Boolean
 }
 
@@ -1379,6 +1388,10 @@ type CreateRenderSync {
 enum RenderResourceType {
   ENVIRONMENT_GROUP
   SERVICE
+}
+
+type CreateAzureKeyVaultSync {
+  sync: EnvironmentSyncType
 }
 
 type CreateUserTokenMutation {

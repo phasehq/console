@@ -14,9 +14,9 @@ export default function AppsHome({ params }: { params: { team: string } }) {
   return (
     <>
       <div className="text-black dark:text-white">
-        <div className="flex h-full w-full gap-8 ">
-          <div className="w-full space-y-16 p-8">
-            <h1 className="text-3xl font-bold capitalize text-wrap">{organisation?.name} Home</h1>
+        <div className="flex h-full w-full gap-3 sm:gap-4 lg:gap-6">
+          <div className="w-full space-y-6 sm:space-y-8 lg:space-y-12 p-3 sm:p-4 lg:p-6">
+            <h1 className="text-lg sm:text-xl font-bold capitalize text-wrap">{organisation?.name} Home</h1>
 
             {organisation && (
               <div className="w-full">
@@ -24,7 +24,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
               {organisation && (
                 <Link href={`/${params.team}/apps`}>
                   <AppsHomeCard organisation={organisation} />

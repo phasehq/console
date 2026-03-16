@@ -18,6 +18,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
 import clsx from 'clsx'
 import { CreateRenderSync } from './Render/CreateRenderSync'
+import { CreateAzureKeyVaultSync } from './Azure/CreateAzureKeyVaultSync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -75,6 +76,8 @@ export const CreateSyncDialog = (props: {
         return <CreateCloudflareWorkersSync appId={props.appId} closeModal={closeModal} />
       case 'render':
         return <CreateRenderSync appId={props.appId} closeModal={closeModal} />
+      case 'azure_key_vault':
+        return <CreateAzureKeyVaultSync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null
@@ -83,7 +86,7 @@ export const CreateSyncDialog = (props: {
 
   return (
     <>
-      <div onClick={openModal}>{props.button}</div>
+      <div className="h-full" onClick={openModal}>{props.button}</div>
       <Transition appear show={isOpen} as={Fragment}>
         <Dialog as="div" className="relative z-10" onClose={closeModal}>
           <Transition.Child

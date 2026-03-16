@@ -119,7 +119,7 @@ const BulkAddEmailsDialog = ({
       }
     >
       <div className="space-y-4">
-        <p className="text-neutral-500">
+        <p className="text-neutral-500 text-sm">
           Paste email adresses separated by commas, spaces, or new lines
         </p>
         <div className="space-y-4">
@@ -357,7 +357,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
         }
       >
         <div className="space-y-4 divide-y divide-neutral-500/40 h-full ">
-          <p className="text-neutral-500">Invite users to your Organisation.</p>
+          <p className="text-neutral-500 text-sm">Invite users to your Organisation.</p>
           <div>
             {inviteLinks.length === 0 && (
               <form className="space-y-6 pt-4" onSubmit={handleInvite}>
@@ -367,7 +367,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   </Alert>
                 )}
 
-                <p className="text-neutral-500">
+                <p className="text-neutral-500 text-sm">
                   Enter the email address and role for each user. They&apos;ll each get a unique
                   invite link.
                 </p>
@@ -500,15 +500,15 @@ export const InviteDialog = (props: { organisationId: string }) => {
               </form>
             )}
             {inviteLinks.length > 0 && (
-              <div className="py-8 space-y-6">
+              <div className="py-6 space-y-6">
                 <div className="text-center max-w-lg mx-auto">
                   <h3 className="font-semibold text-xl text-black dark:text-white">
                     Invite{inviteLinks.length > 1 ? 's' : ''} sent!
                   </h3>
-                  <p className="text-neutral-500">
+                  <p className="text-neutral-500 text-sm">
                     Invite link{inviteLinks.length > 1 ? 's have' : ' has'} been sent by email. You
                     can also copy the invite link{inviteLinks.length > 1 ? 's' : ''} for each user
-                    and share them manually. Invites expire in 72 hours.
+                    and share them manually. Invites expire in 14 days.
                   </p>
                 </div>
                 <Alert variant="info" icon={true} size="sm">

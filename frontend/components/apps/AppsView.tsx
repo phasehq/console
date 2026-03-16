@@ -145,7 +145,7 @@ export const AppsView = ({
         className={clsx(
           'grid grid-cols-1',
           viewMode === 'grid'
-            ? 'xl:grid-cols-2 1080p:grid-cols-3 gap-6'
+            ? 'xl:grid-cols-2 1080p:grid-cols-3 gap-3 sm:gap-4'
             : 'divide-y divide-neutral-500/20'
         )}
       >
@@ -164,7 +164,7 @@ export const AppsView = ({
       </div>
 
       {filteredAndSortedApps?.length === 0 && searchQuery && (
-        <div className="xl:col-span-2 1080p:col-span-3 justify-center p-20">
+        <div className="xl:col-span-2 1080p:col-span-3 justify-center p-8 sm:p-10 lg:p-14">
           <EmptyState
             title={`No results for "${searchQuery}"`}
             subtitle="Try adjusting your search term"
@@ -180,7 +180,7 @@ export const AppsView = ({
       )}
 
       {!loading && noApps && !userCanCreateApps && (
-        <div className="xl:col-span-2 1080p:col-span-3 justify-center p-20">
+        <div className="xl:col-span-2 1080p:col-span-3 justify-center p-8 sm:p-10 lg:p-14">
           <EmptyState
             title="No apps"
             subtitle="You don't have access to any Apps yet. Contact an Admin to get access."
