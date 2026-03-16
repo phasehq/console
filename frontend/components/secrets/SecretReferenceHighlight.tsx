@@ -3,11 +3,11 @@ import { segmentSecretValue, HighlightSegment } from '@/utils/secretReferences'
 
 const segmentColor: Record<HighlightSegment['type'], string> = {
   plain: '',
-  delimiter: 'text-zinc-500 dark:text-zinc-400',
-  app: 'text-purple-600 dark:text-purple-400',
-  env: 'text-blue-600 dark:text-blue-400',
-  folder: 'text-amber-600 dark:text-amber-400',
-  key: 'text-emerald-600 dark:text-emerald-400',
+  delimiter: 'text-[#6b6f8a] dark:text-[#a0a5d6]',
+  app: 'text-[#c4608e] dark:text-[#ed9cc2]',
+  env: 'text-[#3a8a93] dark:text-[#5fb5be]',
+  folder: 'text-[#b07a2a] dark:text-[#f6c177]',
+  key: 'text-[#3a9474] dark:text-[#74ccaa]',
 }
 
 export const SecretReferenceHighlight: React.FC<{ value: string }> = ({ value }) => {

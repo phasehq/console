@@ -17,19 +17,19 @@ const typeIcon: Record<ReferenceSuggestion['type'], { icon: React.ReactNode; cla
   {
     key: {
       icon: <FaKey />,
-      className: 'text-emerald-600 dark:text-emerald-400',
+      className: 'text-[#3a9474] dark:text-[#74ccaa]',
     },
     env: {
       icon: <BsListColumnsReverse />,
-      className: 'text-blue-600 dark:text-blue-400',
+      className: 'text-[#3a8a93] dark:text-[#5fb5be]',
     },
     app: {
       icon: <FaCubes />,
-      className: 'text-purple-600 dark:text-purple-400',
+      className: 'text-[#c4608e] dark:text-[#ed9cc2]',
     },
     folder: {
       icon: <FaFolder />,
-      className: 'text-amber-600 dark:text-amber-400',
+      className: 'text-[#b07a2a] dark:text-[#f6c177]',
     },
   }
 
