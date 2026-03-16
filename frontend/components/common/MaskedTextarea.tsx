@@ -93,7 +93,7 @@ export const MaskedTextarea = forwardRef<HTMLTextAreaElement, MaskedTextareaProp
             aria-hidden="true"
             className={clsx(
               sharedClasses,
-              'absolute inset-0 pointer-events-none overflow-hidden'
+              'absolute inset-0 pointer-events-none overflow-hidden px-2 py-1.5'
             )}
           >
             {highlightContent}
