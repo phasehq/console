@@ -16,15 +16,16 @@ export const DynamicSecretRow = ({
 }) => {
   const keyMap: KeyMap[] = (secret.keyMap as KeyMap[]) ?? []
 
-  const KEY_BASE_STYLE = 'w-full font-mono custom bg-transparent transition ease p-1 ph-no-capture'
+  const KEY_BASE_STYLE =
+    'w-full font-mono custom bg-transparent transition ease p-0.5 ph-no-capture rounded-lg text-2xs 2xl:text-sm'
 
   return (
-    <div className="p-2 flex w-full rounded-lg group">
+    <div className="flex w-full gap-2 rounded-lg group">
       <div className="w-1/3">
         <div className="text-2xs text-emerald-500 flex items-center gap-1 bg-emerald-400/10 rounded-full w-min whitespace-nowrap px-1">
           <FaBolt /> {secret.name}
         </div>
-        <div className={clsx('flex flex-col gap-2 group relative pl-8 ')}>
+        <div className={clsx('flex flex-col gap-0.5 group relative pl-10')}>
           {keyMap.map((key) => (
             <div key={key.id} className={KEY_BASE_STYLE}>
               {String(key.keyName).toUpperCase()}
@@ -32,8 +33,8 @@ export const DynamicSecretRow = ({
           ))}
         </div>
       </div>
-      <div className="w-2/3 px-6 relative group">
-        <div className="absolute flex flex-col gap-2 pointer-events-none group-hover:opacity-0 transition ease pl-4 pt-5">
+      <div className="w-2/3 pl-5 pr-2 relative group">
+        <div className="absolute flex flex-col gap-1 pointer-events-none group-hover:opacity-0 transition ease pl-2 pt-1.5">
           {keyMap.map((k) => (
             <MaskedTextarea
               className={clsx(KEY_BASE_STYLE)}
@@ -45,16 +46,14 @@ export const DynamicSecretRow = ({
           ))}
         </div>
 
-        <div className="flex h-full items-center justify-between gap-4 opacity-0 group-hover:opacity-100 transition ease">
+        <div className="flex h-full items-center justify-between gap-2 opacity-0 group-hover:opacity-100 transition ease">
           <CreateLeaseDialog secret={secret} />
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <ManageLeasesDialog secret={secret} />
             <UpdateDynamicSecretDialog secret={secret} environment={environment} />
+            <DeleteDynamicSecretDialog secret={secret} />
           </div>
         </div>
-      </div>
-      <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center">
-        <DeleteDynamicSecretDialog secret={secret} />
       </div>
     </div>
   )

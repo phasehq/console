@@ -47,7 +47,7 @@ export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccoun
       ref={dialogRef}
     >
       <div className="space-y-4">
-        <div className="text-neutral-500 py-4">
+        <div className="text-neutral-500 text-sm pt-4">
           Are you sure you want to delete{' '}
           <span className="text-zinc-900 dark:text-zinc-100">{account.name}</span>? This will delete
           all service tokens associated with this account.

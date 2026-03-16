@@ -1,8 +1,8 @@
 import { EnvironmentSyncType, RailwayResourceInput, VercelProjectType } from '@/apollo/graphql'
 import { FaEyeSlash, FaLock } from 'react-icons/fa'
 
-export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
-  const { sync } = props
+export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: boolean }) => {
+  const { sync, showMetadata } = props
 
   if (sync.serviceInfo?.id?.includes('cloudflare_pages')) {
     return (
@@ -78,7 +78,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const path = JSON.parse(sync.options)['path']
 
     return (
-      <div className="flex gap-2 text-xs text-neutral-500">
+      <div className="flex gap-2 text-neutral-500">
         {engine}data/{path}
       </div>
     )
@@ -87,7 +87,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const namespace = JSON.parse(sync.options)['namespace']
 
     return (
-      <div className="flex gap-2 text-xs text-neutral-500">
+      <div className="flex gap-2 text-neutral-500">
         {path}@{namespace || 'default'}
       </div>
     )
@@ -97,7 +97,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const isProtected = JSON.parse(sync.options)['protected']
 
     return (
-      <div className="flex gap-2 text-xs text-neutral-500 items-center">
+      <div className="flex gap-2 text-neutral-500 items-center">
         {path}
         {isMasked && <FaEyeSlash title="Masked" />}
         {isProtected && <FaLock title="Protected" />}
@@ -109,7 +109,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const service: RailwayResourceInput | undefined = JSON.parse(sync.options)['service']
 
     return (
-      <div className="flex gap-2 text-xs text-neutral-500">
+      <div className="flex gap-2 text-neutral-500">
         {project.name} {service ? ` - ${service.name}` : ''} ({environment.name})
       </div>
     )
@@ -120,7 +120,7 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     const secretType = JSON.parse(sync.options)['secret_type']
 
     return (
-      <div className="flex gap-2 items-center text-xs text-neutral-500">
+      <div className="flex gap-2 items-center text-neutral-500">
         {team?.name && `${team.name} / `} {project.name} ({environment})
         {secretType === 'encrypted' && <FaLock title="Encrypted" />}
         {secretType === 'sensitive' && <FaEyeSlash title="Sensitive" />}
@@ -128,6 +128,19 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType }) => {
     )
   } else if (sync.serviceInfo?.id?.includes('render')) {
     const resourceName: string = JSON.parse(sync.options)['resource_name']
-    return <div className="flex gap-2 text-xs text-neutral-500">{resourceName}</div>
+    return <div className="flex gap-2 text-neutral-500">{resourceName}</div>
+  } else if (sync.serviceInfo?.id?.includes('azure_key_vault')) {
+    const options = JSON.parse(sync.options)
+    const vaultUri = options['vault_uri']
+    const syncMode = options['sync_mode']
+    const vaultName = vaultUri.replace('https://', '').replace(/\.vault\..+$/, '')
+    return (
+      <div className="flex flex-col gap-1 text-neutral-500">
+        <div>
+          {vaultName} ({syncMode === 'blob' ? options['secret_name'] : 'individual'})
+        </div>
+        {showMetadata && <code className="text-2xs">{vaultUri}</code>}
+      </div>
+    )
   } else return <>{sync.serviceInfo?.id}</>
 }

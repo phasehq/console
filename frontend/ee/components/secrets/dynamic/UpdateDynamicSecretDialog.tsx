@@ -171,7 +171,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
       ref={dialogRef}
       title="Configure Dynamic Secret"
       dialogTitle={
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 text-zinc-900 dark:text-zinc-100">
           Configure {secret.name}
           <div className="flex items-center gap-1 text-xs text-neutral-500">
             Dynamic Secret ID:
@@ -341,7 +341,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
             </div>
           </div>
         )}
-        <div className="flex justify-between mt-6">
+        <div className="flex justify-between mt-4">
           <Button variant="secondary" type="button" onClick={prevStep} disabled={activeStep === 0}>
             Back
           </Button>

@@ -72,7 +72,7 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
         </>
       }
     >
-      <div className="text-neutral-500">Add an allow-list of IP addresses or CIDR ranges</div>
+      <div className="text-neutral-500 text-sm">Add an allow-list of IP addresses or CIDR ranges</div>
 
       <NetworkAccessPolicyForm
         clientIp={clientIp}

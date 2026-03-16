@@ -6,6 +6,7 @@ from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
 from api.models import AuditEvent
+from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
 from api.utils.database import get_approximate_count
 from ee.integrations.secrets.dynamic.graphene.mutations import (
     DeleteDynamicSecretMutation,
@@ -39,7 +40,7 @@ from api.utils.syncing.vercel.main import VercelTeamProjectsType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
 )
-from .graphene.mutations.syncing import CreateRenderSync, CreateVercelSync
+from .graphene.mutations.syncing import CreateAzureKeyVaultSync, CreateRenderSync, CreateVercelSync
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
     CreateNetworkAccessPolicyMutation,
@@ -94,6 +95,7 @@ from .graphene.queries.syncing import (
     resolve_railway_projects,
     resolve_render_services,
     resolve_render_envgroups,
+    resolve_azure_kv_secrets,
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
@@ -439,6 +441,12 @@ class Query(graphene.ObjectType):
     render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
     render_envgroups = graphene.List(RenderEnvGroupType, credential_id=graphene.ID())
 
+    azure_kv_secrets = graphene.List(
+        AzureKeyVaultSecretType,
+        credential_id=graphene.ID(),
+        vault_uri=graphene.String(),
+    )
+
     test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -522,6 +530,8 @@ class Query(graphene.ObjectType):
 
     resolve_render_services = resolve_render_services
     resolve_render_envgroups = resolve_render_envgroups
+
+    resolve_azure_kv_secrets = resolve_azure_kv_secrets
 
     resolve_test_vault_creds = resolve_test_vault_creds
 
@@ -1208,6 +1218,9 @@ class Mutation(graphene.ObjectType):
 
     # Render
     create_render_sync = CreateRenderSync.Field()
+
+    # Azure Key Vault
+    create_azure_key_vault_sync = CreateAzureKeyVaultSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

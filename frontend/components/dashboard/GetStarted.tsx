@@ -40,7 +40,7 @@ const TaskPanel = (props: {
     <Disclosure
       as="div"
       defaultOpen={defaultOpen}
-      className="ring-1 ring-inset ring-neutral-500/40 rounded-md p-px flex flex-col divide-y divide-neutral-500/30 w-full"
+      className="ring-1 ring-inset ring-neutral-500/40 rounded-md p-px flex flex-col divide-y divide-neutral-500/30 w-full text-xs"
     >
       {({ open }) => (
         <>
@@ -48,7 +48,7 @@ const TaskPanel = (props: {
             <div>
               <div
                 className={clsx(
-                  'p-4 flex justify-between items-center gap-8 transition ease  w-full',
+                  'p-3 flex justify-between items-center gap-6 transition ease w-full',
                   open
                     ? 'bg-zinc-200 dark:bg-zinc-800 rounded-t-md'
                     : 'bg-zinc-300 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 rounded-md'
@@ -62,7 +62,7 @@ const TaskPanel = (props: {
                   ) : (
                     <FaRegDotCircle className="text-amber-500" />
                   )}
-                  <h2 className="text- xl font-semibold text-black dark:text-white">{title}</h2>
+                  <h2 className="text-xs font-semibold text-black dark:text-white">{title}</h2>
                 </div>
                 <FaChevronRight
                   className={clsx(
@@ -73,7 +73,7 @@ const TaskPanel = (props: {
               </div>
               <div
                 className={clsx(
-                  'h-0.5 w-full bg-neutral-300 dark:bg-neutral-600 text-sm',
+                  'h-0.5 w-full bg-neutral-300 dark:bg-neutral-600 text-xs',
                   !open && 'rounded-b-md'
                 )}
               >
@@ -101,7 +101,7 @@ const TaskPanel = (props: {
             leaveTo="transform scale-95 opacity-0"
           >
             <Disclosure.Panel>
-              <div className="p-4">{children}</div>
+              <div className="p-3">{children}</div>
             </Disclosure.Panel>
           </Transition>
         </>
@@ -247,12 +247,12 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
       <div className="flex justify-end">
         <DismissButton />
       </div>
-      <div className="flex flex-col lg:flex-row gap-6">
-        <div className="space-y-6 w-full lg:w-2/3">
+      <div className="flex flex-col lg:flex-row gap-4">
+        <div className="space-y-4 w-full lg:w-2/3">
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-black dark:text-white font-semibold text-2xl">Getting started</h1>
-              <p className="text-neutral-500">
+              <h1 className="text-black dark:text-white font-semibold text-base">Getting started</h1>
+              <p className="text-neutral-500 text-xs">
                 Start using Phase by creating an App and setting up your local dev environment. Add
                 your team members to start collaborating and set up syncing with third party
                 services.
@@ -261,7 +261,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
           </div>
 
           {loading ? (
-            <div className="p-40 flex items-center justify-center">
+            <div className="p-20 flex items-center justify-center">
               <Spinner size="lg" />
             </div>
           ) : (
@@ -272,7 +272,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 progress={appCreated ? '100%' : '0%'}
               >
                 <div className="space-y-4">
-                  <div className="text-sm">
+                  <div className="text-xs">
                     Apps are where you can store, manage and sync secrets across{' '}
                     <code className="bg-neutral-500/40 rounded-full py-0.5 px-2">Development</code>{' '}
                     <code className="bg-neutral-500/40 rounded-full py-0.5 px-2">Staging</code> and{' '}
@@ -281,7 +281,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   </div>
                   <div
                     className={clsx(
-                      'flex items-center gap-2 text-sm',
+                      'flex items-center gap-2 text-xs',
                       appCreated ? 'text-emerald-500' : 'text-neutral-500'
                     )}
                   >
@@ -289,7 +289,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     Create a new App
                   </div>
                   {!appCreated && (
-                    <div className="flex gap-4">
+                    <div className="flex gap-3">
                       <Link href={`/${organisation.name}/apps`}>
                         <Button variant="primary">Go to Apps</Button>
                       </Link>
@@ -307,7 +307,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 progress={cliSetup ? '100%' : '0%'}
               >
                 <div className="space-y-4">
-                  <div className="text-sm">
+                  <div className="text-xs">
                     The Phase CLI is how you can integrate Phase with your local development
                     environment.
                   </div>
@@ -316,10 +316,10 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   {!cliSetup && (
                     <>
                       <div>
-                        <div className="my-4 text-sm">1. Install the Phase CLI</div>
+                        <div className="my-4 text-xs">1. Install the Phase CLI</div>
                         <CliInstallCommands />
                       </div>
-                      <div className="space-y-3 text-sm">
+                      <div className="space-y-3 text-xs">
                         <div>2. Authenticate</div>
                         <div>
                           <CliCommand command="auth" />
@@ -333,7 +333,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     <div className="my-4">
                       <div className="space-y-3">
                         <div
-                          className={clsx('flex items-center gap-2 text-sm', 'text-emerald-500')}
+                          className={clsx('flex items-center gap-2 text-xs', 'text-emerald-500')}
                         >
                           <FaCheckCircle />
                           Install the Phase CLI
@@ -341,7 +341,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       </div>
                       <div className="space-y-3">
                         <div
-                          className={clsx('flex items-center gap-2 text-sm', 'text-emerald-500')}
+                          className={clsx('flex items-center gap-2 text-xs', 'text-emerald-500')}
                         >
                           <FaCheckCircle />
                           Authenticate
@@ -350,7 +350,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     </div>
                   )}
 
-                  <div className="space-y-3 text-sm">
+                  <div className="space-y-3 text-xs">
                     <div className="my-4">
                       <div className="space-y-3">
                         <div>3. Link your App</div>
@@ -370,7 +370,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-4">
+                    <div className="flex gap-3">
                       <Link href="https://docs.phase.dev/cli/install" target="_blank">
                         <Button variant="secondary">View Docs</Button>
                       </Link>
@@ -385,7 +385,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 progress={membersProgress}
               >
                 <div className="space-y-4">
-                  <ul className="list-disc list-inside text-sm">
+                  <ul className="list-disc list-inside text-xs">
                     <li>Invite team members to collaborate with you and securely share secrets.</li>
                     <li>
                       Team members need accept your invite and join the Organisation before they can
@@ -400,7 +400,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   <div className="space-y-2">
                     <div
                       className={clsx(
-                        'flex items-center gap-2 text-sm',
+                        'flex items-center gap-2 text-xs',
                         memberInvited ? 'text-emerald-500' : 'text-neutral-500'
                       )}
                     >
@@ -409,7 +409,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     </div>
                     <div
                       className={clsx(
-                        'flex items-center gap-2 text-sm',
+                        'flex items-center gap-2 text-xs',
                         memberAdded ? 'text-emerald-500' : 'text-neutral-500'
                       )}
                     >
@@ -419,7 +419,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   </div>
 
                   {!memberAdded && (
-                    <div className="flex gap-4">
+                    <div className="flex gap-3">
                       <Link href={`/${organisation.name}/access/members`}>
                         <Button variant="primary">Go to Members</Button>
                       </Link>
@@ -440,7 +440,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                 progress={integrationProgress}
               >
                 <div className="space-y-4">
-                  <ul className="list-disc list-inside text-sm">
+                  <ul className="list-disc list-inside text-xs">
                     <li>
                       Integrations sync your secrets from a specific Environment to third-party
                       services.
@@ -451,7 +451,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   <div className="space-y-2">
                     <div
                       className={clsx(
-                        'flex items-center gap-2 text-sm',
+                        'flex items-center gap-2 text-xs',
                         syncAuthAdded ? 'text-emerald-500' : 'text-neutral-500'
                       )}
                     >
@@ -460,7 +460,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     </div>
                     <div
                       className={clsx(
-                        'flex items-center gap-2 text-sm',
+                        'flex items-center gap-2 text-xs',
                         sseEnabled ? 'text-emerald-500' : 'text-neutral-500'
                       )}
                     >
@@ -469,7 +469,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     </div>
                     <div
                       className={clsx(
-                        'flex items-center gap-2 text-sm',
+                        'flex items-center gap-2 text-xs',
                         syncCreated ? 'text-emerald-500' : 'text-neutral-500'
                       )}
                     >
@@ -478,7 +478,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                     </div>
                   </div>
 
-                  <div className="flex gap-4">
+                  <div className="flex gap-3">
                     <Link href={`/${organisation.name}/integrations/syncs`}>
                       <Button variant="primary">Go to Integrations</Button>
                     </Link>
@@ -494,33 +494,33 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
             </div>
           )}
         </div>
-        <div className="w-full lg:w-1/3 lg:pl-4 lg:border-l border-neutral-500/40 space-y-6">
+        <div className="w-full lg:w-1/3 lg:pl-4 lg:border-l border-neutral-500/40 space-y-4">
           <div>
-            <h1 className="text-black dark:text-white font-semibold text-2xl">Resources</h1>
-            <p className="text-neutral-500">
+            <h1 className="text-black dark:text-white font-semibold text-base">Resources</h1>
+            <p className="text-neutral-500 text-xs">
               Here are some more resources to help you get started with Phase.
             </p>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             {resources.map((resource) => (
               <Card key={resource.title}>
-                <Link href={resource.href} target="_blank" className="flex flex-row-reverse gap-6">
+                <Link href={resource.href} target="_blank" className="flex flex-row-reverse gap-4">
                   <div className="flex-auto">
-                    <h3 className=" font-semibold text-zinc-900 dark:text-white">
+                    <h3 className="text-xs font-semibold text-zinc-900 dark:text-white">
                       {resource.title}
                     </h3>
-                    <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                    <p className="mt-1 text-2xs text-zinc-600 dark:text-zinc-400">
                       {resource.description}
                     </p>
-                    <div className="mt-4 flex items-center gap-1 text-sm">
+                    <div className="mt-3 flex items-center gap-1 text-xs">
                       <div className="flex items-center text-emerald-500">
                         {resource.linkText || 'Explore'}
                       </div>
-                      <FaArrowRight className="text-emerald-500 text-xs" />
+                      <FaArrowRight className="text-emerald-500 text-2xs" />
                     </div>
                   </div>
-                  <div className="text-3xl">{resource.logo}</div>
+                  <div className="text-2xl">{resource.logo}</div>
                 </Link>
               </Card>
             ))}

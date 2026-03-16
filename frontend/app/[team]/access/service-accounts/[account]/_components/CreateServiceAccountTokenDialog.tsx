@@ -150,13 +150,15 @@ const CreateServiceAccountTokenDialog = forwardRef(
         onClose={reset}
       >
         <div className="space-y-4 divide-y divide-neutral-500/40">
-          <div className="text-neutral-500 py-4">Create a new token for this service account</div>
+          <div className="text-neutral-500 text-sm py-1">
+            Create a new token for this service account
+          </div>
 
           {cliSAToken ? (
             <div className="space-y-6">
               <div className="flex items-center justify-between py-2">
                 <div className="space-y-1">
-                  <div className="font-semibold text-black dark:text-white text-2xl">{name}</div>
+                  <div className="font-semibold text-black dark:text-white text-xl">{name}</div>
                   <div className="text-neutral-500 text-sm">{humanReadableExpiry(expiry)}</div>
                 </div>
               </div>
@@ -166,12 +168,12 @@ const CreateServiceAccountTokenDialog = forwardRef(
               </Alert>
 
               <Tab.Group>
-                <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+                <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
                   <Tab as={Fragment}>
                     {({ selected }) => (
                       <div
                         className={clsx(
-                          'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                          'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                           selected
                             ? 'border-emerald-500 font-semibold text-emerald-500'
                             : ' border-transparent cursor-pointer'
@@ -185,7 +187,7 @@ const CreateServiceAccountTokenDialog = forwardRef(
                     {({ selected }) => (
                       <div
                         className={clsx(
-                          'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                          'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                           selected
                             ? 'border-emerald-500 font-semibold'
                             : ' border-transparent cursor-pointer'
@@ -278,9 +280,9 @@ const CreateServiceAccountTokenDialog = forwardRef(
               </Tab.Group>
             </div>
           ) : (
-            <form className="space-y-6 py-4" onSubmit={handleCreateNewSAToken}>
-              <div className="space-y-2 w-full">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">
+            <form className="space-y-6 pt-4" onSubmit={handleCreateNewSAToken}>
+              <div className="w-full">
+                <label className="block text-neutral-500 text-xs mb-2" htmlFor="name">
                   Token name
                 </label>
                 <input required id="name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -289,7 +291,7 @@ const CreateServiceAccountTokenDialog = forwardRef(
               <div>
                 <RadioGroup value={expiry} by={compareExpiryOptions} onChange={setExpiry}>
                   <RadioGroup.Label as={Fragment}>
-                    <label className="block text-gray-700 text-sm font-bold mb-2">Expiry</label>
+                    <label className="block text-neutral-500 text-xs mb-2">Expiry</label>
                   </RadioGroup.Label>
                   <div className="flex flex-wrap items-center gap-2">
                     {tokenExpiryOptions.map((option) => (
@@ -310,7 +312,7 @@ const CreateServiceAccountTokenDialog = forwardRef(
                     ))}
                   </div>
                 </RadioGroup>
-                <span className="text-sm text-neutral-500">{humanReadableExpiry(expiry)}</span>
+                <span className="text-xs text-neutral-500">{humanReadableExpiry(expiry)}</span>
               </div>
 
               <div className="flex items-center justify-between gap-4">

@@ -140,9 +140,9 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       }
       initialFocus={inputRef}
     >
-      <form className="space-y-4 py-4" onSubmit={handleSubmit}>
+      <form className="space-y-4 pt-4" onSubmit={handleSubmit}>
         <div>
-          <p className="text-neutral-500">Create a new Environment in this App</p>
+          <p className="text-neutral-500 text-sm">Create a new Environment in this App</p>
         </div>
 
         <Alert variant="info" icon={true} size="sm">

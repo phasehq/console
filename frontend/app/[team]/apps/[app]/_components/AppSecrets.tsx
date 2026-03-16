@@ -695,7 +695,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     <section className="space-y-4">
       <div className="flex items-end justify-between">
         <div className="space-y-1">
-          <h1 className="h3 font-semibold text-xl" id="secrets">
+          <h1 className="h3 font-semibold text-lg" id="secrets">
             Secrets
           </h1>
           <p className="text-neutral-500 text-sm">
@@ -927,6 +927,18 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           <SecretInfoLegend />
         </>
       ) : isLoading || fetching || (appSecrets?.length > 0 && clientAppSecrets.length === 0) ? (
+        <>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-28" />
+            <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-28" />
+            <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-36" />
+          </div>
+          <div className="flex items-center gap-4 pr-4">
+            <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-32" />
+            <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-28" />
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full table-auto w-full">
             <thead
@@ -940,7 +952,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 {['Development', 'Staging', 'Production'].map((envName) => (
                   <th
                     key={envName}
-                    className="group text-center text-2xs 2xl:text-sm font-semibold uppercase tracking-widest py-2"
+                    className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2 w-px whitespace-nowrap"
                   >
                     <Button variant="outline">
                       <div className="items-center gap-2 justify-center hidden 2xl:flex">
@@ -964,6 +976,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             </tbody>
           </table>
         </div>
+        </>
       ) : userCanReadEnvironments && userCanReadSecrets ? (
         <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
           <EmptyState

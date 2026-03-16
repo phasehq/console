@@ -37,8 +37,8 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
   return (
     <div className="py-4">
       <div>
-        <div className="text-xl font-semibold">Access Tokens</div>
-        <div className="text-neutral-500">Manage access tokens for this Service Account</div>
+        <div className="text-base font-medium">Access Tokens</div>
+        <div className="text-neutral-500 text-sm">Manage access tokens for this Service Account</div>
       </div>
 
       <CreateServiceAccountTokenDialog serviceAccount={account} ref={tokenDialogRef} />
@@ -65,17 +65,17 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
               return (
                 <div
                   key={token!.id}
-                  className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-2 group"
+                  className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-1.5 px-2 group"
                 >
                   {/* Token Name and ID*/}
-                  <div className="md:col-span-4 space-y-1">
+                  <div className="md:col-span-4 space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <FaKey className="text-neutral-500 flex-shrink-0" />
-                      <span className="font-medium text-lg text-zinc-900 dark:text-zinc-100 truncate">
+                      <FaKey className="text-neutral-500 flex-shrink-0 text-xs" />
+                      <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">
                         {token!.name}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-neutral-500">
+                    <div className="flex items-center gap-2 text-xs text-neutral-500">
                       <span className="text-neutral-500 text-xs flex items-center">Token ID:</span>
                       <CopyButton
                         value={token!.id}
@@ -88,7 +88,7 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
                   </div>
 
                   {/* Created Info*/}
-                  <div className="md:col-span-4 text-neutral-500 text-sm flex flex-col gap-1">
+                  <div className="md:col-span-4 text-neutral-500 text-xs flex flex-col gap-1">
                     <div className="whitespace-nowrap">
                       Created {relativeTimeFromDates(new Date(token?.createdAt))}
                     </div>
@@ -118,7 +118,7 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
                   <div className="md:col-span-3 space-y-2">
                     <div
                       className={clsx(
-                        'flex items-center gap-1 text-sm ',
+                        'flex items-center gap-1 text-xs',
                         isExpired ? 'text-red-500' : 'text-neutral-500'
                       )}
                     >
@@ -130,7 +130,7 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-sm text-neutral-500">
+                    <div className="flex items-center gap-1 text-xs text-neutral-500">
                       <span className="whitespace-nowrap">Last used</span>
                       <span className="whitespace-nowrap">
                         {token!.lastUsed

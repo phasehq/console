@@ -47,8 +47,8 @@ export const DeleteNetworkAccessPolicyDialog = ({
         </>
       }
     >
-      <div className="space-y-6 py-4">
-        <p className="text-neutral-500">
+      <div className="space-y-6 pt-4">
+        <p className="text-neutral-500 text-sm">
           Are you sure you want to delete the{' '}
           <span className="text-zinc-900 dark:text-zinc-100 font-medium break-all">
             {policy.name}
