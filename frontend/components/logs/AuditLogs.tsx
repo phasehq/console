@@ -16,9 +16,6 @@ import {
   FaUser,
   FaRobot,
   FaArrowRight,
-  FaCopy,
-  FaCheck,
-  FaCode,
 } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { FaArrowRotateLeft, FaFilter } from 'react-icons/fa6'
@@ -119,61 +116,14 @@ const getResourceLink = (
   if (rt === 'sa') return `/${team}/access/service-accounts/${id}`
   if (rt === 'member') return `/${team}/access/members`
   if (rt === 'policy') return `/${team}/access/network`
+  if (rt === 'pat') return `/${team}/access/authentication`
+  if (rt === 'sa_token' && resourceMeta?.service_account_id)
+    return `/${team}/access/service-accounts/${resourceMeta.service_account_id}`
+  if (rt === 'svc_token' && resourceMeta?.app_id) return `/${team}/apps/${resourceMeta.app_id}`
 
   return null
 }
 
-const JsonDetailButton = ({ log }: { log: AuditEventType }) => {
-  const [copied, setCopied] = useState(false)
-  const [showTooltip, setShowTooltip] = useState(false)
-
-  const jsonData = JSON.stringify(
-    {
-      id: log.id,
-      event_type: log.eventType,
-      resource_type: log.resourceType,
-      resource_id: log.resourceId,
-      actor_type: log.actorType,
-      actor_id: log.actorId,
-      actor_metadata: parseJsonField(log.actorMetadata),
-      resource_metadata: parseJsonField(log.resourceMetadata),
-      old_values: parseJsonField(log.oldValues),
-      new_values: parseJsonField(log.newValues),
-      description: log.description,
-      ip_address: log.ipAddress,
-      user_agent: log.userAgent,
-      timestamp: log.timestamp,
-    },
-    null,
-    2
-  )
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    await navigator.clipboard.writeText(jsonData)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <div
-      className="relative"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
-    >
-      <Button variant="outline" onClick={handleCopy} title="Copy event JSON">
-        {copied ? <FaCheck className="text-emerald-500" /> : <FaCopy />}
-        <FaCode />
-      </Button>
-
-      {showTooltip && (
-        <div className="absolute right-0 top-full mt-2 z-50 w-[480px] max-h-80 overflow-auto rounded-md shadow-2xl bg-zinc-900 text-zinc-100 ring-1 ring-neutral-500/30 p-3">
-          <pre className="text-xs font-mono whitespace-pre-wrap">{jsonData}</pre>
-        </div>
-      )}
-    </div>
-  )
-}
 
 const LogRow = ({
   log,
@@ -227,9 +177,108 @@ const LogRow = ({
   const resourceLink = getResourceLink(log, resourceMeta, team)
 
   const LogField = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 text-xs">
       <span className="text-neutral-500 font-medium">{label}: </span>
-      <span className="font-semibold font-mono">{children}</span>
+      <span className="font-medium font-mono">{children}</span>
+    </div>
+  )
+
+  /** Resolve a UUID to a member or service account display chip */
+  const resolveAccountId = (id: string) => {
+    const m = members.find((m) => m.id === id)
+    if (m)
+      return (
+        <span className="inline-flex items-center gap-1">
+          <Avatar member={m} size="sm" />
+          <span>{m.fullName || m.email}</span>
+        </span>
+      )
+    const s = serviceAccounts.find((s) => s.id === id)
+    if (s)
+      return (
+        <span className="inline-flex items-center gap-1">
+          <Avatar serviceAccount={s} size="sm" />
+          <span>{s.name}</span>
+        </span>
+      )
+    return <span className="font-mono">{id}</span>
+  }
+
+  /** Check if an array contains string account IDs */
+  const isAccountIdList = (key: string, val: any): boolean => {
+    if (!Array.isArray(val) || val.length === 0) return false
+    // Must be an array of strings (not objects)
+    if (!val.every((v: any) => typeof v === 'string')) return false
+    const accountKeys = ['members_added', 'members_removed', 'apps_granted', 'apps_revoked']
+    if (accountKeys.includes(key)) return true
+    // Heuristic: array of UUID-like strings
+    return val.every((v: any) => v.length >= 32 && v.includes('-'))
+  }
+
+  /** Check if an array contains member detail objects (from bulk add) */
+  const isMemberDetailList = (val: any): boolean => {
+    if (!Array.isArray(val) || val.length === 0) return false
+    return val.every((v: any) => typeof v === 'object' && v !== null && 'id' in v && 'name' in v)
+  }
+
+  const AccountList = ({
+    ids,
+    variant,
+  }: {
+    ids: string[]
+    variant: 'added' | 'removed'
+  }) => (
+    <div
+      className={clsx(
+        'flex flex-wrap gap-1.5 rounded px-2 py-1 mt-0.5',
+        variant === 'removed' ? 'bg-red-500/10' : 'bg-emerald-500/10'
+      )}
+    >
+      {ids.map((id) => (
+        <span
+          key={id}
+          className={clsx(
+            'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs',
+            variant === 'removed'
+              ? 'text-red-400 line-through'
+              : 'text-emerald-400'
+          )}
+        >
+          {variant === 'removed' ? '- ' : '+ '}
+          {resolveAccountId(id)}
+        </span>
+      ))}
+    </div>
+  )
+
+  /** Render member detail objects (from bulk add with env scope) */
+  const MemberDetailList = ({
+    items,
+    variant,
+  }: {
+    items: Array<{ id: string; name: string; type?: string; env_scope?: string[] }>
+    variant: 'added' | 'removed'
+  }) => (
+    <div className="space-y-1 mt-0.5">
+      {items.map((item) => (
+        <div
+          key={item.id}
+          className={clsx(
+            'flex items-center gap-2 rounded px-2 py-1 text-xs',
+            variant === 'removed' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
+          )}
+        >
+          <span className={clsx('inline-flex items-center gap-1', variant === 'removed' && 'line-through')}>
+            {variant === 'removed' ? '- ' : '+ '}
+            {resolveAccountId(item.id)}
+          </span>
+          {item.env_scope && item.env_scope.length > 0 && (
+            <span className="text-neutral-500 font-normal">
+              ({item.env_scope.join(', ')})
+            </span>
+          )}
+        </div>
+      ))}
     </div>
   )
 
@@ -259,6 +308,37 @@ const LogRow = ({
         {changedKeys.map((key) => {
           const oldVal = oldVals?.[key]
           const newVal = newVals?.[key]
+
+          // Render member detail objects (from bulk add/remove with env scope)
+          if (isMemberDetailList(oldVal) || isMemberDetailList(newVal)) {
+            return (
+              <div key={key} className="text-xs">
+                <span className="text-neutral-500 font-medium">{key}</span>
+                {oldVal !== undefined && Array.isArray(oldVal) && (
+                  <MemberDetailList items={oldVal} variant="removed" />
+                )}
+                {newVal !== undefined && Array.isArray(newVal) && (
+                  <MemberDetailList items={newVal} variant="added" />
+                )}
+              </div>
+            )
+          }
+
+          // Render account ID lists with avatars
+          if (isAccountIdList(key, oldVal) || isAccountIdList(key, newVal)) {
+            return (
+              <div key={key} className="text-xs">
+                <span className="text-neutral-500 font-medium">{key}</span>
+                {oldVal !== undefined && Array.isArray(oldVal) && (
+                  <AccountList ids={oldVal} variant="removed" />
+                )}
+                {newVal !== undefined && Array.isArray(newVal) && (
+                  <AccountList ids={newVal} variant="added" />
+                )}
+              </div>
+            )
+          }
+
           const isObj = typeof oldVal === 'object' || typeof newVal === 'object'
 
           if (isObj) {
@@ -323,40 +403,40 @@ const LogRow = ({
           >
             <td
               className={clsx(
-                'px-6 py-4 border-l',
+                'px-6 py-2 border-l',
                 open ? 'border-l-emerald-500' : 'border-l-transparent'
               )}
             >
               <FaChevronRight
                 className={clsx(
-                  'transform transition-all duration-300',
+                  'transform transition-all duration-300 text-xs',
                   open && 'rotate-90 text-emerald-500'
                 )}
               />
             </td>
-            <td className="whitespace-nowrap px-6 py-4">
-              <div className="text-sm flex items-center gap-2 text-zinc-900 dark:text-zinc-100 font-medium">
+            <td className="whitespace-nowrap px-6 py-2">
+              <div className="text-xs flex items-center gap-2 text-zinc-900 dark:text-zinc-100 font-medium">
                 <ActorAvatar />
                 {actorDisplayName}
               </div>
             </td>
-            <td className="whitespace-nowrap px-6 py-4">
+            <td className="whitespace-nowrap px-6 py-2">
               <div className="flex flex-row items-center gap-2 -ml-1">
                 <span
-                  className={clsx('h-2 w-2 rounded-full', getEventTypeColor(log.eventType))}
+                  className={clsx('h-1.5 w-1.5 rounded-full', getEventTypeColor(log.eventType))}
                 />
-                <div className="text-zinc-800 dark:text-zinc-200 font-semibold">
+                <div className="text-zinc-800 dark:text-zinc-200 text-xs font-medium">
                   {getEventTypeText(log.eventType)}
                 </div>
               </div>
             </td>
-            <td className="whitespace-nowrap px-6 py-4">
-              <span className="text-xs font-medium bg-neutral-200 dark:bg-neutral-700 rounded px-2 py-0.5">
+            <td className="whitespace-nowrap px-6 py-2">
+              <span className="text-2xs font-medium bg-neutral-200 dark:bg-neutral-700 rounded px-2 py-0.5">
                 {getResourceTypeLabel(log.resourceType)}
               </span>
             </td>
-            <td className="px-6 py-4 max-w-md truncate">{log.description}</td>
-            <td className="whitespace-nowrap px-6 py-4 font-medium capitalize">
+            <td className="px-6 py-2 max-w-md truncate text-xs">{log.description}</td>
+            <td className="whitespace-nowrap px-6 py-2 text-xs font-medium capitalize">
               {relativeTimeStamp}
             </td>
           </Disclosure.Button>
@@ -372,49 +452,27 @@ const LogRow = ({
             <td colSpan={6}>
               <Disclosure.Panel
                 className={clsx(
-                  'p-4 w-full space-y-6 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
+                  'p-4 w-full space-y-4 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
                   open
                     ? 'border-b border-l-emerald-500 border-r shadow-xl'
                     : 'border-l-transparent'
                 )}
               >
-                {/* Header row with JSON button */}
-                <div className="flex items-start justify-between">
-                  <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-4 text-sm flex-1">
-                    <LogField label="Actor">
-                      <div className="flex items-center gap-1">
-                        <ActorAvatar />
-                        {actorDisplayName}
-                      </div>
-                    </LogField>
-
-                    <LogField label="Resource">
-                      <div className="flex items-center gap-1">
-                        {getResourceTypeLabel(log.resourceType)}
-                        {resourceMeta?.name && ` (${resourceMeta.name})`}
-                        {resourceLink && (
-                          <Link href={resourceLink} onClick={(e) => e.stopPropagation()}>
-                            <Button variant="outline" classString="text-2xs px-1.5 py-0.5 ml-1">
-                              <FaArrowRight />
-                            </Button>
-                          </Link>
-                        )}
-                      </div>
-                    </LogField>
-
-                    <LogField label="Resource ID">
-                      <span className="text-xs">{log.resourceId}</span>
-                    </LogField>
-
-                    {resourceMeta?.app_name && (
-                      <LogField label="App">
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <LogField label="Actor">
                         <div className="flex items-center gap-1">
-                          {resourceMeta.app_name}
-                          {resourceMeta?.app_id && (
-                            <Link
-                              href={`/${team}/apps/${resourceMeta.app_id}`}
-                              onClick={(e) => e.stopPropagation()}
-                            >
+                          <ActorAvatar />
+                          {actorDisplayName}
+                        </div>
+                      </LogField>
+
+                      <LogField label="Resource">
+                        <div className="flex items-center gap-1">
+                          {getResourceTypeLabel(log.resourceType)}
+                          {resourceMeta?.name && ` (${resourceMeta.name})`}
+                          {resourceLink && (
+                            <Link href={resourceLink} onClick={(e) => e.stopPropagation()}>
                               <Button variant="outline" classString="text-2xs px-1.5 py-0.5 ml-1">
                                 <FaArrowRight />
                               </Button>
@@ -422,39 +480,56 @@ const LogRow = ({
                           )}
                         </div>
                       </LogField>
+
+                      <LogField label="Resource ID">
+                        <span className="text-xs">{log.resourceId}</span>
+                      </LogField>
+
+                      {resourceMeta?.app_name && (
+                        <LogField label="App">
+                          <div className="flex items-center gap-1">
+                            {resourceMeta.app_name}
+                            {resourceMeta?.app_id && (
+                              <Link
+                                href={`/${team}/apps/${resourceMeta.app_id}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Button variant="outline" classString="text-2xs px-1.5 py-0.5 ml-1">
+                                  <FaArrowRight />
+                                </Button>
+                              </Link>
+                            )}
+                          </div>
+                        </LogField>
+                      )}
+
+                      <LogField label="IP Address">{log.ipAddress || 'N/A'}</LogField>
+
+                      <LogField label="User Agent">
+                        <span
+                          className="text-xs truncate max-w-xs inline-block align-bottom"
+                          title={log.userAgent}
+                        >
+                          {log.userAgent || 'N/A'}
+                        </span>
+                      </LogField>
+
+                      <LogField label="Event ID">
+                        <span className="text-xs">{log.id}</span>
+                      </LogField>
+
+                      <LogField label="Timestamp">{verboseTimeStamp}</LogField>
+                    </div>
+
+                    {hasChanges && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                          Changes
+                        </h4>
+                        <ChangeDiff oldVals={oldValues} newVals={newValues} />
+                      </div>
                     )}
-
-                    <LogField label="IP Address">{log.ipAddress || 'N/A'}</LogField>
-
-                    <LogField label="User Agent">
-                      <span
-                        className="text-xs truncate max-w-xs inline-block align-bottom"
-                        title={log.userAgent}
-                      >
-                        {log.userAgent || 'N/A'}
-                      </span>
-                    </LogField>
-
-                    <LogField label="Event ID">
-                      <span className="text-xs">{log.id}</span>
-                    </LogField>
-
-                    <LogField label="Timestamp">{verboseTimeStamp}</LogField>
-                  </div>
-
-                  <div className="flex-shrink-0 ml-4">
-                    <JsonDetailButton log={log} />
-                  </div>
                 </div>
-
-                {hasChanges && (
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                      Changes
-                    </h4>
-                    <ChangeDiff oldVals={oldValues} newVals={newValues} />
-                  </div>
-                )}
               </Disclosure.Panel>
             </td>
           </Transition>
@@ -474,29 +549,29 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
           key={n}
           className="py-4 border-b border-neutral-500/20 transition duration-300 ease-in-out"
         >
-          <td className="px-6 py-4 border-l border-l-transparent">
-            <FaChevronRight className="text-neutral-300 dark:text-neutral-700 animate-pulse" />
+          <td className="px-6 py-2 border-l border-l-transparent">
+            <FaChevronRight className="text-neutral-300 dark:text-neutral-700 animate-pulse text-xs" />
           </td>
-          <td className="whitespace-nowrap px-6 py-4">
-            <div className="flex items-center gap-2 text-sm">
-              <div className="rounded-full size-6 bg-neutral-400/30" />
-              <div className={`${SKELETON_BASE} h-4 w-32 rounded-md`} />
+          <td className="whitespace-nowrap px-6 py-2">
+            <div className="flex items-center gap-2 text-xs">
+              <div className="rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
+              <div className={`${SKELETON_BASE} h-3.5 w-32 rounded-md`} />
             </div>
           </td>
-          <td className="whitespace-nowrap px-6 py-4">
+          <td className="whitespace-nowrap px-6 py-2">
             <div className="flex items-center gap-2 -ml-1">
-              <span className="h-2 w-2 rounded-full bg-neutral-400" />
-              <div className={`${SKELETON_BASE} h-4 w-20 rounded-md`} />
+              <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
+              <div className={`${SKELETON_BASE} h-3.5 w-20 rounded-md`} />
             </div>
           </td>
-          <td className="whitespace-nowrap px-6 py-4">
-            <div className={`${SKELETON_BASE} h-4 w-24 rounded-md`} />
+          <td className="whitespace-nowrap px-6 py-2">
+            <div className={`${SKELETON_BASE} h-3.5 w-24 rounded-md`} />
           </td>
-          <td className="px-6 py-4">
-            <div className={`${SKELETON_BASE} h-4 w-48 rounded-md`} />
+          <td className="px-6 py-2">
+            <div className={`${SKELETON_BASE} h-3.5 w-48 rounded-md`} />
           </td>
-          <td className="whitespace-nowrap px-6 py-4">
-            <div className={`${SKELETON_BASE} h-4 w-20 rounded-md`} />
+          <td className="whitespace-nowrap px-6 py-2">
+            <div className={`${SKELETON_BASE} h-3.5 w-20 rounded-md`} />
           </td>
         </tr>
       ))}
@@ -646,16 +721,16 @@ export default function AuditLogs() {
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
           {/* Resource type tabs */}
-          <div className="flex gap-0 w-full border-b border-neutral-500/20 px-4">
+          <div className="flex gap-0 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
             {RESOURCE_TABS.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={clsx(
-                  'px-4 py-3 font-medium border-b-2 transition-colors text-sm focus:outline-none',
+                  'p-2 text-xs font-medium border-b -mb-px transition-colors focus:outline-none',
                   activeTab === tab.key
                     ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
-                    : 'border-transparent text-neutral-500 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer'
+                    : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer'
                 )}
               >
                 {tab.label}
@@ -665,7 +740,7 @@ export default function AuditLogs() {
 
           {/* Toolbar */}
           <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-200 dark:bg-neutral-900">
-            <span className="text-neutral-500 font-light text-lg">
+            <span className="text-neutral-500 font-light text-base">
               {totalCount >= COUNT_ACCURACY_THRESHOLD ? '~' : ''}
               {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
             </span>

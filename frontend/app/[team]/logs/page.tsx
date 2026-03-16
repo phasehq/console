@@ -16,8 +16,8 @@ export default function OrgLogs({ params }: { params: { team: string } }) {
     )
 
   return (
-    <div className="h-screen overflow-y-auto w-full text-black dark:text-white flex flex-col px-8">
-      <h1 className="text-3xl font-bold pt-8 pb-4">Logs</h1>
+    <div className="h-screen overflow-y-auto w-full text-black dark:text-white flex flex-col px-3 sm:px-4 lg:px-6">
+      <h1 className="text-lg sm:text-xl font-bold pt-3 sm:pt-4 lg:pt-6 pb-3 sm:pb-4 lg:pb-6">Logs</h1>
       <AuditLogs />
     </div>
   )
