@@ -9,7 +9,7 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0116_app_description'),
+        ('api', '0117_alter_environmentsync_service_and_more'),
     ]
 
     operations = [
