@@ -83,7 +83,7 @@ export const ReferenceAutocompleteDropdown: React.FC<ReferenceAutocompleteDropdo
                 }
               }}
             >
-              <span className={clsx('shrink-0 text-xs', iconClass)}>{icon}</span>
+              <span className={clsx('shrink-0 text-2xs', iconClass)}>{icon}</span>
               <span className="truncate">{suggestion.label}</span>
               {isActive ? (
                 <span className="ml-auto shrink-0 flex items-center gap-2">
