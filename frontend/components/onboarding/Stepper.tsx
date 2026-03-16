@@ -16,9 +16,9 @@ interface StepperProps {
 
 export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) => {
   const ICON_WRAPPER_BASE =
-    'rounded-full transition duration-500 ease-in-out h-10 w-10 py-3 border text-center flex justify-center items-center'
+    'rounded-full transition duration-500 ease-in-out h-8 w-8 border text-center flex justify-center items-center text-xs'
   const LABEL_BASE =
-    'absolute top-0 -ml-10 text-center mt-16 w-32 text-2xs font-medium uppercase tracking-widest'
+    'absolute top-0 -ml-10 text-center mt-12 w-32 text-2xs font-medium uppercase tracking-widest'
   const THREAD_BASE = 'flex-auto border-t transition duration-500 ease-in-out'
 
   const stepIsComplete = (step: Step) => {
@@ -30,7 +30,7 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <div className="mx-4 p-4">
         <div className="flex items-center">
           {steps.map((step: Step, index: number) => (
@@ -80,10 +80,10 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
           align === 'center' && 'text-center px-4'
         )}
       >
-        <div className="text-xl text-zinc-900 dark:text-zinc-100 font-semibold">
+        <div className="text-base text-zinc-900 dark:text-zinc-100 font-medium">
           {steps[activeStep].title}
         </div>
-        <div className="text-neutral-500  text-sm">{steps[activeStep].description}</div>
+        <div className="text-neutral-500 text-xs">{steps[activeStep].description}</div>
       </div>
     </div>
   )

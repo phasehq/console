@@ -79,8 +79,8 @@ export const CreateLeaseDialog = ({ secret }: { secret: DynamicSecretType }) => 
       }
       onClose={reset}
     >
-      <div className="space-y-6">
-        <div className="text-neutral-500">
+      <div className="space-y-4 pt-4">
+        <div className="text-neutral-500 text-xs">
           Generate new values for this dynamic secret. These values will be leased to you for the
           specifed TTL.
         </div>
@@ -88,10 +88,10 @@ export const CreateLeaseDialog = ({ secret }: { secret: DynamicSecretType }) => 
         {lease?.credentials ? (
           <div className="space-y-4">
             <div className="border-b border-neutral-500/40 pb-2">
-              <div className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+              <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 {lease.name}
               </div>
-              <span className="text-neutral-500 text-sm">Lease ID: </span>
+              <span className="text-neutral-500 text-xs">Lease ID: </span>
               <CopyButton value={lease.id}>
                 <span className="text-xs font-mono">{lease.id}</span>
               </CopyButton>

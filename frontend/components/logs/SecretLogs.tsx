@@ -43,7 +43,7 @@ import {
 } from '@/utils/crypto'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
-import { Popover, Combobox, RadioGroup } from '@headlessui/react'
+import { Combobox, RadioGroup } from '@headlessui/react'
 import { FaFilter } from 'react-icons/fa'
 import { GetAppAccounts } from '@/graphql/queries/apps/getAppAccounts.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
@@ -260,9 +260,9 @@ export default function SecretLogs(props: { app: string }) {
 
     const LogField = (props: { label: string; children: ReactNode }) => {
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 text-xs">
           <span className="text-neutral-500 font-medium">{props.label}: </span>
-          <span className="font-semibold font-mono">{props.children}</span>
+          <span className="font-medium font-mono">{props.children}</span>
         </div>
       )
     }
@@ -282,7 +282,7 @@ export default function SecretLogs(props: { app: string }) {
     }
 
     const logCreatedBy = (log: SecretEventType) => {
-      const textStyle = 'text-sm font-medium text-zinc-900 dark:text-zinc-100'
+      const textStyle = 'text-xs font-medium text-zinc-900 dark:text-zinc-100'
 
       if (log.user)
         return (
@@ -339,38 +339,38 @@ export default function SecretLogs(props: { app: string }) {
             >
               <td
                 className={clsx(
-                  'px-6 py-4 border-l',
+                  'px-6 py-2 border-l',
                   open ? 'border-l-emerald-500 ' : 'border-l-transparent'
                 )}
               >
                 <FaChevronRight
                   className={clsx(
-                    'transform transition-all duration-300',
+                    'transform transition-all duration-300 text-xs',
                     open && 'rotate-90 text-emerald-500'
                   )}
                 />
               </td>
-              <td className="whitespace-nowrap px-6 py-4">
-                <div className="text-sm flex items-center gap-2 text-neutral-500">
+              <td className="whitespace-nowrap px-6 py-2">
+                <div className="text-xs flex items-center gap-2 text-neutral-500">
                   {logCreatedBy(log)}
                 </div>
               </td>
-              <td className="whitespace-nowrap px-6 py-4">
+              <td className="whitespace-nowrap px-6 py-2">
                 <div className="flex flex-row items-center gap-2 -ml-1">
                   <span
-                    className={clsx('h-2 w-2 rounded-full', getEventTypeColor(log.eventType))}
+                    className={clsx('h-1.5 w-1.5 rounded-full', getEventTypeColor(log.eventType))}
                   ></span>
-                  <div className="text-zinc-800 dark:text-zinc-200 font-semibold">
+                  <div className="text-zinc-800 dark:text-zinc-200 text-xs font-medium">
                     {getEventTypeText(log.eventType)}
                   </div>
                 </div>
               </td>
-              <td className="whitespace-nowrap px-6 py-4">{log.environment.name}</td>
-              <td className="whitespace-nowrap px-6 py-4 font-mono ph-no-capture font-medium">
+              <td className="whitespace-nowrap px-6 py-2 text-xs">{log.environment.name}</td>
+              <td className="whitespace-nowrap px-6 py-2 font-mono ph-no-capture text-xs font-medium">
                 {decryptedEvent?.path !== '/' && `${decryptedEvent?.path}/`}
                 {decryptedEvent?.key}
               </td>
-              <td className="whitespace-nowrap px-6 py-4 font-medium capitalize">
+              <td className="whitespace-nowrap px-6 py-2 text-xs font-medium capitalize">
                 {relativeTimeStamp()}
               </td>
             </Disclosure.Button>
@@ -386,13 +386,13 @@ export default function SecretLogs(props: { app: string }) {
               <td colSpan={6}>
                 <Disclosure.Panel
                   className={clsx(
-                    'p-4 w-full space-y-6 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
+                    'p-4 w-full space-y-4 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
                     open
                       ? 'border-b  border-l-emerald-500 border-r shadow-xl'
                       : 'border-l-transparent'
                   )}
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-4 text-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-3 text-xs">
                     <LogField label="Environment">
                       <div className="flex items-center gap-2 ph-no-capture">
                         {decryptedEvent?.environment.name}
@@ -495,29 +495,29 @@ export default function SecretLogs(props: { app: string }) {
             key={n}
             className="py-4 border-b border-neutral-500/20 transition duration-300 ease-in-out"
           >
-            <td className="px-6 py-4 border-l border-l-transparent">
-              <FaChevronRight className="text-neutral-300 dark:text-neutral-700 animate-pulse" />
+            <td className="px-6 py-2 border-l border-l-transparent">
+              <FaChevronRight className="text-neutral-300 dark:text-neutral-700 animate-pulse text-xs" />
             </td>
-            <td className="whitespace-nowrap px-6 py-4">
-              <div className="flex items-center gap-2 text-sm text-neutral-500">
-                <div className="rounded-full flex items-center justify-center size-6 bg-neutral-400/30" />
-                <div className={`${SKELETON_BASE} h-4 w-32 rounded-md`} />
+            <td className="whitespace-nowrap px-6 py-2">
+              <div className="flex items-center gap-2 text-xs text-neutral-500">
+                <div className="rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
+                <div className={`${SKELETON_BASE} h-3.5 w-32 rounded-md`} />
               </div>
             </td>
-            <td className="whitespace-nowrap px-6 py-4">
+            <td className="whitespace-nowrap px-6 py-2">
               <div className="flex items-center gap-2 -ml-1">
-                <span className="h-2 w-2 rounded-full bg-neutral-400" />
-                <div className={`${SKELETON_BASE} h-4 w-28 rounded-md`} />
+                <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
+                <div className={`${SKELETON_BASE} h-3.5 w-28 rounded-md`} />
               </div>
             </td>
-            <td className="whitespace-nowrap px-6 py-4 font-mono">
-              <div className={`${SKELETON_BASE} h-4 w-24 rounded-md`} />
+            <td className="whitespace-nowrap px-6 py-2 font-mono">
+              <div className={`${SKELETON_BASE} h-3.5 w-24 rounded-md`} />
             </td>
-            <td className="whitespace-nowrap px-6 py-4 font-mono">
-              <div className={`${SKELETON_BASE} h-4 w-32 rounded-md`} />
+            <td className="whitespace-nowrap px-6 py-2 font-mono">
+              <div className={`${SKELETON_BASE} h-3.5 w-32 rounded-md`} />
             </td>
-            <td className="whitespace-nowrap px-6 py-4 font-medium capitalize">
-              <div className={`${SKELETON_BASE} h-4 w-20 rounded-md`} />
+            <td className="whitespace-nowrap px-6 py-2 font-medium capitalize">
+              <div className={`${SKELETON_BASE} h-3.5 w-20 rounded-md`} />
             </td>
           </tr>
         ))}
@@ -565,7 +565,7 @@ export default function SecretLogs(props: { app: string }) {
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
           <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-200 dark:bg-neutral-900">
-            <span className="text-neutral-500 font-light text-lg">
+            <span className="text-neutral-500 font-light text-base">
               {totalCount >= COUNT_ACCURACY_THRESHOLD ? '~' : ''}
               {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
             </span>

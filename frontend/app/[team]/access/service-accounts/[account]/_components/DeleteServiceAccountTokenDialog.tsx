@@ -58,7 +58,7 @@ export const DeleteServiceAccountTokenDialog = ({
       ref={dialogRef}
     >
       <div className="space-y-4">
-        <div className="text-neutral-500 py-4">Are you sure you want to delete this token?</div>
+        <div className="text-neutral-500 text-sm pt-4">Are you sure you want to delete this token?</div>
         <div className="flex justify-end">
           <Button variant="danger" onClick={handleDelete} isLoading={loading}>
             <FaTrashAlt /> Delete

@@ -62,7 +62,7 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
         ref={dialogRef}
       >
         <div className="space-y-4">
-          <div className="text-neutral-500">
+          <div className="text-neutral-500 text-sm">
             Get access to all the features in Phase{' '}
             {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr
               ? isCloudHosted()
