@@ -455,6 +455,14 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                     "This service account does not have access to this app"
                 )
 
+        # Capture old env scope for audit logging
+        old_env_key_filter = dict(key_to_delete_filter)
+        old_env_ids = set(
+            EnvironmentKey.objects.filter(**old_env_key_filter)
+            .values_list("environment_id", flat=True)
+        )
+        new_env_ids = set(key.env_id for key in env_keys)
+
         with transaction.atomic():
             # delete all existing keys for this member
             EnvironmentKey.objects.filter(**key_to_delete_filter).delete()
@@ -472,6 +480,54 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                     wrapped_salt=key.wrapped_salt,
                     identity_key=key.identity_key,
                 )
+
+        # Audit log the env scope change
+        if old_env_ids != new_env_ids:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+
+            # Compute the actual diff — only envs that were added or removed
+            added_env_ids = new_env_ids - old_env_ids
+            removed_env_ids = old_env_ids - new_env_ids
+
+            # Resolve env names for readability
+            env_name_map = dict(
+                Environment.objects.filter(
+                    id__in=added_env_ids | removed_env_ids
+                ).values_list("id", "name")
+            )
+            added_env_names = sorted(env_name_map.get(eid, str(eid)) for eid in added_env_ids)
+            removed_env_names = sorted(env_name_map.get(eid, str(eid)) for eid in removed_env_ids)
+
+            if member_type == MemberType.USER:
+                member_name = app_member.user.username or app_member.user.email or str(member_id)
+                resource_type = "member"
+            else:
+                member_name = app_member.name
+                resource_type = "sa"
+
+            old_values = {}
+            new_values = {}
+            if removed_env_names:
+                old_values["envs_removed"] = removed_env_names
+            if added_env_names:
+                new_values["envs_added"] = added_env_names
+
+            log_audit_event(
+                organisation=app.organisation,
+                event_type="A",
+                resource_type=resource_type,
+                resource_id=str(member_id),
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": member_name, "app_name": app.name, "app_id": str(app.id)},
+                old_values=old_values,
+                new_values=new_values,
+                description=f"Updated environment scope for {member_name} in app '{app.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return UpdateMemberEnvScopeMutation(app=app)
 
@@ -683,7 +739,7 @@ class CreateServiceTokenMutation(graphene.Mutation):
             actor_type=actor_type,
             actor_id=actor_id,
             actor_metadata=actor_metadata,
-            resource_metadata={"name": name, "app": app.name},
+            resource_metadata={"name": name, "app_name": app.name, "app_id": str(app.id)},
             description=f"Created service token '{name}' for app '{app.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
@@ -709,6 +765,8 @@ class DeleteServiceTokenMutation(graphene.Mutation):
 
         token_name = token.name
         token_id = token.id
+        app_name = token.app.name
+        app_id = str(token.app.id)
 
         token.deleted_at = timezone.now()
         token.save()
@@ -723,7 +781,7 @@ class DeleteServiceTokenMutation(graphene.Mutation):
             actor_type=actor_type,
             actor_id=actor_id,
             actor_metadata=actor_metadata,
-            resource_metadata={"name": token_name},
+            resource_metadata={"name": token_name, "app_name": app_name, "app_id": app_id},
             description=f"Deleted service token '{token_name}'",
             ip_address=ip_address,
             user_agent=user_agent,

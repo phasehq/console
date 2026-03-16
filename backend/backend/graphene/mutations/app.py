@@ -9,6 +9,7 @@ import graphene
 from graphql import GraphQLError
 from api.models import (
     App,
+    Environment,
     EnvironmentKey,
     Organisation,
     OrganisationMember,
@@ -336,7 +337,29 @@ class BulkAddAppMembersMutation(graphene.Mutation):
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
         ip_address, user_agent = get_resolver_request_meta(info.context)
-        member_ids = [m.member_id for m in members]
+
+        # Build per-member details with names and env scopes
+        members_detail = []
+        for member_input in members:
+            mid = member_input.member_id
+            mtype = member_input.member_type
+            env_ids = [k.env_id for k in member_input.env_keys]
+            env_names = sorted(
+                Environment.objects.filter(id__in=env_ids).values_list("name", flat=True)
+            )
+            if mtype == MemberType.USER:
+                m = OrganisationMember.objects.filter(id=mid, deleted_at=None).first()
+                mname = (m.user.username or m.user.email or str(mid)) if m else str(mid)
+            else:
+                m = ServiceAccount.objects.filter(id=mid, deleted_at=None).first()
+                mname = m.name if m else str(mid)
+            members_detail.append({
+                "id": str(mid),
+                "name": mname,
+                "type": mtype.value if hasattr(mtype, 'value') else str(mtype),
+                "env_scope": env_names,
+            })
+
         log_audit_event(
             organisation=app.organisation,
             event_type="A",
@@ -346,7 +369,7 @@ class BulkAddAppMembersMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"name": app.name},
-            new_values={"members_added": member_ids},
+            new_values={"members_added": members_detail},
             description=f"Added {len(members)} member(s) to app '{app.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
@@ -409,6 +432,17 @@ class AddAppMemberMutation(graphene.Mutation):
 
             EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
 
+        # Resolve member name and initial env scope for audit log
+        if member_type == MemberType.USER:
+            member_name = member.user.username or member.user.email or str(member_id)
+        else:
+            member_name = member.name
+
+        env_ids = [key.env_id for key in env_keys]
+        env_names = sorted(
+            Environment.objects.filter(id__in=env_ids).values_list("name", flat=True)
+        )
+
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
@@ -420,8 +454,13 @@ class AddAppMemberMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"name": app.name},
-            new_values={"member_id": str(member_id), "member_type": member_type.value if hasattr(member_type, 'value') else str(member_type)},
-            description=f"Added member to app '{app.name}'",
+            new_values={
+                "member_id": str(member_id),
+                "member_name": member_name,
+                "member_type": member_type.value if hasattr(member_type, 'value') else str(member_type),
+                "env_scope": env_names,
+            },
+            description=f"Added {member_name} to app '{app.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -466,6 +505,20 @@ class RemoveAppMemberMutation(graphene.Mutation):
         if not member:
             raise GraphQLError("Invalid member type or ID")
 
+        # Capture member name and env scope before removal
+        if member_type == MemberType.USER:
+            member_name = member.user.username or member.user.email or str(member_id)
+            env_scope_qs = EnvironmentKey.objects.filter(environment__app=app, user_id=member_id)
+        else:
+            member_name = member.name
+            env_scope_qs = EnvironmentKey.objects.filter(environment__app=app, service_account_id=member_id)
+
+        env_names = sorted(
+            Environment.objects.filter(
+                id__in=env_scope_qs.values_list("environment_id", flat=True)
+            ).values_list("name", flat=True)
+        )
+
         if member_type == MemberType.USER:
             if member not in app.members.all():
                 raise GraphQLError("This user is not a member of this app")
@@ -495,8 +548,15 @@ class RemoveAppMemberMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"name": app.name},
-            old_values={"member_id": str(member_id), "member_type": member_type.value if hasattr(member_type, 'value') else str(member_type)},
-            description=f"Removed member from app '{app.name}'",
+            old_values={
+                "members_removed": [{
+                    "id": str(member_id),
+                    "name": member_name,
+                    "type": member_type.value if hasattr(member_type, 'value') else str(member_type),
+                    "env_scope": env_names,
+                }],
+            },
+            description=f"Removed {member_name} from app '{app.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
         )
