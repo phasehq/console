@@ -42,8 +42,8 @@ const SidebarLink = ({
       <div className="relative group">
         <div
           className={clsx(
-            'flex items-center gap-2 text-xs h-10 px-3 transition ease rounded-lg font-semibold whitespace-nowrap',
-            collapsed ? 'justify-center' : '',
+            'flex items-center gap-2 text-xs h-10 px-2.5 transition ease rounded-lg font-semibold whitespace-nowrap',
+            collapsed ? 'justify-start' : '',
             active
               ? 'bg-zinc-300 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
               : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
@@ -170,7 +170,14 @@ const Sidebar = () => {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className={clsx("absolute z-20 shadow-2xl divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none", collapsed ? "left-full ml-2 top-0 w-56 origin-top-left" : "left-0 top-full mt-1 w-full origin-top-left")}>
+              <Menu.Items
+                className={clsx(
+                  'absolute z-20 shadow-2xl divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none',
+                  collapsed
+                    ? 'left-full ml-2 top-0 w-56 origin-top-left'
+                    : 'left-0 top-full mt-1 w-full origin-top-left'
+                )}
+              >
                 <div className="px-1 py-1">
                   {organisations?.map((org: OrganisationType) => (
                     <Menu.Item key={org.id}>
