@@ -1,15 +1,9 @@
 import requests
-from api.models import CustomUser
 from api.emails import send_login_email
-from backend.api.notifier import notify_slack
-from django.conf import settings
 from allauth.socialaccount import app_settings
 from allauth.socialaccount.providers.github.provider import GitHubProvider
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from django.conf import settings
-
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
@@ -46,14 +40,6 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
                     extra_data["email"] = emails[0]["email"]
 
         email = extra_data["email"]
-
-        if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
-
-            try:
-                # Notify Slack
-                notify_slack(f"New user signup: {email}")
-            except Exception as e:
-                print(f"Error notifying Slack: {e}")
 
         try:
             full_name = extra_data.get("name", email.split("@")[0])
