@@ -965,6 +965,7 @@ class AuditEvent(models.Model):
     USER_TOKEN = "pat"
     SA_TOKEN = "sa_token"
     SERVICE_TOKEN = "svc_token"
+    INVITE = "invite"
     RESOURCE_TYPES = [
         (APP, "App"),
         (ENVIRONMENT, "Environment"),
@@ -975,6 +976,7 @@ class AuditEvent(models.Model):
         (USER_TOKEN, "UserToken"),
         (SA_TOKEN, "ServiceAccountToken"),
         (SERVICE_TOKEN, "ServiceToken"),
+        (INVITE, "Invite"),
     ]
 
     class Meta:

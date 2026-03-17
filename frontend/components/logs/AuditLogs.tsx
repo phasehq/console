@@ -49,6 +49,7 @@ const RESOURCE_TABS: ResourceTab[] = [
   { key: 'role', label: 'Roles', resourceType: 'role' },
   { key: 'sa', label: 'Service Accounts', resourceType: 'sa' },
   { key: 'member', label: 'Members', resourceType: 'member' },
+  { key: 'invite', label: 'Invites', resourceType: 'invite' },
   { key: 'policy', label: 'Network Policies', resourceType: 'policy' },
   { key: 'tokens', label: 'Tokens', resourceType: null },
 ]
@@ -84,6 +85,7 @@ const getResourceTypeLabel = (resourceType: string) => {
     pat: 'Personal Access Token',
     sa_token: 'SA Token',
     svc_token: 'Service Token',
+    invite: 'Invite',
   }
   return labels[resourceType] || resourceType
 }

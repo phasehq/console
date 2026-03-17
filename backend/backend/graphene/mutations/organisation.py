@@ -6,6 +6,8 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
 from backend.quotas import can_add_account
 import graphene
@@ -202,6 +204,22 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
 
             created_invites.append(new_invite)
 
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="C",
+                resource_type="invite",
+                resource_id=str(new_invite.id),
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"email": email, "role": role.name},
+                description=f"Invited '{email}' with role '{role.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         return BulkInviteOrganisationMembersMutation(invites=created_invites)
 
 
@@ -221,7 +239,25 @@ class DeleteInviteMutation(graphene.Mutation):
             raise GraphQLError("You dont have permission to delete invites")
 
         if user_is_org_member(info.context.user, invite.organisation.id):
+            invite_email = invite.invitee_email
+            invite_id = str(invite.id)
             invite.delete()
+
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=invite.organisation,
+                event_type="D",
+                resource_type="invite",
+                resource_id=invite_id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"email": invite_email},
+                description=f"Deleted invite for '{invite_email}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
             return DeleteInviteMutation(ok=True)
 
