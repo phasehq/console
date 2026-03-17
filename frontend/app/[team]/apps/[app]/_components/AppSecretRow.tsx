@@ -358,8 +358,6 @@ const AppSecretRowComponent = ({
   // Derive type from the first non-null env secret
   const secretType = clientAppSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Secret
   const serverSecretType = serverAppSecret?.envs.find((env) => env.secret !== null)?.secret?.type
-  const isSealed = secretType === ApiSecretTypeChoices.Sealed
-  const isConfig = secretType === ApiSecretTypeChoices.Config
   const isSealedAndSaved = serverSecretType === ApiSecretTypeChoices.Sealed
 
   const keyInputRef = useRef<HTMLInputElement>(null)
@@ -534,10 +532,6 @@ const AppSecretRowComponent = ({
                 />
 
                 <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
-                  <div className="flex items-center gap-1 group-hover:hidden">
-                    {isSealed && <FaLock className="text-red-500 dark:text-red-400" />}
-                    {isConfig && <FaCog className="text-blue-500 dark:text-blue-400" />}
-                  </div>
                   <div className="hidden group-hover:flex gap-1 items-center" onClick={(e) => e.stopPropagation()}>
                     {!stagedForDelete && userCanUpdateSecrets && (
                       <TypeSelector

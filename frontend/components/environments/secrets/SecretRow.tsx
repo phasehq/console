@@ -8,7 +8,6 @@ import {
   FaCompressArrowsAlt,
   FaExpandArrowsAlt,
   FaLock,
-  FaCog,
 } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
@@ -60,7 +59,6 @@ function SecretRow(props: {
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
     !canonicalSecret
 
-  const isSealed = secret.type === ApiSecretTypeChoices.Sealed
   const isConfig = secret.type === ApiSecretTypeChoices.Config
   const isNewSecret = canonicalSecret === undefined
   // Only lock when the server version is sealed (so users can still change type before saving)
@@ -176,16 +174,9 @@ function SecretRow(props: {
     if (value.includes('\n') && !expanded) setExpanded(true)
   }
 
-  const typeBadge = () => {
-    if (isSealed) return <FaLock className="text-red-500 dark:text-red-400" />
-    if (isConfig) return <FaCog className="text-blue-500 dark:text-blue-400" />
-    return null
-  }
-
   const keyActionMenu = (
     <>
       <div className="flex items-center gap-1 absolute right-1 top-1/2 -translate-y-1/2 opacity-100 group-hover:opacity-0 text-2xs">
-        {typeBadge()}
         <div className="flex items-center gap-0.5">
           {secret.tags.map((tag) => (
             <FaCircle key={`tag-indicator-${tag.id}`} className="text-[8px]" color={tag.color} />
@@ -333,6 +324,12 @@ function SecretRow(props: {
             inputTextColor()
           )}
           value={secret.key}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault()
+              ;(e.currentTarget.parentElement?.nextElementSibling?.querySelector('textarea') as HTMLElement)?.focus()
+            }
+          }}
           onChange={(e) => {
             const { selectionStart } = e.target
             handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())

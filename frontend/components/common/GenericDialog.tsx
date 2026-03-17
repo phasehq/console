@@ -87,7 +87,7 @@ const GenericDialog = forwardRef(
         <Transition appear show={isOpen} as={Fragment}>
           <Dialog
             as="div"
-            className="relative z-10"
+            className="relative z-50"
             onClose={closeModal}
             initialFocus={initialFocus}
             static={isStatic}
