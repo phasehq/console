@@ -259,7 +259,7 @@ const EnvSecretComponent = ({
                 isRevealed={showValue}
                 expanded={true}
                 disabled={isSealedAndSaved}
-                placeholder={isSealedAndSaved ? 'Sealed' : undefined}
+                placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
               />
             </div>
             {clientEnvSecret.secret !== null && (
@@ -356,7 +356,7 @@ const AppSecretRowComponent = ({
   const secretIsNew = !serverAppSecret
 
   // Derive type from the first non-null env secret
-  const secretType = clientAppSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Secret
+  const secretType = clientAppSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Config
   const serverSecretType = serverAppSecret?.envs.find((env) => env.secret !== null)?.secret?.type
   const isSealedAndSaved = serverSecretType === ApiSecretTypeChoices.Sealed
 

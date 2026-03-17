@@ -4,9 +4,9 @@ import { FaKey, FaLock, FaCog } from 'react-icons/fa'
 import { useRef, useEffect, useState } from 'react'
 
 const SECRET_TYPES = [
+  { value: ApiSecretTypeChoices.Config, label: 'Config', icon: FaCog },
   { value: ApiSecretTypeChoices.Secret, label: 'Secret', icon: FaKey },
   { value: ApiSecretTypeChoices.Sealed, label: 'Sealed', icon: FaLock },
-  { value: ApiSecretTypeChoices.Config, label: 'Config', icon: FaCog },
 ] as const
 
 export const TypeSelector = ({

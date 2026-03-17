@@ -379,7 +379,7 @@ function SecretRow(props: {
           expanded={expanded}
           onFocus={() => setExpanded(true)}
           disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
-          placeholder={isSealedAndSaved ? 'Sealed' : undefined}
+          placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
         />
         {valueActionMenu}
       </div>

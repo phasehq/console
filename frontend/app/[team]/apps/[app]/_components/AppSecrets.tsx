@@ -412,7 +412,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret) => {
+  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Config) => {
     const keyToUse = initialKey ?? ''
     const envs: EnvironmentType[] = appEnvironments
 
@@ -487,7 +487,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 tags: [],
                 comment: secret.comment,
                 path: '/',
-                type: ApiSecretTypeChoices.Secret,
+                type: ApiSecretTypeChoices.Config,
                 environment: env as EnvironmentType,
               }
             } else if (match && secret) {
@@ -514,7 +514,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       prevSecrets.map((appSecret) => {
         if (appSecret.id === appSecretId) {
           // Inherit type from existing env secrets for this key
-          const existingType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Secret
+          const existingType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Config
           const newSecret = {
             id: `new-${crypto.randomUUID()}`,
             updatedAt: null,

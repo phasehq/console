@@ -248,7 +248,7 @@ export default function EnvironmentPath({
         }
       }) ?? []
 
-  const handleAddSecret = (start: boolean = true, key: string = '', type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret) => {
+  const handleAddSecret = (start: boolean = true, key: string = '', type: ApiSecretTypeChoices = ApiSecretTypeChoices.Config) => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
