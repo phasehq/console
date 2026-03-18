@@ -176,13 +176,17 @@ export default function Members({ params }: { params: { team: string } }) {
                         <div>
                           <div className="font-medium">
                             {invite.inviteeEmail}{' '}
-                            <span className="text-sm text-neutral-500">
-                              (invited by{' '}
-                              {invite.invitedBy.self
-                                ? 'You'
-                                : invite.invitedBy.fullName || invite.invitedBy.email}
-                              )
-                            </span>
+                            {(invite.invitedBy || invite.invitedByServiceAccount) && (
+                              <span className="text-sm text-neutral-500">
+                                (invited by{' '}
+                                {invite.invitedBy
+                                  ? invite.invitedBy.self
+                                    ? 'You'
+                                    : invite.invitedBy.fullName || invite.invitedBy.email
+                                  : invite.invitedByServiceAccount!.name}
+                                )
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>

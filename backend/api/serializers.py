@@ -15,6 +15,7 @@ from .models import (
     Lockbox,
     Organisation,
     OrganisationMember,
+    OrganisationMemberInvite,
     Secret,
     ServiceAccount,
     ServiceToken,
@@ -75,6 +76,8 @@ class OrganisationMemberSerializer(serializers.ModelSerializer):
             "full_name",
             "email",
             "role",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = fields
 
@@ -89,6 +92,37 @@ class OrganisationMemberSerializer(serializers.ModelSerializer):
         if not r:
             return None
         return {"id": r.id, "name": r.name}
+
+
+class OrganisationMemberInviteSerializer(serializers.ModelSerializer):
+
+    role = serializers.SerializerMethodField()
+    invited_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganisationMemberInvite
+        fields = [
+            "id",
+            "invitee_email",
+            "role",
+            "invited_by",
+            "created_at",
+            "expires_at",
+            "valid",
+        ]
+        read_only_fields = fields
+
+    def get_role(self, obj):
+        if not obj.role:
+            return None
+        return {"id": str(obj.role.id), "name": obj.role.name}
+
+    def get_invited_by(self, obj):
+        if obj.invited_by:
+            return {"type": "member", "email": obj.invited_by.user.email}
+        if obj.invited_by_service_account:
+            return {"type": "service_account", "name": obj.invited_by_service_account.name}
+        return None
 
 
 class ServiceAccountSerializer(serializers.ModelSerializer):

@@ -340,7 +340,12 @@ class OrganisationMemberInvite(models.Model):
         null=True,
         blank=True,
     )
-    invited_by = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE)
+    invited_by = models.ForeignKey(
+        OrganisationMember, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    invited_by_service_account = models.ForeignKey(
+        "ServiceAccount", on_delete=models.SET_NULL, null=True, blank=True
+    )
     invitee_email = models.EmailField()
     valid = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)

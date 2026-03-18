@@ -274,6 +274,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
         fields = (
             "id",
             "invited_by",
+            "invited_by_service_account",
             "invitee_email",
             "valid",
             "organisation",

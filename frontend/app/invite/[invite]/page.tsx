@@ -206,7 +206,9 @@ export default function Invite({ params }: { params: { invite: string } }) {
         <p className="text-lg text-neutral-500">
           You have been invited by{' '}
           <span className="font-medium text-neutral-800 dark:text-neutral-200">
-            {invite.invitedBy.fullName || invite.invitedBy.email}
+            {invite.invitedBy
+              ? invite.invitedBy.fullName || invite.invitedBy.email
+              : invite.invitedByServiceAccount?.name ?? invite.organisation.name}
           </span>{' '}
           to join the{' '}
           <span className="font-medium text-neutral-800 dark:text-neutral-200">

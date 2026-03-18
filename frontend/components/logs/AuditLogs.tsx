@@ -4,7 +4,7 @@ import { GetAuditLogs } from '@/graphql/queries/organisation/getAuditLogs.gql'
 import { GetOrganisationMembers } from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { NetworkStatus, useQuery } from '@apollo/client'
-import { AuditEventType, OrganisationMemberType, ServiceAccountType } from '@/apollo/graphql'
+import { ApiAuditEventActorTypeChoices, AuditEventType, OrganisationMemberType, ServiceAccountType } from '@/apollo/graphql'
 import { Disclosure, Menu, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
@@ -150,7 +150,8 @@ const LogRow = ({
       m.email === actorMeta?.email ||
       (actorMeta?.username && m.fullName === actorMeta?.username)
   )
-  const sa = log.actorType === 'sa'
+  const isSaActor = log.actorType === ApiAuditEventActorTypeChoices.Sa
+  const sa = isSaActor
     ? serviceAccounts.find((s) => s.id === log.actorId)
     : null
 
@@ -158,7 +159,7 @@ const LogRow = ({
     ? member.fullName || member.email || 'User'
     : sa
       ? sa.name
-      : log.actorType === 'sa'
+      : isSaActor
         ? actorMeta?.name || 'Service Account'
         : actorMeta?.email || actorMeta?.username || 'User'
 
@@ -167,7 +168,7 @@ const LogRow = ({
       <Avatar member={member} size={size} />
     ) : sa ? (
       <Avatar serviceAccount={sa} size={size} />
-    ) : log.actorType === 'sa' ? (
+    ) : isSaActor ? (
       <FaRobot className="text-neutral-500" />
     ) : (
       <FaUser className="text-neutral-500" />
