@@ -174,6 +174,8 @@ class TestPublicAppsViewList:
         }
         self.view = PublicAppsView.as_view()
         self.org = _make_org()
+        with patch("api.views.apps.user_is_org_member", return_value=True):
+            yield
 
     @patch("api.views.apps.AppSerializer")
     @patch("api.views.apps.App")
@@ -242,6 +244,8 @@ class TestPublicAppsViewCreate:
         settings.APP_HOST = "self"
         self.view = PublicAppsView.as_view()
         self.org = _make_org()
+        with patch("api.views.apps.user_is_org_member", return_value=True):
+            yield
 
     @patch("api.views.apps.AppSerializer")
     @patch("api.views.apps.create_environment")
@@ -711,6 +715,8 @@ class TestAppsAPIRBAC:
         self.detail_view = PublicAppDetailView.as_view()
         self.org = _make_org()
         self.app = _make_app(org=self.org)
+        with patch("api.views.apps.user_is_org_member", return_value=True):
+            yield
 
     @patch("api.views.apps.user_has_permission", return_value=False)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
