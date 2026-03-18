@@ -4,7 +4,7 @@ import { GetAuditLogs } from '@/graphql/queries/organisation/getAuditLogs.gql'
 import { GetOrganisationMembers } from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { NetworkStatus, useQuery } from '@apollo/client'
-import { ApiAuditEventActorTypeChoices, AuditEventType, OrganisationMemberType, ServiceAccountType } from '@/apollo/graphql'
+import { ApiAuditEventActorTypeChoices, ApiAuditEventResourceTypeChoices, AuditEventType, OrganisationMemberType, ServiceAccountType } from '@/apollo/graphql'
 import { Disclosure, Menu, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
@@ -112,16 +112,16 @@ const getResourceLink = (
   const rt = log.resourceType
   const id = log.resourceId
 
-  if (rt === 'app') return `/${team}/apps/${id}`
-  if (rt === 'env' && resourceMeta?.app_id) return `/${team}/apps/${resourceMeta.app_id}/environments/${id}`
-  if (rt === 'role') return `/${team}/access/roles`
-  if (rt === 'sa') return `/${team}/access/service-accounts/${id}`
-  if (rt === 'member') return `/${team}/access/members`
-  if (rt === 'policy') return `/${team}/access/network`
-  if (rt === 'pat') return `/${team}/access/authentication`
-  if (rt === 'sa_token' && resourceMeta?.service_account_id)
+  if (rt === ApiAuditEventResourceTypeChoices.App) return `/${team}/apps/${id}`
+  if (rt === ApiAuditEventResourceTypeChoices.Env && resourceMeta?.app_id) return `/${team}/apps/${resourceMeta.app_id}/environments/${id}`
+  if (rt === ApiAuditEventResourceTypeChoices.Role) return `/${team}/access/roles`
+  if (rt === ApiAuditEventResourceTypeChoices.Sa) return `/${team}/access/service-accounts/${id}`
+  if (rt === ApiAuditEventResourceTypeChoices.Member) return `/${team}/access/members`
+  if (rt === ApiAuditEventResourceTypeChoices.Policy) return `/${team}/access/network`
+  if (rt === ApiAuditEventResourceTypeChoices.Pat) return `/${team}/access/authentication`
+  if (rt === ApiAuditEventResourceTypeChoices.SaToken && resourceMeta?.service_account_id)
     return `/${team}/access/service-accounts/${resourceMeta.service_account_id}`
-  if (rt === 'svc_token' && resourceMeta?.app_id) return `/${team}/apps/${resourceMeta.app_id}`
+  if (rt === ApiAuditEventResourceTypeChoices.SvcToken && resourceMeta?.app_id) return `/${team}/apps/${resourceMeta.app_id}`
 
   return null
 }
