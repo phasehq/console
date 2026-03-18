@@ -49,6 +49,9 @@ class PublicEnvironmentsView(APIView):
         is_sa = False
         if request.auth["auth_type"] == "User":
             account = request.auth["org_member"].user
+            org_member = request.auth["org_member"]
+            if not app.members.filter(id=org_member.id).exists():
+                raise PermissionDenied("You do not have access to this app.")
         elif request.auth["auth_type"] == "ServiceAccount":
             account = request.auth["service_account"]
             is_sa = True
@@ -179,6 +182,9 @@ class PublicEnvironmentDetailView(APIView):
         is_sa = False
         if request.auth["auth_type"] == "User":
             account = request.auth["org_member"].user
+            org_member = request.auth["org_member"]
+            if not app.members.filter(id=org_member.id).exists():
+                raise PermissionDenied("You do not have access to this app.")
         elif request.auth["auth_type"] == "ServiceAccount":
             account = request.auth["service_account"]
             is_sa = True

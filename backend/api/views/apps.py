@@ -3,7 +3,7 @@ import logging
 from api.auth import PhaseTokenAuthentication
 from api.models import App, OrganisationMember, Role
 from api.serializers import AppSerializer
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import user_has_permission, user_is_org_member
 from api.utils.crypto import (
     encrypt_raw,
     env_keypair,
@@ -59,6 +59,9 @@ class PublicAppsView(APIView):
         is_sa = False
         if request.auth["auth_type"] == "User":
             account = request.auth["org_member"].user
+            org = self._get_org(request)
+            if not user_is_org_member(account.userId, org.id):
+                raise PermissionDenied("You are not a member of this organisation.")
         elif request.auth["auth_type"] == "ServiceAccount":
             account = request.auth["service_account"]
             is_sa = True
@@ -292,9 +295,14 @@ class PublicAppDetailView(APIView):
         is_sa = False
         if request.auth["auth_type"] == "User":
             account = request.auth["org_member"].user
+            org_member = request.auth["org_member"]
+            if not app.members.filter(id=org_member.id).exists():
+                raise PermissionDenied("You do not have access to this app.")
         elif request.auth["auth_type"] == "ServiceAccount":
             account = request.auth["service_account"]
             is_sa = True
+            if not app.service_accounts.filter(id=account.id, deleted_at=None).exists():
+                raise PermissionDenied("Service account does not have access to this app.")
 
         if account is not None:
             organisation = app.organisation
