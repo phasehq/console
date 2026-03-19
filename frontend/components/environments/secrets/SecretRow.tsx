@@ -135,6 +135,15 @@ function SecretRow(props: {
     isRevealed ? handleHideSecret() : handleRevealSecret()
   }
 
+  const focusNextRowKey = (currentElement: HTMLElement) => {
+    const row = currentElement.closest('[data-secret-row]')
+    // The row's parent is a wrapper div in page.tsx; siblings are at that level
+    const wrapper = row?.parentElement
+    const nextWrapper = wrapper?.nextElementSibling
+    const nextKeyInput = nextWrapper?.querySelector('input') as HTMLElement | null
+    nextKeyInput?.focus()
+  }
+
   const INPUT_BASE_STYLE =
     'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-sm'
 
@@ -244,6 +253,7 @@ function SecretRow(props: {
         <div className="">
           <Button
             variant="ghost"
+            tabIndex={-1}
             onClick={() => toggleExpanded()}
             title={expanded ? 'Collapse' : 'Expand'}
           >
@@ -300,6 +310,7 @@ function SecretRow(props: {
       {userCanDeleteSecrets && (
         <Button
           variant="danger"
+          tabIndex={-1}
           onClick={() => handleDelete(secret.id)}
           title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
         >
@@ -310,7 +321,7 @@ function SecretRow(props: {
   )
 
   return (
-    <div className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10', rowBgColor())}>
+    <div data-secret-row className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10 focus-within:z-10', rowBgColor())}>
       <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}
@@ -330,11 +341,15 @@ function SecretRow(props: {
           onKeyDown={(e) => {
             if (e.key === 'Tab' && !e.shiftKey) {
               e.preventDefault()
-              ;(
-                e.currentTarget.parentElement?.nextElementSibling?.querySelector(
-                  'textarea'
-                ) as HTMLElement
-              )?.focus()
+              if (isSealedAndSaved) {
+                focusNextRowKey(e.currentTarget)
+              } else {
+                ;(
+                  e.currentTarget.parentElement?.nextElementSibling?.querySelector(
+                    'textarea'
+                  ) as HTMLElement
+                )?.focus()
+              }
             }
           }}
           onChange={(e) => {
@@ -381,6 +396,12 @@ function SecretRow(props: {
           isRevealed={isRevealed}
           expanded={expanded}
           onFocus={() => setExpanded(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault()
+              focusNextRowKey(e.currentTarget)
+            }
+          }}
           disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
           placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
         />
