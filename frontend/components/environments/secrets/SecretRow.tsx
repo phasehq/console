@@ -8,7 +8,6 @@ import {
   FaCompressArrowsAlt,
   FaExpandArrowsAlt,
   FaLock,
-  FaCog,
 } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
@@ -60,7 +59,6 @@ function SecretRow(props: {
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
     !canonicalSecret
 
-  const isSealed = secret.type === ApiSecretTypeChoices.Sealed
   const isConfig = secret.type === ApiSecretTypeChoices.Config
   const isNewSecret = canonicalSecret === undefined
   // Only lock when the server version is sealed (so users can still change type before saving)
@@ -137,6 +135,15 @@ function SecretRow(props: {
     isRevealed ? handleHideSecret() : handleRevealSecret()
   }
 
+  const focusNextRowKey = (currentElement: HTMLElement) => {
+    const row = currentElement.closest('[data-secret-row]')
+    // The row's parent is a wrapper div in page.tsx; siblings are at that level
+    const wrapper = row?.parentElement
+    const nextWrapper = wrapper?.nextElementSibling
+    const nextKeyInput = nextWrapper?.querySelector('input') as HTMLElement | null
+    nextKeyInput?.focus()
+  }
+
   const INPUT_BASE_STYLE =
     'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-sm'
 
@@ -176,16 +183,9 @@ function SecretRow(props: {
     if (value.includes('\n') && !expanded) setExpanded(true)
   }
 
-  const typeBadge = () => {
-    if (isSealed) return <FaLock className="text-red-500 dark:text-red-400" />
-    if (isConfig) return <FaCog className="text-blue-500 dark:text-blue-400" />
-    return null
-  }
-
   const keyActionMenu = (
     <>
-      <div className="flex items-center gap-1 absolute right-1 top-1/2 -translate-y-1/2 opacity-100 group-hover:opacity-0 text-2xs">
-        {typeBadge()}
+      <div className="flex items-center gap-1 absolute right-1 top-1/2 -translate-y-1/2 opacity-100 group-hover:opacity-0 group-focus-within:opacity-0 text-2xs">
         <div className="flex items-center gap-0.5">
           {secret.tags.map((tag) => (
             <FaCircle key={`tag-indicator-${tag.id}`} className="text-[8px]" color={tag.color} />
@@ -197,7 +197,7 @@ function SecretRow(props: {
         className={clsx(
           'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
           'bg-zinc-200 dark:bg-zinc-700',
-          'z-10 group-hover:z-10 absolute -right-px -top-9 translate-y-9 group-hover:translate-y-0 opacity-0 group-hover:opacity-100',
+          'z-10 group-hover:z-10 group-focus-within:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           'transition ease'
         )}
       >
@@ -210,7 +210,7 @@ function SecretRow(props: {
         )}
         <div
           className={clsx(
-            secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
+            secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity ease'
           )}
         >
           <TagsDialog
@@ -226,7 +226,7 @@ function SecretRow(props: {
           <div
             className={clsx(
               secret.comment.length === 0 &&
-                'opacity-0 group-hover:opacity-100 transition-opacity ease'
+                'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity ease'
             )}
           >
             <CommentDialog
@@ -246,13 +246,14 @@ function SecretRow(props: {
       className={clsx(
         'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
         'bg-zinc-200 dark:bg-zinc-700',
-        'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 translate-y-9 group-hover:translate-y-0'
+        'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0'
       )}
     >
       {isMultiLine && (
         <div className="">
           <Button
             variant="ghost"
+            tabIndex={-1}
             onClick={() => toggleExpanded()}
             title={expanded ? 'Collapse' : 'Expand'}
           >
@@ -274,7 +275,10 @@ function SecretRow(props: {
           </Button>
         )}
         {isSealedAndSaved && (
-          <span className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1" title="This secret is sealed and cannot be revealed">
+          <span
+            className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1"
+            title="This secret is sealed and cannot be revealed"
+          >
             <FaLock /> Sealed
           </span>
         )}
@@ -306,6 +310,7 @@ function SecretRow(props: {
       {userCanDeleteSecrets && (
         <Button
           variant="danger"
+          tabIndex={-1}
           onClick={() => handleDelete(secret.id)}
           title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
         >
@@ -316,7 +321,7 @@ function SecretRow(props: {
   )
 
   return (
-    <div className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10', rowBgColor())}>
+    <div data-secret-row className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10 focus-within:z-10', rowBgColor())}>
       <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}
@@ -333,6 +338,20 @@ function SecretRow(props: {
             inputTextColor()
           )}
           value={secret.key}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault()
+              if (isSealedAndSaved) {
+                focusNextRowKey(e.currentTarget)
+              } else {
+                ;(
+                  e.currentTarget.parentElement?.nextElementSibling?.querySelector(
+                    'textarea'
+                  ) as HTMLElement
+                )?.focus()
+              }
+            }
+          }}
           onChange={(e) => {
             const { selectionStart } = e.target
             handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
@@ -371,18 +390,20 @@ function SecretRow(props: {
         )}
 
         <MaskedTextarea
-          className={clsx(
-            INPUT_BASE_STYLE,
-            inputTextColor(),
-            'w-full group-hover:rounded-tr-none'
-          )}
+          className={clsx(INPUT_BASE_STYLE, inputTextColor(), 'w-full group-hover:rounded-tr-none')}
           value={isSealedAndSaved ? '' : secret.value}
           onChange={(v) => handleValueChange(v)}
           isRevealed={isRevealed}
           expanded={expanded}
           onFocus={() => setExpanded(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault()
+              focusNextRowKey(e.currentTarget)
+            }
+          }}
           disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
-          placeholder={isSealedAndSaved ? 'Sealed' : undefined}
+          placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
         />
         {valueActionMenu}
       </div>

@@ -248,7 +248,11 @@ export default function EnvironmentPath({
         }
       }) ?? []
 
-  const handleAddSecret = (start: boolean = true, key: string = '', type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret) => {
+  const handleAddSecret = (
+    start: boolean = true,
+    key: string = '',
+    type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret
+  ) => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
@@ -477,11 +481,15 @@ export default function EnvironmentPath({
                     envKeys.publicKey
                   )
 
-                  decryptedEvent!.value = await decryptAsymmetric(
-                    event!.value,
-                    envKeys.privateKey,
-                    envKeys.publicKey
-                  )
+                  if (secret.type === ApiSecretTypeChoices.Sealed || !event!.value) {
+                    decryptedEvent!.value = ''
+                  } else {
+                    decryptedEvent!.value = await decryptAsymmetric(
+                      event!.value,
+                      envKeys.privateKey,
+                      envKeys.publicKey
+                    )
+                  }
 
                   if (decryptedEvent!.comment !== '') {
                     decryptedEvent!.comment = await decryptAsymmetric(
@@ -866,14 +874,6 @@ export default function EnvironmentPath({
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
-            <Button variant="secondary" onClick={() => handleAddSecret(true, '', ApiSecretTypeChoices.Config)}>
-              <FaCog /> Config Variable
-            </Button>
-
-            <Button variant="secondary" onClick={() => handleAddSecret(true, '', ApiSecretTypeChoices.Sealed)}>
-              <FaLock /> Sealed Secret
-            </Button>
-
             <Button
               variant="secondary"
               onClick={() =>

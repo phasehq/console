@@ -4,9 +4,9 @@ import { FaKey, FaLock, FaCog } from 'react-icons/fa'
 import { useRef, useEffect, useState } from 'react'
 
 const SECRET_TYPES = [
+  { value: ApiSecretTypeChoices.Config, label: 'Config', icon: FaCog },
   { value: ApiSecretTypeChoices.Secret, label: 'Secret', icon: FaKey },
   { value: ApiSecretTypeChoices.Sealed, label: 'Sealed', icon: FaLock },
-  { value: ApiSecretTypeChoices.Config, label: 'Config', icon: FaCog },
 ] as const
 
 export const TypeSelector = ({
@@ -75,7 +75,7 @@ export const TypeSelector = ({
             title={
               isLocked && value !== ApiSecretTypeChoices.Sealed
                 ? 'Sealed secrets cannot be unsealed'
-                : label
+                : `Change secret type to ${label}`
             }
             className={clsx(
               'relative z-[1] flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium transition-colors duration-200',

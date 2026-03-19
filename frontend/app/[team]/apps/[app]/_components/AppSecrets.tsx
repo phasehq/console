@@ -17,8 +17,6 @@ import {
   FaCheckCircle,
   FaCloudUploadAlt,
   FaFolder,
-  FaCog,
-  FaLock,
   FaPlus,
   FaRegEye,
   FaSearch,
@@ -29,7 +27,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
-import { SplitButton } from '@/components/common/SplitButton'
 import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -415,7 +412,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret) => {
+  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Config) => {
     const keyToUse = initialKey ?? ''
     const envs: EnvironmentType[] = appEnvironments
 
@@ -490,7 +487,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 tags: [],
                 comment: secret.comment,
                 path: '/',
-                type: ApiSecretTypeChoices.Secret,
+                type: ApiSecretTypeChoices.Config,
                 environment: env as EnvironmentType,
               }
             } else if (match && secret) {
@@ -517,7 +514,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       prevSecrets.map((appSecret) => {
         if (appSecret.id === appSecretId) {
           // Inherit type from existing env secrets for this key
-          const existingType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Secret
+          const existingType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Config
           const newSecret = {
             id: `new-${crypto.randomUUID()}`,
             updatedAt: null,
@@ -854,22 +851,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <TbDownload /> Import secrets
             </Button>
             {userCanCreateSecrets && (
-              <SplitButton
+              <Button
                 variant="primary"
                 onClick={() => handleAddNewClientSecret()}
-                menuContent={
-                  <div className="w-max flex flex-col items-start gap-1">
-                    <Button variant="secondary" onClick={() => handleAddNewClientSecret(undefined, ApiSecretTypeChoices.Config)}>
-                      <FaCog /> Config Variable
-                    </Button>
-                    <Button variant="secondary" onClick={() => handleAddNewClientSecret(undefined, ApiSecretTypeChoices.Sealed)}>
-                      <FaLock /> Sealed Secret
-                    </Button>
-                  </div>
-                }
               >
                 <FaPlus /> New Secret
-              </SplitButton>
+              </Button>
             )}
           </div>
         </div>
@@ -1041,22 +1028,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <Button variant="outline" onClick={() => importDialogRef.current?.openModal()}>
                 <TbDownload /> Import secrets
               </Button>
-              <SplitButton
+              <Button
                 variant="primary"
                 onClick={() => handleAddNewClientSecret()}
-                menuContent={
-                  <div className="w-max flex flex-col items-start gap-1">
-                    <Button variant="secondary" onClick={() => handleAddNewClientSecret(undefined, ApiSecretTypeChoices.Config)}>
-                      <FaCog /> Config Variable
-                    </Button>
-                    <Button variant="secondary" onClick={() => handleAddNewClientSecret(undefined, ApiSecretTypeChoices.Sealed)}>
-                      <FaLock /> Sealed Secret
-                    </Button>
-                  </div>
-                }
               >
                 <FaPlus /> New Secret
-              </SplitButton>
+              </Button>
             </div>
           </EmptyState>
         </div>

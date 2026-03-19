@@ -206,7 +206,7 @@ export const processEnvFile = (
       tags: [],
       comment: withComments ? lastComment || inlineComment || '' : '',
       path,
-      type: ApiSecretTypeChoices.Secret,
+      type: ApiSecretTypeChoices.Config,
       environment,
     })
 
