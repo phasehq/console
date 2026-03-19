@@ -477,11 +477,15 @@ export default function EnvironmentPath({
                     envKeys.publicKey
                   )
 
-                  decryptedEvent!.value = await decryptAsymmetric(
-                    event!.value,
-                    envKeys.privateKey,
-                    envKeys.publicKey
-                  )
+                  if (secret.type === ApiSecretTypeChoices.Sealed || !event!.value) {
+                    decryptedEvent!.value = ''
+                  } else {
+                    decryptedEvent!.value = await decryptAsymmetric(
+                      event!.value,
+                      envKeys.privateKey,
+                      envKeys.publicKey
+                    )
+                  }
 
                   if (decryptedEvent!.comment !== '') {
                     decryptedEvent!.comment = await decryptAsymmetric(

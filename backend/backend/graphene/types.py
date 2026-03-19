@@ -427,7 +427,7 @@ class SecretEventType(DjangoObjectType):
         )
 
     def resolve_value(self, info):
-        if self.type == "sealed":
+        if self.secret.type == "sealed":
             return ""
         return self.value
 
