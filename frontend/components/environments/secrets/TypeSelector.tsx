@@ -75,7 +75,7 @@ export const TypeSelector = ({
             title={
               isLocked && value !== ApiSecretTypeChoices.Sealed
                 ? 'Sealed secrets cannot be unsealed'
-                : label
+                : `Change secret type to ${label}`
             }
             className={clsx(
               'relative z-[1] flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium transition-colors duration-200',
