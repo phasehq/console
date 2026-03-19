@@ -188,7 +188,7 @@ function SecretRow(props: {
         className={clsx(
           'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
           'bg-zinc-200 dark:bg-zinc-700',
-          'z-10 group-hover:z-10 absolute -right-px -top-9 translate-y-9 group-hover:translate-y-0 opacity-0 group-hover:opacity-100',
+          'z-10 group-hover:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 opacity-0 group-hover:opacity-100',
           'transition ease'
         )}
       >
@@ -265,7 +265,10 @@ function SecretRow(props: {
           </Button>
         )}
         {isSealedAndSaved && (
-          <span className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1" title="This secret is sealed and cannot be revealed">
+          <span
+            className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1"
+            title="This secret is sealed and cannot be revealed"
+          >
             <FaLock /> Sealed
           </span>
         )}
@@ -327,7 +330,11 @@ function SecretRow(props: {
           onKeyDown={(e) => {
             if (e.key === 'Tab' && !e.shiftKey) {
               e.preventDefault()
-              ;(e.currentTarget.parentElement?.nextElementSibling?.querySelector('textarea') as HTMLElement)?.focus()
+              ;(
+                e.currentTarget.parentElement?.nextElementSibling?.querySelector(
+                  'textarea'
+                ) as HTMLElement
+              )?.focus()
             }
           }}
           onChange={(e) => {
@@ -368,11 +375,7 @@ function SecretRow(props: {
         )}
 
         <MaskedTextarea
-          className={clsx(
-            INPUT_BASE_STYLE,
-            inputTextColor(),
-            'w-full group-hover:rounded-tr-none'
-          )}
+          className={clsx(INPUT_BASE_STYLE, inputTextColor(), 'w-full group-hover:rounded-tr-none')}
           value={isSealedAndSaved ? '' : secret.value}
           onChange={(v) => handleValueChange(v)}
           isRevealed={isRevealed}
