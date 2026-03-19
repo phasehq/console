@@ -122,7 +122,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                         <Avatar serviceAccount={account} />
                         <div>
                           <div className="font-medium">{account.name}</div>
-                          <div className="text-sm text-neutral-500">{account.id}</div>
+                          <div className="text-sm text-neutral-500 font-mono">{account.id}</div>
                         </div>
                       </td>
 
