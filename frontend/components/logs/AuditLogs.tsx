@@ -4,7 +4,13 @@ import { GetAuditLogs } from '@/graphql/queries/organisation/getAuditLogs.gql'
 import { GetOrganisationMembers } from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { NetworkStatus, useQuery } from '@apollo/client'
-import { ApiAuditEventActorTypeChoices, ApiAuditEventResourceTypeChoices, AuditEventType, OrganisationMemberType, ServiceAccountType } from '@/apollo/graphql'
+import {
+  ApiAuditEventActorTypeChoices,
+  ApiAuditEventResourceTypeChoices,
+  AuditEventType,
+  OrganisationMemberType,
+  ServiceAccountType,
+} from '@/apollo/graphql'
 import { Disclosure, Menu, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
@@ -76,16 +82,16 @@ const getEventTypeText = (eventType: string) => {
 
 const getResourceTypeLabel = (resourceType: string) => {
   const labels: Record<string, string> = {
-    app: 'App',
-    env: 'Environment',
-    role: 'Role',
-    sa: 'Service Account',
-    member: 'Member',
-    policy: 'Network Policy',
-    pat: 'Personal Access Token',
-    sa_token: 'SA Token',
-    svc_token: 'Service Token',
-    invite: 'Invite',
+    [ApiAuditEventResourceTypeChoices.App]: 'App',
+    [ApiAuditEventResourceTypeChoices.Env]: 'Environment',
+    [ApiAuditEventResourceTypeChoices.Role]: 'Role',
+    [ApiAuditEventResourceTypeChoices.Sa]: 'Service Account',
+    [ApiAuditEventResourceTypeChoices.Member]: 'Member',
+    [ApiAuditEventResourceTypeChoices.Policy]: 'Network Policy',
+    [ApiAuditEventResourceTypeChoices.Pat]: 'Personal Access Token',
+    [ApiAuditEventResourceTypeChoices.SaToken]: 'Service Account Token',
+    [ApiAuditEventResourceTypeChoices.SvcToken]: 'Service Token',
+    [ApiAuditEventResourceTypeChoices.Invite]: 'Invite',
   }
   return labels[resourceType] || resourceType
 }
@@ -113,19 +119,20 @@ const getResourceLink = (
   const id = log.resourceId
 
   if (rt === ApiAuditEventResourceTypeChoices.App) return `/${team}/apps/${id}`
-  if (rt === ApiAuditEventResourceTypeChoices.Env && resourceMeta?.app_id) return `/${team}/apps/${resourceMeta.app_id}/environments/${id}`
+  if (rt === ApiAuditEventResourceTypeChoices.Env && resourceMeta?.app_id)
+    return `/${team}/apps/${resourceMeta.app_id}/environments/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Role) return `/${team}/access/roles`
   if (rt === ApiAuditEventResourceTypeChoices.Sa) return `/${team}/access/service-accounts/${id}`
-  if (rt === ApiAuditEventResourceTypeChoices.Member) return `/${team}/access/members`
+  if (rt === ApiAuditEventResourceTypeChoices.Member) return `/${team}/access/members/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Policy) return `/${team}/access/network`
   if (rt === ApiAuditEventResourceTypeChoices.Pat) return `/${team}/access/authentication`
   if (rt === ApiAuditEventResourceTypeChoices.SaToken && resourceMeta?.service_account_id)
     return `/${team}/access/service-accounts/${resourceMeta.service_account_id}`
-  if (rt === ApiAuditEventResourceTypeChoices.SvcToken && resourceMeta?.app_id) return `/${team}/apps/${resourceMeta.app_id}`
+  if (rt === ApiAuditEventResourceTypeChoices.SvcToken && resourceMeta?.app_id)
+    return `/${team}/apps/${resourceMeta.app_id}`
 
   return null
 }
-
 
 const LogRow = ({
   log,
@@ -151,9 +158,7 @@ const LogRow = ({
       (actorMeta?.username && m.fullName === actorMeta?.username)
   )
   const isSaActor = log.actorType === ApiAuditEventActorTypeChoices.Sa
-  const sa = isSaActor
-    ? serviceAccounts.find((s) => s.id === log.actorId)
-    : null
+  const sa = isSaActor ? serviceAccounts.find((s) => s.id === log.actorId) : null
 
   const actorDisplayName = member
     ? member.fullName || member.email || 'User'
@@ -178,6 +183,22 @@ const LogRow = ({
   const verboseTimeStamp = new Date(log.timestamp).toISOString()
 
   const resourceLink = getResourceLink(log, resourceMeta, team)
+
+  // Resolve resource to a member or SA entity when applicable
+  const resourceMember =
+    log.resourceType === ApiAuditEventResourceTypeChoices.Member
+      ? members.find((m) => m.id === log.resourceId)
+      : null
+  const resourceSa =
+    log.resourceType === ApiAuditEventResourceTypeChoices.Sa
+      ? serviceAccounts.find((s) => s.id === log.resourceId)
+      : null
+
+  const resourceDisplayLabel = resourceMember
+    ? resourceMember.fullName || resourceMember.email || 'Member'
+    : resourceSa
+      ? resourceSa.name || 'Service Account'
+      : getResourceTypeLabel(log.resourceType)
 
   const LogField = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div className="flex items-center gap-2 text-xs">
@@ -212,7 +233,7 @@ const LogRow = ({
     if (!Array.isArray(val) || val.length === 0) return false
     // Must be an array of strings (not objects)
     if (!val.every((v: any) => typeof v === 'string')) return false
-    const accountKeys = ['members_added', 'members_removed', 'apps_granted', 'apps_revoked']
+    const accountKeys = ['members_added', 'members_removed']
     if (accountKeys.includes(key)) return true
     // Heuristic: array of UUID-like strings
     return val.every((v: any) => v.length >= 32 && v.includes('-'))
@@ -224,13 +245,7 @@ const LogRow = ({
     return val.every((v: any) => typeof v === 'object' && v !== null && 'id' in v && 'name' in v)
   }
 
-  const AccountList = ({
-    ids,
-    variant,
-  }: {
-    ids: string[]
-    variant: 'added' | 'removed'
-  }) => (
+  const AccountList = ({ ids, variant }: { ids: string[]; variant: 'added' | 'removed' }) => (
     <div
       className={clsx(
         'flex flex-wrap gap-1.5 rounded px-2 py-1 mt-0.5',
@@ -242,9 +257,7 @@ const LogRow = ({
           key={id}
           className={clsx(
             'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs',
-            variant === 'removed'
-              ? 'text-red-400 line-through'
-              : 'text-emerald-400'
+            variant === 'removed' ? 'text-red-400 line-through' : 'text-emerald-400'
           )}
         >
           {variant === 'removed' ? '- ' : '+ '}
@@ -254,12 +267,39 @@ const LogRow = ({
     </div>
   )
 
-  /** Render member detail objects (from bulk add with env scope) */
+  /** Resolve an item to a display chip — tries member/SA lookup, falls back to item.name */
+  const resolveItemDisplay = (item: { id: string; name: string }) => {
+    const m = members.find((m) => m.id === item.id)
+    if (m)
+      return (
+        <span className="inline-flex items-center gap-1">
+          <Avatar member={m} size="sm" />
+          <span>{m.fullName || m.email}</span>
+        </span>
+      )
+    const s = serviceAccounts.find((s) => s.id === item.id)
+    if (s)
+      return (
+        <span className="inline-flex items-center gap-1">
+          <Avatar serviceAccount={s} size="sm" />
+          <span>{s.name}</span>
+        </span>
+      )
+    return <span>{item.name}</span>
+  }
+
+  /** Render detail objects with optional env scope (members, SAs, or apps) */
   const MemberDetailList = ({
     items,
     variant,
   }: {
-    items: Array<{ id: string; name: string; type?: string; env_scope?: string[] }>
+    items: Array<{
+      id: string
+      name: string
+      type?: string
+      env_scope?: string[]
+      environments?: string[]
+    }>
     variant: 'added' | 'removed'
   }) => (
     <div className="space-y-1 mt-0.5">
@@ -268,18 +308,26 @@ const LogRow = ({
           key={item.id}
           className={clsx(
             'flex items-center gap-2 rounded px-2 py-1 text-xs',
-            variant === 'removed' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
+            variant === 'removed'
+              ? 'bg-red-500/10 text-red-400'
+              : 'bg-emerald-500/10 text-emerald-400'
           )}
         >
-          <span className={clsx('inline-flex items-center gap-1', variant === 'removed' && 'line-through')}>
+          <span
+            className={clsx(
+              'inline-flex items-center gap-1',
+              variant === 'removed' && 'line-through'
+            )}
+          >
             {variant === 'removed' ? '- ' : '+ '}
-            {resolveAccountId(item.id)}
+            {resolveItemDisplay(item)}
           </span>
-          {item.env_scope && item.env_scope.length > 0 && (
-            <span className="text-neutral-500 font-normal">
-              ({item.env_scope.join(', ')})
-            </span>
-          )}
+          {(item.env_scope || item.environments) &&
+            (item.env_scope || item.environments)!.length > 0 && (
+              <span className="text-neutral-500 font-normal">
+                ({(item.env_scope || item.environments)!.join(', ')})
+              </span>
+            )}
         </div>
       ))}
     </div>
@@ -293,10 +341,21 @@ const LogRow = ({
     newVals: Record<string, any> | null
   }) => {
     // Collect only keys where values actually differ
-    const allKeys = new Set([
-      ...Object.keys(oldVals || {}),
-      ...Object.keys(newVals || {}),
-    ])
+    const allKeys = new Set([...Object.keys(oldVals || {}), ...Object.keys(newVals || {})])
+
+    const humanizeKey = (key: string): string => {
+      const labels: Record<string, string> = {
+        apps_granted: 'Apps Granted',
+        apps_revoked: 'Apps Revoked',
+        members_added: 'Members Added',
+        members_removed: 'Members Removed',
+        envs_added: 'Environments Added',
+        envs_removed: 'Environments Removed',
+        env_scope: 'Environment Scope',
+        access_updated: 'Access Updated',
+      }
+      return labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    }
 
     const changedKeys = Array.from(allKeys).filter((key) => {
       const oldVal = oldVals?.[key]
@@ -316,7 +375,7 @@ const LogRow = ({
           if (isMemberDetailList(oldVal) || isMemberDetailList(newVal)) {
             return (
               <div key={key} className="text-xs">
-                <span className="text-neutral-500 font-medium">{key}</span>
+                <span className="text-neutral-500 font-medium">{humanizeKey(key)}</span>
                 {oldVal !== undefined && Array.isArray(oldVal) && (
                   <MemberDetailList items={oldVal} variant="removed" />
                 )}
@@ -327,11 +386,54 @@ const LogRow = ({
             )
           }
 
+          // Render env scope change objects ({app, environments})
+          const isEnvScopeList = (v: any) =>
+            Array.isArray(v) &&
+            v.length > 0 &&
+            v.every((x: any) => typeof x === 'object' && 'app' in x && 'environments' in x)
+          if (isEnvScopeList(oldVal) || isEnvScopeList(newVal)) {
+            const renderEnvScopes = (
+              items: Array<{ app: string; environments: string[] }>,
+              variant: 'added' | 'removed'
+            ) => (
+              <div className="space-y-1 mt-0.5">
+                {items.map((item) => (
+                  <div
+                    key={item.app}
+                    className={clsx(
+                      'flex items-center gap-2 rounded px-2 py-1 text-xs',
+                      variant === 'removed'
+                        ? 'bg-red-500/10 text-red-400'
+                        : 'bg-emerald-500/10 text-emerald-400'
+                    )}
+                  >
+                    <span className={clsx(variant === 'removed' && 'line-through')}>
+                      {variant === 'removed' ? '- ' : '+ '}
+                      {item.app}
+                    </span>
+                    <span className="text-neutral-500 font-normal">
+                      ({item.environments.join(', ')})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
+            return (
+              <div key={key} className="text-xs">
+                <span className="text-neutral-500 font-medium">{humanizeKey(key)}</span>
+                {oldVal !== undefined &&
+                  Array.isArray(oldVal) &&
+                  renderEnvScopes(oldVal, 'removed')}
+                {newVal !== undefined && Array.isArray(newVal) && renderEnvScopes(newVal, 'added')}
+              </div>
+            )
+          }
+
           // Render account ID lists with avatars
           if (isAccountIdList(key, oldVal) || isAccountIdList(key, newVal)) {
             return (
               <div key={key} className="text-xs">
-                <span className="text-neutral-500 font-medium">{key}</span>
+                <span className="text-neutral-500 font-medium">{humanizeKey(key)}</span>
                 {oldVal !== undefined && Array.isArray(oldVal) && (
                   <AccountList ids={oldVal} variant="removed" />
                 )}
@@ -347,7 +449,7 @@ const LogRow = ({
           if (isObj) {
             return (
               <div key={key} className="text-xs">
-                <span className="text-neutral-500 font-medium">{key}</span>
+                <span className="text-neutral-500 font-medium">{humanizeKey(key)}</span>
                 {oldVal !== undefined && (
                   <pre className="text-red-400 bg-red-500/10 rounded px-2 py-1 mt-0.5 text-xs overflow-auto max-h-32">
                     - {JSON.stringify(oldVal, null, 2)}
@@ -364,7 +466,7 @@ const LogRow = ({
 
           return (
             <div key={key} className="text-xs flex items-center gap-2 flex-wrap">
-              <span className="text-neutral-500 font-medium">{key}:</span>
+              <span className="text-neutral-500 font-medium">{humanizeKey(key)}:</span>
               {oldVal !== undefined && (
                 <span className="text-red-400 bg-red-500/10 rounded px-1.5 py-0.5 line-through">
                   {String(oldVal)}
@@ -387,9 +489,9 @@ const LogRow = ({
 
   const hasChanges =
     (oldValues || newValues) &&
-    Array.from(
-      new Set([...Object.keys(oldValues || {}), ...Object.keys(newValues || {})])
-    ).some((key) => JSON.stringify(oldValues?.[key]) !== JSON.stringify(newValues?.[key]))
+    Array.from(new Set([...Object.keys(oldValues || {}), ...Object.keys(newValues || {})])).some(
+      (key) => JSON.stringify(oldValues?.[key]) !== JSON.stringify(newValues?.[key])
+    )
 
   return (
     <Disclosure>
@@ -434,14 +536,10 @@ const LogRow = ({
               </div>
             </td>
             <td className="whitespace-nowrap px-6 py-2">
-              <span className="text-2xs font-medium bg-neutral-200 dark:bg-neutral-700 rounded px-2 py-0.5">
-                {getResourceTypeLabel(log.resourceType)}
-              </span>
+              <span className="text-2xs font-medium">{getResourceTypeLabel(log.resourceType)}</span>
             </td>
             <td className="px-6 py-2 max-w-md truncate text-xs">{log.description}</td>
-            <td className="whitespace-nowrap px-6 py-2 text-xs font-medium capitalize">
-              {relativeTimeStamp}
-            </td>
+            <td className="whitespace-nowrap px-6 py-2 text-xs capitalize">{relativeTimeStamp}</td>
           </Disclosure.Button>
           <Transition
             as="tr"
@@ -456,26 +554,53 @@ const LogRow = ({
               <Disclosure.Panel
                 className={clsx(
                   'p-4 w-full space-y-4 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
-                  open
-                    ? 'border-b border-l-emerald-500 border-r shadow-xl'
-                    : 'border-l-transparent'
+                  open ? 'border-b border-l-emerald-500 border-r shadow-xl' : 'border-l-transparent'
                 )}
               >
                 <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                      <LogField label="Actor">
-                        <div className="flex items-center gap-1">
-                          <ActorAvatar />
-                          {actorDisplayName}
-                        </div>
-                      </LogField>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <LogField label="Actor">
+                      <div className="flex items-center gap-1">
+                        <ActorAvatar />
+                        {actorDisplayName}
+                      </div>
+                    </LogField>
 
-                      <LogField label="Resource">
+                    <LogField label="Resource">
+                      <div className="flex items-center gap-1">
+                        {resourceMember ? (
+                          <Avatar member={resourceMember} size="sm" />
+                        ) : resourceSa ? (
+                          <FaRobot className="text-neutral-500 text-xs" />
+                        ) : null}
+                        {resourceDisplayLabel}
+                        {!resourceMember &&
+                          !resourceSa &&
+                          resourceMeta?.name &&
+                          ` (${resourceMeta.name})`}
+                        {resourceLink && (
+                          <Link href={resourceLink} onClick={(e) => e.stopPropagation()}>
+                            <Button variant="outline" classString="text-2xs px-1.5 py-0.5 ml-1">
+                              <FaArrowRight />
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    </LogField>
+
+                    <LogField label="Resource ID">
+                      <span className="text-xs">{log.resourceId}</span>
+                    </LogField>
+
+                    {resourceMeta?.app_name && (
+                      <LogField label="App">
                         <div className="flex items-center gap-1">
-                          {getResourceTypeLabel(log.resourceType)}
-                          {resourceMeta?.name && ` (${resourceMeta.name})`}
-                          {resourceLink && (
-                            <Link href={resourceLink} onClick={(e) => e.stopPropagation()}>
+                          {resourceMeta.app_name}
+                          {resourceMeta?.app_id && (
+                            <Link
+                              href={`/${team}/apps/${resourceMeta.app_id}`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Button variant="outline" classString="text-2xs px-1.5 py-0.5 ml-1">
                                 <FaArrowRight />
                               </Button>
@@ -483,55 +608,34 @@ const LogRow = ({
                           )}
                         </div>
                       </LogField>
-
-                      <LogField label="Resource ID">
-                        <span className="text-xs">{log.resourceId}</span>
-                      </LogField>
-
-                      {resourceMeta?.app_name && (
-                        <LogField label="App">
-                          <div className="flex items-center gap-1">
-                            {resourceMeta.app_name}
-                            {resourceMeta?.app_id && (
-                              <Link
-                                href={`/${team}/apps/${resourceMeta.app_id}`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Button variant="outline" classString="text-2xs px-1.5 py-0.5 ml-1">
-                                  <FaArrowRight />
-                                </Button>
-                              </Link>
-                            )}
-                          </div>
-                        </LogField>
-                      )}
-
-                      <LogField label="IP Address">{log.ipAddress || 'N/A'}</LogField>
-
-                      <LogField label="User Agent">
-                        <span
-                          className="text-xs truncate max-w-xs inline-block align-bottom"
-                          title={log.userAgent}
-                        >
-                          {log.userAgent || 'N/A'}
-                        </span>
-                      </LogField>
-
-                      <LogField label="Event ID">
-                        <span className="text-xs">{log.id}</span>
-                      </LogField>
-
-                      <LogField label="Timestamp">{verboseTimeStamp}</LogField>
-                    </div>
-
-                    {hasChanges && (
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                          Changes
-                        </h4>
-                        <ChangeDiff oldVals={oldValues} newVals={newValues} />
-                      </div>
                     )}
+
+                    <LogField label="IP Address">{log.ipAddress || 'N/A'}</LogField>
+
+                    <LogField label="User Agent">
+                      <span
+                        className="text-xs truncate max-w-xs inline-block align-bottom"
+                        title={log.userAgent}
+                      >
+                        {log.userAgent || 'N/A'}
+                      </span>
+                    </LogField>
+
+                    <LogField label="Event ID">
+                      <span className="text-xs">{log.id}</span>
+                    </LogField>
+
+                    <LogField label="Timestamp">{verboseTimeStamp}</LogField>
+                  </div>
+
+                  {hasChanges && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                        Changes
+                      </h4>
+                      <ChangeDiff oldVals={oldValues} newVals={newValues} />
+                    </div>
+                  )}
                 </div>
               </Disclosure.Panel>
             </td>
@@ -707,8 +811,7 @@ export default function AuditLogs() {
     setQueryEnd(getCurrentTimeStamp())
   }
 
-  const hasActiveFilters =
-    eventTypes.length > 0 || selectedMember !== null || dateRange !== null
+  const hasActiveFilters = eventTypes.length > 0 || selectedMember !== null || dateRange !== null
 
   const filterCategoryTitleStyle =
     'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
@@ -816,11 +919,7 @@ export default function AuditLogs() {
                                     }[ev.color]
                                   )}
                                 >
-                                  {eventTypes.includes(ev.code) ? (
-                                    <FaCheckCircle />
-                                  ) : (
-                                    <FaCircle />
-                                  )}
+                                  {eventTypes.includes(ev.code) ? <FaCheckCircle /> : <FaCircle />}
                                 </span>{' '}
                                 <span className="text-xs">{ev.label}</span>
                               </Button>
@@ -942,9 +1041,7 @@ export default function AuditLogs() {
                                   type="datetime-local"
                                   className="flex-1 p-1 rounded-md bg-neutral-200 dark:bg-neutral-800 text-xs"
                                   value={formatTimestampForInput(queryEnd)}
-                                  onChange={(e) =>
-                                    setQueryEnd(new Date(e.target.value).getTime())
-                                  }
+                                  onChange={(e) => setQueryEnd(new Date(e.target.value).getTime())}
                                 />
                               </div>
                             </div>
@@ -982,11 +1079,11 @@ export default function AuditLogs() {
             <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
                 <th className="w-10"></th>
-                <th className="px-6 py-4">Actor</th>
-                <th className="px-6 py-4">Event</th>
-                <th className="px-6 py-4">Resource</th>
+                <th className="px-6 py-4 w-48">Actor</th>
+                <th className="px-6 py-4 w-28">Event</th>
+                <th className="px-6 py-4 w-44">Resource</th>
                 <th className="px-6 py-4">Description</th>
-                <th className="px-6 py-4">Time</th>
+                <th className="px-6 py-4 w-32">Time</th>
               </tr>
             </thead>
             <tbody className="h-full">
