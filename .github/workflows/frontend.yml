@@ -13,6 +13,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,6 +37,9 @@ jobs:
   build:
     if: inputs.is_pr == 'true'
     needs: test
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +99,8 @@ jobs:
     if: inputs.is_pr == 'true'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -136,6 +143,9 @@ jobs:
     if: inputs.is_pr != 'true'
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
