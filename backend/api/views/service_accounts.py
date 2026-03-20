@@ -700,13 +700,71 @@ class PublicServiceAccountAccessView(APIView):
                     if new_env_keys:
                         EnvironmentKey.objects.bulk_create(new_env_keys)
 
-        # Audit log — access change
-        access_changes = {}
-        if apps_to_add:
-            access_changes["apps_granted"] = list(apps_to_add)
-        if apps_to_remove:
-            access_changes["apps_revoked"] = list(apps_to_remove)
-        if access_changes or desired_env_map:
+        # Audit log — build detailed access change data
+        app_name_map = {
+            str(a.id): a.name
+            for a in App.objects.filter(
+                id__in=desired_app_ids | apps_to_remove
+            )
+        }
+        env_name_map = {
+            str(e.id): e.name
+            for e in Environment.objects.filter(
+                app_id__in=desired_app_ids | apps_to_remove
+            )
+        }
+
+        access_detail = []
+        for app_id_str in apps_to_add:
+            env_ids = desired_env_map.get(app_id_str, [])
+            access_detail.append({
+                "id": app_id_str,
+                "name": app_name_map.get(app_id_str, app_id_str),
+                "env_scope": sorted(env_name_map.get(str(e), str(e)) for e in env_ids),
+            })
+
+        revoked_detail = []
+        for app_id_str in apps_to_remove:
+            revoked_detail.append({
+                "id": app_id_str,
+                "name": app_name_map.get(app_id_str, app_id_str),
+            })
+
+        new_values = {}
+        old_values = {}
+        if access_detail:
+            new_values["apps_granted"] = access_detail
+        if revoked_detail:
+            old_values["apps_revoked"] = revoked_detail
+
+        # Include env scope changes for apps that weren't added/removed
+        existing_apps = desired_app_ids - apps_to_add
+        for app_id_str in existing_apps:
+            desired_envs = set(str(e) for e in desired_env_map.get(app_id_str, []))
+            current_envs = set(
+                str(ek.environment_id)
+                for ek in EnvironmentKey.objects.filter(
+                    service_account=sa,
+                    environment__app_id=app_id_str,
+                    deleted_at=None,
+                )
+            )
+            added_envs = desired_envs - current_envs  # already applied above in atomic block
+            removed_envs = current_envs - desired_envs
+            if added_envs or removed_envs:
+                app_name = app_name_map.get(app_id_str, app_id_str)
+                if added_envs:
+                    new_values.setdefault("envs_added", []).append({
+                        "app": app_name,
+                        "environments": sorted(env_name_map.get(e, e) for e in added_envs),
+                    })
+                if removed_envs:
+                    old_values.setdefault("envs_removed", []).append({
+                        "app": app_name,
+                        "environments": sorted(env_name_map.get(e, e) for e in removed_envs),
+                    })
+
+        if new_values or old_values:
             actor_type, actor_id, actor_meta = get_actor_info(request)
             ip_address, user_agent = get_resolver_request_meta(request)
             log_audit_event(
@@ -718,7 +776,8 @@ class PublicServiceAccountAccessView(APIView):
                 actor_id=actor_id,
                 actor_metadata=actor_meta,
                 resource_metadata={"name": sa.name},
-                new_values=access_changes or {"access_updated": True},
+                old_values=old_values or None,
+                new_values=new_values or None,
                 description=f"Updated access for service account '{sa.name}'",
                 ip_address=ip_address,
                 user_agent=user_agent,

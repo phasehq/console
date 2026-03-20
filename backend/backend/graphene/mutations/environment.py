@@ -10,7 +10,7 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
-from api.utils.audit_logging import log_secret_event, log_audit_event, get_actor_info_from_graphql
+from api.utils.audit_logging import log_secret_event, log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.secrets import create_environment_folder_structure, normalize_path_string
 from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
@@ -500,7 +500,7 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
             removed_env_names = sorted(env_name_map.get(eid, str(eid)) for eid in removed_env_ids)
 
             if member_type == MemberType.USER:
-                member_name = app_member.user.username or app_member.user.email or str(member_id)
+                member_name = get_member_display_name(app_member)
                 resource_type = "member"
             else:
                 member_name = app_member.name

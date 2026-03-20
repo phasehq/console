@@ -17,7 +17,7 @@ from api.models import (
     ServiceAccount,
 )
 from backend.graphene.types import AppType, MemberType
-from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.rest import get_resolver_request_meta
 from django.conf import settings
 from django.db.models import Q
@@ -349,7 +349,7 @@ class BulkAddAppMembersMutation(graphene.Mutation):
             )
             if mtype == MemberType.USER:
                 m = OrganisationMember.objects.filter(id=mid, deleted_at=None).first()
-                mname = (m.user.username or m.user.email or str(mid)) if m else str(mid)
+                mname = get_member_display_name(m) if m else str(mid)
             else:
                 m = ServiceAccount.objects.filter(id=mid, deleted_at=None).first()
                 mname = m.name if m else str(mid)
@@ -370,7 +370,11 @@ class BulkAddAppMembersMutation(graphene.Mutation):
             actor_metadata=actor_metadata,
             resource_metadata={"name": app.name},
             new_values={"members_added": members_detail},
-            description=f"Added {len(members)} member(s) to app '{app.name}'",
+            description=(
+                f"Added {members_detail[0]['name']} to app '{app.name}'"
+                if len(members_detail) == 1
+                else f"Added {len(members_detail)} members to app '{app.name}'"
+            ),
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -434,7 +438,7 @@ class AddAppMemberMutation(graphene.Mutation):
 
         # Resolve member name and initial env scope for audit log
         if member_type == MemberType.USER:
-            member_name = member.user.username or member.user.email or str(member_id)
+            member_name = get_member_display_name(member)
         else:
             member_name = member.name
 
@@ -455,10 +459,12 @@ class AddAppMemberMutation(graphene.Mutation):
             actor_metadata=actor_metadata,
             resource_metadata={"name": app.name},
             new_values={
-                "member_id": str(member_id),
-                "member_name": member_name,
-                "member_type": member_type.value if hasattr(member_type, 'value') else str(member_type),
-                "env_scope": env_names,
+                "members_added": [{
+                    "id": str(member_id),
+                    "name": member_name,
+                    "type": member_type.value if hasattr(member_type, 'value') else str(member_type),
+                    "env_scope": env_names,
+                }],
             },
             description=f"Added {member_name} to app '{app.name}'",
             ip_address=ip_address,
@@ -507,7 +513,7 @@ class RemoveAppMemberMutation(graphene.Mutation):
 
         # Capture member name and env scope before removal
         if member_type == MemberType.USER:
-            member_name = member.user.username or member.user.email or str(member_id)
+            member_name = get_member_display_name(member)
             env_scope_qs = EnvironmentKey.objects.filter(environment__app=app, user_id=member_id)
         else:
             member_name = member.name

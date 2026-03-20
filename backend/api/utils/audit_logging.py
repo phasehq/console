@@ -7,6 +7,22 @@ from api.models import AuditEvent, SecretEvent
 logger = logging.getLogger(__name__)
 
 
+def get_member_display_name(org_member):
+    """
+    Return the best human-readable display name for an OrganisationMember.
+    Prefers the social account full name, falls back to email.
+    """
+    try:
+        social_acc = org_member.user.socialaccount_set.first()
+        if social_acc:
+            name = social_acc.extra_data.get("name")
+            if name:
+                return name
+    except Exception:
+        pass
+    return getattr(org_member.user, "email", str(org_member.id))
+
+
 def log_secret_event(
     secret,
     event_type,

@@ -29,7 +29,7 @@ from api.utils.access.permissions import (
     role_has_permission,
     user_has_permission,
 )
-from api.utils.audit_logging import log_audit_event, get_actor_info
+from api.utils.audit_logging import log_audit_event, get_actor_info, get_member_display_name
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
 from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
@@ -326,7 +326,7 @@ class PublicMemberDetailView(APIView):
             resource_metadata={"email": member.user.email},
             old_values={"role": old_role_name},
             new_values={"role": new_role.name},
-            description=f"Updated member '{member.user.email}' role from '{old_role_name}' to '{new_role.name}'",
+            description=f"Updated member '{get_member_display_name(member)}' role from '{old_role_name}' to '{new_role.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -347,6 +347,7 @@ class PublicMemberDetailView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+        member_display_name = get_member_display_name(member)
         member_email = member.user.email
         member_role = member.role.name
 
@@ -370,7 +371,7 @@ class PublicMemberDetailView(APIView):
             actor_metadata=actor_meta,
             resource_metadata={"email": member_email},
             old_values={"email": member_email, "role": member_role},
-            description=f"Removed member '{member_email}' from the organisation",
+            description=f"Removed member '{member_display_name}' from the organisation",
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -604,12 +605,67 @@ class PublicMemberAccessView(APIView):
                     if new_env_keys:
                         EnvironmentKey.objects.bulk_create(new_env_keys)
 
-        access_changes = {}
-        if apps_to_add:
-            access_changes["apps_granted"] = list(apps_to_add)
-        if apps_to_remove:
-            access_changes["apps_revoked"] = list(apps_to_remove)
+        # Build detailed access change data for audit log
+        app_name_map = {
+            str(a.id): a.name
+            for a in App.objects.filter(id__in=desired_app_ids | apps_to_remove)
+        }
+        env_name_map = {
+            str(e.id): e.name
+            for e in Environment.objects.filter(app_id__in=desired_app_ids | apps_to_remove)
+        }
 
+        access_detail = []
+        for app_id_str in apps_to_add:
+            env_ids = desired_env_map.get(app_id_str, [])
+            access_detail.append({
+                "id": app_id_str,
+                "name": app_name_map.get(app_id_str, app_id_str),
+                "env_scope": sorted(env_name_map.get(str(e), str(e)) for e in env_ids),
+            })
+
+        revoked_detail = []
+        for app_id_str in apps_to_remove:
+            revoked_detail.append({
+                "id": app_id_str,
+                "name": app_name_map.get(app_id_str, app_id_str),
+            })
+
+        new_values = {}
+        old_values = {}
+        if access_detail:
+            new_values["apps_granted"] = access_detail
+        if revoked_detail:
+            old_values["apps_revoked"] = revoked_detail
+
+        # Include env scope changes for apps that weren't added/removed
+        existing_apps = desired_app_ids - apps_to_add
+        for app_id_str in existing_apps:
+            desired_envs = set(str(e) for e in desired_env_map.get(app_id_str, []))
+            current_envs = set(
+                str(ek.environment_id)
+                for ek in EnvironmentKey.objects.filter(
+                    user=member,
+                    environment__app_id=app_id_str,
+                    deleted_at=None,
+                )
+            )
+            added_envs = desired_envs - current_envs
+            removed_envs = current_envs - desired_envs
+            if added_envs or removed_envs:
+                app_name = app_name_map.get(app_id_str, app_id_str)
+                if added_envs:
+                    new_values.setdefault("envs_added", []).append({
+                        "app": app_name,
+                        "environments": sorted(env_name_map.get(e, e) for e in added_envs),
+                    })
+                if removed_envs:
+                    old_values.setdefault("envs_removed", []).append({
+                        "app": app_name,
+                        "environments": sorted(env_name_map.get(e, e) for e in removed_envs),
+                    })
+
+        member_display = get_member_display_name(member)
         actor_type, actor_id, actor_meta = get_actor_info(request)
         ip_address, user_agent = get_resolver_request_meta(request)
         log_audit_event(
@@ -621,8 +677,9 @@ class PublicMemberAccessView(APIView):
             actor_id=actor_id,
             actor_metadata=actor_meta,
             resource_metadata={"email": member.user.email},
-            new_values=access_changes or {"access_updated": True},
-            description=f"Updated access for member '{member.user.email}'",
+            old_values=old_values or None,
+            new_values=new_values or None,
+            description=f"Updated access for member '{member_display}'",
             ip_address=ip_address,
             user_agent=user_agent,
         )

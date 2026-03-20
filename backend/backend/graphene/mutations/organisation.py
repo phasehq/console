@@ -6,7 +6,7 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
-from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
 from backend.quotas import can_add_account
@@ -26,7 +26,7 @@ from backend.graphene.types import (
     OrganisationMemberType,
     OrganisationType,
 )
-from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.rest import get_resolver_request_meta
 from datetime import timedelta
 from django.utils import timezone
@@ -355,6 +355,7 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         member_id_val = org_member.id
         member_org = org_member.organisation
         member_email = getattr(org_member.user, "email", "")
+        member_display_name = get_member_display_name(org_member)
 
         org_member.delete()
 
@@ -374,7 +375,7 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"email": member_email},
-            description=f"Deleted organisation member '{member_email}'",
+            description=f"Deleted organisation member '{member_display_name}'",
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -438,7 +439,7 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
             resource_metadata={"email": getattr(org_member.user, "email", "")},
             old_values={"role": old_role_name},
             new_values={"role": new_role.name},
-            description=f"Updated member role from '{old_role_name}' to '{new_role.name}'",
+            description=f"Updated member '{get_member_display_name(org_member)}' role from '{old_role_name}' to '{new_role.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
         )
