@@ -162,6 +162,7 @@ from .graphene.mutations.syncing import (
     UpdateSyncAuthentication,
 )
 from api.utils.access.permissions import (
+    role_has_global_access,
     user_can_access_app,
     user_can_access_environment,
     user_has_permission,
@@ -250,7 +251,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import prefetch_related_objects
+from django.db.models import Q, prefetch_related_objects
 
 logger = logging.getLogger(__name__)
 
@@ -911,6 +912,27 @@ class Query(graphene.ObjectType):
             filters["actor_id"] = str(actor_id)
 
         qs = AuditEvent.objects.filter(**filters).order_by("-timestamp")
+
+        # Scope to resources the user can actually access
+        if not role_has_global_access(org_member.role):
+            accessible_app_ids = set(
+                org_member.apps.values_list("id", flat=True)
+            )
+            accessible_env_ids = set(
+                EnvironmentKey.objects.filter(
+                    user=org_member, deleted_at=None
+                ).values_list("environment_id", flat=True)
+            )
+            org_scoped_types = [
+                "role", "member", "invite", "policy", "pat", "sa",
+            ]
+            qs = qs.filter(
+                Q(resource_type__in=org_scoped_types)
+                | Q(resource_type="app", resource_id__in=accessible_app_ids)
+                | Q(resource_type="env", resource_id__in=accessible_env_ids)
+                | Q(resource_type__in=["sa_token", "svc_token"])
+            )
+
         count = get_approximate_count(qs)
         logs = qs[offset : offset + limit]
 
