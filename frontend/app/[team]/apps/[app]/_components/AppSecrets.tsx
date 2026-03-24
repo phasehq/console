@@ -5,7 +5,7 @@ import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
+import { ApiSecretTypeChoices, EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
@@ -137,6 +137,11 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
       if (!clientSecret) return true // Secret is missing in client (potential deletion)
 
+      // Check if types have changed
+      const serverType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type
+      const clientType = clientSecret.envs.find((env) => env.secret !== null)?.secret?.type
+      if (serverType !== clientType) return true
+
       return !arraysEqual(
         normalizeValues(appSecret.envs.map((env) => env.secret?.value)),
         normalizeValues(clientSecret.envs.map((env) => env.secret?.value))
@@ -169,6 +174,24 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const handleUpdateSecretKey = useCallback((id: string, key: string) => {
     setClientAppSecrets((prev) => prev.map((s) => (s.id === id ? { ...s, key } : s)))
   }, [])
+
+  const handleUpdateSecretType = useCallback(
+    (id: string, type: ApiSecretTypeChoices) => {
+      setClientAppSecrets((prev) =>
+        prev.map((s) => {
+          if (s.id !== id) return s
+          return {
+            ...s,
+            envs: s.envs.map((env) => ({
+              ...env,
+              secret: env.secret ? { ...env.secret, type } : env.secret,
+            })),
+          }
+        })
+      )
+    },
+    []
+  )
 
   const handleUpdateSecretValue = useCallback(
     (id: string, envId: string, value: string | undefined) => {
@@ -297,7 +320,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         const isModified =
           !isNewSecret &&
           serverSecret &&
-          (serverSecret.key !== clientSecret.key || serverSecret.value !== clientSecret.value)
+          (serverSecret.key !== clientSecret.key ||
+            serverSecret.value !== clientSecret.value ||
+            serverSecret.type !== clientSecret.type)
 
         // Only process if the secret is new or has been modified
         if (isNewSecret || isModified) {
@@ -323,6 +348,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             value: encryptedValue,
             comment: encryptedComment,
             tags: tagIds,
+            type: clientSecret.type?.toLowerCase() || 'secret',
           }
 
           if (isNewSecret) {
@@ -386,7 +412,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const handleAddNewClientSecret = (initialKey?: string) => {
+  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Config) => {
     const keyToUse = initialKey ?? ''
     const envs: EnvironmentType[] = appEnvironments
 
@@ -406,6 +432,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               tags: [],
               comment: '',
               path: '/',
+              type,
               environment,
             },
           }
@@ -460,6 +487,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 tags: [],
                 comment: secret.comment,
                 path: '/',
+                type: ApiSecretTypeChoices.Config,
                 environment: env as EnvironmentType,
               }
             } else if (match && secret) {
@@ -485,6 +513,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     setClientAppSecrets((prevSecrets) =>
       prevSecrets.map((appSecret) => {
         if (appSecret.id === appSecretId) {
+          // Inherit type from existing env secrets for this key
+          const existingType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Config
           const newSecret = {
             id: `new-${crypto.randomUUID()}`,
             updatedAt: null,
@@ -494,6 +524,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             tags: [],
             comment: '',
             path: '/',
+            type: existingType,
             environment,
           }
 
@@ -820,7 +851,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <TbDownload /> Import secrets
             </Button>
             {userCanCreateSecrets && (
-              <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
+              <Button
+                variant="primary"
+                onClick={() => handleAddNewClientSecret()}
+              >
                 <FaPlus /> New Secret
               </Button>
             )}
@@ -892,6 +926,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       clientAppSecret={appSecret}
                       serverAppSecret={serverSecret(appSecret.id)}
                       updateKey={handleUpdateSecretKey}
+                      updateType={handleUpdateSecretType}
                       addEnvValue={handleAddNewEnvValue}
                       deleteEnvValue={stageEnvValueForDelete}
                       updateValue={handleUpdateSecretValue}
@@ -993,7 +1028,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <Button variant="outline" onClick={() => importDialogRef.current?.openModal()}>
                 <TbDownload /> Import secrets
               </Button>
-              <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
+              <Button
+                variant="primary"
+                onClick={() => handleAddNewClientSecret()}
+              >
                 <FaPlus /> New Secret
               </Button>
             </div>
