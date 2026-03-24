@@ -1,4 +1,4 @@
-import { DynamicSecretType, EnvironmentType, SecretType } from '@/apollo/graphql'
+import { ApiSecretTypeChoices, DynamicSecretType, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 
 export type SortOption =
@@ -206,6 +206,7 @@ export const processEnvFile = (
       tags: [],
       comment: withComments ? lastComment || inlineComment || '' : '',
       path,
+      type: ApiSecretTypeChoices.Config,
       environment,
     })
 

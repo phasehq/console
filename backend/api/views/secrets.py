@@ -330,6 +330,7 @@ class E2EESecretsView(APIView):
                 "value": secret["value"],
                 "version": 1,
                 "comment": secret["comment"],
+                "type": secret.get("type", "secret"),
             }
 
             secret_obj = Secret.objects.create(**secret_data)
@@ -405,6 +406,13 @@ class E2EESecretsView(APIView):
                         {"error": "Invalid ciphertext format"}, status=400
                     )
 
+            # Enforce seal permanence
+            if secret_obj.type == "sealed" and secret.get("type") is not None and secret.get("type") != "sealed":
+                return JsonResponse(
+                    {"error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."},
+                    status=400,
+                )
+
             secret_data = {
                 "environment": env,
                 "key": secret["key"],
@@ -413,6 +421,14 @@ class E2EESecretsView(APIView):
                 "version": secret_obj.version + 1,
                 "comment": secret["comment"],
             }
+
+            # For sealed secrets, preserve existing encrypted value
+            if secret_obj.type == "sealed":
+                secret_data["value"] = secret_obj.value
+
+            # Set type if provided
+            if "type" in secret:
+                secret_data["type"] = secret["type"]
 
             try:
                 folder = None
@@ -785,6 +801,7 @@ class PublicSecretsView(APIView):
                 "value": secret["value"],
                 "version": 1,
                 "comment": secret["comment"],
+                "type": secret.get("type", "secret"),
             }
 
             secret_obj = Secret.objects.create(**secret_data)
@@ -887,6 +904,13 @@ class PublicSecretsView(APIView):
             else:
                 secret["comment"] = secret_obj.comment
 
+            # Enforce seal permanence
+            if secret_obj.type == "sealed" and secret.get("type") is not None and secret.get("type") != "sealed":
+                return JsonResponse(
+                    {"error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."},
+                    status=400,
+                )
+
             secret_data = {
                 "environment": env,
                 "key": secret["key"],
@@ -895,6 +919,14 @@ class PublicSecretsView(APIView):
                 "version": secret_obj.version + 1,
                 "comment": secret["comment"],
             }
+
+            # For sealed secrets, preserve existing encrypted value
+            if secret_obj.type == "sealed":
+                secret_data["value"] = secret_obj.value
+
+            # Set type if provided
+            if "type" in secret:
+                secret_data["type"] = secret["type"]
 
             try:
                 folder = None

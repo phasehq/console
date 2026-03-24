@@ -672,6 +672,12 @@ class SecretTag(models.Model):
 
 
 class Secret(models.Model):
+    SECRET_TYPE_CHOICES = [
+        ("secret", "Secret"),
+        ("sealed", "Sealed"),
+        ("config", "Config"),
+    ]
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
@@ -682,6 +688,11 @@ class Secret(models.Model):
     version = models.IntegerField(default=1)
     tags = models.ManyToManyField(SecretTag)
     comment = models.TextField()
+    type = models.CharField(
+        max_length=10,
+        choices=SECRET_TYPE_CHOICES,
+        default="secret",
+    )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
@@ -931,6 +942,11 @@ class SecretEvent(models.Model):
     version = models.IntegerField(default=1)
     tags = models.ManyToManyField(SecretTag)
     comment = models.TextField()
+    type = models.CharField(
+        max_length=10,
+        choices=Secret.SECRET_TYPE_CHOICES,
+        default="secret",
+    )
     event_type = models.CharField(
         max_length=1,
         choices=EVENT_TYPES,

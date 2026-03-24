@@ -231,6 +231,7 @@ type SecretType {
   version: Int!
   tags: [SecretTagType!]!
   comment: String!
+  type: ApiSecretTypeChoices!
   createdAt: DateTime
   updatedAt: DateTime!
   history: [SecretEventType]
@@ -241,6 +242,18 @@ type SecretTagType {
   id: String!
   name: String!
   color: String!
+}
+
+"""An enumeration."""
+enum ApiSecretTypeChoices {
+  """Secret"""
+  SECRET
+
+  """Sealed"""
+  SEALED
+
+  """Config"""
+  CONFIG
 }
 
 type SecretEventType {
@@ -257,6 +270,7 @@ type SecretEventType {
   version: Int!
   tags: [SecretTagType!]!
   comment: String!
+  type: ApiSecretTypeChoices!
   eventType: ApiSecretEventEventTypeChoices!
   timestamp: DateTime!
   ipAddress: String
@@ -1520,6 +1534,7 @@ input SecretInput {
   value: String!
   tags: [String]
   comment: String
+  type: String
 }
 
 type EditSecretMutation {

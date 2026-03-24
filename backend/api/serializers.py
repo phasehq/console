@@ -249,7 +249,7 @@ class SecretSerializer(serializers.ModelSerializer):
         return None
 
     def get_type(self, obj):
-        return "static"
+        return obj.type
 
 
 class AppSerializer(serializers.ModelSerializer):

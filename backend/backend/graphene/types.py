@@ -425,7 +425,13 @@ class SecretEventType(DjangoObjectType):
             "user_agent",
             "environment",
             "path",
+            "type",
         )
+
+    def resolve_value(self, info):
+        if self.secret.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_user(self, info):
         # use the precomputed permission flag; return None if not allowed
@@ -470,6 +476,7 @@ class SecretType(DjangoObjectType):
             "version",
             "tags",
             "comment",
+            "type",
             "created_at",
             "updated_at",
             "history",
@@ -477,6 +484,11 @@ class SecretType(DjangoObjectType):
             "environment",
         )
         # interfaces = (relay.Node, )
+
+    def resolve_value(self, info):
+        if self.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_history(self, info):
         user = info.context.user

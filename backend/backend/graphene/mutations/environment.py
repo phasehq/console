@@ -75,6 +75,7 @@ class SecretInput(graphene.InputObjectType):
     value = graphene.String(required=True)
     tags = graphene.List(graphene.String)
     comment = graphene.String()
+    type = graphene.String(required=False)
 
 
 class PersonalSecretInput(graphene.InputObjectType):
@@ -931,6 +932,7 @@ class CreateSecretMutation(graphene.Mutation):
             "value": secret_data.value,
             "version": 1,
             "comment": secret_data.comment,
+            "type": secret_data.type or "secret",
         }
 
         secret = Secret.objects.create(**secret_obj_data)
@@ -994,6 +996,7 @@ class BulkCreateSecretMutation(graphene.Mutation):
                 "value": secret_data.value,
                 "version": 1,
                 "comment": secret_data.comment,
+                "type": secret_data.type or "secret",
             }
 
             secret = Secret.objects.create(**secret_obj_data)
@@ -1046,6 +1049,10 @@ class EditSecretMutation(graphene.Mutation):
             else "/"
         )
 
+        # Enforce seal permanence
+        if secret.type == "sealed" and secret_data.type is not None and secret_data.type != "sealed":
+            raise GraphQLError("Sealed secrets cannot be unsealed. Delete and recreate the secret instead.")
+
         secret_obj_data = {
             "path": path,
             "key": secret_data.key,
@@ -1054,6 +1061,14 @@ class EditSecretMutation(graphene.Mutation):
             "version": secret.version + 1,
             "comment": secret_data.comment,
         }
+
+        # For sealed secrets, preserve existing encrypted value (UI sends "" since it never received it)
+        if secret.type == "sealed":
+            secret_obj_data["value"] = secret.value
+
+        # Set type if provided (and not already sealed)
+        if secret_data.type is not None:
+            secret_obj_data["type"] = secret_data.type
 
         for key, value in secret_obj_data.items():
             setattr(secret, key, value)
@@ -1100,6 +1115,10 @@ class BulkEditSecretMutation(graphene.Mutation):
             if not user_can_access_environment(info.context.user.userId, env.id):
                 raise GraphQLError("You don't have access to this environment")
 
+            # Enforce seal permanence
+            if secret.type == "sealed" and secret_data.type is not None and secret_data.type != "sealed":
+                raise GraphQLError("Sealed secrets cannot be unsealed. Delete and recreate the secret instead.")
+
             tags = SecretTag.objects.filter(id__in=secret_data.tags)
 
             path = (
@@ -1116,6 +1135,14 @@ class BulkEditSecretMutation(graphene.Mutation):
                 "version": secret.version + 1,
                 "comment": secret_data.comment,
             }
+
+            # For sealed secrets, preserve existing encrypted value
+            if secret.type == "sealed":
+                secret_obj_data["value"] = secret.value
+
+            # Set type if provided (and not already sealed)
+            if secret_data.type is not None:
+                secret_obj_data["type"] = secret_data.type
 
             for key, value in secret_obj_data.items():
                 setattr(secret, key, value)
