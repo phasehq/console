@@ -3,6 +3,7 @@ import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { ReferenceValidationError } from '@/utils/secretReferences'
+import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 
 interface BrokenReferencesDialogProps {
   warnings: ReferenceValidationError[]
@@ -38,12 +39,12 @@ export const BrokenReferencesDialog = forwardRef<
                 <span className="text-neutral-500"> in {err.envName}</span>
               </div>
               <div className="text-2xs 2xl:text-xs text-neutral-600 dark:text-neutral-400">
-                <span className="font-mono">{err.reference}</span>: {err.error}
+                <span className="font-mono"><SecretReferenceHighlight value={err.reference} /></span>: {err.error}
               </div>
             </li>
           ))}
         </ul>
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-between gap-2 pt-2">
           <Button variant="secondary" onClick={() => dialogRef.current?.closeModal()}>
             Go back
           </Button>
