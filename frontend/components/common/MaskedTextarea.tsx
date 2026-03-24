@@ -5,6 +5,7 @@ interface MaskedTextareaProps {
   value?: string
   onChange?: (value: string) => void
   onFocus?: () => void
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   isRevealed: boolean
   expanded: boolean
   placeholder?: string
@@ -17,6 +18,7 @@ export const MaskedTextarea: React.FC<MaskedTextareaProps> = ({
   value = '',
   onChange,
   onFocus,
+  onKeyDown,
   isRevealed,
   expanded,
   placeholder,
@@ -40,6 +42,7 @@ export const MaskedTextarea: React.FC<MaskedTextareaProps> = ({
       placeholder={placeholder}
       disabled={disabled}
       onFocus={onFocus}
+      onKeyDown={onKeyDown}
       onChange={handleChange}
       rows={rows}
       className={clsx(

@@ -2,6 +2,7 @@
 
 import {
   ApiOrganisationPlanChoices,
+  ApiSecretTypeChoices,
   DynamicSecretType,
   EnvironmentType,
   SecretFolderType,
@@ -36,6 +37,8 @@ import {
   FaEyeSlash,
   FaCloudUploadAlt,
   FaBan,
+  FaLock,
+  FaCog,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -188,6 +191,7 @@ export default function EnvironmentPath({
       if (
         secret.comment !== updated.comment ||
         secret.key !== updated.key ||
+        secret.type !== updated.type ||
         !arraysEqual(secret.tags, updated.tags) ||
         secret.value !== updated.value
       ) {
@@ -244,7 +248,11 @@ export default function EnvironmentPath({
         }
       }) ?? []
 
-  const handleAddSecret = (start: boolean = true, key: string = '') => {
+  const handleAddSecret = (
+    start: boolean = true,
+    key: string = '',
+    type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret
+  ) => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
@@ -254,6 +262,7 @@ export default function EnvironmentPath({
       tags: [],
       comment: '',
       path: '/',
+      type,
       environment,
     } as SecretType
     start
@@ -320,6 +329,7 @@ export default function EnvironmentPath({
           serverSecret &&
           (serverSecret.comment !== clientSecret.comment ||
             serverSecret.key !== clientSecret.key ||
+            serverSecret.type !== clientSecret.type ||
             !arraysEqual(serverSecret.tags, clientSecret.tags) ||
             serverSecret.value !== clientSecret.value)
 
@@ -339,6 +349,7 @@ export default function EnvironmentPath({
             value: encryptedValue,
             comment: encryptedComment,
             tags: tagIds,
+            type: clientSecret.type.toLowerCase(),
           }
 
           if (isNewSecret) {
@@ -439,11 +450,16 @@ export default function EnvironmentPath({
               envKeys?.publicKey
             )
 
-            decryptedSecret.value = await decryptAsymmetric(
-              secret.value,
-              envKeys.privateKey,
-              envKeys.publicKey
-            )
+            // Skip value decryption for sealed secrets (server returns empty string)
+            if (secret.type === ApiSecretTypeChoices.Sealed || !secret.value) {
+              decryptedSecret.value = ''
+            } else {
+              decryptedSecret.value = await decryptAsymmetric(
+                secret.value,
+                envKeys.privateKey,
+                envKeys.publicKey
+              )
+            }
 
             if (decryptedSecret.comment !== '')
               decryptedSecret.comment = await decryptAsymmetric(
@@ -465,11 +481,15 @@ export default function EnvironmentPath({
                     envKeys.publicKey
                   )
 
-                  decryptedEvent!.value = await decryptAsymmetric(
-                    event!.value,
-                    envKeys.privateKey,
-                    envKeys.publicKey
-                  )
+                  if (secret.type === ApiSecretTypeChoices.Sealed || !event!.value) {
+                    decryptedEvent!.value = ''
+                  } else {
+                    decryptedEvent!.value = await decryptAsymmetric(
+                      event!.value,
+                      envKeys.privateKey,
+                      envKeys.publicKey
+                    )
+                  }
 
                   if (decryptedEvent!.comment !== '') {
                     decryptedEvent!.comment = await decryptAsymmetric(
