@@ -72,6 +72,17 @@ export type ReferenceContext = {
   deletedKeys: string[]
 }
 
+// --- Segment colors (shared by highlight overlay and autocomplete dropdown) ---
+
+export const SEGMENT_COLORS = {
+  key: 'text-emerald-700 dark:text-emerald-400',
+  env: 'text-cyan-600 dark:text-cyan-400',
+  app: 'text-pink-600 dark:text-pink-300',
+  folder: 'text-amber-700 dark:text-amber-300',
+  delimiter: 'text-slate-500 dark:text-slate-400',
+  plain: '',
+} as const
+
 /** Build a lookup key for secretIdLookup maps. */
 export function secretIdKey(envName: string, path: string, keyName: string): string {
   return `${envName.toLowerCase()}|${path}|${keyName}`
@@ -428,9 +439,7 @@ export function computeSuggestions(
 
     case 'cross-app-env': {
       // Show environment names for the specified app
-      const app = context.orgApps.find(
-        (a) => a.name.toLowerCase() === token.app!.toLowerCase()
-      )
+      const app = context.orgApps.find((a) => a.name.toLowerCase() === token.app!.toLowerCase())
       if (app) {
         for (const envName of app.envNames) {
           if (envName.toLowerCase().includes(filter)) {
@@ -582,9 +591,7 @@ export function getSuggestionUrl(
     case 'env': {
       if (token.stage === 'cross-app-env' && token.app) {
         // Cross-app env: navigate to the target app's environment
-        const app = context.orgApps.find(
-          (a) => a.name.toLowerCase() === token.app!.toLowerCase()
-        )
+        const app = context.orgApps.find((a) => a.name.toLowerCase() === token.app!.toLowerCase())
         if (!app) return null
         const targetEnvId = app.envIds[suggestion.label.toLowerCase()]
         if (!targetEnvId) return null
@@ -603,9 +610,7 @@ export function getSuggestionUrl(
       let targetEnvId = envId
 
       if (token.stage === 'cross-app-key' && token.app && token.env) {
-        const app = context.orgApps.find(
-          (a) => a.name.toLowerCase() === token.app!.toLowerCase()
-        )
+        const app = context.orgApps.find((a) => a.name.toLowerCase() === token.app!.toLowerCase())
         if (!app) return null
         targetAppId = app.id
         targetEnvId = app.envIds[token.env.toLowerCase()]
@@ -635,9 +640,7 @@ export function getSuggestionUrl(
       }
 
       if (token.stage === 'cross-app-key' && token.app && token.env) {
-        const app = context.orgApps.find(
-          (a) => a.name.toLowerCase() === token.app!.toLowerCase()
-        )
+        const app = context.orgApps.find((a) => a.name.toLowerCase() === token.app!.toLowerCase())
         if (!app) return null
         const targetEnvId = app.envIds[token.env.toLowerCase()]
         if (!targetEnvId) return null
@@ -660,7 +663,8 @@ export function getSuggestionUrl(
       }
       // Local key or folder-key — navigate to current env if available
       if (!envId) return null
-      const secretPath = token.stage === 'folder-key' && token.folderPath ? '/' + token.folderPath : '/'
+      const secretPath =
+        token.stage === 'folder-key' && token.folderPath ? '/' + token.folderPath : '/'
       const folderPath = secretPath === '/' ? undefined : secretPath.slice(1)
       // Determine env name from envId
       const envName = Object.entries(envIds).find(([, id]) => id === envId)?.[0] ?? ''
@@ -760,7 +764,13 @@ function decomposePathAndKey(pathAndKey: string): { path: string; key: string } 
 }
 
 export function validateSecretReferences(
-  secrets: { key: string; envs: { env: { id?: string; name?: string }; secret: { value: string; stagedForDelete?: boolean } | null }[] }[],
+  secrets: {
+    key: string
+    envs: {
+      env: { id?: string; name?: string }
+      secret: { value: string; stagedForDelete?: boolean } | null
+    }[]
+  }[],
   context: ReferenceContext
 ): ReferenceValidationError[] {
   const errors: ReferenceValidationError[] = []
