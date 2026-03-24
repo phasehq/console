@@ -148,7 +148,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <div>
               <h3 className="relative group w-full max-w-md">
                 <input
-                  className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full "
+                  className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-base font-medium"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   readOnly={!userCanUpdateSA}
