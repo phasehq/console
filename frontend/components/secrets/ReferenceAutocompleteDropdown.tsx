@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { FaKey, FaCubes, FaFolder } from 'react-icons/fa'
 import { BsListColumnsReverse } from 'react-icons/bs'
 import { MdKeyboardReturn, MdOpenInNew } from 'react-icons/md'
-import { ReferenceSuggestion } from '@/utils/secretReferences'
+import { ReferenceSuggestion, SEGMENT_COLORS } from '@/utils/secretReferences'
 
 interface ReferenceAutocompleteDropdownProps {
   suggestions: ReferenceSuggestion[]
@@ -13,25 +13,12 @@ interface ReferenceAutocompleteDropdownProps {
   visible: boolean
 }
 
-const typeIcon: Record<ReferenceSuggestion['type'], { icon: React.ReactNode; className: string }> =
-  {
-    key: {
-      icon: <FaKey />,
-      className: 'text-[#3a9474] dark:text-[#74ccaa]',
-    },
-    env: {
-      icon: <BsListColumnsReverse />,
-      className: 'text-[#3a8a93] dark:text-[#5fb5be]',
-    },
-    app: {
-      icon: <FaCubes />,
-      className: 'text-[#c4608e] dark:text-[#ed9cc2]',
-    },
-    folder: {
-      icon: <FaFolder />,
-      className: 'text-[#b07a2a] dark:text-[#f6c177]',
-    },
-  }
+const typeIcon: Record<ReferenceSuggestion['type'], React.ReactNode> = {
+  key: <FaKey />,
+  env: <BsListColumnsReverse />,
+  app: <FaCubes />,
+  folder: <FaFolder />,
+}
 
 export const ReferenceAutocompleteDropdown: React.FC<ReferenceAutocompleteDropdownProps> = ({
   suggestions,
@@ -58,7 +45,8 @@ export const ReferenceAutocompleteDropdown: React.FC<ReferenceAutocompleteDropdo
         aria-activedescendant={activeIndex >= 0 ? `ref-option-${activeIndex}` : undefined}
       >
         {suggestions.map((suggestion, index) => {
-          const { icon, className: iconClass } = typeIcon[suggestion.type]
+          const icon = typeIcon[suggestion.type]
+          const iconClass = SEGMENT_COLORS[suggestion.type]
           const isActive = index === activeIndex
 
           return (
