@@ -25,6 +25,7 @@ export type ActiveReferenceToken = {
   raw: string // text between ${ and cursor
   startIndex: number // position of $ in the value
   filterText: string // text to filter suggestions with
+  insideClosedRef: boolean // true when cursor is inside a complete ${...} reference
   env?: string
   app?: string
   folderPath?: string // for folder-key stage
@@ -183,6 +184,12 @@ export function getActiveReferenceToken(
 
     const raw = textBetween
 
+    // Check if cursor is inside a closed reference (} after cursor belongs to this ref)
+    const afterCursor = value.slice(cursorPos)
+    const closingIdx = afterCursor.indexOf('}')
+    const insideClosedRef =
+      closingIdx !== -1 && !afterCursor.slice(0, closingIdx).includes('${')
+
     // Determine stage based on what's been typed
     const doubleColonIdx = raw.indexOf('::')
     const dotIdx = raw.indexOf('.')
@@ -197,7 +204,7 @@ export function getActiveReferenceToken(
         // Has app::env. → typing key
         const env = afterApp.slice(0, envDotIdx)
         const filterText = afterApp.slice(envDotIdx + 1)
-        return { stage: 'cross-app-key', raw, startIndex: dollarIdx, filterText, app, env }
+        return { stage: 'cross-app-key', raw, startIndex: dollarIdx, filterText, insideClosedRef, app, env }
       } else {
         // Has app:: → typing env
         return {
@@ -205,6 +212,7 @@ export function getActiveReferenceToken(
           raw,
           startIndex: dollarIdx,
           filterText: afterApp,
+          insideClosedRef,
           app,
         }
       }
@@ -212,16 +220,16 @@ export function getActiveReferenceToken(
       // Has . but no :: → cross-env reference
       const env = raw.slice(0, dotIdx)
       const filterText = raw.slice(dotIdx + 1)
-      return { stage: 'cross-env-key', raw, startIndex: dollarIdx, filterText, env }
+      return { stage: 'cross-env-key', raw, startIndex: dollarIdx, filterText, insideClosedRef, env }
     } else if (raw.includes('/')) {
       // Has / but no . or :: → folder-qualified reference
       const lastSlash = raw.lastIndexOf('/')
       const folderPath = raw.slice(0, lastSlash)
       const filterText = raw.slice(lastSlash + 1)
-      return { stage: 'folder-key', raw, startIndex: dollarIdx, filterText, folderPath }
+      return { stage: 'folder-key', raw, startIndex: dollarIdx, filterText, insideClosedRef, folderPath }
     } else {
       // No . or :: or / → initial stage (could be local key, env prefix, or app prefix)
-      return { stage: 'initial', raw, startIndex: dollarIdx, filterText: raw }
+      return { stage: 'initial', raw, startIndex: dollarIdx, filterText: raw, insideClosedRef }
     }
   }
 
@@ -253,7 +261,8 @@ export function computeSuggestions(
   context: ReferenceContext,
   currentSecretKey?: string
 ): ReferenceSuggestion[] {
-  const filter = token.filterText.toLowerCase()
+  // Inside a closed reference: show all suggestions (unfiltered) so the user can swap segments
+  const filter = token.insideClosedRef ? '' : token.filterText.toLowerCase()
   const suggestions: ReferenceSuggestion[] = []
 
   switch (token.stage) {
@@ -548,10 +557,51 @@ export function buildInsertionText(
   token: ActiveReferenceToken,
   fullValue: string
 ): { newValue: string; newCursorPos: number } {
-  // Replace from ${ to cursor with the suggestion's insertText
   const before = fullValue.slice(0, token.startIndex + 2) // everything up to and including ${
-  const after = fullValue.slice(token.startIndex + 2 + token.raw.length) // everything after cursor
+  const cursorPos = token.startIndex + 2 + token.raw.length
+  const afterCursor = fullValue.slice(cursorPos)
 
+  // Check if cursor is inside a complete (closed) reference
+  const closingBraceRelIdx = afterCursor.indexOf('}')
+
+  let consumeAfterCursor = 0
+
+  if (closingBraceRelIdx !== -1) {
+    // Inside a closed reference — replace the full current segment, not just up to cursor
+    const afterCursorInRef = afterCursor.slice(0, closingBraceRelIdx)
+
+    if (suggestion.closesReference) {
+      // Key suggestion: replace everything up to and including the closing }
+      consumeAfterCursor = closingBraceRelIdx + 1
+    } else {
+      // Non-key suggestion (env, app, folder): find the matching segment delimiter
+      // after the cursor and consume through it. The insertText always ends with
+      // the delimiter that separates segments (:: for apps, . for envs, / for folders).
+      const insertText = suggestion.insertText
+      let delimiterPos = -1
+      let delimiterLen = 0
+
+      if (insertText.endsWith('::')) {
+        delimiterPos = afterCursorInRef.indexOf('::')
+        delimiterLen = 2
+      } else if (insertText.endsWith('.')) {
+        delimiterPos = afterCursorInRef.indexOf('.')
+        delimiterLen = 1
+      } else if (insertText.endsWith('/')) {
+        delimiterPos = afterCursorInRef.indexOf('/')
+        delimiterLen = 1
+      }
+
+      if (delimiterPos !== -1) {
+        consumeAfterCursor = delimiterPos + delimiterLen
+      } else {
+        // No matching delimiter found — consume to } inclusive (reference structure changes)
+        consumeAfterCursor = closingBraceRelIdx + 1
+      }
+    }
+  }
+
+  const after = fullValue.slice(cursorPos + consumeAfterCursor)
   const closing = suggestion.closesReference ? '}' : ''
   const inserted = suggestion.insertText + closing
 

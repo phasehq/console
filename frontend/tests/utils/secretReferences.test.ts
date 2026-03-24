@@ -264,6 +264,7 @@ describe('computeSuggestions', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestions = computeSuggestions(token, ctx)
@@ -279,6 +280,7 @@ describe('computeSuggestions', () => {
       stage: 'initial',
       raw: 'DB',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'DB',
     }
     const suggestions = computeSuggestions(token, ctx)
@@ -293,6 +295,7 @@ describe('computeSuggestions', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestions = computeSuggestions(token, ctx, 'DB_HOST')
@@ -307,6 +310,7 @@ describe('computeSuggestions', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestions = computeSuggestions(token, ctxWithDeleted)
@@ -319,6 +323,7 @@ describe('computeSuggestions', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestions = computeSuggestions(token, ctx)
@@ -333,6 +338,7 @@ describe('computeSuggestions', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestions = computeSuggestions(token, ctx)
@@ -347,6 +353,7 @@ describe('computeSuggestions', () => {
       stage: 'initial',
       raw: 'DB_HOST',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'DB_HOST',
     }
     const suggestions = computeSuggestions(token, ctx)
@@ -360,6 +367,7 @@ describe('computeSuggestions', () => {
       stage: 'cross-env-key',
       raw: 'staging.',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
       env: 'staging',
     }
@@ -375,6 +383,7 @@ describe('computeSuggestions', () => {
       stage: 'cross-env-key',
       raw: 'staging.',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
       env: 'staging',
     }
@@ -388,6 +397,7 @@ describe('computeSuggestions', () => {
       stage: 'cross-app-env',
       raw: 'OtherApp::',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
       app: 'OtherApp',
     }
@@ -402,6 +412,7 @@ describe('computeSuggestions', () => {
       stage: 'cross-app-env',
       raw: 'UnknownApp::',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
       app: 'UnknownApp',
     }
@@ -414,6 +425,7 @@ describe('computeSuggestions', () => {
       stage: 'cross-app-key',
       raw: 'OtherApp::development.',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
       app: 'OtherApp',
       env: 'development',
@@ -428,6 +440,7 @@ describe('computeSuggestions', () => {
       stage: 'folder-key',
       raw: 'backend/',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
       folderPath: 'backend',
     }
@@ -442,6 +455,7 @@ describe('computeSuggestions', () => {
       stage: 'folder-key',
       raw: 'backend/',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
       folderPath: 'backend',
     }
@@ -455,6 +469,7 @@ describe('computeSuggestions', () => {
       stage: 'initial',
       raw: 'db',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'db',
     }
     const suggestions = computeSuggestions(token, ctx)
@@ -474,6 +489,7 @@ describe('buildInsertionText', () => {
       stage: 'initial',
       raw: 'DB',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'DB',
     }
     const suggestion = {
@@ -492,6 +508,7 @@ describe('buildInsertionText', () => {
       stage: 'initial',
       raw: 'st',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'st',
     }
     const suggestion = {
@@ -510,6 +527,7 @@ describe('buildInsertionText', () => {
       stage: 'initial',
       raw: 'K',
       startIndex: 7,
+      insideClosedRef: false,
       filterText: 'K',
     }
     const suggestion = {
@@ -519,15 +537,9 @@ describe('buildInsertionText', () => {
       closesReference: true,
     }
     const result = buildInsertionText(suggestion, token, 'prefix ${K} suffix')
-    // before = 'prefix ${', after = '} suffix'
-    expect(result.newValue).toBe('prefix ${KEY}} suffix')
-    // Wait — that's wrong. Let's think about this more carefully.
-    // The token.raw = 'K', the full value is 'prefix ${K} suffix'
-    // after = fullValue.slice(token.startIndex + 2 + token.raw.length) = 'prefix ${K} suffix'.slice(7+2+1) = '} suffix'
-    // So newValue = 'prefix ${' + 'KEY}' + '} suffix' = 'prefix ${KEY}} suffix'
-    // This is because the user is currently typing inside an incomplete ref and there's a } later.
-    // Actually in real usage, getActiveReferenceToken returns null when } exists between ${ and cursor.
-    // So let's test with a value that doesn't have closing brace.
+    // Cursor is inside a closed reference ${K} — the new code detects the closing }
+    // and consumes it, so selecting KEY replaces the entire reference content correctly.
+    expect(result.newValue).toBe('prefix ${KEY} suffix')
   })
 
   test('preserves text before and after an unclosed reference', () => {
@@ -535,6 +547,7 @@ describe('buildInsertionText', () => {
       stage: 'initial',
       raw: 'K',
       startIndex: 7,
+      insideClosedRef: false,
       filterText: 'K',
     }
     const suggestion = {
@@ -552,6 +565,7 @@ describe('buildInsertionText', () => {
       stage: 'cross-env-key',
       raw: 'staging.DB',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'DB',
       env: 'staging',
     }
@@ -570,6 +584,7 @@ describe('buildInsertionText', () => {
       stage: 'initial',
       raw: 'Oth',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'Oth',
     }
     const suggestion = {
@@ -596,6 +611,7 @@ describe('getSuggestionUrl', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestion = {
@@ -613,6 +629,7 @@ describe('getSuggestionUrl', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestion = {
@@ -629,6 +646,7 @@ describe('getSuggestionUrl', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestion = {
@@ -646,6 +664,7 @@ describe('getSuggestionUrl', () => {
       stage: 'cross-app-env',
       raw: 'OtherApp::',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
       app: 'OtherApp',
     }
@@ -667,6 +686,7 @@ describe('getSuggestionUrl', () => {
       stage: 'initial',
       raw: 'DB_HOST',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'DB_HOST',
     }
     const suggestion = {
@@ -685,6 +705,7 @@ describe('getSuggestionUrl', () => {
       stage: 'initial',
       raw: 'DB_HOST',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: 'DB_HOST',
     }
     const suggestion = {
@@ -701,6 +722,7 @@ describe('getSuggestionUrl', () => {
       stage: 'initial',
       raw: '',
       startIndex: 0,
+      insideClosedRef: false,
       filterText: '',
     }
     const suggestion = {
