@@ -412,7 +412,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Config) => {
+  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret) => {
     const keyToUse = initialKey ?? ''
     const envs: EnvironmentType[] = appEnvironments
 
@@ -487,7 +487,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 tags: [],
                 comment: secret.comment,
                 path: '/',
-                type: ApiSecretTypeChoices.Config,
+                type: ApiSecretTypeChoices.Secret,
                 environment: env as EnvironmentType,
               }
             } else if (match && secret) {
