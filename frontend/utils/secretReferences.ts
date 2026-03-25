@@ -54,6 +54,7 @@ export type OrgApp = {
   envSecretKeys: Record<string, string[]> // env name (lowercase) → ALL decrypted key names
   envRootKeys: Record<string, string[]> // env name (lowercase) → root-level key names only
   folderKeys: Record<string, string[]> // folder path (lowercase, no leading slash) → key names
+  envFolderKeys: Record<string, Record<string, string[]>> // env name (lowercase) → { folder path (lowercase) → key names }
   secretIdLookup: Record<string, string> // "env|path|key" → secret ID
 }
 
@@ -69,6 +70,7 @@ export type ReferenceContext = {
   envNames: string[]
   folderPaths: string[]
   folderSecretKeys: Record<string, string[]> // folder path (lowercase) → keys at that path
+  envFolderKeys: Record<string, Record<string, string[]>> // env name (lowercase) → { folder path → keys }
   orgApps: OrgApp[]
   deletedKeys: string[]
 }
@@ -373,13 +375,14 @@ export function computeSuggestions(
     case 'cross-env-key': {
       const insertPrefix = `${token.env}.`
       const slashIdx = filter.indexOf('/')
+      const targetEnvFolders = context.envFolderKeys[token.env!.toLowerCase()] ?? {}
 
       if (slashIdx !== -1) {
         // User is inside a folder, e.g. ${env.backend/...
         const folderPath = token.filterText.slice(0, slashIdx)
         const keyFilter = filter.slice(slashIdx + 1)
 
-        const folderKeys = context.folderSecretKeys[folderPath.toLowerCase()] ?? []
+        const folderKeys = targetEnvFolders[folderPath.toLowerCase()] ?? []
         for (const key of folderKeys) {
           if (context.deletedKeys.includes(key)) continue
           if (key.toLowerCase().includes(keyFilter)) {
@@ -393,11 +396,11 @@ export function computeSuggestions(
           }
         }
 
-        // Sub-folders
+        // Sub-folders scoped to the target env
         const subPrefix = folderPath.toLowerCase() + '/'
         const seenSub = new Set<string>()
-        for (const fp of context.folderPaths) {
-          if (fp.toLowerCase().startsWith(subPrefix)) {
+        for (const fp of Object.keys(targetEnvFolders)) {
+          if (fp.startsWith(subPrefix)) {
             const rest = fp.slice(subPrefix.length)
             const seg = rest.includes('/') ? rest.slice(0, rest.indexOf('/')) : rest
             if (seenSub.has(seg.toLowerCase())) continue
@@ -414,8 +417,8 @@ export function computeSuggestions(
           }
         }
       } else {
-        // Root level — show folders first, then root-level keys
-        for (const folderPath of context.folderPaths) {
+        // Root level — show folders that exist in the target env, then root-level keys
+        for (const folderPath of Object.keys(targetEnvFolders)) {
           // Only show top-level folders (no slash in the path)
           if (folderPath.includes('/')) continue
           if (folderPath.toLowerCase().includes(filter)) {
@@ -472,13 +475,14 @@ export function computeSuggestions(
       if (crossApp) {
         const insertPrefix = `${token.app}::${token.env}.`
         const slashIdx = filter.indexOf('/')
+        const targetEnvFolders = crossApp.envFolderKeys?.[token.env!.toLowerCase()] ?? {}
 
         if (slashIdx !== -1) {
           // User is inside a folder, e.g. ${app::env.backend/...
           const folderPath = token.filterText.slice(0, slashIdx)
           const keyFilter = filter.slice(slashIdx + 1)
 
-          const folderKeys = crossApp.folderKeys[folderPath.toLowerCase()] ?? []
+          const folderKeys = targetEnvFolders[folderPath.toLowerCase()] ?? []
           for (const key of folderKeys) {
             if (key.toLowerCase().includes(keyFilter)) {
               suggestions.push({
@@ -491,10 +495,10 @@ export function computeSuggestions(
             }
           }
 
-          // Sub-folders from the target app
+          // Sub-folders scoped to the target env
           const subPrefix = folderPath.toLowerCase() + '/'
           const seenSub = new Set<string>()
-          for (const fp of Object.keys(crossApp.folderKeys)) {
+          for (const fp of Object.keys(targetEnvFolders)) {
             if (fp.startsWith(subPrefix)) {
               const rest = fp.slice(subPrefix.length)
               const seg = rest.includes('/') ? rest.slice(0, rest.indexOf('/')) : rest
@@ -512,9 +516,9 @@ export function computeSuggestions(
             }
           }
         } else {
-          // Root level — show folders first, then root-level keys from target app
+          // Root level — show folders that exist in the target env, then root-level keys
           const seenFolders = new Set<string>()
-          for (const fp of Object.keys(crossApp.folderKeys)) {
+          for (const fp of Object.keys(targetEnvFolders)) {
             const topLevel = fp.includes('/') ? fp.slice(0, fp.indexOf('/')) : fp
             if (seenFolders.has(topLevel)) continue
             seenFolders.add(topLevel)

@@ -47,6 +47,7 @@ export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
           const envSecretKeys: Record<string, string[]> = {}
           const envRootKeysMap: Record<string, Set<string>> = {}
           const folderKeysMap: Record<string, Set<string>> = {}
+          const envFolderKeysMap: Record<string, Record<string, Set<string>>> = {}
           const secretIdLookupMap: Record<string, string> = {}
 
           for (const env of app.environments ?? []) {
@@ -80,6 +81,14 @@ export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
                       folderKeysMap[secretPath.toLowerCase()] = new Set()
                     }
                     folderKeysMap[secretPath.toLowerCase()].add(decryptedKey)
+
+                    // Also track per-env folder keys
+                    const envKey = env.name.toLowerCase()
+                    if (!envFolderKeysMap[envKey]) envFolderKeysMap[envKey] = {}
+                    if (!envFolderKeysMap[envKey][secretPath.toLowerCase()]) {
+                      envFolderKeysMap[envKey][secretPath.toLowerCase()] = new Set()
+                    }
+                    envFolderKeysMap[envKey][secretPath.toLowerCase()].add(decryptedKey)
                   } else {
                     // Root-level key
                     const envKey = env.name.toLowerCase()
@@ -110,7 +119,15 @@ export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
             envRootKeys[envKey] = [...keySet]
           }
 
-          apps.push({ id: app.id, name: app.name, envNames, envIds, envSecretKeys, envRootKeys, folderKeys, secretIdLookup: secretIdLookupMap })
+          const envFolderKeys: Record<string, Record<string, string[]>> = {}
+          for (const [envName, folders] of Object.entries(envFolderKeysMap)) {
+            envFolderKeys[envName] = {}
+            for (const [path, keySet] of Object.entries(folders)) {
+              envFolderKeys[envName][path] = [...keySet]
+            }
+          }
+
+          apps.push({ id: app.id, name: app.name, envNames, envIds, envSecretKeys, envRootKeys, folderKeys, envFolderKeys, secretIdLookup: secretIdLookupMap })
         }
       } catch (error) {
         console.error('Failed to fetch org secret keys for reference autocomplete', error)

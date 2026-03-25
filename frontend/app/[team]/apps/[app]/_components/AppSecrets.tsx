@@ -201,6 +201,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     // Extract folder-qualified and root-level secret keys for the current app
     const currentAppData = allOrgApps.find((a) => a.name.toLowerCase() === currentAppName)
     const folderSecretKeys = currentAppData?.folderKeys ?? {}
+    const envFolderKeys = currentAppData?.envFolderKeys ?? {}
     const envRootKeys = currentAppData?.envRootKeys ?? {}
 
     const deletedKeys = clientAppSecrets
@@ -226,6 +227,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       envNames,
       folderPaths,
       folderSecretKeys,
+      envFolderKeys,
       orgApps,
       deletedKeys,
     }

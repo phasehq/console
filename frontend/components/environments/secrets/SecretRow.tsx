@@ -389,7 +389,7 @@ function SecretRow(props: {
         />
         {keyActionMenu}
       </div>
-      <div className="w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease">
+      <div className={clsx("w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
         {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
@@ -419,7 +419,8 @@ function SecretRow(props: {
             className={clsx(
               INPUT_BASE_STYLE,
               inputTextColor(),
-              'w-full p-2 group-hover:rounded-tr-none'
+              'w-full group-hover:rounded-tr-none',
+              autocomplete.isOpen && 'rounded-bl-none'
             )}
             value={isSealedAndSaved ? '' : secret.value}
             onChange={(v) => {
@@ -439,6 +440,12 @@ function SecretRow(props: {
             expanded={expanded}
             onFocus={() => {
               setExpanded(true)
+              // Move cursor to end for new secrets with prefilled values (e.g. reference shortcut)
+              if (isNewSecret && secret.value && textareaRef.current) {
+                const len = secret.value.length
+                textareaRef.current.selectionStart = len
+                textareaRef.current.selectionEnd = len
+              }
               autocomplete.handleFocus()
             }}
             disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}

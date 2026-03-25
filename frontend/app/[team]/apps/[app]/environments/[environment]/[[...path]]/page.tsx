@@ -39,6 +39,7 @@ import {
   FaBan,
   FaLock,
   FaCog,
+  FaLink,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -267,6 +268,7 @@ export default function EnvironmentPath({
     const folderPaths = [...new Set([...localFolderPaths, ...orgFolderPaths])]
 
     const folderSecretKeys = currentAppData?.folderKeys ?? {}
+    const envFolderKeys = currentAppData?.envFolderKeys ?? {}
     const envRootKeys: Record<string, string[]> = {
       ...(currentAppData?.envRootKeys ?? {}),
     }
@@ -311,6 +313,7 @@ export default function EnvironmentPath({
       envNames,
       folderPaths,
       folderSecretKeys,
+      envFolderKeys,
       orgApps,
       deletedKeys,
     }
@@ -342,14 +345,15 @@ export default function EnvironmentPath({
   const handleAddSecret = (
     start: boolean = true,
     key: string = '',
-    type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret
+    type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret,
+    value: string = ''
   ) => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
       version: 1,
       key: key,
-      value: '',
+      value,
       tags: [],
       comment: '',
       path: '/',
@@ -1004,6 +1008,12 @@ export default function EnvironmentPath({
             >
               <FaBolt /> Dynamic Secret{' '}
               {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
+            </Button>
+
+            <Button variant="secondary" onClick={() => handleAddSecret(true, '', ApiSecretTypeChoices.Secret, '${')}>
+              <div className="flex items-center gap-2">
+                <FaLink /> Reference a secret
+              </div>
             </Button>
 
             <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>

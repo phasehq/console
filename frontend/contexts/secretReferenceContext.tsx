@@ -14,6 +14,7 @@ export const SecretReferenceContext = createContext<ReferenceContext>({
   envNames: [],
   folderPaths: [],
   folderSecretKeys: {},
+  envFolderKeys: {},
   orgApps: [],
   deletedKeys: [],
 })

@@ -37,6 +37,12 @@ function makeContext(overrides: Partial<ReferenceContext> = {}): ReferenceContex
       backend: ['REDIS_URL', 'WORKER_COUNT'],
       'backend/config': ['LOG_LEVEL'],
     },
+    envFolderKeys: {
+      development: {
+        backend: ['REDIS_URL', 'WORKER_COUNT'],
+        'backend/config': ['LOG_LEVEL'],
+      },
+    },
     orgApps: [
       {
         id: 'app-2',
@@ -46,6 +52,7 @@ function makeContext(overrides: Partial<ReferenceContext> = {}): ReferenceContex
         envSecretKeys: { development: ['OTHER_KEY'], production: ['OTHER_PROD'] },
         envRootKeys: { development: ['OTHER_KEY'], production: ['OTHER_PROD'] },
         folderKeys: { services: ['SVC_KEY'] },
+        envFolderKeys: { development: { services: ['SVC_KEY'] } },
         secretIdLookup: { 'development|/|OTHER_KEY': 'other-secret-id' },
       },
     ],
@@ -378,8 +385,21 @@ describe('computeSuggestions', () => {
     expect(keyLabels).not.toContain('API_KEY') // not in staging root keys
   })
 
-  test('cross-env-key stage shows folder suggestions', () => {
+  test('cross-env-key stage shows folder suggestions scoped to target env', () => {
     const token: ActiveReferenceToken = {
+      stage: 'cross-env-key',
+      raw: 'development.',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: '',
+      env: 'development',
+    }
+    const suggestions = computeSuggestions(token, ctx)
+    const folderLabels = suggestions.filter((s) => s.type === 'folder').map((s) => s.label)
+    expect(folderLabels).toContain('backend/')
+
+    // Env without folders should show no folder suggestions
+    const tokenStaging: ActiveReferenceToken = {
       stage: 'cross-env-key',
       raw: 'staging.',
       startIndex: 0,
@@ -387,9 +407,9 @@ describe('computeSuggestions', () => {
       filterText: '',
       env: 'staging',
     }
-    const suggestions = computeSuggestions(token, ctx)
-    const folderLabels = suggestions.filter((s) => s.type === 'folder').map((s) => s.label)
-    expect(folderLabels).toContain('backend/')
+    const stagingSuggestions = computeSuggestions(tokenStaging, ctx)
+    const stagingFolders = stagingSuggestions.filter((s) => s.type === 'folder')
+    expect(stagingFolders).toHaveLength(0)
   })
 
   test('cross-app-env stage shows envs from target app', () => {

@@ -37,10 +37,10 @@ export const ReferenceAutocompleteDropdown: React.FC<ReferenceAutocompleteDropdo
   if (!visible || suggestions.length === 0) return null
 
   return (
-    <div className="absolute left-0 top-full mt-0 z-50 w-full min-w-[280px] max-w-lg">
+    <div className="absolute left-px top-full mt-0 z-50 w-full min-w-[280px] max-w-lg">
       <ul
         ref={listRef}
-        className="max-h-48 overflow-y-auto rounded-b-md bg-zinc-100 dark:bg-zinc-800 shadow-lg ring-1 ring-neutral-500/20 py-1"
+        className="max-h-48 overflow-y-auto rounded-b-md bg-zinc-100 dark:bg-zinc-800 shadow-lg dark:shadow-2xl dark:shadow-black/50 ring-1 ring-neutral-500/20 py-1"
         role="listbox"
         aria-activedescendant={activeIndex >= 0 ? `ref-option-${activeIndex}` : undefined}
       >

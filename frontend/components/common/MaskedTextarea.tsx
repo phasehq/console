@@ -86,7 +86,7 @@ export const MaskedTextarea = forwardRef<HTMLTextAreaElement, MaskedTextareaProp
     )
 
     return (
-      <div className="relative w-full flex-1">
+      <div className="relative w-full flex-1 flex">
         {hasHighlight && (
           <div
             ref={highlightRef}
