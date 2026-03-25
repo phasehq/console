@@ -75,7 +75,8 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
 
             <td className="whitespace-nowrap px-4 py-2 text-xs">
               {event.completedAt &&
-                event.status !== ApiEnvironmentSyncEventStatusChoices.InProgress && (
+                event.status !== ApiEnvironmentSyncEventStatusChoices.InProgress &&
+                event.status !== ApiEnvironmentSyncEventStatusChoices.Queued && (
                   <div>{relativeTimeFromDates(new Date(event.completedAt))}</div>
                 )}
             </td>

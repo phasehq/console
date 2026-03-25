@@ -17,7 +17,9 @@ export const EnvSyncStatus = (props: {
   const syncStatus = () => {
     if (
       syncs.some(
-        (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.InProgress
+        (sync: EnvironmentSyncType) =>
+          sync.status === ApiEnvironmentSyncStatusChoices.InProgress ||
+          sync.status === ApiEnvironmentSyncStatusChoices.Queued
       )
     )
       return ApiEnvironmentSyncStatusChoices.InProgress

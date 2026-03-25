@@ -72,7 +72,8 @@ export const SyncCard = (props: {
         <div className="flex items-center gap-2">
           <div>{sync.status && <SyncStatusIndicator status={sync.status} showLabel />}</div>
 
-          {sync.status === ApiEnvironmentSyncStatusChoices.InProgress ? (
+          {sync.status === ApiEnvironmentSyncStatusChoices.InProgress ||
+          sync.status === ApiEnvironmentSyncStatusChoices.Queued ? (
             <div></div>
           ) : (
             <div className="text-neutral-500">
