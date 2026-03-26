@@ -12,6 +12,7 @@ import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvi
 import { EntraIDProvider } from '@/ee/authentication/sso/oidc/util/entraidProvider'
 import GitHubEnterpriseProvider from '@/ee/authentication/sso/oidc/util/githubEnterpriseProvider'
 import { OktaProvider } from '@/ee/authentication/sso/oidc/util/oktaProvider'
+import { AutheliaProvider } from '@/ee/authentication/sso/oidc/util/autheliaProvider'
 import { custom } from 'openid-client'
 
 type AccessTokenResponse = {
@@ -186,23 +187,10 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     const clientSecret = getSecret('AUTHELIA_CLIENT_SECRET')
     if (clientSecret) {
       providers.push(
-        OIDCProvider({
-          id: 'authelia',
-          name: 'Authelia',
-          type: 'oauth',
+        AutheliaProvider({
           clientId: process.env.AUTHELIA_CLIENT_ID,
           clientSecret: clientSecret,
           issuer: process.env.AUTHELIA_URL,
-          wellKnown: `${process.env.AUTHELIA_URL}/.well-known/openid-configuration`,
-          authorization: { params: { scope: 'openid email profile' } },
-          profile: (profile) => {
-            return {
-              id: profile.sub,
-              name: profile.name,
-              email: profile.email,
-              image: profile.picture,
-            }
-          },
         })
       )
     }

@@ -1,3 +1,3 @@
 export type LogoProps = {
-  className: string
+  className?: string
 }
