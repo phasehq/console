@@ -12,6 +12,7 @@ import { OIDCProvider } from '@/ee/authentication/sso/oidc/util/genericOIDCProvi
 import { EntraIDProvider } from '@/ee/authentication/sso/oidc/util/entraidProvider'
 import GitHubEnterpriseProvider from '@/ee/authentication/sso/oidc/util/githubEnterpriseProvider'
 import { OktaProvider } from '@/ee/authentication/sso/oidc/util/oktaProvider'
+import { AutheliaProvider } from '@/ee/authentication/sso/oidc/util/autheliaProvider'
 import { custom } from 'openid-client'
 
 type AccessTokenResponse = {
@@ -182,6 +183,19 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
     }
   }
 
+  if (process.env.AUTHELIA_CLIENT_ID && process.env.AUTHELIA_URL) {
+    const clientSecret = getSecret('AUTHELIA_CLIENT_SECRET')
+    if (clientSecret) {
+      providers.push(
+        AutheliaProvider({
+          clientId: process.env.AUTHELIA_CLIENT_ID,
+          clientSecret: clientSecret,
+          issuer: process.env.AUTHELIA_URL,
+        })
+      )
+    }
+  }
+
   if (process.env.OKTA_OIDC_CLIENT_ID && process.env.OKTA_OIDC_ISSUER) {
     const clientSecret = getSecret('OKTA_OIDC_CLIENT_SECRET')
     if (clientSecret) {
@@ -250,6 +264,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
               account.provider === 'jumpcloud-oidc' ||
               account.provider === 'entra-id-oidc' ||
               account.provider === 'authentik' ||
+              account.provider === 'authelia' ||
               account.provider === 'okta-oidc'
             ) {
               const { access_token, id_token } = account
