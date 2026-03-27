@@ -50,6 +50,7 @@ export const ManageUserAccessDialog = ({
     variables: {
       appId: appId,
     },
+    fetchPolicy: 'cache-and-network',
   })
 
   // Get the environemnts that the member has access to
@@ -58,6 +59,7 @@ export const ManageUserAccessDialog = ({
       appId: appId,
       memberId: member.id,
     },
+    fetchPolicy: 'cache-and-network',
   })
 
   const envScope: Array<Partial<EnvironmentType>> = useMemo(() => {

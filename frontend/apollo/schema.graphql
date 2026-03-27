@@ -15,6 +15,7 @@ type Query {
   apps(organisationId: ID, appId: ID): [AppType]
   kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
   secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
+  auditLogs(organisationId: ID!, start: BigInt, end: BigInt, resourceType: String, resourceId: ID, eventTypes: [String], actorId: ID, offset: Int, limit: Int): AuditLogsResponseType
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
@@ -675,7 +676,8 @@ type OrganisationMemberInviteType {
   organisation: OrganisationType!
   apps: [AppMembershipType!]!
   role: RoleType
-  invitedBy: OrganisationMemberType!
+  invitedBy: OrganisationMemberType
+  invitedByServiceAccount: ServiceAccountType
   inviteeEmail: String!
   valid: Boolean!
   createdAt: DateTime
@@ -743,6 +745,88 @@ type SecretLogsResponseType {
 enum MemberType {
   USER
   SERVICE
+}
+
+type AuditLogsResponseType {
+  logs: [AuditEventType]
+  count: Int
+}
+
+type AuditEventType {
+  id: String!
+  eventType: ApiAuditEventEventTypeChoices!
+  resourceType: ApiAuditEventResourceTypeChoices!
+  resourceId: String!
+  actorType: ApiAuditEventActorTypeChoices!
+  actorId: String!
+  actorMetadata: JSONString!
+  resourceMetadata: JSONString!
+  oldValues: JSONString
+  newValues: JSONString
+  description: String!
+  ipAddress: String
+  userAgent: String!
+  timestamp: DateTime!
+}
+
+"""An enumeration."""
+enum ApiAuditEventEventTypeChoices {
+  """Create"""
+  C
+
+  """Read"""
+  R
+
+  """Update"""
+  U
+
+  """Delete"""
+  D
+
+  """Access"""
+  A
+}
+
+"""An enumeration."""
+enum ApiAuditEventResourceTypeChoices {
+  """App"""
+  APP
+
+  """Environment"""
+  ENV
+
+  """Role"""
+  ROLE
+
+  """ServiceAccount"""
+  SA
+
+  """OrganisationMember"""
+  MEMBER
+
+  """NetworkAccessPolicy"""
+  POLICY
+
+  """UserToken"""
+  PAT
+
+  """ServiceAccountToken"""
+  SA_TOKEN
+
+  """ServiceToken"""
+  SVC_TOKEN
+
+  """Invite"""
+  INVITE
+}
+
+"""An enumeration."""
+enum ApiAuditEventActorTypeChoices {
+  """User"""
+  USER
+
+  """ServiceAccount"""
+  SA
 }
 
 type ChartDataPointType {

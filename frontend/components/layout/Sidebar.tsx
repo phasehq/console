@@ -14,6 +14,7 @@ import {
   FaAngleDoubleLeft,
   FaAngleDoubleRight,
   FaChevronDown,
+  FaClipboardList,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
@@ -247,6 +248,12 @@ const Sidebar = () => {
       href: `/${team}/access/members`,
       icon: <FaUsersCog />,
       active: usePathname()?.split('/')[2] === `access`,
+    },
+    {
+      name: 'Logs',
+      href: `/${team}/logs`,
+      icon: <FaClipboardList />,
+      active: usePathname()?.split('/')[2] === `logs`,
     },
     {
       name: 'Settings',

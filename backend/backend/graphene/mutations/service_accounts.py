@@ -15,6 +15,8 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
 from datetime import datetime
 from django.conf import settings
@@ -92,6 +94,22 @@ class CreateServiceAccountMutation(graphene.Mutation):
             from ee.billing.stripe import update_stripe_subscription_seats
 
             update_stripe_subscription_seats(org)
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="sa",
+            resource_id=service_account.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name},
+            description=f"Created service account '{name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return CreateServiceAccountMutation(service_account=service_account)
 
@@ -254,12 +272,32 @@ class DeleteServiceAccountMutation(graphene.Mutation):
                 "You don't have the permissions required to delete Service Accounts in this organisation"
             )
 
+        sa_name = service_account.name
+        sa_id = service_account.id
+        sa_org = service_account.organisation
+
         service_account.delete()
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
 
-            update_stripe_subscription_seats(service_account.organisation)
+            update_stripe_subscription_seats(sa_org)
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=sa_org,
+            event_type="D",
+            resource_type="sa",
+            resource_id=sa_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": sa_name},
+            description=f"Deleted service account '{sa_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteServiceAccountMutation(ok=True)
 
@@ -315,6 +353,22 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
             expires_at=expires_at,
         )
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=service_account.organisation,
+            event_type="C",
+            resource_type="sa_token",
+            resource_id=token.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name, "service_account": service_account.name, "service_account_id": str(service_account.id)},
+            description=f"Created service account token '{name}' for '{service_account.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateServiceAccountTokenMutation(token=token)
 
 
@@ -336,6 +390,28 @@ class DeleteServiceAccountTokenMutation(graphene.Mutation):
                 "You don't have the permissions required to delete Service Tokens in this organisation"
             )
 
+        token_name = token.name
+        token_id = token.id
+        token_org = token.service_account.organisation
+        sa_name = token.service_account.name
+        sa_id = str(token.service_account.id)
+
         token.delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=token_org,
+            event_type="D",
+            resource_type="sa_token",
+            resource_id=token_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": token_name, "service_account": sa_name, "service_account_id": sa_id},
+            description=f"Deleted service account token '{token_name}' from '{sa_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteServiceAccountTokenMutation(ok=True)

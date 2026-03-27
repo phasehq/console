@@ -13,6 +13,7 @@ from graphene import ObjectType, relay, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
+    AuditEvent,
     CustomUser,
     DynamicSecret,
     Environment,
@@ -273,6 +274,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
         fields = (
             "id",
             "invited_by",
+            "invited_by_service_account",
             "invitee_email",
             "valid",
             "organisation",
@@ -973,6 +975,32 @@ class KMSLogsResponseType(ObjectType):
 
 class SecretLogsResponseType(ObjectType):
     logs = graphene.List(SecretEventType)
+    count = graphene.Int()
+
+
+class AuditEventType(DjangoObjectType):
+    class Meta:
+        model = AuditEvent
+        fields = (
+            "id",
+            "event_type",
+            "resource_type",
+            "resource_id",
+            "actor_type",
+            "actor_id",
+            "actor_metadata",
+            "resource_metadata",
+            "old_values",
+            "new_values",
+            "description",
+            "ip_address",
+            "user_agent",
+            "timestamp",
+        )
+
+
+class AuditLogsResponseType(ObjectType):
+    logs = graphene.List(AuditEventType)
     count = graphene.Int()
 
 

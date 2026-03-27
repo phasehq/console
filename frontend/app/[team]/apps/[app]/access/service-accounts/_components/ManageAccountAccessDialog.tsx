@@ -50,6 +50,7 @@ export const ManageAccountAccessDialog = ({
     variables: {
       appId: appId,
     },
+    fetchPolicy: 'cache-and-network',
   })
 
   // Get the environemnts that the account has access to
@@ -59,6 +60,7 @@ export const ManageAccountAccessDialog = ({
       memberId: account.id,
       memberType: MemberType.Service,
     },
+    fetchPolicy: 'cache-and-network',
   })
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)

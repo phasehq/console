@@ -39,6 +39,7 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
   const { data, loading } = useQuery(GetAppServiceAccounts, {
     variables: { appId: params.app },
     skip: !userCanReadAppSA,
+    fetchPolicy: 'cache-and-network',
   })
 
   const filteredAccounts = data?.appServiceAccounts

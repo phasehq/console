@@ -1,0 +1,41 @@
+query GetAuditLogs(
+  $organisationId: ID!
+  $start: BigInt
+  $end: BigInt
+  $resourceType: String
+  $resourceId: ID
+  $eventTypes: [String]
+  $actorId: ID
+  $offset: Int
+  $limit: Int
+) {
+  auditLogs(
+    organisationId: $organisationId
+    start: $start
+    end: $end
+    resourceType: $resourceType
+    resourceId: $resourceId
+    eventTypes: $eventTypes
+    actorId: $actorId
+    offset: $offset
+    limit: $limit
+  ) {
+    logs {
+      id
+      eventType
+      resourceType
+      resourceId
+      actorType
+      actorId
+      actorMetadata
+      resourceMetadata
+      oldValues
+      newValues
+      description
+      ipAddress
+      userAgent
+      timestamp
+    }
+    count
+  }
+}

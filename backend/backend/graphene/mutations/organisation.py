@@ -6,6 +6,8 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
 from backend.quotas import can_add_account
 import graphene
@@ -24,6 +26,8 @@ from backend.graphene.types import (
     OrganisationMemberType,
     OrganisationType,
 )
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from api.utils.rest import get_resolver_request_meta
 from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
@@ -200,6 +204,22 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
 
             created_invites.append(new_invite)
 
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="C",
+                resource_type="invite",
+                resource_id=str(new_invite.id),
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"email": email, "role": role.name},
+                description=f"Invited '{email}' with role '{role.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         return BulkInviteOrganisationMembersMutation(invites=created_invites)
 
 
@@ -219,7 +239,25 @@ class DeleteInviteMutation(graphene.Mutation):
             raise GraphQLError("You dont have permission to delete invites")
 
         if user_is_org_member(info.context.user, invite.organisation.id):
+            invite_email = invite.invitee_email
+            invite_id = str(invite.id)
             invite.delete()
+
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=invite.organisation,
+                event_type="D",
+                resource_type="invite",
+                resource_id=invite_id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"email": invite_email},
+                description=f"Deleted invite for '{invite_email}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
             return DeleteInviteMutation(ok=True)
 
@@ -314,12 +352,33 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
+        member_id_val = org_member.id
+        member_org = org_member.organisation
+        member_email = getattr(org_member.user, "email", "")
+        member_display_name = get_member_display_name(org_member)
+
         org_member.delete()
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
 
-            update_stripe_subscription_seats(org_member.organisation)
+            update_stripe_subscription_seats(member_org)
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=member_org,
+            event_type="D",
+            resource_type="member",
+            resource_id=member_id_val,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"email": member_email},
+            description=f"Deleted organisation member '{member_display_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteOrganisationMemberMutation(ok=True)
 
@@ -362,8 +421,28 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         if new_role.name.lower() == "owner":
             raise GraphQLError("You cannot set this user as the organisation owner")
 
+        old_role_name = org_member.role.name
+
         org_member.role = new_role
         org_member.save()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org_member.organisation,
+            event_type="U",
+            resource_type="member",
+            resource_id=org_member.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"email": getattr(org_member.user, "email", "")},
+            old_values={"role": old_role_name},
+            new_values={"role": new_role.name},
+            description=f"Updated member '{get_member_display_name(org_member)}' role from '{old_role_name}' to '{new_role.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return UpdateOrganisationMemberRole(org_member=org_member)
 
