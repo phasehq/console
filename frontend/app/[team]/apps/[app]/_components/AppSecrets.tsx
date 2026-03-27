@@ -49,11 +49,12 @@ import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
-import { duplicateKeysExist, normalizeKey } from '@/utils/secrets'
+import { duplicateKeysExist, getSavedSort, normalizeKey, saveSort, SortOption, sortAppSecrets } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
 import { AppFolderRow } from './AppFolderRow'
 import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
+import SortMenu from '@/components/environments/secrets/SortMenu'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -108,6 +109,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const [revealOnHover, setRevealOnHover] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState<string>('')
+
+  const [sort, _setSort] = useState<SortOption>(() => getSavedSort() ?? '-created')
+  const setSort = useCallback((option: SortOption) => {
+    _setSort(option)
+    saveSort(option)
+  }, [])
 
   const [bulkProcessSecrets, { loading: bulkUpdatePending }] = useMutation(BulkProcessSecrets)
 
@@ -223,16 +230,19 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     }
   }, [appSecrets])
 
-  const filteredSecrets =
-    searchQuery === ''
-      ? clientAppSecrets
-      : clientAppSecrets.filter((secret) => {
-          const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
-          const valueMatch = secret.envs.some(
-            (env) => env.secret && searchRegex.test(env.secret.value)
-          )
-          return searchRegex.test(secret.key) || valueMatch
-        })
+  const filteredSecrets = useMemo(() => {
+    const filtered =
+      searchQuery === ''
+        ? clientAppSecrets
+        : clientAppSecrets.filter((secret) => {
+            const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
+            const valueMatch = secret.envs.some(
+              (env) => env.secret && searchRegex.test(env.secret.value)
+            )
+            return searchRegex.test(secret.key) || valueMatch
+          })
+    return sortAppSecrets(filtered, sort)
+  }, [clientAppSecrets, searchQuery, sort])
 
   const filteredDynamicSecrets =
     searchQuery === ''
@@ -412,7 +422,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Config) => {
+  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret) => {
     const keyToUse = initialKey ?? ''
     const envs: EnvironmentType[] = appEnvironments
 
@@ -487,7 +497,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 tags: [],
                 comment: secret.comment,
                 path: '/',
-                type: ApiSecretTypeChoices.Config,
+                type: ApiSecretTypeChoices.Secret,
                 environment: env as EnvironmentType,
               }
             } else if (match && secret) {
@@ -737,24 +747,29 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       </div>
 
       <div className="flex items-center w-full justify-between border-b border-neutral-500/20 pb-4">
-        <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-          <div className="">
-            <FaSearch className="text-neutral-500" />
+        <div className="flex items-center gap-2">
+          <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+            <div className="">
+              <FaSearch className="text-neutral-500" />
+            </div>
+            <input
+              placeholder="Search keys or values"
+              className="custom bg-zinc-100 dark:bg-zinc-800"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <FaTimesCircle
+              className={clsx(
+                'cursor-pointer text-neutral-500 transition-opacity ease',
+                searchQuery ? 'opacity-100' : 'opacity-0'
+              )}
+              role="button"
+              onClick={() => setSearchQuery('')}
+            />
           </div>
-          <input
-            placeholder="Search keys or values"
-            className="custom bg-zinc-100 dark:bg-zinc-800"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <FaTimesCircle
-            className={clsx(
-              'cursor-pointer text-neutral-500 transition-opacity ease',
-              searchQuery ? 'opacity-100' : 'opacity-0'
-            )}
-            role="button"
-            onClick={() => setSearchQuery('')}
-          />
+          <div className="relative">
+            <SortMenu sort={sort} setSort={setSort} />
+          </div>
         </div>
 
         <div className="flex flex-col items-end gap-4 pr-4">
