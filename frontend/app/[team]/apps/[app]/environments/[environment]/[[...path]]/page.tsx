@@ -67,8 +67,10 @@ import { EmptyState } from '@/components/common/EmptyState'
 import {
   duplicateKeysExist,
   exportToEnvFile,
+  getSavedSort,
   normalizeKey,
   processEnvFile,
+  saveSort,
   SortOption,
   sortSecrets,
 } from '@/utils/secrets'
@@ -118,7 +120,11 @@ export default function EnvironmentPath({
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
-  const [sort, setSort] = useState<SortOption>('-created')
+  const [sort, _setSort] = useState<SortOption>(() => getSavedSort() ?? '-created')
+  const setSort = useCallback((option: SortOption) => {
+    _setSort(option)
+    saveSort(option)
+  }, [])
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
