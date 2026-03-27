@@ -394,9 +394,9 @@ class TestCompleteLogin(unittest.TestCase):
         app = _make_mock_app()
         request = _make_mock_request()
 
-        # Act & Assert: The Authelia adapter's complete_login does not wrap
-        # exceptions in a try/except, so HTTPError propagates directly.
-        with self.assertRaises(HTTPError):
+        # Act & Assert: The generic adapter's complete_login wraps exceptions
+        # in OAuth2Error via try/except.
+        with self.assertRaises(OAuth2Error):
             adapter.complete_login(request, app, token)
 
 
