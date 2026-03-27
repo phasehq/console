@@ -10,7 +10,7 @@ import json
 from django.utils import timezone
 from django.conf import settings
 from api.services import Providers, ServiceConfig
-from api.tasks.syncing import trigger_sync_tasks
+from api.tasks.syncing import trigger_sync_tasks, trigger_syncs_for_referencing_envs
 from backend.quotas import (
     can_add_account,
     can_add_app,
@@ -402,6 +402,10 @@ class Environment(models.Model):
             if env_sync.is_active
         ]
 
+        # Trigger syncs for other environments whose secrets
+        # reference this one (cross-env and cross-app references)
+        trigger_syncs_for_referencing_envs(self)
+
 
 class EnvironmentKey(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
@@ -470,6 +474,7 @@ class ProviderCredentials(models.Model):
 
 
 class EnvironmentSync(models.Model):
+    QUEUED = "queued"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -477,6 +482,7 @@ class EnvironmentSync(models.Model):
     FAILED = "failed"
 
     STATUS_OPTIONS = [
+        (QUEUED, "Queued"),
         (IN_PROGRESS, "In progress"),
         (COMPLETED, "Completed"),
         (CANCELLED, "cancelled"),
@@ -501,7 +507,7 @@ class EnvironmentSync(models.Model):
     status = models.CharField(
         max_length=16,
         choices=STATUS_OPTIONS,
-        default=IN_PROGRESS,
+        default=QUEUED,
     )
 
 
@@ -512,7 +518,7 @@ class EnvironmentSyncEvent(models.Model):
     status = models.CharField(
         max_length=16,
         choices=EnvironmentSync.STATUS_OPTIONS,
-        default=EnvironmentSync.IN_PROGRESS,
+        default=EnvironmentSync.QUEUED,
     )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     completed_at = models.DateTimeField(blank=True, null=True)
