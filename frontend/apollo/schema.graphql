@@ -385,6 +385,18 @@ enum ApiSecretEventTypeChoices {
 }
 
 """An enumeration."""
+enum ApiSecretEventTypeChoices {
+  """Secret"""
+  SECRET
+
+  """Sealed"""
+  SEALED
+
+  """Config"""
+  CONFIG
+}
+
+"""An enumeration."""
 enum ApiSecretEventEventTypeChoices {
   """Create"""
   C
