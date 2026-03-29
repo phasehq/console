@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
 export type Maybe<T> = T | null;
-export type InputMaybe<T> = T | null | undefined;
+export type InputMaybe<T> = Maybe<T>;
 export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 export type MakeOptional<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]?: Maybe<T[SubKey]> };
 export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]: Maybe<T[SubKey]> };
@@ -219,6 +219,16 @@ export enum ApiSecretEventEventTypeChoices {
   R = 'R',
   /** Update */
   U = 'U'
+}
+
+/** An enumeration. */
+export enum ApiSecretEventTypeChoices {
+  /** Config */
+  Config = 'CONFIG',
+  /** Sealed */
+  Sealed = 'SEALED',
+  /** Secret */
+  Secret = 'SECRET'
 }
 
 /** An enumeration. */
@@ -2346,7 +2356,7 @@ export type SecretEventType = {
   serviceToken?: Maybe<ServiceTokenType>;
   tags: Array<SecretTagType>;
   timestamp: Scalars['DateTime']['output'];
-  type: ApiSecretTypeChoices;
+  type: ApiSecretEventTypeChoices;
   user?: Maybe<OrganisationMemberType>;
   userAgent?: Maybe<Scalars['String']['output']>;
   value: Scalars['String']['output'];
@@ -3810,7 +3820,7 @@ export type GetSecretHistoryQueryVariables = Exact<{
 }>;
 
 
-export type GetSecretHistoryQuery = { __typename?: 'Query', secrets?: Array<{ __typename?: 'SecretType', id: string, history?: Array<{ __typename?: 'SecretEventType', id: string, key: string, value: string, type: ApiSecretTypeChoices, path: string, version: number, comment: string, timestamp: any, ipAddress?: string | null, userAgent?: string | null, eventType: ApiSecretEventEventTypeChoices, tags: Array<{ __typename?: 'SecretTagType', id: string, name: string, color: string }>, user?: { __typename?: 'OrganisationMemberType', email?: string | null, username?: string | null, fullName?: string | null, avatarUrl?: string | null } | null, serviceToken?: { __typename?: 'ServiceTokenType', id: string, name: string } | null, serviceAccount?: { __typename?: 'ServiceAccountType', id: string, name: string, deletedAt?: any | null } | null } | null> | null } | null> | null, environmentKeys?: Array<{ __typename?: 'EnvironmentKeyType', id: string, identityKey: string, wrappedSeed: string, wrappedSalt: string } | null> | null };
+export type GetSecretHistoryQuery = { __typename?: 'Query', secrets?: Array<{ __typename?: 'SecretType', id: string, history?: Array<{ __typename?: 'SecretEventType', id: string, key: string, value: string, type: ApiSecretEventTypeChoices, path: string, version: number, comment: string, timestamp: any, ipAddress?: string | null, userAgent?: string | null, eventType: ApiSecretEventEventTypeChoices, tags: Array<{ __typename?: 'SecretTagType', id: string, name: string, color: string }>, user?: { __typename?: 'OrganisationMemberType', email?: string | null, username?: string | null, fullName?: string | null, avatarUrl?: string | null } | null, serviceToken?: { __typename?: 'ServiceTokenType', id: string, name: string } | null, serviceAccount?: { __typename?: 'ServiceAccountType', id: string, name: string, deletedAt?: any | null } | null } | null> | null } | null> | null, environmentKeys?: Array<{ __typename?: 'EnvironmentKeyType', id: string, identityKey: string, wrappedSeed: string, wrappedSalt: string } | null> | null };
 
 export type GetEnvSecretsKvQueryVariables = Exact<{
   envId: Scalars['ID']['input'];
