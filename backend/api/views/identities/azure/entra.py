@@ -1,8 +1,11 @@
 import base64
 import json
+import logging
 
 import jwt
 from django.http import JsonResponse
+
+logger = logging.getLogger(__name__)
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 
@@ -99,9 +102,11 @@ def azure_entra_auth(request):
     try:
         claims = validate_azure_jwt(token_str, configured_tenant_id, configured_resource)
     except ValueError as e:
-        return JsonResponse({"error": str(e)}, status=401)
-    except Exception:
-        return JsonResponse({"error": "JWT validation failed"}, status=401)
+        logger.warning("Azure JWT validation error: %s", e)
+        return JsonResponse({"error": "Azure JWT validation failed"}, status=401)
+    except Exception as e:
+        logger.warning("Azure JWT validation error: %s", e)
+        return JsonResponse({"error": "Azure JWT validation failed"}, status=401)
 
     # Trust check: match oid claim against allowedServicePrincipalIds
     oid = claims.get("oid")
