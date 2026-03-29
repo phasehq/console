@@ -154,7 +154,7 @@ export const AzureEntraIdentityForm = ({
     } catch (e: any) {
       const hasGraphQLErrors = Array.isArray(e?.graphQLErrors) && e.graphQLErrors.length > 0
       if (!hasGraphQLErrors) {
-        toast.error('Failed to create External Identity')
+        toast.error(identity ? 'Failed to update External Identity' : 'Failed to create External Identity')
       } else {
         toast.error(e.message)
       }

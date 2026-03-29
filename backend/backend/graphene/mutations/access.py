@@ -288,6 +288,13 @@ class CreateIdentityMutation(graphene.Mutation):
             except ValueError as e:
                 raise GraphQLError(str(e))
 
+            from uuid import UUID
+            for sp_id in trusted_list:
+                try:
+                    UUID(sp_id)
+                except ValueError:
+                    raise GraphQLError(f"Invalid service principal ID format: '{sp_id}'. Must be a valid UUID.")
+
             config = {
                 "tenantId": tenant_id,
                 "resource": resource,
@@ -383,6 +390,12 @@ class UpdateIdentityMutation(graphene.Mutation):
                 p.strip() for p in trusted_principals.split(",") if p.strip()
             ]
             if is_azure:
+                from uuid import UUID
+                for sp_id in trusted_list:
+                    try:
+                        UUID(sp_id)
+                    except ValueError:
+                        raise GraphQLError(f"Invalid service principal ID format: '{sp_id}'. Must be a valid UUID.")
                 config_updates["allowedServicePrincipalIds"] = trusted_list
             else:
                 config_updates["trustedPrincipals"] = trusted_list

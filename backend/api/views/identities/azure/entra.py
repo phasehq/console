@@ -27,9 +27,12 @@ def azure_entra_auth(request):
     except Exception:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    account = (payload or {}).get("account", {})
-    azure_entra = (payload or {}).get("azureEntra", {})
-    token_req = (payload or {}).get("tokenRequest", {})
+    if not isinstance(payload, dict):
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+
+    account = payload.get("account", {})
+    azure_entra = payload.get("azureEntra", {})
+    token_req = payload.get("tokenRequest", {})
 
     account_type = (account.get("type") or "service").lower()
     account_id = account.get("id")
@@ -101,9 +104,6 @@ def azure_entra_auth(request):
     # Validate the Azure AD JWT
     try:
         claims = validate_azure_jwt(token_str, configured_tenant_id, configured_resource)
-    except ValueError as e:
-        logger.warning("Azure JWT validation error: %s", e)
-        return JsonResponse({"error": "Azure JWT validation failed"}, status=401)
     except Exception as e:
         logger.warning("Azure JWT validation error: %s", e)
         return JsonResponse({"error": "Azure JWT validation failed"}, status=401)

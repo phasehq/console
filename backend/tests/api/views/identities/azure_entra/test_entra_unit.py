@@ -72,6 +72,27 @@ class TestAzureEntraAuth(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Missing azureEntra.jwt", response.content.decode())
 
+    def test_non_service_account_type_rejected(self):
+        payload = {
+            "account": {"type": "user", "id": self.service_account_id},
+            "azureEntra": {"jwt": ENCODED_JWT},
+        }
+        request = self.make_request(payload)
+        response = azure_entra_auth(request)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Only service account authentication supported", response.content.decode())
+
+    @patch("api.views.identities.azure.entra.resolve_service_account")
+    def test_server_wrapped_keyring_required(self, mock_resolve):
+        mock_sa = MagicMock()
+        mock_sa.server_wrapped_keyring = None
+        mock_resolve.return_value = mock_sa
+
+        request = self.make_request(self.valid_payload)
+        response = azure_entra_auth(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Server-side key management must be enabled", response.content.decode())
+
     @patch("api.views.identities.azure.entra.resolve_service_account")
     def test_service_account_not_found(self, mock_resolve):
         mock_resolve.return_value = None
