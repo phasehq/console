@@ -108,7 +108,7 @@ class TestAzureEntraAuth(unittest.TestCase):
         request = self.make_request(self.valid_payload)
         response = azure_entra_auth(request)
         self.assertEqual(response.status_code, 401)
-        self.assertIn("Signature verification failed", response.content.decode())
+        self.assertIn("Azure JWT validation failed", response.content.decode())
 
     @patch("api.views.identities.azure.entra.resolve_service_account")
     @patch("api.views.identities.azure.entra.validate_azure_jwt")
@@ -126,7 +126,7 @@ class TestAzureEntraAuth(unittest.TestCase):
         request = self.make_request(self.valid_payload)
         response = azure_entra_auth(request)
         self.assertEqual(response.status_code, 401)
-        self.assertIn("Signature has expired", response.content.decode())
+        self.assertIn("Azure JWT validation failed", response.content.decode())
 
     @patch("api.views.identities.azure.entra.resolve_service_account")
     @patch("api.views.identities.azure.entra.validate_azure_jwt")
@@ -144,7 +144,7 @@ class TestAzureEntraAuth(unittest.TestCase):
         request = self.make_request(self.valid_payload)
         response = azure_entra_auth(request)
         self.assertEqual(response.status_code, 401)
-        self.assertIn("Tenant ID mismatch", response.content.decode())
+        self.assertIn("Azure JWT validation failed", response.content.decode())
 
     @patch("api.views.identities.azure.entra.resolve_service_account")
     @patch("api.views.identities.azure.entra.validate_azure_jwt")
