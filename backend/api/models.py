@@ -1007,6 +1007,128 @@ class PersonalSecret(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
 
 
+class Team(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.CharField(max_length=64)
+    description = models.TextField(null=True, blank=True)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="teams"
+    )
+
+    # Optional roles — when set, override org role's app_permissions for team-accessed apps
+    member_role = models.ForeignKey(
+        Role,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="teams_as_member_role",
+    )
+    service_account_role = models.ForeignKey(
+        Role,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="teams_as_sa_role",
+    )
+
+    is_scim_managed = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        OrganisationMember,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="created_teams",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.save()
+
+    def __str__(self):
+        return f"{self.name} ({self.organisation.name})"
+
+
+class TeamMembership(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    team = models.ForeignKey(
+        Team, on_delete=models.CASCADE, related_name="memberships"
+    )
+    org_member = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="team_memberships",
+    )
+    service_account = models.ForeignKey(
+        ServiceAccount,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="team_memberships",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "org_member"],
+                condition=models.Q(org_member__isnull=False),
+                name="unique_team_user",
+            ),
+            models.UniqueConstraint(
+                fields=["team", "service_account"],
+                condition=models.Q(service_account__isnull=False),
+                name="unique_team_sa",
+            ),
+        ]
+
+
+class TeamAppEnvironment(models.Model):
+    """Tracks which environments within an app a team has access to."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    team = models.ForeignKey(
+        Team, on_delete=models.CASCADE, related_name="app_environments"
+    )
+    app = models.ForeignKey(App, on_delete=models.CASCADE)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "environment"],
+                name="unique_team_env",
+            )
+        ]
+
+
+class EnvironmentKeyGrant(models.Model):
+    """Tracks why an EnvironmentKey exists — prevents accidental revocation
+    when removing team access."""
+
+    INDIVIDUAL = "individual"
+    TEAM = "team"
+
+    GRANT_TYPE_CHOICES = [
+        (INDIVIDUAL, "Individual"),
+        (TEAM, "Team"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    environment_key = models.ForeignKey(
+        EnvironmentKey, on_delete=models.CASCADE, related_name="grants"
+    )
+    grant_type = models.CharField(max_length=20, choices=GRANT_TYPE_CHOICES)
+    team = models.ForeignKey(
+        Team, on_delete=models.CASCADE, null=True, blank=True, related_name="key_grants"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+
+
 class Lockbox(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     data = models.JSONField()
