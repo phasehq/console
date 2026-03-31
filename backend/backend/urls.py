@@ -13,6 +13,7 @@ from api.views.auth import (
     root_endpoint,
 )
 from api.views.identities.aws.iam import aws_iam_auth
+from api.views.identities.azure.entra import azure_entra_auth
 from api.views.kms import kms
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
@@ -49,6 +50,7 @@ public_urls = [
         include("ee.integrations.secrets.dynamic.rest.urls"),
     ),
     path("public/identities/external/v1/aws/iam/auth/", aws_iam_auth),
+    path("public/identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]
 
 # Add public URLs to main urlpatterns

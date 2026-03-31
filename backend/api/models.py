@@ -985,7 +985,10 @@ class Identity(models.Model):
 
     def get_trusted_list(self):
         try:
-            principals = self.config.get("trustedPrincipals", [])
+            if self.provider == "azure_entra":
+                principals = self.config.get("allowedServicePrincipalIds", [])
+            else:
+                principals = self.config.get("trustedPrincipals", [])
             if isinstance(principals, list):
                 return [
                     p.strip() for p in principals if isinstance(p, str) and p.strip()
