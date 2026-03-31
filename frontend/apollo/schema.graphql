@@ -359,12 +359,30 @@ type IdentityType {
   serviceAccounts: [ServiceAccountType!]!
 }
 
-union IdentityConfigUnion = AwsIamConfigType
+union IdentityConfigUnion = AwsIamConfigType | AzureEntraConfigType
 
 type AwsIamConfigType {
   trustedPrincipals: [String]
   signatureTtlSeconds: Int
   stsEndpoint: String
+}
+
+type AzureEntraConfigType {
+  tenantId: String
+  resource: String
+  allowedServicePrincipalIds: [String]
+}
+
+"""An enumeration."""
+enum ApiSecretEventTypeChoices {
+  """Secret"""
+  SECRET
+
+  """Sealed"""
+  SEALED
+
+  """Config"""
+  CONFIG
 }
 
 """An enumeration."""
@@ -831,7 +849,6 @@ type IdentityProviderType {
   name: String!
   description: String!
   iconId: String!
-  supported: Boolean!
 }
 
 type CloudFlarePagesType {
@@ -1077,8 +1094,8 @@ type Mutation {
   updateNetworkAccessPolicy(policyInputs: [UpdatePolicyInput]): UpdateNetworkAccessPolicyMutation
   deleteNetworkAccessPolicy(id: ID!): DeleteNetworkAccessPolicyMutation
   updateAccountNetworkAccessPolicies(accountInputs: [AccountPolicyInput], organisationId: ID!): UpdateAccountNetworkAccessPolicies
-  createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
-  updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
+  createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
+  updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
   deleteIdentity(id: ID!): DeleteIdentityMutation
   createTeam(description: String, memberRoleId: ID, name: String!, organisationId: ID!, serviceAccountRoleId: ID): CreateTeamMutation
   updateTeam(description: String, memberRoleId: ID, name: String, serviceAccountRoleId: ID, teamId: ID!): UpdateTeamMutation
