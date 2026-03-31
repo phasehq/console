@@ -3,16 +3,16 @@
 import { AppType, EnvironmentType, TeamType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
+import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { AddTeamAppsOp } from '@/graphql/mutations/teams/addTeamApps.gql'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef, useState } from 'react'
-import { FaPlus, FaCheck, FaUsers, FaChevronDown } from 'react-icons/fa'
+import { FaPlus, FaCheck, FaUsers } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
-import { Disclosure } from '@headlessui/react'
 
 export const AddTeamToAppDialog = ({
   appId,
@@ -41,6 +41,7 @@ export const AddTeamToAppDialog = ({
     ) || []
 
   const envIds = appEnvironments.map((e) => e.id)
+  const allSelected = envIds.length > 0 && envIds.every((id) => selectedEnvIds.has(id))
 
   const toggleEnv = (envId: string) => {
     setSelectedEnvIds((prev) => {
@@ -109,7 +110,7 @@ export const AddTeamToAppDialog = ({
       ref={dialogRef}
       onClose={reset}
     >
-      <div className="space-y-4 py-4">
+      <div className="space-y-4 pt-4">
         {availableTeams.length === 0 ? (
           <p className="text-sm text-neutral-500 text-center py-4">
             No available teams. All teams already have access to this app, or no teams exist.
@@ -138,7 +139,7 @@ export const AddTeamToAppDialog = ({
                     <div className="flex items-center gap-2">
                       <FaUsers className="text-neutral-500 text-sm" />
                       <div>
-                        <div className="text-sm font-medium">{team.name}</div>
+                        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{team.name}</div>
                         <div className="text-xs text-neutral-500">
                           {team.memberCount} member{team.memberCount !== 1 ? 's' : ''}
                         </div>
@@ -161,74 +162,42 @@ export const AddTeamToAppDialog = ({
 
             {/* Environment Selection */}
             {selectedTeam && (
-              <Disclosure defaultOpen>
-                {({ open }) => (
-                  <div className="border border-zinc-500/20 rounded-lg overflow-hidden">
-                    <Disclosure.Button className="w-full flex items-center justify-between p-3 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                      <span className="text-sm font-medium">
-                        Environment access
-                        {selectedEnvIds.size > 0 && (
-                          <span className="text-2xs ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500">
-                            {selectedEnvIds.size} selected
-                          </span>
-                        )}
-                      </span>
-                      <FaChevronDown
+              <div>
+                <label className="block text-2xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                  Environment access
+                </label>
+                <div
+                  className="flex items-center justify-between py-2 cursor-pointer"
+                  onClick={toggleAllEnvs}
+                >
+                  <span className="text-2xs text-neutral-500">All environments</span>
+                  <ToggleSwitch size="sm" value={allSelected} onToggle={toggleAllEnvs} />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {appEnvironments.map((env) => {
+                    const isSelected = selectedEnvIds.has(env.id)
+                    return (
+                      <div
+                        key={env.id}
                         className={clsx(
-                          'text-neutral-500 transition-transform',
-                          open && 'rotate-180'
+                          'flex items-center gap-1.5 py-1 px-2 cursor-pointer rounded-full border transition',
+                          isSelected
+                            ? 'border-emerald-500/40 bg-emerald-500/10'
+                            : 'border-zinc-500/20 hover:border-zinc-500/40'
                         )}
-                      />
-                    </Disclosure.Button>
-                    <Disclosure.Panel className="p-3 border-t border-zinc-500/20">
-                      <div className="space-y-1">
-                        <div
-                          className="flex items-center gap-2 p-1.5 cursor-pointer text-sm text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-                          onClick={toggleAllEnvs}
-                        >
-                          <div
-                            className={clsx(
-                              'w-4 h-4 rounded border flex items-center justify-center transition',
-                              envIds.every((id) => selectedEnvIds.has(id))
-                                ? 'bg-emerald-500 border-emerald-500 text-white'
-                                : 'border-neutral-500/40'
-                            )}
-                          >
-                            {envIds.every((id) => selectedEnvIds.has(id)) && (
-                              <FaCheck className="text-2xs" />
-                            )}
-                          </div>
-                          Select all environments
-                        </div>
-                        {appEnvironments.map((env) => (
-                          <div
-                            key={env.id}
-                            className="flex items-center gap-2 p-1.5 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
-                            onClick={() => toggleEnv(env.id)}
-                          >
-                            <div
-                              className={clsx(
-                                'w-4 h-4 rounded border flex items-center justify-center transition',
-                                selectedEnvIds.has(env.id)
-                                  ? 'bg-emerald-500 border-emerald-500 text-white'
-                                  : 'border-neutral-500/40'
-                              )}
-                            >
-                              {selectedEnvIds.has(env.id) && (
-                                <FaCheck className="text-2xs" />
-                              )}
-                            </div>
-                            <span className="text-sm">{env.name}</span>
-                            <span className="text-2xs text-neutral-500 uppercase">
-                              {env.envType}
-                            </span>
-                          </div>
-                        ))}
+                        onClick={() => toggleEnv(env.id)}
+                      >
+                        <span className="text-2xs text-zinc-900 dark:text-zinc-100">{env.name}</span>
+                        <ToggleSwitch
+                          size="sm"
+                          value={isSelected}
+                          onToggle={() => toggleEnv(env.id)}
+                        />
                       </div>
-                    </Disclosure.Panel>
-                  </div>
-                )}
-              </Disclosure>
+                    )
+                  })}
+                </div>
+              </div>
             )}
           </>
         )}
