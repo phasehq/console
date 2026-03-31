@@ -1,13 +1,15 @@
 'use client'
 
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { useQuery } from '@apollo/client'
-import { useContext, useState } from 'react'
-import { ServiceAccountType } from '@/apollo/graphql'
+import { useContext, useMemo, useState } from 'react'
+import { ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaBan, FaRobot, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import { userHasPermission } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { TeamLabel } from '@/components/teams/TeamLabel'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { AddAccountDialog } from './_components/AddAccountDialog'
@@ -36,10 +38,36 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete', true)
     : false
 
+  const userCanReadTeams = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
+    : false
+
   const { data, loading } = useQuery(GetAppServiceAccounts, {
     variables: { appId: params.app },
     skip: !userCanReadAppSA,
   })
+
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadTeams,
+  })
+
+  // Map SA ID → teams that grant access to this app
+  const saTeamsMap = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }[]>()
+    if (!teamsData?.teams) return map
+    for (const team of teamsData.teams as TeamType[]) {
+      const hasApp = team.apps?.some((a) => a!.id === params.app)
+      if (!hasApp) continue
+      for (const m of team.members || []) {
+        if (!m.serviceAccount) continue
+        const list = map.get(m.serviceAccount.id) || []
+        list.push({ id: team.id, name: team.name })
+        map.set(m.serviceAccount.id, list)
+      }
+    }
+    return map
+  }, [teamsData, params.app])
 
   const filteredAccounts = data?.appServiceAccounts
     ? searchQuery !== ''
@@ -125,25 +153,37 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
                   <tr className="group" key={account.id}>
                     <td className="px-6 py-2 whitespace-nowrap flex items-center gap-2">
                       <Avatar serviceAccount={account} size="md" />
-                      <div className="flex flex-col">
+                      <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm">{account.name}</span>
                           <RoleLabel role={account.role!} />
                         </div>
                         <span className="text-neutral-500 text-2xs font-mono">{account.id}</span>
+                        {saTeamsMap.get(account.id) && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {saTeamsMap.get(account.id)!.map((t) => (
+                              <TeamLabel
+                                key={t.id}
+                                teamId={t.id}
+                                teamName={t.name}
+                                orgSlug={params.team}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </td>
 
                     <td className="px-6 py-2">
                       <div className="flex items-center gap-2 ">
-                        <ManageAccountAccessDialog appId={params.app} account={account} />
+                        <ManageAccountAccessDialog appId={params.app} account={account} teams={saTeamsMap.get(account.id)} />
                       </div>
                     </td>
 
                     {userCanRemoveAppSA && (
                       <td className="px-6 py-2">
                         <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
-                          <RemoveAccountConfirmDialog appId={params.app} account={account} />
+                          <RemoveAccountConfirmDialog appId={params.app} account={account} teams={saTeamsMap.get(account.id)} />
                         </div>
                       </td>
                     )}

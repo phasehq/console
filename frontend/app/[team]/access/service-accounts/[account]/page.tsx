@@ -4,18 +4,20 @@ import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
 import { UpdateServiceAccountOp } from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { FaBan, FaBoxOpen, FaChevronLeft, FaCog, FaEdit, FaNetworkWired } from 'react-icons/fa'
 import { FaServer, FaArrowDownUpLock } from 'react-icons/fa6'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
-import { ServiceAccountType } from '@/apollo/graphql'
+import { ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ServiceAccountRoleSelector } from '../_components/RoleSelector'
+import { RoleLabel } from '@/components/users/RoleLabel'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import CopyButton from '@/components/common/CopyButton'
@@ -51,15 +53,31 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete')
     : false
 
+  const userCanReadTeams = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
+    : false
+
   const { data, loading } = useQuery(GetServiceAccountDetail, {
     variables: { orgId: organisation?.id, id: params.account },
     skip: !organisation || !userCanReadSA,
     fetchPolicy: 'cache-and-network',
   })
 
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadTeams,
+  })
+
   const [updateAccount] = useMutation(UpdateServiceAccountOp)
 
   const account: ServiceAccountType = data?.serviceAccounts[0]
+
+  const accountTeams = useMemo(() => {
+    if (!teamsData?.teams || !account) return []
+    return (teamsData.teams as TeamType[]).filter((team) =>
+      team.members?.some((m) => m.serviceAccount?.id === account.id)
+    )
+  }, [teamsData, account])
 
   const nameUpdated = account ? account.name !== name : false
 
@@ -214,6 +232,63 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             </div>
           </div>
         </div>
+
+        {userCanReadTeams && (
+          <div className="py-4 space-y-3">
+            <div>
+              <div className="text-base font-medium">Teams</div>
+              <div className="text-neutral-500 text-sm">
+                Teams this account belongs to
+              </div>
+            </div>
+
+            <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+              {accountTeams.length > 0 ? (
+                accountTeams.map((team) => (
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between py-1.5 px-2 group"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/${params.team}/access/teams/${team.id}`}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:underline"
+                        >
+                          {team.name}
+                        </Link>
+                        {team.serviceAccountRole && <RoleLabel role={team.serviceAccountRole} size="xs" />}
+                      </div>
+                      {team.description && (
+                        <div className="text-2xs text-neutral-500 truncate max-w-md">
+                          {team.description}
+                        </div>
+                      )}
+                      <div className="text-2xs text-neutral-500">
+                        {team.apps?.length || 0} app{team.apps?.length !== 1 ? 's' : ''}
+                        {team.apps && team.apps.length > 0 && (
+                          <> ({team.apps.map((a) => a!.name).join(', ')})</>
+                        )}
+                      </div>
+                    </div>
+                    <Link
+                      className="opacity-0 group-hover:opacity-100 transition ease"
+                      href={`/${params.team}/access/teams/${team.id}`}
+                    >
+                      <Button variant="secondary" icon={FaCog}>
+                        Manage
+                      </Button>
+                    </Link>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-neutral-500">
+                  This account is not part of any teams.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="py-4">
           <div className="flex items-center justify-between">

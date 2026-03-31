@@ -24,9 +24,11 @@ import { useSearchParams } from 'next/navigation'
 export const ManageAccountAccessDialog = ({
   account,
   appId,
+  teams,
 }: {
   account: ServiceAccountType
   appId: string
+  teams?: { id: string; name: string }[]
 }) => {
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -215,6 +217,21 @@ export const ManageAccountAccessDialog = ({
                       Service Accounts
                     </Link>{' '}
                     page.
+                  </p>
+                </Alert>
+              )}
+              {teams && teams.length > 0 && (
+                <Alert variant="info" icon={true} size="sm">
+                  <p>
+                    This account also has access to this app via the{' '}
+                    {teams.map((t) => (
+                      <strong key={t.id}>{t.name}</strong>
+                    )).reduce<React.ReactNode[]>((acc, el, i) => {
+                      if (i === 0) return [el]
+                      if (i === teams.length - 1) return [...acc, ' and ', el]
+                      return [...acc, ', ', el]
+                    }, [])}{' '}
+                    {teams.length === 1 ? 'team' : 'teams'}.
                   </p>
                 </Alert>
               )}

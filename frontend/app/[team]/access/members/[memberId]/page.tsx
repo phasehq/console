@@ -3,14 +3,16 @@
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationMemberDetail } from '@/graphql/queries/users/getOrganisationMemberDetail.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext } from 'react'
+import { useContext, useMemo } from 'react'
 import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey, FaNetworkWired } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
-import { OrganisationMemberType, UserTokenType, AppMembershipType } from '@/apollo/graphql'
+import { OrganisationMemberType, UserTokenType, AppMembershipType, TeamType } from '@/apollo/graphql'
+import { RoleLabel } from '@/components/users/RoleLabel'
 import { DeleteMemberConfirmDialog } from '../_components/DeleteMemberConfirmDialog'
 import { RoleSelector } from '../_components/RoleSelector'
 import { relativeTimeFromDates } from '@/utils/time'
@@ -59,6 +61,10 @@ export default function MemberDetail({ params }: { params: { team: string; membe
     ? userHasPermission(organisation.role!.permissions, 'MemberPersonalAccessTokens', 'delete')
     : false
 
+  const userCanReadTeams = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
+    : false
+
   const { data, loading, error } = useQuery(GetOrganisationMemberDetail, {
     variables: {
       organisationId: organisation?.id,
@@ -68,7 +74,19 @@ export default function MemberDetail({ params }: { params: { team: string; membe
     fetchPolicy: 'cache-and-network',
   })
 
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadTeams,
+  })
+
   const member: OrganisationMemberType | undefined = data?.organisationMembers[0]
+
+  const memberTeams = useMemo(() => {
+    if (!teamsData?.teams || !member) return []
+    return (teamsData.teams as TeamType[]).filter((team) =>
+      team.members?.some((m) => m.orgMember?.id === member.id)
+    )
+  }, [teamsData, member])
 
   if (loading || !organisation) {
     return (
@@ -200,6 +218,63 @@ export default function MemberDetail({ params }: { params: { team: string; membe
             </div>
           </div>
         </div>
+
+        {userCanReadTeams && (
+          <div className="pt-4 space-y-3 border-t border-neutral-500/40">
+            <div>
+              <div className="text-base font-medium">Teams</div>
+              <div className="text-neutral-500 text-sm">
+                Teams this member belongs to
+              </div>
+            </div>
+
+            <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+              {memberTeams.length > 0 ? (
+                memberTeams.map((team) => (
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between py-1.5 px-2 group"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/${params.team}/access/teams/${team.id}`}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:underline"
+                        >
+                          {team.name}
+                        </Link>
+                        {team.memberRole && <RoleLabel role={team.memberRole} size="xs" />}
+                      </div>
+                      {team.description && (
+                        <div className="text-2xs text-neutral-500 truncate max-w-md">
+                          {team.description}
+                        </div>
+                      )}
+                      <div className="text-2xs text-neutral-500">
+                        {team.apps?.length || 0} app{team.apps?.length !== 1 ? 's' : ''}
+                        {team.apps && team.apps.length > 0 && (
+                          <> ({team.apps.map((a) => a!.name).join(', ')})</>
+                        )}
+                      </div>
+                    </div>
+                    <Link
+                      className="opacity-0 group-hover:opacity-100 transition ease"
+                      href={`/${params.team}/access/teams/${team.id}`}
+                    >
+                      <Button variant="secondary" icon={FaCog}>
+                        Manage
+                      </Button>
+                    </Link>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-neutral-500">
+                  This member is not part of any teams.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {userCanReadAppMemberships && (
           <div className="pt-4 space-y-3 border-t border-neutral-500/40">
