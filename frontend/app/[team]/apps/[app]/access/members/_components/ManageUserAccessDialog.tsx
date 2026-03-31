@@ -23,9 +23,11 @@ import { useSearchParams } from 'next/navigation'
 export const ManageUserAccessDialog = ({
   member,
   appId,
+  teams,
 }: {
   member: OrganisationMemberType
   appId: string
+  teams?: { id: string; name: string }[]
 }) => {
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -204,6 +206,21 @@ export const ManageUserAccessDialog = ({
                     organisation members
                   </Link>{' '}
                   page.
+                </p>
+              </Alert>
+            )}
+            {teams && teams.length > 0 && (
+              <Alert variant="info" icon={true} size="sm">
+                <p>
+                  This user also has access to this app via the{' '}
+                  {teams.map((t) => (
+                    <strong key={t.id}>{t.name}</strong>
+                  )).reduce<React.ReactNode[]>((acc, el, i) => {
+                    if (i === 0) return [el]
+                    if (i === teams.length - 1) return [...acc, ' and ', el]
+                    return [...acc, ', ', el]
+                  }, [])}{' '}
+                  {teams.length === 1 ? 'team' : 'teams'}.
                 </p>
               </Alert>
             )}
