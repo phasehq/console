@@ -28,6 +28,10 @@ export default function AccessLayout({
         link: 'service-accounts',
       },
       {
+        name: 'Teams',
+        link: 'teams',
+      },
+      {
         name: 'Service Tokens',
         link: 'tokens',
         isLegacy: true,
