@@ -3,8 +3,9 @@ import { userHasGlobalAccess } from '@/utils/access/permissions'
 import { getContrastingTextColor, stringToHexColor } from '@/utils/copy'
 import clsx from 'clsx'
 
-export const RoleLabel = ({ role, size }: { role: RoleType; size?: 'sm' | 'md' | 'lg' }) => {
+export const RoleLabel = ({ role, size }: { role: RoleType; size?: 'xs' | 'sm' | 'md' | 'lg' }) => {
   const sizeStyles = {
+    xs: 'text-[0.625rem] leading-tight px-1 py-px',
     sm: 'text-2xs px-1',
     md: 'text-sm px-2 py-0.5',
     lg: 'text-base px-2 py-0.5',
