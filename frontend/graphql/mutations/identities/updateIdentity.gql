@@ -5,6 +5,8 @@ mutation UpdateExtIdentity(
   $trustedPrincipals: String
   $signatureTtlSeconds: Int
   $stsEndpoint: String
+  $tenantId: String
+  $resource: String
   $tokenNamePattern: String
   $defaultTtlSeconds: Int
   $maxTtlSeconds: Int
@@ -16,6 +18,8 @@ mutation UpdateExtIdentity(
     trustedPrincipals: $trustedPrincipals
     signatureTtlSeconds: $signatureTtlSeconds
     stsEndpoint: $stsEndpoint
+    tenantId: $tenantId
+    resource: $resource
     tokenNamePattern: $tokenNamePattern
     defaultTtlSeconds: $defaultTtlSeconds
     maxTtlSeconds: $maxTtlSeconds
@@ -29,6 +33,11 @@ mutation UpdateExtIdentity(
           trustedPrincipals
           signatureTtlSeconds
           stsEndpoint
+        }
+        ... on AzureEntraConfigType {
+          tenantId
+          resource
+          allowedServicePrincipalIds
         }
       }
       tokenNamePattern

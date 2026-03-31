@@ -16,6 +16,7 @@ import clsx from 'clsx'
 import { parseTTL, formatTTL, isValidTTL, getTTLExamples } from '@/utils/ttl'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import { IdentityType } from '@/apollo/graphql'
+import type { AwsIamConfigType } from '@/apollo/graphql'
 
 type AwsIamConfig = {
   trustedPrincipals: string[]
@@ -98,16 +99,17 @@ export const AwsIamIdentityForm = ({
 
   useEffect(() => {
     if (identity) {
+      const cfg = identity.config as AwsIamConfigType | undefined
       // Populate form with identity data
       setName(identity.name)
       setDescription(identity.description || '')
-      setTrustedPrincipals(identity.config?.trustedPrincipals?.join(', ') || '')
-      setSignatureTtlInput(formatTTL(identity.config?.signatureTtlSeconds ?? 60))
-      setSignatureTtlSeconds(identity.config?.signatureTtlSeconds ?? 60)
-      setStsEndpoint(identity.config?.stsEndpoint ?? '')
+      setTrustedPrincipals(cfg?.trustedPrincipals?.join(', ') || '')
+      setSignatureTtlInput(formatTTL(cfg?.signatureTtlSeconds ?? 60))
+      setSignatureTtlSeconds(cfg?.signatureTtlSeconds ?? 60)
+      setStsEndpoint(cfg?.stsEndpoint ?? '')
 
       const existingEndpoint = awsStsEndpoints.find(
-        (ep) => identity.config && ep.endpoint === identity.config.stsEndpoint
+        (ep) => cfg && ep.endpoint === cfg.stsEndpoint
       )
       setUseCustomEndpoint(!existingEndpoint)
       setSelectedStsEndpoint(existingEndpoint || null)
@@ -121,10 +123,10 @@ export const AwsIamIdentityForm = ({
       setInitialState({
         name: identity.name,
         description: identity.description || '',
-        trustedPrincipals: identity.config?.trustedPrincipals?.join(', ') || '',
-        signatureTtlInput: formatTTL(identity.config?.signatureTtlSeconds ?? 60),
-        signatureTtlSeconds: identity.config?.signatureTtlSeconds ?? 60,
-        stsEndpoint: identity.config?.stsEndpoint ?? '',
+        trustedPrincipals: cfg?.trustedPrincipals?.join(', ') || '',
+        signatureTtlInput: formatTTL(cfg?.signatureTtlSeconds ?? 60),
+        signatureTtlSeconds: cfg?.signatureTtlSeconds ?? 60,
+        stsEndpoint: cfg?.stsEndpoint ?? '',
         tokenNamePattern: identity.tokenNamePattern || '',
         defaultTtlInput: formatTTL(identity.defaultTtlSeconds),
         maxTtlInput: formatTTL(identity.maxTtlSeconds),

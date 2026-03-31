@@ -9,7 +9,6 @@ interface IdentityProvider {
   name: string
   description: string
   iconId: string
-  supported: boolean
 }
 
 const ProviderCard = ({
