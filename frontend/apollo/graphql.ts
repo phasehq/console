@@ -3310,7 +3310,10 @@ export type CreateExtIdentityMutationVariables = Exact<{
 }>;
 
 
-export type CreateExtIdentityMutation = { __typename?: 'Mutation', createIdentity?: { __typename?: 'CreateIdentityMutation', identity?: { __typename?: 'IdentityType', id: string, provider: string, name: string, description?: string | null, tokenNamePattern?: string | null, defaultTtlSeconds: number, maxTtlSeconds: number, config?: { __typename?: 'AwsIamConfigType', trustedPrincipals?: Array<string | null> | null, signatureTtlSeconds?: number | null, stsEndpoint?: string | null } | { __typename?: 'AzureEntraConfigType', tenantId?: string | null, resource?: string | null, allowedServicePrincipalIds?: Array<string | null> | null } | null } | null } | null };
+export type CreateExtIdentityMutation = { __typename?: 'Mutation', createIdentity?: { __typename?: 'CreateIdentityMutation', identity?: { __typename?: 'IdentityType', id: string, provider: string, name: string, description?: string | null, tokenNamePattern?: string | null, defaultTtlSeconds: number, maxTtlSeconds: number, config?:
+        | { __typename?: 'AwsIamConfigType', trustedPrincipals?: Array<string | null> | null, signatureTtlSeconds?: number | null, stsEndpoint?: string | null }
+        | { __typename?: 'AzureEntraConfigType', tenantId?: string | null, resource?: string | null, allowedServicePrincipalIds?: Array<string | null> | null }
+       | null } | null } | null };
 
 export type DeleteExtIdentityMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -3334,7 +3337,10 @@ export type UpdateExtIdentityMutationVariables = Exact<{
 }>;
 
 
-export type UpdateExtIdentityMutation = { __typename?: 'Mutation', updateIdentity?: { __typename?: 'UpdateIdentityMutation', identity?: { __typename?: 'IdentityType', id: string, name: string, description?: string | null, tokenNamePattern?: string | null, defaultTtlSeconds: number, maxTtlSeconds: number, config?: { __typename?: 'AwsIamConfigType', trustedPrincipals?: Array<string | null> | null, signatureTtlSeconds?: number | null, stsEndpoint?: string | null } | { __typename?: 'AzureEntraConfigType', tenantId?: string | null, resource?: string | null, allowedServicePrincipalIds?: Array<string | null> | null } | null } | null } | null };
+export type UpdateExtIdentityMutation = { __typename?: 'Mutation', updateIdentity?: { __typename?: 'UpdateIdentityMutation', identity?: { __typename?: 'IdentityType', id: string, name: string, description?: string | null, tokenNamePattern?: string | null, defaultTtlSeconds: number, maxTtlSeconds: number, config?:
+        | { __typename?: 'AwsIamConfigType', trustedPrincipals?: Array<string | null> | null, signatureTtlSeconds?: number | null, stsEndpoint?: string | null }
+        | { __typename?: 'AzureEntraConfigType', tenantId?: string | null, resource?: string | null, allowedServicePrincipalIds?: Array<string | null> | null }
+       | null } | null } | null };
 
 export type AcceptOrganisationInviteMutationVariables = Exact<{
   orgId: Scalars['ID']['input'];
@@ -3903,7 +3909,10 @@ export type GetOrganisationIdentitiesQueryVariables = Exact<{
 }>;
 
 
-export type GetOrganisationIdentitiesQuery = { __typename?: 'Query', identities?: Array<{ __typename?: 'IdentityType', id: string, provider: string, name: string, description?: string | null, tokenNamePattern?: string | null, defaultTtlSeconds: number, maxTtlSeconds: number, createdAt?: any | null, config?: { __typename?: 'AwsIamConfigType', trustedPrincipals?: Array<string | null> | null, signatureTtlSeconds?: number | null, stsEndpoint?: string | null } | { __typename?: 'AzureEntraConfigType', tenantId?: string | null, resource?: string | null, allowedServicePrincipalIds?: Array<string | null> | null } | null } | null> | null };
+export type GetOrganisationIdentitiesQuery = { __typename?: 'Query', identities?: Array<{ __typename?: 'IdentityType', id: string, provider: string, name: string, description?: string | null, tokenNamePattern?: string | null, defaultTtlSeconds: number, maxTtlSeconds: number, createdAt?: any | null, config?:
+      | { __typename?: 'AwsIamConfigType', trustedPrincipals?: Array<string | null> | null, signatureTtlSeconds?: number | null, stsEndpoint?: string | null }
+      | { __typename?: 'AzureEntraConfigType', tenantId?: string | null, resource?: string | null, allowedServicePrincipalIds?: Array<string | null> | null }
+     | null } | null> | null };
 
 export type CheckOrganisationNameAvailabilityQueryVariables = Exact<{
   name: Scalars['String']['input'];
