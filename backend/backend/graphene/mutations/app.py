@@ -238,7 +238,7 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                 member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
 
             if not user_has_permission(
-                user, "create", permission_key, app.organisation, True
+                user, "create", permission_key, app.organisation, True, app=app
             ):
                 raise GraphQLError(
                     f"You don't have permission to add {member_type.lower()}s to this App"
@@ -293,7 +293,7 @@ class AddAppMemberMutation(graphene.Mutation):
             member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
 
         if not user_has_permission(
-            info.context.user, "create", permission_key, app.organisation, True
+            info.context.user, "create", permission_key, app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to add members to this App")
 
@@ -345,7 +345,7 @@ class RemoveAppMemberMutation(graphene.Mutation):
             permission_key = "ServiceAccounts"
 
         if not user_has_permission(
-            info.context.user, "delete", permission_key, app.organisation, True
+            info.context.user, "delete", permission_key, app.organisation, True, app=app
         ):
             raise GraphQLError(
                 f"You don't have permission to remove {permission_key} from this App"

@@ -111,7 +111,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
         app = App.objects.get(id=environment_data.app_id)
 
         if not user_has_permission(
-            info.context.user, "create", "Environments", app.organisation, True
+            info.context.user, "create", "Environments", app.organisation, True, app=app
         ):
             raise GraphQLError(
                 "You don't have permission to create environments in this organisation"
@@ -208,7 +208,7 @@ class RenameEnvironmentMutation(graphene.Mutation):
         org = environment.app.organisation
 
         if not user_has_permission(
-            info.context.user, "update", "Environments", org, True
+            info.context.user, "update", "Environments", org, True, app=environment.app
         ):
             raise GraphQLError("You do not have permission to rename environments")
 
@@ -250,7 +250,7 @@ class DeleteEnvironmentMutation(graphene.Mutation):
         org = environment.app.organisation
 
         if not user_has_permission(
-            info.context.user, "delete", "Environments", org, True
+            info.context.user, "delete", "Environments", org, True, app=environment.app
         ):
             raise GraphQLError("You do not have permission to delete environments")
 
@@ -277,7 +277,7 @@ class UpdateEnvironmentOrderMutation(graphene.Mutation):
         app = App.objects.get(id=app_id)
         org = app.organisation
 
-        if not user_has_permission(user, "update", "Environments", org, True):
+        if not user_has_permission(user, "update", "Environments", org, True, app=app):
             raise GraphQLError("You do not have permission to update environments")
 
         if not can_use_custom_envs(org):
@@ -377,7 +377,7 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
             permission_key = "ServiceAccounts"
 
         if not user_has_permission(
-            info.context.user, "update", permission_key, app.organisation, True
+            info.context.user, "update", permission_key, app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to update App member access")
 
@@ -546,7 +546,7 @@ class CreateServiceTokenMutation(graphene.Mutation):
         app = App.objects.get(id=app_id)
 
         if not user_has_permission(
-            info.context.user, "create", "Tokens", app.organisation, True
+            info.context.user, "create", "Tokens", app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to create Tokens in this App")
 
@@ -600,7 +600,7 @@ class DeleteServiceTokenMutation(graphene.Mutation):
         token = ServiceToken.objects.get(id=token_id)
         org = token.app.organisation
 
-        if not user_has_permission(info.context.user, "delete", "Tokens", org, True):
+        if not user_has_permission(info.context.user, "delete", "Tokens", org, True, app=token.app):
             raise GraphQLError("You don't have permission to delete Tokens in this App")
 
         token.deleted_at = timezone.now()
@@ -621,9 +621,11 @@ class CreateSecretFolderMutation(graphene.Mutation):
     def mutate(cls, root, info, env_id, name, path):
         user = info.context.user
 
-        org = Environment.objects.get(id=env_id).app.organisation
+        env_obj = Environment.objects.get(id=env_id)
+        app = env_obj.app
+        org = app.organisation
 
-        if not user_has_permission(info.context.user, "create", "Secrets", org, True):
+        if not user_has_permission(info.context.user, "create", "Secrets", org, True, app=app):
             raise GraphQLError(
                 "You don't have permission to create folders in this organisation"
             )
@@ -668,6 +670,7 @@ class DeleteSecretFolderMutation(graphene.Mutation):
             "Secrets",
             folder.environment.app.organisation,
             True,
+            app=folder.environment.app,
         ):
             raise GraphQLError(
                 "You don't have permission to delete folders in this organisation"
@@ -715,7 +718,7 @@ class CreateSecretMutation(graphene.Mutation):
         env = Environment.objects.get(id=secret_data.env_id)
         org = env.app.organisation
 
-        if not user_has_permission(info.context.user, "create", "Secrets", org, True):
+        if not user_has_permission(info.context.user, "create", "Secrets", org, True, app=env.app):
             raise GraphQLError(
                 "You don't have permission to create secrets in this organisation"
             )
@@ -784,7 +787,7 @@ class BulkCreateSecretMutation(graphene.Mutation):
             org = env.app.organisation
 
             if not user_has_permission(
-                info.context.user, "create", "Secrets", org, True
+                info.context.user, "create", "Secrets", org, True, app=env.app
             ):
                 raise GraphQLError(
                     "You don't have permission to create secrets in this organisation"
@@ -851,7 +854,7 @@ class EditSecretMutation(graphene.Mutation):
         env = secret.environment
         org = env.app.organisation
 
-        if not user_has_permission(info.context.user, "update", "Secrets", org, True):
+        if not user_has_permission(info.context.user, "update", "Secrets", org, True, app=env.app):
             raise GraphQLError(
                 "You don't have permission to update secrets in this organisation"
             )
@@ -924,7 +927,7 @@ class BulkEditSecretMutation(graphene.Mutation):
             org = env.app.organisation
 
             if not user_has_permission(
-                info.context.user, "create", "Secrets", org, True
+                info.context.user, "create", "Secrets", org, True, app=env.app
             ):
                 raise GraphQLError(
                     "You don't have permission to update secrets in this organisation"
@@ -999,7 +1002,7 @@ class DeleteSecretMutation(graphene.Mutation):
         env = secret.environment
         org = env.app.organisation
 
-        if not user_has_permission(info.context.user, "delete", "Secrets", org, True):
+        if not user_has_permission(info.context.user, "delete", "Secrets", org, True, app=env.app):
             raise GraphQLError(
                 "You don't have permission to delete secrets in this organisation"
             )
@@ -1037,7 +1040,7 @@ class BulkDeleteSecretMutation(graphene.Mutation):
             org = env.app.organisation
 
             if not user_has_permission(
-                info.context.user, "delete", "Secrets", org, True
+                info.context.user, "delete", "Secrets", org, True, app=env.app
             ):
                 raise GraphQLError(
                     "You don't have permission to delete secrets in this organisation"

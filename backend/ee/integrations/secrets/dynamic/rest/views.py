@@ -82,6 +82,7 @@ class DynamicSecretsView(APIView):
                 organisation,
                 True,
                 request.auth.get("service_account") is not None,
+                app=env.app,
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} secrets in this environment."
@@ -232,6 +233,7 @@ class DynamicSecretLeaseView(APIView):
             and lease_holder.id == getattr(account, "id", None)
         ):
             return
+        env = request.auth["environment"]
         if not user_has_permission(
             account,
             action,
@@ -239,6 +241,7 @@ class DynamicSecretLeaseView(APIView):
             organisation,
             True,
             request.auth.get("service_account") is not None,
+            app=env.app,
         ):
             raise PermissionDenied(
                 f"You don't have permission to {action} leases for other accounts."
@@ -252,6 +255,7 @@ class DynamicSecretLeaseView(APIView):
 
         account, organisation = self._get_account_and_org(request)
 
+        env = request.auth["environment"]
         if not user_has_permission(
             account,
             "read",
@@ -259,6 +263,7 @@ class DynamicSecretLeaseView(APIView):
             organisation,
             True,
             request.auth.get("service_account") is not None,
+            app=env.app,
         ):
             raise PermissionDenied(
                 f"You don't have permission to read secrets in this environment."
@@ -279,6 +284,7 @@ class DynamicSecretLeaseView(APIView):
             organisation,
             True,
             request.auth.get("service_account") is not None,
+            app=env.app,
         ):
             if request.auth["org_member"] is not None:
                 leases_filter["organisation_member"] = request.auth["org_member"]

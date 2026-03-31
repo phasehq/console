@@ -90,6 +90,7 @@ class E2EESecretsView(APIView):
                 organisation,
                 True,
                 request.auth.get("service_account") is not None,
+                app=env.app,
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} secrets in this environment."
@@ -538,6 +539,7 @@ class PublicSecretsView(APIView):
                 organisation,
                 True,
                 request.auth.get("service_account") is not None,
+                app=env.app,
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} secrets in this environment."
