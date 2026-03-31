@@ -108,10 +108,12 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                 <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Team
                 </th>
+                <th className="hidden md:table-cell px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Members
+                </th>
                 <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Environment Access
                 </th>
-                {userCanUpdateTeams && <th className="px-6 py-2"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-500/20">
@@ -133,113 +135,111 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                         href={`/${params.team}/access/teams/${team.id}`}
                         className="hover:underline"
                       >
-                        <div className="space-y-2">
-                          <div>
-                            <div className="text-sm font-medium">{team.name}</div>
-                            {team.description && (
-                              <div className="text-2xs text-neutral-500 truncate max-w-xs">
-                                {team.description}
-                              </div>
-                            )}
+                        <div className="text-sm font-medium">{team.name}</div>
+                        {team.description && (
+                          <div className="text-2xs text-neutral-500 truncate max-w-xs">
+                            {team.description}
                           </div>
-                          <div className="space-y-1.5">
-                            {orgMembers.length > 0 && (
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-1.5">
-                                  <div className="flex items-center">
-                                    {orgMembers.slice(0, 5).map((m, i) => (
-                                      <div
-                                        key={m.id}
-                                        className={clsx('rounded-full', i !== 0 && '-ml-2')}
-                                        style={{ zIndex: i }}
-                                      >
-                                        <Avatar
-                                          user={{
-                                            name: m.fullName,
-                                            email: m.email,
-                                            image: m.avatarUrl,
-                                          }}
-                                          size="xs"
-                                          showTitle={false}
-                                        />
-                                      </div>
-                                    ))}
-                                    {surplusMemberCount > 0 && (
-                                      <span className="text-neutral-500 text-xs ml-1">
-                                        +{surplusMemberCount}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-2xs text-neutral-500">
-                                    {orgMembers.length} member
-                                    {orgMembers.length !== 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                                {team.memberRole && (
-                                  <RoleLabel role={team.memberRole} size="xs" />
-                                )}
-                              </div>
-                            )}
-                            {sas.length > 0 && (
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-1.5">
-                                  <div className="flex items-center">
-                                    {sas.slice(0, 3).map((m, i) => (
-                                      <div
-                                        key={m.id}
-                                        className={clsx('rounded-full', i !== 0 && '-ml-2')}
-                                        style={{ zIndex: i }}
-                                      >
-                                        <Avatar
-                                          serviceAccount={m.serviceAccount!}
-                                          size="xs"
-                                          showTitle={false}
-                                        />
-                                      </div>
-                                    ))}
-                                    {surplusSaCount > 0 && (
-                                      <span className="text-neutral-500 text-xs ml-1">
-                                        +{surplusSaCount}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-2xs text-neutral-500">
-                                    {sas.length} Service Account
-                                    {sas.length !== 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                                {team.serviceAccountRole && (
-                                  <RoleLabel role={team.serviceAccountRole} size="xs" />
-                                )}
-                              </div>
-                            )}
-                            {orgMembers.length === 0 && sas.length === 0 && (
-                              <span className="text-2xs text-neutral-500">No members</span>
-                            )}
-                          </div>
-                        </div>
+                        )}
                       </Link>
                     </td>
-                    <td className="px-6 py-2">
-                      <ManageTeamEnvsDialog
-                        teamId={team.id}
-                        teamName={team.name}
-                        appId={params.app}
-                        appEnvironments={appEnvironments}
-                        teamEnvs={teamEnvs as TeamAppEnvironmentType[]}
-                      />
+                    <td className="hidden md:table-cell px-6 py-2">
+                      <div className="space-y-1.5">
+                        {orgMembers.length > 0 && (
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-1.5">
+                              <div className="flex items-center">
+                                {orgMembers.slice(0, 5).map((m, i) => (
+                                  <div
+                                    key={m.id}
+                                    className={clsx('rounded-full', i !== 0 && '-ml-2')}
+                                    style={{ zIndex: i }}
+                                  >
+                                    <Avatar
+                                      user={{
+                                        name: m.fullName,
+                                        email: m.email,
+                                        image: m.avatarUrl,
+                                      }}
+                                      size="xs"
+                                      showTitle={false}
+                                    />
+                                  </div>
+                                ))}
+                                {surplusMemberCount > 0 && (
+                                  <span className="text-neutral-500 text-xs ml-1">
+                                    +{surplusMemberCount}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-2xs text-neutral-500">
+                                {orgMembers.length} member
+                                {orgMembers.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            {team.memberRole && (
+                              <RoleLabel role={team.memberRole} size="xs" />
+                            )}
+                          </div>
+                        )}
+                        {sas.length > 0 && (
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-1.5">
+                              <div className="flex items-center">
+                                {sas.slice(0, 3).map((m, i) => (
+                                  <div
+                                    key={m.id}
+                                    className={clsx('rounded-full', i !== 0 && '-ml-2')}
+                                    style={{ zIndex: i }}
+                                  >
+                                    <Avatar
+                                      serviceAccount={m.serviceAccount!}
+                                      size="xs"
+                                      showTitle={false}
+                                    />
+                                  </div>
+                                ))}
+                                {surplusSaCount > 0 && (
+                                  <span className="text-neutral-500 text-xs ml-1">
+                                    +{surplusSaCount}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-2xs text-neutral-500">
+                                {sas.length} Service Account
+                                {sas.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            {team.serviceAccountRole && (
+                              <RoleLabel role={team.serviceAccountRole} size="xs" />
+                            )}
+                          </div>
+                        )}
+                        {orgMembers.length === 0 && sas.length === 0 && (
+                          <span className="text-2xs text-neutral-500">No members</span>
+                        )}
+                      </div>
                     </td>
-                    {userCanUpdateTeams && (
-                      <td className="px-6 py-2">
-                        <div className="flex items-center justify-end opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
-                          <RemoveTeamFromAppDialog
-                            teamId={team.id}
-                            teamName={team.name}
-                            appId={params.app}
-                          />
-                        </div>
-                      </td>
-                    )}
+                    <td className="px-6 py-2">
+                      <div className="flex items-center gap-2">
+                        <ManageTeamEnvsDialog
+                          teamId={team.id}
+                          teamName={team.name}
+                          appId={params.app}
+                          appEnvironments={appEnvironments}
+                          teamEnvs={teamEnvs as TeamAppEnvironmentType[]}
+                        />
+                        {userCanUpdateTeams && (
+                          <div className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
+                            <RemoveTeamFromAppDialog
+                              teamId={team.id}
+                              teamName={team.name}
+                              appId={params.app}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 )
               })}
