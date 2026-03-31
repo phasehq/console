@@ -1,0 +1,20 @@
+mutation UpdateTeamOp(
+  $teamId: ID!
+  $name: String
+  $description: String
+  $memberRoleId: ID
+  $serviceAccountRoleId: ID
+) {
+  updateTeam(
+    teamId: $teamId
+    name: $name
+    description: $description
+    memberRoleId: $memberRoleId
+    serviceAccountRoleId: $serviceAccountRoleId
+  ) {
+    team {
+      id
+      name
+    }
+  }
+}
