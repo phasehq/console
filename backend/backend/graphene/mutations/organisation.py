@@ -6,6 +6,7 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
+from api.utils.keys import provision_pending_team_keys
 from api.tasks.emails import send_invite_email_job
 from backend.quotas import can_add_account
 import graphene
@@ -129,9 +130,19 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         except OrganisationMember.DoesNotExist:
             raise GraphQLError("Not a member of this organisation.")
 
+        first_key_ceremony = identity_key and not org_member.identity_key
+
+        if identity_key:
+            org_member.identity_key = identity_key
+
         org_member.wrapped_keyring = wrapped_keyring
         org_member.wrapped_recovery = wrapped_recovery
         org_member.save()
+
+        # Provision team environment keys for SCIM-preprovisioned users
+        # completing their key ceremony for the first time
+        if first_key_ceremony:
+            provision_pending_team_keys(org_member)
 
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
 
