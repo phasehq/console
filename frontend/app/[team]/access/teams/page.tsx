@@ -20,6 +20,7 @@ import {
   FaRobot,
 } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
+import { ProfileCard } from '@/components/common/ProfileCard'
 import { MdSearchOff } from 'react-icons/md'
 import clsx from 'clsx'
 import { CreateTeamDialog } from './_components/CreateTeamDialog'
@@ -125,9 +126,6 @@ export default function Teams({ params }: { params: { team: string } }) {
                       Team
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Role overrides
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Members
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -153,113 +151,99 @@ export default function Teams({ params }: { params: { team: string } }) {
                     return (
                       <tr key={team.id} className="group">
                         <td className="py-2">
-                          <div className="flex items-center gap-3">
-                            <div className="text-2xl text-neutral-500">
-                              <FaUsers />
-                            </div>
-                            <div>
-                              <div className="font-medium flex items-center gap-2">
-                                {team.name}
-                                {team.isScimManaged && (
-                                  <span className="text-2xs px-1 rounded ring-1 ring-inset ring-purple-500/40 bg-purple-500/20 text-purple-400 uppercase font-medium">
-                                    <FaRobot className="inline mr-0.5" />
-                                    SCIM
-                                  </span>
-                                )}
-                              </div>
-                              {team.description && (
-                                <div className="text-sm text-neutral-500 truncate max-w-xs">
-                                  {team.description}
-                                </div>
+                          <div>
+                            <div className="font-medium flex items-center gap-2">
+                              {team.name}
+                              {team.isScimManaged && (
+                                <span className="text-2xs px-1 rounded ring-1 ring-inset ring-purple-500/40 bg-purple-500/20 text-purple-400 uppercase font-medium">
+                                  <FaRobot className="inline mr-0.5" />
+                                  SCIM
+                                </span>
                               )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-2">
-                          <div className="flex flex-col gap-1">
-                            {team.memberRole ? (
-                              <div className="flex items-center gap-1.5 text-2xs text-neutral-500">
-                                <FaUsers className="text-2xs shrink-0" />
-                                <RoleLabel role={team.memberRole} />
+                            {team.description && (
+                              <div className="text-sm text-neutral-500 truncate max-w-xs">
+                                {team.description}
                               </div>
-                            ) : null}
-                            {team.serviceAccountRole ? (
-                              <div className="flex items-center gap-1.5 text-2xs text-neutral-500">
-                                <FaRobot className="text-2xs shrink-0" />
-                                <RoleLabel role={team.serviceAccountRole} />
-                              </div>
-                            ) : null}
-                            {!team.memberRole && !team.serviceAccountRole && (
-                              <span className="text-neutral-500 text-xs">Org role</span>
                             )}
                           </div>
                         </td>
                         <td className="px-6 py-2">
                           <div className="space-y-1.5">
                             {orgMembers.length > 0 && (
-                              <div className="flex items-center gap-1.5">
-                                <div className="flex items-center">
-                                  {orgMembers.slice(0, 5).map((m, i) => (
-                                    <div
-                                      key={m.id}
-                                      className={clsx(
-                                        'rounded-full',
-                                        i !== 0 && '-ml-2'
-                                      )}
-                                      style={{ zIndex: i }}
-                                    >
-                                      <Avatar
-                                        user={{
-                                          name: m.fullName,
-                                          email: m.email,
-                                          image: m.avatarUrl,
-                                        }}
-                                        size="xs"
-                                        showTitle={false}
-                                      />
-                                    </div>
-                                  ))}
-                                  {surplusMemberCount > 0 && (
-                                    <span className="text-neutral-500 text-xs ml-1">
-                                      +{surplusMemberCount}
-                                    </span>
-                                  )}
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center">
+                                    {orgMembers.slice(0, 5).map((m, i) => (
+                                      <div
+                                        key={m.id}
+                                        className={clsx(
+                                          'rounded-full',
+                                          i !== 0 && '-ml-2'
+                                        )}
+                                        style={{ zIndex: i }}
+                                      >
+                                        <Avatar
+                                          user={{
+                                            name: m.fullName,
+                                            email: m.email,
+                                            image: m.avatarUrl,
+                                          }}
+                                          size="xs"
+                                          showTitle={false}
+                                        />
+                                      </div>
+                                    ))}
+                                    {surplusMemberCount > 0 && (
+                                      <span className="text-neutral-500 text-xs ml-1">
+                                        +{surplusMemberCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-2xs text-neutral-500">
+                                    {orgMembers.length} member
+                                    {orgMembers.length !== 1 ? 's' : ''}
+                                  </span>
                                 </div>
-                                <span className="text-2xs text-neutral-500">
-                                  {orgMembers.length} member
-                                  {orgMembers.length !== 1 ? 's' : ''}
-                                </span>
+                                {team.memberRole && (
+                                  <RoleLabel role={team.memberRole} size="xs" />
+                                )}
                               </div>
                             )}
                             {serviceAccounts.length > 0 && (
-                              <div className="flex items-center gap-1.5">
-                                <div className="flex items-center">
-                                  {serviceAccounts.slice(0, 3).map((m, i) => (
-                                    <div
-                                      key={m.id}
-                                      className={clsx(
-                                        'rounded-full',
-                                        i !== 0 && '-ml-2'
-                                      )}
-                                      style={{ zIndex: i }}
-                                    >
-                                      <Avatar
-                                        serviceAccount={m.serviceAccount!}
-                                        size="xs"
-                                        showTitle={false}
-                                      />
-                                    </div>
-                                  ))}
-                                  {surplusSaCount > 0 && (
-                                    <span className="text-neutral-500 text-xs ml-1">
-                                      +{surplusSaCount}
-                                    </span>
-                                  )}
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center">
+                                    {serviceAccounts.slice(0, 3).map((m, i) => (
+                                      <div
+                                        key={m.id}
+                                        className={clsx(
+                                          'rounded-full',
+                                          i !== 0 && '-ml-2'
+                                        )}
+                                        style={{ zIndex: i }}
+                                      >
+                                        <Avatar
+                                          serviceAccount={m.serviceAccount!}
+                                          size="xs"
+                                          showTitle={false}
+                                        />
+                                      </div>
+                                    ))}
+                                    {surplusSaCount > 0 && (
+                                      <span className="text-neutral-500 text-xs ml-1">
+                                        +{surplusSaCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-2xs text-neutral-500">
+                                    {serviceAccounts.length} Service Account
+                                    {serviceAccounts.length !== 1 ? 's' : ''}
+                                  </span>
                                 </div>
-                                <span className="text-2xs text-neutral-500">
-                                  {serviceAccounts.length} SA
-                                  {serviceAccounts.length !== 1 ? 's' : ''}
-                                </span>
+                                {team.serviceAccountRole && (
+                                  <RoleLabel role={team.serviceAccountRole} size="xs" />
+                                )}
                               </div>
                             )}
                             {orgMembers.length === 0 &&
@@ -273,8 +257,23 @@ export default function Teams({ params }: { params: { team: string } }) {
                         <td className="px-6 py-2 text-sm">
                           {team.apps?.length || 0}
                         </td>
-                        <td className="px-6 py-2 text-sm">
-                          {relativeTimeFromDates(new Date(team.createdAt))}
+                        <td className="px-6 py-2">
+                          <div className="space-y-1">
+                            <div className="text-2xs text-neutral-500">
+                              {relativeTimeFromDates(new Date(team.createdAt))}
+                              {team.createdBy && ' by'}
+                            </div>
+                            {team.createdBy && (
+                              <ProfileCard
+                                user={{
+                                  name: team.createdBy.fullName,
+                                  email: team.createdBy.email,
+                                  image: team.createdBy.avatarUrl,
+                                }}
+                                size="sm"
+                              />
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-2 whitespace-nowrap text-right">
                           <Link href={`/${params.team}/access/teams/${team.id}`}>
