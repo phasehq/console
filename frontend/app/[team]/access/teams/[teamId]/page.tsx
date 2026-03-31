@@ -4,7 +4,7 @@ import { AppType, TeamAppEnvironmentType, TeamMembershipType, TeamType } from '@
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
-import { Avatar } from '@/components/common/Avatar'
+import { ProfileCard } from '@/components/common/ProfileCard'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
@@ -204,29 +204,21 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                     key={membership.id}
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
-                    <div className="flex items-center gap-2">
-                      {isUser ? (
-                        <Avatar
-                          user={{
-                            name: membership.fullName,
-                            email: membership.email,
-                            image: membership.avatarUrl,
-                          }}
-                          size="md"
-                        />
-                      ) : (
-                        <Avatar serviceAccount={membership.serviceAccount!} size="md" />
-                      )}
-                      <div>
-                        <div className="text-sm font-medium">{displayName}</div>
-                        {isUser && membership.fullName && (
-                          <div className="text-xs text-neutral-500">{membership.email}</div>
-                        )}
-                        {!isUser && (
-                          <div className="text-2xs text-neutral-500 font-mono">{memberId}</div>
-                        )}
-                      </div>
-                    </div>
+                    {isUser ? (
+                      <ProfileCard
+                        user={{
+                          name: membership.fullName,
+                          email: membership.email,
+                          image: membership.avatarUrl,
+                        }}
+                        size="md"
+                      />
+                    ) : (
+                      <ProfileCard
+                        serviceAccount={membership.serviceAccount!}
+                        size="md"
+                      />
+                    )}
 
                     <div>
                       {isUser && membership.orgMember?.role && (

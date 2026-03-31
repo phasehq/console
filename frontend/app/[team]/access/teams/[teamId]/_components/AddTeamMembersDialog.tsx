@@ -7,8 +7,8 @@ import {
 } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
-import { Avatar } from '@/components/common/Avatar'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
+import { ProfileCard } from '@/components/common/ProfileCard'
 import { organisationContext } from '@/contexts/organisationContext'
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
@@ -255,17 +255,7 @@ export const AddTeamMembersDialog = ({
                     className="flex items-center justify-between py-1 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 rounded"
                     onClick={() => toggleMember(member.id)}
                   >
-                    <div className="flex items-center gap-2">
-                      <Avatar member={member} size="md" />
-                      <div>
-                        <div className="text-xs font-medium">
-                          {member.fullName || member.email}
-                        </div>
-                        {member.fullName && (
-                          <div className="text-2xs text-neutral-500">{member.email}</div>
-                        )}
-                      </div>
-                    </div>
+                    <ProfileCard member={member} size="md" />
                     <ToggleSwitch
                       size="sm"
                       value={selectedMembers.has(member.id)}
@@ -289,13 +279,7 @@ export const AddTeamMembersDialog = ({
                     className="flex items-center justify-between py-1 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 rounded"
                     onClick={() => toggleSA(sa.id)}
                   >
-                    <div className="flex items-center gap-2">
-                      <Avatar serviceAccount={sa} size="md" />
-                      <div>
-                        <div className="text-xs font-medium">{sa.name}</div>
-                        <div className="text-2xs text-neutral-500 font-mono">{sa.id}</div>
-                      </div>
-                    </div>
+                    <ProfileCard serviceAccount={sa} size="md" />
                     <ToggleSwitch
                       size="sm"
                       value={selectedSAs.has(sa.id)}
