@@ -116,6 +116,17 @@ from .graphene.queries.service_accounts import (
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
+from .graphene.queries.teams import resolve_teams
+from .graphene.mutations.teams import (
+    AddTeamAppsMutation,
+    AddTeamMembersMutation,
+    CreateTeamMutation,
+    DeleteTeamMutation,
+    RemoveTeamAppMutation,
+    RemoveTeamMemberMutation,
+    UpdateTeamAppEnvironmentsMutation,
+    UpdateTeamMutation,
+)
 from .graphene.mutations.environment import (
     BulkCreateSecretMutation,
     BulkDeleteSecretMutation,
@@ -214,6 +225,7 @@ from .graphene.types import (
     ServiceAccountType,
     ServiceTokenType,
     ServiceType,
+    TeamType,
     TimeRange,
     UserTokenType,
     AWSValidationResultType,
@@ -236,6 +248,7 @@ from api.models import (
     SecretTag,
     ServiceAccount,
     ServiceToken,
+    TeamAppEnvironment,
     UserToken,
 )
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
@@ -264,6 +277,12 @@ class Query(graphene.ObjectType):
         NetworkAccessPolicyType, organisation_id=graphene.ID()
     )
     identities = graphene.List(IdentityType, organisation_id=graphene.ID())
+
+    teams = graphene.List(
+        TeamType,
+        organisation_id=graphene.ID(),
+        team_id=graphene.ID(required=False),
+    )
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
@@ -545,6 +564,9 @@ class Query(graphene.ObjectType):
     resolve_aws_sts_endpoints = resolve_aws_sts_endpoints
     resolve_identity_providers = resolve_identity_providers
 
+    # Teams
+    resolve_teams = resolve_teams
+
     resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_name_available(root, info, name):
@@ -608,9 +630,22 @@ class Query(graphene.ObjectType):
         ):
             return []
 
+        # Individual app IDs
+        individual_ids = set(org_member.apps.values_list("id", flat=True))
+
+        # Team app IDs
+        team_ids = set(
+            TeamAppEnvironment.objects.filter(
+                team__memberships__org_member=org_member,
+                team__deleted_at__isnull=True,
+            ).values_list("app_id", flat=True)
+        )
+
+        all_app_ids = individual_ids | team_ids
+
         filter = {
             "organisation_id": organisation_id,
-            "id__in": org_member.apps.all(),
+            "id__in": all_app_ids,
             "is_deleted": False,
         }
 
@@ -625,7 +660,7 @@ class Query(graphene.ObjectType):
         app = App.objects.get(id=app_id)
 
         if not user_has_permission(
-            info.context.user, "read", "Environments", app.organisation, True
+            info.context.user, "read", "Environments", app.organisation, True, app=app
         ):
             return []
 
@@ -672,7 +707,7 @@ class Query(graphene.ObjectType):
         app = App.objects.get(id=app_id)
 
         if not user_has_permission(
-            info.context.user, "read", "Members", app.organisation, True
+            info.context.user, "read", "Members", app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to read members of this App")
 
@@ -685,11 +720,13 @@ class Query(graphene.ObjectType):
 
     def resolve_secrets(root, info, env_id, path=None, id=None):
 
-        org = Environment.objects.get(id=env_id).app.organisation
+        env = Environment.objects.get(id=env_id)
+        app = env.app
+        org = app.organisation
         if not user_has_permission(
-            info.context.user, "read", "Secrets", org, True
+            info.context.user, "read", "Secrets", org, True, app=app
         ) or not user_has_permission(
-            info.context.user, "read", "Environments", org, True
+            info.context.user, "read", "Environments", org, True, app=app
         ):
             raise GraphQLError("You don't have access to read secrets")
 
@@ -726,7 +763,7 @@ class Query(graphene.ObjectType):
 
         # compute permission once and store it on the request context
         can_view_members = user_has_permission(
-            user, "read", "Members", secret.environment.app.organisation, True
+            user, "read", "Members", secret.environment.app.organisation, True, app=secret.environment.app
         ) or user_has_permission(
             user, "read", "Members", secret.environment.app.organisation, False
         )
@@ -795,7 +832,7 @@ class Query(graphene.ObjectType):
     def resolve_service_tokens(root, info, app_id):
         app = App.objects.get(id=app_id)
         if not user_has_permission(
-            info.context.user, "read", "Tokens", app.organisation, True
+            info.context.user, "read", "Tokens", app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to view Tokens in this App")
 
@@ -896,11 +933,11 @@ class Query(graphene.ObjectType):
 
         # Permissions
         can_see_members = user_has_permission(
-            user, "read", "Members", app.organisation, True
+            user, "read", "Members", app.organisation, True, app=app
         ) or user_has_permission(user, "read", "Members", app.organisation, False)
         setattr(info.context, "can_view_members", can_see_members)
 
-        if not user_has_permission(user, "read", "Logs", app.organisation, True):
+        if not user_has_permission(user, "read", "Logs", app.organisation, True, app=app):
             return SecretLogsResponseType(logs=[], count=0)
 
         # Base filter
@@ -1089,6 +1126,16 @@ class Mutation(graphene.ObjectType):
     create_identity = CreateIdentityMutation.Field()
     update_identity = UpdateIdentityMutation.Field()
     delete_identity = DeleteIdentityMutation.Field()
+
+    # Teams
+    create_team = CreateTeamMutation.Field()
+    update_team = UpdateTeamMutation.Field()
+    delete_team = DeleteTeamMutation.Field()
+    add_team_members = AddTeamMembersMutation.Field()
+    remove_team_member = RemoveTeamMemberMutation.Field()
+    add_team_apps = AddTeamAppsMutation.Field()
+    remove_team_app = RemoveTeamAppMutation.Field()
+    update_team_app_environments = UpdateTeamAppEnvironmentsMutation.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()

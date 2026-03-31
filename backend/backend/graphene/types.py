@@ -39,6 +39,9 @@ from api.models import (
     ServiceToken,
     UserToken,
     Identity,
+    Team,
+    TeamMembership,
+    TeamAppEnvironment,
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
@@ -494,7 +497,7 @@ class SecretType(DjangoObjectType):
         # Compute can_view_members only once per request
         organisation = self.environment.app.organisation
         can_view_members = user_has_permission(
-            user, "read", "Members", organisation, True
+            user, "read", "Members", organisation, True, app=self.environment.app
         ) or user_has_permission(user, "read", "Members", organisation, False)
         setattr(info.context, "can_view_members", can_view_members)
 
@@ -555,9 +558,9 @@ class EnvironmentType(DjangoObjectType):
 
         org = self.app.organisation
         if not user_has_permission(
-            info.context.user, "read", "Secrets", org, True
+            info.context.user, "read", "Secrets", org, True, app=self.app
         ) or not user_has_permission(
-            info.context.user, "read", "Environments", org, True
+            info.context.user, "read", "Environments", org, True, app=self.app
         ):
             raise GraphQLError("You don't have access to read secrets")
 
@@ -1076,3 +1079,80 @@ class IdentityType(DjangoObjectType):
             )
 
         return None
+
+
+class TeamAppEnvironmentType(DjangoObjectType):
+    class Meta:
+        model = TeamAppEnvironment
+        fields = ("id", "app", "environment", "created_at")
+
+
+class TeamMembershipType(DjangoObjectType):
+    email = graphene.String()
+    full_name = graphene.String()
+    avatar_url = graphene.String()
+
+    class Meta:
+        model = TeamMembership
+        fields = ("id", "org_member", "service_account", "created_at")
+
+    def resolve_email(self, info):
+        if self.org_member:
+            return self.org_member.user.email
+        if self.service_account:
+            return self.service_account.name
+        return None
+
+    def resolve_full_name(self, info):
+        if self.org_member:
+            social_acc = self.org_member.user.socialaccount_set.first()
+            if social_acc:
+                return social_acc.extra_data.get("name")
+        return None
+
+    def resolve_avatar_url(self, info):
+        if self.org_member:
+            social_acc = self.org_member.user.socialaccount_set.first()
+            if social_acc:
+                if social_acc.provider == "google":
+                    return social_acc.extra_data.get("picture")
+                return social_acc.extra_data.get("avatar_url")
+        return None
+
+
+class TeamType(DjangoObjectType):
+    members = graphene.List(graphene.NonNull(TeamMembershipType))
+    apps = graphene.List(graphene.NonNull(AppType))
+    app_environments = graphene.List(graphene.NonNull(TeamAppEnvironmentType))
+    member_count = graphene.Int()
+
+    class Meta:
+        model = Team
+        fields = (
+            "id",
+            "name",
+            "description",
+            "member_role",
+            "service_account_role",
+            "is_scim_managed",
+            "created_by",
+            "created_at",
+            "updated_at",
+        )
+
+    def resolve_members(self, info):
+        return self.memberships.select_related(
+            "org_member__user", "service_account"
+        ).all()
+
+    def resolve_apps(self, info):
+        app_ids = (
+            self.app_environments.values_list("app_id", flat=True).distinct()
+        )
+        return App.objects.filter(id__in=app_ids, is_deleted=False)
+
+    def resolve_app_environments(self, info):
+        return self.app_environments.select_related("app", "environment").all()
+
+    def resolve_member_count(self, info):
+        return self.memberships.count()
