@@ -1,0 +1,78 @@
+query GetTeams($organisationId: ID!, $teamId: ID) {
+  teams(organisationId: $organisationId, teamId: $teamId) {
+    id
+    name
+    description
+    memberRole {
+      id
+      name
+      description
+      color
+      permissions
+    }
+    serviceAccountRole {
+      id
+      name
+      description
+      color
+      permissions
+    }
+    isScimManaged
+    createdBy {
+      id
+      fullName
+      email
+      avatarUrl
+    }
+    createdAt
+    updatedAt
+    memberCount
+    members {
+      id
+      orgMember {
+        id
+        identityKey
+        role {
+          id
+          name
+          description
+          color
+          permissions
+        }
+      }
+      serviceAccount {
+        id
+        name
+        role {
+          id
+          name
+          description
+          color
+          permissions
+        }
+      }
+      email
+      fullName
+      avatarUrl
+      createdAt
+    }
+    apps {
+      id
+      name
+      sseEnabled
+    }
+    appEnvironments {
+      id
+      app {
+        id
+        name
+      }
+      environment {
+        id
+        name
+        envType
+      }
+      createdAt
+    }
+  }
+}

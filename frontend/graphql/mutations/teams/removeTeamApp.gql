@@ -1,0 +1,7 @@
+mutation RemoveTeamAppOp($teamId: ID!, $appId: ID!) {
+  removeTeamApp(teamId: $teamId, appId: $appId) {
+    team {
+      id
+    }
+  }
+}

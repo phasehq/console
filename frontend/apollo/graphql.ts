@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
 export type Maybe<T> = T | null;
-export type InputMaybe<T> = Maybe<T>;
+export type InputMaybe<T> = T | null | undefined;
 export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 export type MakeOptional<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]?: Maybe<T[SubKey]> };
 export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]: Maybe<T[SubKey]> };
@@ -113,6 +113,16 @@ export type ActivatedPhaseLicenseType = {
 export type AddAppMemberMutation = {
   __typename?: 'AddAppMemberMutation';
   app?: Maybe<AppType>;
+};
+
+export type AddTeamAppsMutation = {
+  __typename?: 'AddTeamAppsMutation';
+  team?: Maybe<TeamType>;
+};
+
+export type AddTeamMembersMutation = {
+  __typename?: 'AddTeamMembersMutation';
+  team?: Maybe<TeamType>;
 };
 
 /** An enumeration. */
@@ -240,6 +250,11 @@ export enum ApiSecretTypeChoices {
   /** Secret */
   Secret = 'SECRET'
 }
+
+export type AppEnvironmentInput = {
+  appId: Scalars['ID']['input'];
+  envIds: Array<Scalars['ID']['input']>;
+};
 
 export type AppMemberInputType = {
   envKeys: Array<InputMaybe<EnvironmentKeyInput>>;
@@ -499,6 +514,11 @@ export type CreateSubscriptionCheckoutSession = {
   clientSecret?: Maybe<Scalars['String']['output']>;
 };
 
+export type CreateTeamMutation = {
+  __typename?: 'CreateTeamMutation';
+  team?: Maybe<TeamType>;
+};
+
 export type CreateUserTokenMutation = {
   __typename?: 'CreateUserTokenMutation';
   ok?: Maybe<Scalars['Boolean']['output']>;
@@ -597,6 +617,11 @@ export type DeleteServiceTokenMutation = {
 
 export type DeleteSync = {
   __typename?: 'DeleteSync';
+  ok?: Maybe<Scalars['Boolean']['output']>;
+};
+
+export type DeleteTeamMutation = {
+  __typename?: 'DeleteTeamMutation';
   ok?: Maybe<Scalars['Boolean']['output']>;
 };
 
@@ -952,6 +977,8 @@ export type MigratePricingMutation = {
 export type Mutation = {
   __typename?: 'Mutation';
   addAppMember?: Maybe<AddAppMemberMutation>;
+  addTeamApps?: Maybe<AddTeamAppsMutation>;
+  addTeamMembers?: Maybe<AddTeamMembersMutation>;
   bulkAddAppMembers?: Maybe<BulkAddAppMembersMutation>;
   bulkInviteOrganisationMembers?: Maybe<BulkInviteOrganisationMembersMutation>;
   cancelSubscription?: Maybe<UpdateSubscriptionResponse>;
@@ -988,6 +1015,7 @@ export type Mutation = {
   createServiceToken?: Maybe<CreateServiceTokenMutation>;
   createSetupIntent?: Maybe<CreateSetupIntentMutation>;
   createSubscriptionCheckoutSession?: Maybe<CreateSubscriptionCheckoutSession>;
+  createTeam?: Maybe<CreateTeamMutation>;
   createUserToken?: Maybe<CreateUserTokenMutation>;
   createVaultSync?: Maybe<CreateVaultSync>;
   createVercelSync?: Maybe<CreateVercelSync>;
@@ -1008,6 +1036,7 @@ export type Mutation = {
   deleteServiceAccount?: Maybe<DeleteServiceAccountMutation>;
   deleteServiceAccountToken?: Maybe<DeleteServiceAccountTokenMutation>;
   deleteServiceToken?: Maybe<DeleteServiceTokenMutation>;
+  deleteTeam?: Maybe<DeleteTeamMutation>;
   deleteUserToken?: Maybe<DeleteUserTokenMutation>;
   editSecret?: Maybe<EditSecretMutation>;
   editSecrets?: Maybe<BulkEditSecretMutation>;
@@ -1019,6 +1048,8 @@ export type Mutation = {
   readSecret?: Maybe<ReadSecretMutation>;
   removeAppMember?: Maybe<RemoveAppMemberMutation>;
   removeOverride?: Maybe<DeletePersonalSecretMutation>;
+  removeTeamApp?: Maybe<RemoveTeamAppMutation>;
+  removeTeamMember?: Maybe<RemoveTeamMemberMutation>;
   renameEnvironment?: Maybe<RenameEnvironmentMutation>;
   renewDynamicSecretLease?: Maybe<RenewLeaseMutation>;
   resumeSubscription?: Maybe<UpdateSubscriptionResponse>;
@@ -1046,6 +1077,8 @@ export type Mutation = {
   updateServiceAccount?: Maybe<UpdateServiceAccountMutation>;
   updateServiceAccountHandlers?: Maybe<UpdateServiceAccountHandlersMutation>;
   updateSyncAuthentication?: Maybe<UpdateSyncAuthentication>;
+  updateTeam?: Maybe<UpdateTeamMutation>;
+  updateTeamAppEnvironments?: Maybe<UpdateTeamAppEnvironmentsMutation>;
 };
 
 
@@ -1054,6 +1087,19 @@ export type MutationAddAppMemberArgs = {
   envKeys?: InputMaybe<Array<InputMaybe<EnvironmentKeyInput>>>;
   memberId?: InputMaybe<Scalars['ID']['input']>;
   memberType?: InputMaybe<MemberType>;
+};
+
+
+export type MutationAddTeamAppsArgs = {
+  appEnvs: Array<AppEnvironmentInput>;
+  teamId: Scalars['ID']['input'];
+};
+
+
+export type MutationAddTeamMembersArgs = {
+  memberIds: Array<Scalars['ID']['input']>;
+  memberType?: InputMaybe<MemberType>;
+  teamId: Scalars['ID']['input'];
 };
 
 
@@ -1371,6 +1417,15 @@ export type MutationCreateSubscriptionCheckoutSessionArgs = {
 };
 
 
+export type MutationCreateTeamArgs = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  memberRoleId?: InputMaybe<Scalars['ID']['input']>;
+  name: Scalars['String']['input'];
+  organisationId: Scalars['ID']['input'];
+  serviceAccountRoleId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type MutationCreateUserTokenArgs = {
   expiry?: InputMaybe<Scalars['BigInt']['input']>;
   identityKey: Scalars['String']['input'];
@@ -1489,6 +1544,11 @@ export type MutationDeleteServiceTokenArgs = {
 };
 
 
+export type MutationDeleteTeamArgs = {
+  teamId: Scalars['ID']['input'];
+};
+
+
 export type MutationDeleteUserTokenArgs = {
   tokenId: Scalars['ID']['input'];
 };
@@ -1550,6 +1610,19 @@ export type MutationRemoveAppMemberArgs = {
 
 export type MutationRemoveOverrideArgs = {
   secretId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationRemoveTeamAppArgs = {
+  appId: Scalars['ID']['input'];
+  teamId: Scalars['ID']['input'];
+};
+
+
+export type MutationRemoveTeamMemberArgs = {
+  memberId: Scalars['ID']['input'];
+  memberType?: InputMaybe<MemberType>;
+  teamId: Scalars['ID']['input'];
 };
 
 
@@ -1670,6 +1743,7 @@ export type MutationUpdateMemberEnvironmentScopeArgs = {
 
 
 export type MutationUpdateMemberWrappedSecretsArgs = {
+  identityKey?: InputMaybe<Scalars['String']['input']>;
   orgId: Scalars['ID']['input'];
   wrappedKeyring: Scalars['String']['input'];
   wrappedRecovery: Scalars['String']['input'];
@@ -1711,6 +1785,22 @@ export type MutationUpdateServiceAccountHandlersArgs = {
 export type MutationUpdateSyncAuthenticationArgs = {
   credentialId?: InputMaybe<Scalars['ID']['input']>;
   syncId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationUpdateTeamArgs = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  memberRoleId?: InputMaybe<Scalars['ID']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  serviceAccountRoleId?: InputMaybe<Scalars['ID']['input']>;
+  teamId: Scalars['ID']['input'];
+};
+
+
+export type MutationUpdateTeamAppEnvironmentsArgs = {
+  appId: Scalars['ID']['input'];
+  envIds: Array<Scalars['ID']['input']>;
+  teamId: Scalars['ID']['input'];
 };
 
 export type NamespaceType = {
@@ -1935,6 +2025,7 @@ export type Query = {
   stripeCustomerPortalUrl?: Maybe<Scalars['String']['output']>;
   stripeSubscriptionDetails?: Maybe<StripeSubscriptionDetails>;
   syncs?: Maybe<Array<Maybe<EnvironmentSyncType>>>;
+  teams?: Maybe<Array<Maybe<TeamType>>>;
   testNomadCreds?: Maybe<Scalars['Boolean']['output']>;
   testVaultCreds?: Maybe<Scalars['Boolean']['output']>;
   testVercelCreds?: Maybe<Scalars['Boolean']['output']>;
@@ -2209,6 +2300,12 @@ export type QuerySyncsArgs = {
 };
 
 
+export type QueryTeamsArgs = {
+  organisationId?: InputMaybe<Scalars['ID']['input']>;
+  teamId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type QueryTestNomadCredsArgs = {
   credentialId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -2279,6 +2376,16 @@ export type ReadSecretMutation = {
 export type RemoveAppMemberMutation = {
   __typename?: 'RemoveAppMemberMutation';
   app?: Maybe<AppType>;
+};
+
+export type RemoveTeamAppMutation = {
+  __typename?: 'RemoveTeamAppMutation';
+  team?: Maybe<TeamType>;
+};
+
+export type RemoveTeamMemberMutation = {
+  __typename?: 'RemoveTeamMemberMutation';
+  team?: Maybe<TeamType>;
 };
 
 export type RenameEnvironmentMutation = {
@@ -2544,6 +2651,42 @@ export type StripeSubscriptionDetails = {
   subscriptionId?: Maybe<Scalars['String']['output']>;
 };
 
+export type TeamAppEnvironmentType = {
+  __typename?: 'TeamAppEnvironmentType';
+  app: AppMembershipType;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  environment: EnvironmentType;
+  id: Scalars['String']['output'];
+};
+
+export type TeamMembershipType = {
+  __typename?: 'TeamMembershipType';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  email?: Maybe<Scalars['String']['output']>;
+  fullName?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  orgMember?: Maybe<OrganisationMemberType>;
+  serviceAccount?: Maybe<ServiceAccountType>;
+};
+
+export type TeamType = {
+  __typename?: 'TeamType';
+  appEnvironments?: Maybe<Array<TeamAppEnvironmentType>>;
+  apps?: Maybe<Array<AppType>>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  createdBy?: Maybe<OrganisationMemberType>;
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  isScimManaged: Scalars['Boolean']['output'];
+  memberCount?: Maybe<Scalars['Int']['output']>;
+  memberRole?: Maybe<RoleType>;
+  members?: Maybe<Array<TeamMembershipType>>;
+  name: Scalars['String']['output'];
+  serviceAccountRole?: Maybe<RoleType>;
+  updatedAt: Scalars['DateTime']['output'];
+};
+
 export enum TimeRange {
   AllTime = 'ALL_TIME',
   Day = 'DAY',
@@ -2650,6 +2793,16 @@ export type UpdateSubscriptionResponse = {
 export type UpdateSyncAuthentication = {
   __typename?: 'UpdateSyncAuthentication';
   sync?: Maybe<EnvironmentSyncType>;
+};
+
+export type UpdateTeamAppEnvironmentsMutation = {
+  __typename?: 'UpdateTeamAppEnvironmentsMutation';
+  team?: Maybe<TeamType>;
+};
+
+export type UpdateTeamMutation = {
+  __typename?: 'UpdateTeamMutation';
+  team?: Maybe<TeamType>;
 };
 
 export type UpdateUserWrappedSecretsMutation = {
@@ -3521,6 +3674,78 @@ export type CreateNewVercelSyncMutationVariables = Exact<{
 
 export type CreateNewVercelSyncMutation = { __typename?: 'Mutation', createVercelSync?: { __typename?: 'CreateVercelSync', sync?: { __typename?: 'EnvironmentSyncType', id: string, isActive: boolean, lastSync?: any | null, createdAt?: any | null, environment: { __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices }, serviceInfo?: { __typename?: 'ServiceType', id?: string | null, name?: string | null } | null } | null } | null };
 
+export type AddTeamAppsOpMutationVariables = Exact<{
+  teamId: Scalars['ID']['input'];
+  appEnvs: Array<AppEnvironmentInput> | AppEnvironmentInput;
+}>;
+
+
+export type AddTeamAppsOpMutation = { __typename?: 'Mutation', addTeamApps?: { __typename?: 'AddTeamAppsMutation', team?: { __typename?: 'TeamType', id: string } | null } | null };
+
+export type AddTeamMembersOpMutationVariables = Exact<{
+  teamId: Scalars['ID']['input'];
+  memberIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
+  memberType?: InputMaybe<MemberType>;
+}>;
+
+
+export type AddTeamMembersOpMutation = { __typename?: 'Mutation', addTeamMembers?: { __typename?: 'AddTeamMembersMutation', team?: { __typename?: 'TeamType', id: string } | null } | null };
+
+export type CreateTeamOpMutationVariables = Exact<{
+  organisationId: Scalars['ID']['input'];
+  name: Scalars['String']['input'];
+  description?: InputMaybe<Scalars['String']['input']>;
+  memberRoleId?: InputMaybe<Scalars['ID']['input']>;
+  serviceAccountRoleId?: InputMaybe<Scalars['ID']['input']>;
+}>;
+
+
+export type CreateTeamOpMutation = { __typename?: 'Mutation', createTeam?: { __typename?: 'CreateTeamMutation', team?: { __typename?: 'TeamType', id: string, name: string } | null } | null };
+
+export type DeleteTeamOpMutationVariables = Exact<{
+  teamId: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteTeamOpMutation = { __typename?: 'Mutation', deleteTeam?: { __typename?: 'DeleteTeamMutation', ok?: boolean | null } | null };
+
+export type RemoveTeamAppOpMutationVariables = Exact<{
+  teamId: Scalars['ID']['input'];
+  appId: Scalars['ID']['input'];
+}>;
+
+
+export type RemoveTeamAppOpMutation = { __typename?: 'Mutation', removeTeamApp?: { __typename?: 'RemoveTeamAppMutation', team?: { __typename?: 'TeamType', id: string } | null } | null };
+
+export type RemoveTeamMemberOpMutationVariables = Exact<{
+  teamId: Scalars['ID']['input'];
+  memberId: Scalars['ID']['input'];
+  memberType?: InputMaybe<MemberType>;
+}>;
+
+
+export type RemoveTeamMemberOpMutation = { __typename?: 'Mutation', removeTeamMember?: { __typename?: 'RemoveTeamMemberMutation', team?: { __typename?: 'TeamType', id: string } | null } | null };
+
+export type UpdateTeamOpMutationVariables = Exact<{
+  teamId: Scalars['ID']['input'];
+  name?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  memberRoleId?: InputMaybe<Scalars['ID']['input']>;
+  serviceAccountRoleId?: InputMaybe<Scalars['ID']['input']>;
+}>;
+
+
+export type UpdateTeamOpMutation = { __typename?: 'Mutation', updateTeam?: { __typename?: 'UpdateTeamMutation', team?: { __typename?: 'TeamType', id: string, name: string } | null } | null };
+
+export type UpdateTeamAppEnvironmentsOpMutationVariables = Exact<{
+  teamId: Scalars['ID']['input'];
+  appId: Scalars['ID']['input'];
+  envIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
+}>;
+
+
+export type UpdateTeamAppEnvironmentsOpMutation = { __typename?: 'Mutation', updateTeamAppEnvironments?: { __typename?: 'UpdateTeamAppEnvironmentsMutation', team?: { __typename?: 'TeamType', id: string } | null } | null };
+
 export type CreateNewUserTokenMutationVariables = Exact<{
   orgId: Scalars['ID']['input'];
   name: Scalars['String']['input'];
@@ -4027,6 +4252,14 @@ export type GetVercelProjectsQueryVariables = Exact<{
 
 export type GetVercelProjectsQuery = { __typename?: 'Query', vercelProjects?: Array<{ __typename?: 'VercelTeamProjectsType', id: string, teamName: string, projects?: Array<{ __typename?: 'VercelProjectType', id: string, name: string, environments?: Array<{ __typename?: 'VercelEnvironmentType', id: string, name: string, slug: string, type?: string | null } | null> | null } | null> | null } | null> | null };
 
+export type GetTeamsQueryVariables = Exact<{
+  organisationId: Scalars['ID']['input'];
+  teamId?: InputMaybe<Scalars['ID']['input']>;
+}>;
+
+
+export type GetTeamsQuery = { __typename?: 'Query', teams?: Array<{ __typename?: 'TeamType', id: string, name: string, description?: string | null, isScimManaged: boolean, createdAt?: any | null, updatedAt: any, memberCount?: number | null, memberRole?: { __typename?: 'RoleType', id: string, name?: string | null, description?: string | null, color?: string | null, permissions?: any | null } | null, serviceAccountRole?: { __typename?: 'RoleType', id: string, name?: string | null, description?: string | null, color?: string | null, permissions?: any | null } | null, createdBy?: { __typename?: 'OrganisationMemberType', id: string, fullName?: string | null, email?: string | null, avatarUrl?: string | null } | null, members?: Array<{ __typename?: 'TeamMembershipType', id: string, email?: string | null, fullName?: string | null, avatarUrl?: string | null, createdAt?: any | null, orgMember?: { __typename?: 'OrganisationMemberType', id: string, identityKey?: string | null, role?: { __typename?: 'RoleType', id: string, name?: string | null, description?: string | null, color?: string | null, permissions?: any | null } | null } | null, serviceAccount?: { __typename?: 'ServiceAccountType', id: string, name: string, role?: { __typename?: 'RoleType', id: string, name?: string | null, description?: string | null, color?: string | null, permissions?: any | null } | null } | null }> | null, apps?: Array<{ __typename?: 'AppType', id: string, name: string, sseEnabled: boolean }> | null, appEnvironments?: Array<{ __typename?: 'TeamAppEnvironmentType', id: string, createdAt?: any | null, app: { __typename?: 'AppMembershipType', id: string, name: string }, environment: { __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices } }> | null } | null> | null };
+
 export type GetOrganisationMemberDetailQueryVariables = Exact<{
   organisationId: Scalars['ID']['input'];
   id?: InputMaybe<Scalars['ID']['input']>;
@@ -4131,6 +4364,14 @@ export const UpdateProviderCredsDocument = {"kind":"Document","definitions":[{"k
 export const UpdateSyncAuthDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateSyncAuth"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"syncId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateSyncAuthentication"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"syncId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"syncId"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sync"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateSyncAuthMutation, UpdateSyncAuthMutationVariables>;
 export const CreateNewVaultSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewVaultSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"engine"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"vaultPath"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createVaultSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}},{"kind":"Argument","name":{"kind":"Name","value":"engine"},"value":{"kind":"Variable","name":{"kind":"Name","value":"engine"}}},{"kind":"Argument","name":{"kind":"Name","value":"vaultPath"},"value":{"kind":"Variable","name":{"kind":"Name","value":"vaultPath"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sync"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewVaultSyncMutation, CreateNewVaultSyncMutationVariables>;
 export const CreateNewVercelSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewVercelSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"projectId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"projectName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environment"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"secretType"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createVercelSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}},{"kind":"Argument","name":{"kind":"Name","value":"projectId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"projectId"}}},{"kind":"Argument","name":{"kind":"Name","value":"projectName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"projectName"}}},{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"teamName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamName"}}},{"kind":"Argument","name":{"kind":"Name","value":"environment"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environment"}}},{"kind":"Argument","name":{"kind":"Name","value":"secretType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"secretType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sync"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewVercelSyncMutation, CreateNewVercelSyncMutationVariables>;
+export const AddTeamAppsOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AddTeamAppsOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appEnvs"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AppEnvironmentInput"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"addTeamApps"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appEnvs"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appEnvs"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<AddTeamAppsOpMutation, AddTeamAppsOpMutationVariables>;
+export const AddTeamMembersOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AddTeamMembersOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberIds"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"MemberType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"addTeamMembers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberIds"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberIds"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<AddTeamMembersOpMutation, AddTeamMembersOpMutationVariables>;
+export const CreateTeamOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateTeamOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"description"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberRoleId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"serviceAccountRoleId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createTeam"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"description"},"value":{"kind":"Variable","name":{"kind":"Name","value":"description"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberRoleId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberRoleId"}}},{"kind":"Argument","name":{"kind":"Name","value":"serviceAccountRoleId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"serviceAccountRoleId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<CreateTeamOpMutation, CreateTeamOpMutationVariables>;
+export const DeleteTeamOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteTeamOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteTeam"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<DeleteTeamOpMutation, DeleteTeamOpMutationVariables>;
+export const RemoveTeamAppOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RemoveTeamAppOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeTeamApp"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<RemoveTeamAppOpMutation, RemoveTeamAppOpMutationVariables>;
+export const RemoveTeamMemberOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RemoveTeamMemberOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"MemberType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeTeamMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<RemoveTeamMemberOpMutation, RemoveTeamMemberOpMutationVariables>;
+export const UpdateTeamOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateTeamOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"description"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberRoleId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"serviceAccountRoleId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTeam"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"description"},"value":{"kind":"Variable","name":{"kind":"Name","value":"description"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberRoleId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberRoleId"}}},{"kind":"Argument","name":{"kind":"Name","value":"serviceAccountRoleId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"serviceAccountRoleId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateTeamOpMutation, UpdateTeamOpMutationVariables>;
+export const UpdateTeamAppEnvironmentsOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateTeamAppEnvironmentsOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envIds"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTeamAppEnvironments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"envIds"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envIds"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateTeamAppEnvironmentsOpMutation, UpdateTeamAppEnvironmentsOpMutationVariables>;
 export const CreateNewUserTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewUserToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"token"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyShare"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"expiry"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createUserToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"identityKey"},"value":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}}},{"kind":"Argument","name":{"kind":"Name","value":"token"},"value":{"kind":"Variable","name":{"kind":"Name","value":"token"}}},{"kind":"Argument","name":{"kind":"Name","value":"wrappedKeyShare"},"value":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyShare"}}},{"kind":"Argument","name":{"kind":"Name","value":"expiry"},"value":{"kind":"Variable","name":{"kind":"Name","value":"expiry"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<CreateNewUserTokenMutation, CreateNewUserTokenMutationVariables>;
 export const RevokeUserTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RevokeUserToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tokenId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteUserToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tokenId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tokenId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<RevokeUserTokenMutation, RevokeUserTokenMutationVariables>;
 export const GetIpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetIP"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"clientIp"}}]}}]} as unknown as DocumentNode<GetIpQuery, GetIpQueryVariables>;
@@ -4200,5 +4441,6 @@ export const GetRailwayProjectsDocument = {"kind":"Document","definitions":[{"ki
 export const GetRenderResourcesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetRenderResources"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"renderServices"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}},{"kind":"Field","name":{"kind":"Name","value":"renderEnvgroups"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<GetRenderResourcesQuery, GetRenderResourcesQueryVariables>;
 export const TestVaultAuthDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TestVaultAuth"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"testVaultCreds"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}]}]}}]} as unknown as DocumentNode<TestVaultAuthQuery, TestVaultAuthQueryVariables>;
 export const GetVercelProjectsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetVercelProjects"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"vercelProjects"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"teamName"}},{"kind":"Field","name":{"kind":"Name","value":"projects"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"environments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]}}]}}]} as unknown as DocumentNode<GetVercelProjectsQuery, GetVercelProjectsQueryVariables>;
+export const GetTeamsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetTeams"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"teams"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}},{"kind":"Argument","name":{"kind":"Name","value":"teamId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"memberRole"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceAccountRole"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isScimManaged"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"memberCount"}},{"kind":"Field","name":{"kind":"Name","value":"members"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"orgMember"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceAccount"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"apps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"sseEnabled"}}]}},{"kind":"Field","name":{"kind":"Name","value":"appEnvironments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<GetTeamsQuery, GetTeamsQueryVariables>;
 export const GetOrganisationMemberDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetOrganisationMemberDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"organisationMembers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastLogin"}},{"kind":"Field","name":{"kind":"Name","value":"self"}},{"kind":"Field","name":{"kind":"Name","value":"appMemberships"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"sseEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"environments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"tokens"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"networkPolicies"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"allowedIps"}},{"kind":"Field","name":{"kind":"Name","value":"isGlobal"}}]}}]}}]}}]} as unknown as DocumentNode<GetOrganisationMemberDetailQuery, GetOrganisationMemberDetailQueryVariables>;
 export const GetUserTokensDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetUserTokens"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userTokens"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"wrappedKeyShare"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]} as unknown as DocumentNode<GetUserTokensQuery, GetUserTokensQueryVariables>;

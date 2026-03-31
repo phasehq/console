@@ -4,6 +4,7 @@ type Query {
   roles(orgId: ID): [RoleType]
   networkAccessPolicies(organisationId: ID): [NetworkAccessPolicyType]
   identities(organisationId: ID): [IdentityType]
+  teams(organisationId: ID, teamId: ID): [TeamType]
   organisationNameAvailable(name: String): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -624,6 +625,56 @@ type UserTokenType {
   createdBy: OrganisationMemberType
 }
 
+type TeamType {
+  id: String!
+  name: String!
+  description: String
+  memberRole: RoleType
+  serviceAccountRole: RoleType
+  isScimManaged: Boolean!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  members: [TeamMembershipType!]
+  apps: [AppType!]
+  appEnvironments: [TeamAppEnvironmentType!]
+  memberCount: Int
+}
+
+type TeamMembershipType {
+  id: String!
+  orgMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  createdAt: DateTime
+  email: String
+  fullName: String
+  avatarUrl: String
+}
+
+type AppType {
+  id: String!
+  name: String!
+  description: String
+  identityKey: String!
+  appVersion: Int!
+  appToken: String!
+  appSeed: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  sseEnabled: Boolean!
+  serviceAccounts: [ServiceAccountType]!
+  environments: [EnvironmentType]!
+  members: [OrganisationMemberType]!
+}
+
+type TeamAppEnvironmentType {
+  id: String!
+  app: AppMembershipType!
+  environment: EnvironmentType!
+  createdAt: DateTime
+}
+
 type PhaseLicenseType {
   id: String
   customerName: String
@@ -693,23 +744,6 @@ type OrganisationMemberInviteType {
   createdAt: DateTime
   updatedAt: DateTime!
   expiresAt: DateTime!
-}
-
-type AppType {
-  id: String!
-  name: String!
-  description: String
-  identityKey: String!
-  appVersion: Int!
-  appToken: String!
-  appSeed: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  sseEnabled: Boolean!
-  serviceAccounts: [ServiceAccountType]!
-  environments: [EnvironmentType]!
-  members: [OrganisationMemberType]!
 }
 
 type KMSLogsResponseType {
@@ -1020,7 +1054,7 @@ type Mutation {
   The new owner must have global access (Admin role) to ensure they have all necessary keys.
   """
   transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
-  updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+  updateMemberWrappedSecrets(identityKey: String, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1046,6 +1080,14 @@ type Mutation {
   createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
   updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
   deleteIdentity(id: ID!): DeleteIdentityMutation
+  createTeam(description: String, memberRoleId: ID, name: String!, organisationId: ID!, serviceAccountRoleId: ID): CreateTeamMutation
+  updateTeam(description: String, memberRoleId: ID, name: String, serviceAccountRoleId: ID, teamId: ID!): UpdateTeamMutation
+  deleteTeam(teamId: ID!): DeleteTeamMutation
+  addTeamMembers(memberIds: [ID!]!, memberType: MemberType = USER, teamId: ID!): AddTeamMembersMutation
+  removeTeamMember(memberId: ID!, memberType: MemberType = USER, teamId: ID!): RemoveTeamMemberMutation
+  addTeamApps(appEnvs: [AppEnvironmentInput!]!, teamId: ID!): AddTeamAppsMutation
+  removeTeamApp(appId: ID!, teamId: ID!): RemoveTeamAppMutation
+  updateTeamAppEnvironments(appId: ID!, envIds: [ID!]!, teamId: ID!): UpdateTeamAppEnvironmentsMutation
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
   enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
   enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
@@ -1289,6 +1331,43 @@ type UpdateIdentityMutation {
 
 type DeleteIdentityMutation {
   ok: Boolean
+}
+
+type CreateTeamMutation {
+  team: TeamType
+}
+
+type UpdateTeamMutation {
+  team: TeamType
+}
+
+type DeleteTeamMutation {
+  ok: Boolean
+}
+
+type AddTeamMembersMutation {
+  team: TeamType
+}
+
+type RemoveTeamMemberMutation {
+  team: TeamType
+}
+
+type AddTeamAppsMutation {
+  team: TeamType
+}
+
+input AppEnvironmentInput {
+  appId: ID!
+  envIds: [ID!]!
+}
+
+type RemoveTeamAppMutation {
+  team: TeamType
+}
+
+type UpdateTeamAppEnvironmentsMutation {
+  team: TeamType
 }
 
 type CreateServiceAccountMutation {

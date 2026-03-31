@@ -1,0 +1,7 @@
+mutation UpdateTeamAppEnvironmentsOp($teamId: ID!, $appId: ID!, $envIds: [ID!]!) {
+  updateTeamAppEnvironments(teamId: $teamId, appId: $appId, envIds: $envIds) {
+    team {
+      id
+    }
+  }
+}

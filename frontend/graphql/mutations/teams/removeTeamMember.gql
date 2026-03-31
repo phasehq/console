@@ -1,0 +1,7 @@
+mutation RemoveTeamMemberOp($teamId: ID!, $memberId: ID!, $memberType: MemberType) {
+  removeTeamMember(teamId: $teamId, memberId: $memberId, memberType: $memberType) {
+    team {
+      id
+    }
+  }
+}
