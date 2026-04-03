@@ -147,9 +147,9 @@ class UpdateTeamMutation(graphene.Mutation):
 
         _check_team_membership(user, team)
 
-        if team.is_scim_managed:
+        if team.is_scim_managed and (name is not None or description is not None):
             raise GraphQLError(
-                "This team is managed by SCIM and cannot be manually updated"
+                "Name and description of SCIM-managed teams cannot be changed from the console"
             )
 
         if name is not None:

@@ -133,8 +133,7 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
       await updateTeam({
         variables: {
           teamId: team.id,
-          name,
-          description: description || null,
+          ...(team.isScimManaged ? {} : { name, description: description || null }),
           memberRoleId: memberRole?.id || '',
           serviceAccountRoleId: saRole?.id || '',
         },
@@ -170,9 +169,11 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
       }}
     >
       <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-        <Input value={name} setValue={setName} label="Team name" required maxLength={64} />
+        <div className={clsx(team.isScimManaged && 'opacity-60 pointer-events-none')}>
+          <Input value={name} setValue={setName} label="Team name" required maxLength={64} disabled={team.isScimManaged ?? false} />
+        </div>
 
-        <div className="space-y-2 w-full">
+        <div className={clsx('space-y-2 w-full', team.isScimManaged && 'opacity-60 pointer-events-none')}>
           <label className="block text-neutral-500 text-xs">Description</label>
           <textarea
             value={description}
@@ -180,7 +181,11 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
             className="w-full rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 p-2 text-sm resize-none"
             rows={3}
             placeholder="Optional team description"
+            disabled={team.isScimManaged ?? false}
           />
+          {team.isScimManaged && (
+            <p className="text-2xs text-neutral-500">Name and description are managed by your identity provider via SCIM.</p>
+          )}
         </div>
 
         <div className="space-y-4">
