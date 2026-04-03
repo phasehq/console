@@ -33,5 +33,6 @@ query GetOrganisations {
       providerType
       enabled
     }
+    scimEnabled
   }
 }

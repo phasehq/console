@@ -38,6 +38,10 @@ query GetTeams($organisationId: ID!, $teamId: ID) {
       orgMember {
         id
         identityKey
+        scimManaged
+        email
+        fullName
+        avatarUrl
         role {
           id
           name
