@@ -158,8 +158,7 @@ export default function Teams({ params }: { params: { team: string } }) {
                             <div className="font-medium flex items-center gap-2">
                               {team.name}
                               {team.isScimManaged && (
-                                <span className="text-2xs px-1 rounded ring-1 ring-inset ring-purple-500/40 bg-purple-500/20 text-purple-400 uppercase font-medium">
-                                  <FaRobot className="inline mr-0.5" />
+                                <span className="inline-flex items-center shrink-0 px-1 py-px rounded text-3xs font-medium bg-blue-500/10 text-blue-500 ring-1 ring-inset ring-blue-500/20">
                                   SCIM
                                 </span>
                               )}

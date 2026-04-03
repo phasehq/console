@@ -48,6 +48,10 @@ export default function AccessLayout({
         link: 'authentication',
       },
       {
+        name: 'SCIM',
+        link: 'scim',
+      },
+      {
         name: 'Network',
         link: 'network',
       },

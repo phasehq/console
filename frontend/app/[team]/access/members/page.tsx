@@ -12,6 +12,7 @@ import { FaBan, FaChevronRight, FaSearch, FaTimesCircle, FaCopy } from 'react-ic
 import clsx from 'clsx'
 import Link from 'next/link'
 import { Avatar } from '@/components/common/Avatar'
+import { ProfileCard } from '@/components/common/ProfileCard'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { getInviteLink } from '@/utils/crypto'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -57,7 +58,8 @@ export default function Members({ params }: { params: { team: string } }) {
     ? searchQuery !== ''
       ? membersData?.organisationMembers.filter(
           (member: OrganisationMemberType) =>
-            member.fullName?.includes(searchQuery) || member.email?.includes(searchQuery)
+            member.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            member.email?.toLowerCase().includes(searchQuery.toLowerCase())
         )
       : membersData?.organisationMembers
     : []
@@ -142,16 +144,8 @@ export default function Members({ params }: { params: { team: string } }) {
                 <tbody className="divide-y divide-zinc-500/20">
                   {filteredMembers.map((member: OrganisationMemberType) => (
                     <tr key={member.id} className="group">
-                      <td className="py-2 flex items-center gap-2">
-                        <Avatar member={member} size="md" />
-                        <div>
-                          <div className="font-medium">
-                            {member.fullName || member.email} {member.self && ' (You)'}
-                          </div>
-                          {member.fullName && (
-                            <div className="text-sm text-neutral-500">{member.email}</div>
-                          )}
-                        </div>
+                      <td className="py-2">
+                        <ProfileCard member={member} size="lg" />
                       </td>
                       <td className="px-6 py-2 text-sm">
                         <RoleLabel role={member.role!} />

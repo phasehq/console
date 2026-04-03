@@ -8,7 +8,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext, useMemo } from 'react'
-import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey, FaNetworkWired } from 'react-icons/fa'
+import { FaBan, FaChevronLeft, FaClock, FaCog, FaExclamationTriangle, FaKey, FaNetworkWired } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
@@ -175,10 +175,22 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <div className="flex items-center gap-3">
             <Avatar member={member} size="xl" />
             <div className="flex flex-col gap-0.5">
-              <h3 className="text-base font-medium">
-                {member.fullName || 'User'} {member.self && ' (You)'}{' '}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-medium">
+                  {member.fullName || 'User'} {member.self && ' (You)'}
+                </h3>
+                {member.scimManaged && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-medium bg-blue-500/10 text-blue-500 ring-1 ring-inset ring-blue-500/20">
+                    SCIM
+                  </span>
+                )}
+              </div>
               <span className="text-neutral-500 text-xs">{member.email}</span>
+              {!member.identityKey && (
+                <span className="text-amber-500 text-xs flex items-center gap-1">
+                  <FaExclamationTriangle /> Key ceremony pending — user has not logged in yet
+                </span>
+              )}
               {member.lastLogin ? (
                 <span
                   className="text-neutral-500 text-xs flex items-center gap-1 cursor-help"
@@ -288,7 +300,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                   Apps and Environments this member has direct access to
                 </div>
               </div>
-              {userCanWriteAppMemberships && !member.self && (
+              {userCanWriteAppMemberships && !member.self && member.identityKey && (
                 <AddAppToMemberButton
                   member={member}
                   organisationId={organisation.id}
