@@ -53,6 +53,12 @@ public_urls = [
     path("public/identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]
 
+# SCIM v2 Provisioning API (Enterprise)
+scim_urls = [
+    path("scim/v2/", include("ee.authentication.scim.urls")),
+]
+urlpatterns.extend(scim_urls)
+
 # Add public URLs to main urlpatterns
 urlpatterns.extend(public_urls)
 
