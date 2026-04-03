@@ -42,6 +42,8 @@ from api.models import (
     Team,
     TeamMembership,
     TeamAppEnvironment,
+    SCIMToken,
+    SCIMEvent,
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
@@ -108,6 +110,7 @@ class OrganisationType(DjangoObjectType):
             "keyring",
             "recovery",
             "pricing_version",
+            "scim_enabled",
         )
 
     @staticmethod
@@ -170,6 +173,7 @@ class OrganisationMemberType(DjangoObjectType):
     role = graphene.Field(RoleType)
     self = graphene.Boolean()
     last_login = graphene.DateTime()
+    scim_managed = graphene.Boolean()
     app_memberships = graphene.List(graphene.NonNull(lambda: AppMembershipType))
     tokens = graphene.List(graphene.NonNull(lambda: UserTokenType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
@@ -199,6 +203,10 @@ class OrganisationMemberType(DjangoObjectType):
         social_acc = self.user.socialaccount_set.first()
         if social_acc:
             return social_acc.extra_data.get("name")
+        # Fall back to SCIM display name
+        scim_user = self.scimuser_set.first()
+        if scim_user and scim_user.display_name:
+            return scim_user.display_name
         return None
 
     def resolve_avatar_url(self, info):
@@ -214,6 +222,9 @@ class OrganisationMemberType(DjangoObjectType):
 
     def resolve_last_login(self, info):
         return self.user.last_login
+
+    def resolve_scim_managed(self, info):
+        return self.scimuser_set.exists()
 
     def resolve_app_memberships(self, info):
         # Find all EnvironmentKeys for this user
@@ -1158,7 +1169,11 @@ class TeamType(DjangoObjectType):
     def resolve_members(self, info):
         return self.memberships.select_related(
             "org_member__user", "service_account"
-        ).all()
+        ).exclude(
+            org_member__deleted_at__isnull=False,
+        ).exclude(
+            service_account__deleted_at__isnull=False,
+        )
 
     def resolve_apps(self, info):
         app_ids = (
@@ -1170,4 +1185,51 @@ class TeamType(DjangoObjectType):
         return self.app_environments.select_related("app", "environment").all()
 
     def resolve_member_count(self, info):
-        return self.memberships.count()
+        return self.memberships.exclude(
+            org_member__deleted_at__isnull=False,
+        ).exclude(
+            service_account__deleted_at__isnull=False,
+        ).count()
+
+
+class SCIMTokenType(DjangoObjectType):
+    class Meta:
+        model = SCIMToken
+        fields = (
+            "id",
+            "name",
+            "token_prefix",
+            "created_by",
+            "created_at",
+            "expires_at",
+            "last_used_at",
+            "is_active",
+        )
+
+
+class SCIMEventType(DjangoObjectType):
+    class Meta:
+        model = SCIMEvent
+        fields = (
+            "id",
+            "scim_token",
+            "event_type",
+            "status",
+            "resource_type",
+            "resource_id",
+            "resource_name",
+            "detail",
+            "request_method",
+            "request_path",
+            "request_body",
+            "response_status",
+            "response_body",
+            "ip_address",
+            "user_agent",
+            "timestamp",
+        )
+
+
+class SCIMEventsResponseType(ObjectType):
+    events = graphene.List(SCIMEventType)
+    count = graphene.Int()

@@ -118,6 +118,13 @@ from .graphene.queries.service_accounts import (
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.queries.teams import resolve_teams
+from .graphene.queries.scim import resolve_scim_tokens, resolve_scim_events
+from .graphene.mutations.scim import (
+    CreateSCIMTokenMutation,
+    DeleteSCIMTokenMutation,
+    ToggleSCIMMutation,
+    ToggleSCIMTokenMutation,
+)
 from .graphene.mutations.teams import (
     AddTeamAppsMutation,
     AddTeamMembersMutation,
@@ -228,6 +235,8 @@ from .graphene.types import (
     ServiceTokenType,
     ServiceType,
     TeamType,
+    SCIMTokenType,
+    SCIMEventsResponseType,
     TimeRange,
     UserTokenType,
     AWSValidationResultType,
@@ -284,6 +293,21 @@ class Query(graphene.ObjectType):
         TeamType,
         organisation_id=graphene.ID(),
         team_id=graphene.ID(required=False),
+    )
+
+    scim_tokens = graphene.List(
+        SCIMTokenType,
+        organisation_id=graphene.ID(),
+    )
+
+    scim_events = graphene.Field(
+        SCIMEventsResponseType,
+        organisation_id=graphene.ID(),
+        start=graphene.BigInt(required=False),
+        end=graphene.BigInt(required=False),
+        event_types=graphene.List(graphene.String, required=False),
+        token_id=graphene.ID(required=False),
+        status=graphene.String(required=False),
     )
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
@@ -568,6 +592,8 @@ class Query(graphene.ObjectType):
 
     # Teams
     resolve_teams = resolve_teams
+    resolve_scim_tokens = resolve_scim_tokens
+    resolve_scim_events = resolve_scim_events
 
     resolve_organisation_plan = resolve_organisation_plan
 
@@ -695,7 +721,7 @@ class Query(graphene.ObjectType):
 
         accessible_env_ids = set(
             EnvironmentKey.objects.filter(
-                environment__app_id=app_id, **key_filter
+                environment__app_id=app_id, deleted_at__isnull=True, **key_filter
             ).values_list("environment_id", flat=True)
         )
 
@@ -1139,6 +1165,12 @@ class Mutation(graphene.ObjectType):
     add_team_apps = AddTeamAppsMutation.Field()
     remove_team_app = RemoveTeamAppMutation.Field()
     update_team_app_environments = UpdateTeamAppEnvironmentsMutation.Field()
+
+    # SCIM
+    create_scim_token = CreateSCIMTokenMutation.Field()
+    delete_scim_token = DeleteSCIMTokenMutation.Field()
+    toggle_scim = ToggleSCIMMutation.Field()
+    toggle_scim_token = ToggleSCIMTokenMutation.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
