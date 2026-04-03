@@ -18,6 +18,7 @@ default_roles = {
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "SSO": ["create", "read", "update", "delete"],
             "Teams": ["create", "read", "update", "delete"],
+            "SCIM": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -53,6 +54,7 @@ default_roles = {
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "SSO": ["create", "read", "update", "delete"],
             "Teams": ["create", "read", "update", "delete"],
+            "SCIM": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -87,6 +89,7 @@ default_roles = {
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "SSO": [],
             "Teams": ["create", "read", "update", "delete"],
+            "SCIM": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -125,6 +128,7 @@ default_roles = {
             "NetworkAccessPolicies": ["read"],
             "SSO": [],
             "Teams": ["read"],
+            "SCIM": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -159,6 +163,7 @@ default_roles = {
             "NetworkAccessPolicies": ["read"],
             "SSO": [],
             "Teams": [],
+            "SCIM": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update", "delete"],
