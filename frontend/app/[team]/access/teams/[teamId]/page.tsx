@@ -186,7 +186,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
               </span>
             </div>
             <div className="flex flex-col items-end gap-2">
-              {canUpdateTeam && !team.isScimManaged && <UpdateTeamDialog team={team} />}
+              {canUpdateTeam && <UpdateTeamDialog team={team} />}
               <span
                 className="text-neutral-500 text-2xs flex items-center gap-1 cursor-help"
                 title={new Date(team.createdAt).toLocaleString()}
