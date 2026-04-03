@@ -7,6 +7,7 @@ EnvironmentKeys for each team member using ServerEnvironmentKey data.
 
 from django.apps import apps
 from django.utils import timezone
+from nacl.bindings import crypto_sign_ed25519_pk_to_curve25519
 from api.utils.crypto import (
     get_server_keypair,
     decrypt_asymmetric,
@@ -35,8 +36,13 @@ def server_wrap_env_key_for_member(environment, identity_key):
         server_env_key.wrapped_salt, server_sk.hex(), server_pk.hex()
     )
 
-    wrapped_seed = encrypt_asymmetric(seed, identity_key)
-    wrapped_salt = encrypt_asymmetric(salt, identity_key)
+    # identity_key is Ed25519; encrypt_asymmetric needs Curve25519
+    kx_pubkey_hex = crypto_sign_ed25519_pk_to_curve25519(
+        bytes.fromhex(identity_key)
+    ).hex()
+
+    wrapped_seed = encrypt_asymmetric(seed, kx_pubkey_hex)
+    wrapped_salt = encrypt_asymmetric(salt, kx_pubkey_hex)
     return wrapped_seed, wrapped_salt
 
 
