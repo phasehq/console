@@ -241,6 +241,11 @@ class DeleteTeamMutation(graphene.Mutation):
         if not user_has_permission(user, "delete", "Teams", org):
             raise GraphQLError("You don't have permission to delete Teams")
 
+        if team.is_scim_managed:
+            raise GraphQLError(
+                "This team is managed by SCIM and cannot be manually deleted"
+            )
+
         _check_team_membership(user, team)
 
         # Revoke all team environment key grants
