@@ -144,6 +144,16 @@ def can_use_teams(organisation):
     return organisation.plan in ("PR", "EN")
 
 
+def can_use_scim(organisation):
+    """SCIM provisioning requires an Enterprise plan or activated license."""
+    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
+
+    if ActivatedPhaseLicense.objects.filter(organisation=organisation).exists():
+        return True
+
+    return organisation.plan == "EN"
+
+
 def can_add_service_token(app):
     """Check if a new service token can be added to the app."""
 
