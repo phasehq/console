@@ -178,6 +178,16 @@ def schemas(request):
                             "uniqueness": "none",
                         },
                         {
+                            "name": "description",
+                            "type": "string",
+                            "multiValued": False,
+                            "required": False,
+                            "caseExact": False,
+                            "mutability": "readWrite",
+                            "returned": "default",
+                            "uniqueness": "none",
+                        },
+                        {
                             "name": "members",
                             "type": "complex",
                             "multiValued": True,
