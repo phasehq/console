@@ -7,9 +7,15 @@ from django.http import HttpResponse
 from rest_framework.decorators import (
     api_view,
     authentication_classes,
+    parser_classes,
     permission_classes,
+    renderer_classes,
 )
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer
+
+from ee.authentication.scim.negotiation import SCIMJSONParser, SCIMJSONRenderer
 
 from api.models import SCIMUser
 from backend.quotas import can_add_account
@@ -71,6 +77,8 @@ def _extract_user_fields(data):
 @api_view(["GET", "POST"])
 @authentication_classes([SCIMTokenAuthentication])
 @permission_classes([IsAuthenticated])
+@renderer_classes([SCIMJSONRenderer, JSONRenderer])
+@parser_classes([SCIMJSONParser, JSONParser])
 def users_list(request):
     """
     GET  /scim/v2/Users — List/filter users
@@ -87,6 +95,8 @@ def users_list(request):
 @api_view(["GET", "PUT", "PATCH", "DELETE"])
 @authentication_classes([SCIMTokenAuthentication])
 @permission_classes([IsAuthenticated])
+@renderer_classes([SCIMJSONRenderer, JSONRenderer])
+@parser_classes([SCIMJSONParser, JSONParser])
 def users_detail(request, scim_user_id):
     """
     GET    /scim/v2/Users/:id — Get user
