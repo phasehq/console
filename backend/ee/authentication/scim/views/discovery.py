@@ -1,5 +1,13 @@
 from django.http import JsonResponse
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+    renderer_classes,
+)
+from rest_framework.renderers import JSONRenderer
+
+from ee.authentication.scim.negotiation import SCIMJSONRenderer
 
 from ee.authentication.scim.constants import (
     SCIM_GROUP_SCHEMA,
@@ -13,6 +21,7 @@ from ee.authentication.scim.constants import (
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([])
+@renderer_classes([SCIMJSONRenderer, JSONRenderer])
 def service_provider_config(request):
     """GET /scim/v2/ServiceProviderConfig — RFC 7643 Section 5."""
     return JsonResponse(
@@ -48,6 +57,7 @@ def service_provider_config(request):
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([])
+@renderer_classes([SCIMJSONRenderer, JSONRenderer])
 def schemas(request):
     """GET /scim/v2/Schemas — RFC 7643 Section 7."""
     return JsonResponse(
@@ -235,6 +245,7 @@ def schemas(request):
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([])
+@renderer_classes([SCIMJSONRenderer, JSONRenderer])
 def resource_types(request):
     """GET /scim/v2/ResourceTypes — RFC 7643 Section 6."""
     return JsonResponse(

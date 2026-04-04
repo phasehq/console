@@ -6,9 +6,15 @@ from django.http import HttpResponse, JsonResponse
 from rest_framework.decorators import (
     api_view,
     authentication_classes,
+    parser_classes,
     permission_classes,
+    renderer_classes,
 )
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer
+
+from ee.authentication.scim.negotiation import SCIMJSONParser, SCIMJSONRenderer
 
 from api.models import (
     SCIMGroup,
@@ -97,6 +103,8 @@ def _remove_member_from_team(team, scim_user):
 @api_view(["GET", "POST"])
 @authentication_classes([SCIMTokenAuthentication])
 @permission_classes([IsAuthenticated])
+@renderer_classes([SCIMJSONRenderer, JSONRenderer])
+@parser_classes([SCIMJSONParser, JSONParser])
 def groups_list(request):
     """
     GET  /scim/v2/Groups — List/filter groups
@@ -113,6 +121,8 @@ def groups_list(request):
 @api_view(["GET", "PUT", "PATCH", "DELETE"])
 @authentication_classes([SCIMTokenAuthentication])
 @permission_classes([IsAuthenticated])
+@renderer_classes([SCIMJSONRenderer, JSONRenderer])
+@parser_classes([SCIMJSONParser, JSONParser])
 def groups_detail(request, scim_group_id):
     """
     GET    /scim/v2/Groups/:id — Get group
@@ -172,7 +182,8 @@ def _create_group(request, org):
     if not display_name:
         return scim_bad_request("displayName is required")
     if not external_id:
-        return scim_bad_request("externalId is required")
+        import uuid
+        external_id = str(uuid.uuid4())
 
     # Create Team
     try:
@@ -330,9 +341,25 @@ def _patch_group(request, scim_group):
                         )
 
         elif op_type == "remove":
+            if not scim_group.team:
+                continue
+
+            member_ids = []
+
             # Azure Entra format: members[value eq "abc-123"]
-            member_id = parse_patch_path_filter(path)
-            if member_id and scim_group.team:
+            filtered_id = parse_patch_path_filter(path)
+            if filtered_id:
+                member_ids.append(filtered_id)
+
+            # Okta format: path="members", value=[{"value": "id"}]
+            if path.lower() == "members" and value:
+                refs = value if isinstance(value, list) else [value]
+                for ref in refs:
+                    mid = ref.get("value") if isinstance(ref, dict) else ref
+                    if mid:
+                        member_ids.append(mid)
+
+            for member_id in member_ids:
                 scim_user = SCIMUser.objects.filter(
                     id=member_id, organisation=org
                 ).first()
