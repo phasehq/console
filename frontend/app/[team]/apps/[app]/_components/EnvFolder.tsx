@@ -27,7 +27,7 @@ const EnvFolderBase = ({ envFolder, pathname }: EnvFolderProp) => {
         >
           <div>
             <div className="text-zinc-900 dark:text-zinc-100 opacity-60">{envFolder.env.name}</div>
-            <div className="text-emerald-500 group-hover:text-emerald-600 transition ease flex items-center gap-2">
+            <div className="text-amber-500 group-hover:text-amber-600 transition ease flex items-center gap-2">
               <FaFolder />
               {fullPath}
             </div>
