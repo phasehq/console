@@ -1,8 +1,15 @@
 'use client'
 
+import { Fragment } from 'react'
 import { SCIMEventRow } from './SCIMEventRow'
 
-export function SCIMEventsTable({ events }: { events: any[] }) {
+export function SCIMEventsTable({
+  events,
+  pageSize,
+}: {
+  events: any[]
+  pageSize?: number
+}) {
   return (
     <table className="table-auto min-w-full">
       <thead>
@@ -26,8 +33,19 @@ export function SCIMEventsTable({ events }: { events: any[] }) {
         </tr>
       </thead>
       <tbody>
-        {events.map((event: any) => (
-          <SCIMEventRow key={event.id} event={event} />
+        {events.map((event: any, n: number) => (
+          <Fragment key={event.id}>
+            {pageSize && n !== 0 && n % pageSize === 0 && (
+              <tr>
+                <td colSpan={6}>
+                  <div className="flex items-center justify-center bg-zinc-300 dark:bg-zinc-800 py-px text-neutral-500 text-xs">
+                    Page {n / pageSize + 1}
+                  </div>
+                </td>
+              </tr>
+            )}
+            <SCIMEventRow event={event} />
+          </Fragment>
         ))}
       </tbody>
     </table>
