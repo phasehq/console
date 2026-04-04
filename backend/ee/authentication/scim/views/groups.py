@@ -167,6 +167,7 @@ def _create_group(request, org):
 
     display_name = data.get("displayName", "").strip()
     external_id = data.get("externalId", "")
+    description = (data.get("description") or "").strip() or None
 
     if not display_name:
         return scim_bad_request("displayName is required")
@@ -177,6 +178,7 @@ def _create_group(request, org):
     try:
         team = Team.objects.create(
             name=display_name[:64],
+            description=description,
             organisation=org,
             is_scim_managed=True,
             created_by=None,
@@ -233,12 +235,14 @@ def _replace_group(request, scim_group):
     org = scim_group.organisation
     display_name = data.get("displayName", "").strip()
     external_id = data.get("externalId", scim_group.external_id)
+    description = (data.get("description") or "").strip() or None
 
     if display_name:
         scim_group.display_name = display_name
         if scim_group.team:
             scim_group.team.name = display_name[:64]
-            scim_group.team.save(update_fields=["name", "updated_at"])
+            scim_group.team.description = description
+            scim_group.team.save(update_fields=["name", "description", "updated_at"])
 
     scim_group.external_id = external_id
     scim_group.scim_data = data
@@ -296,13 +300,17 @@ def _patch_group(request, scim_group):
         path = op.get("path", "")
         value = op.get("value")
 
-        if op_type == "replace":
-            if path.lower() == "displayname":
-                scim_group.display_name = value
-                scim_group.save(update_fields=["display_name"])
-                if scim_group.team:
-                    scim_group.team.name = str(value)[:64]
-                    scim_group.team.save(update_fields=["name", "updated_at"])
+        if op_type in ("replace", "add") and path.lower() == "displayname":
+            scim_group.display_name = value
+            scim_group.save(update_fields=["display_name"])
+            if scim_group.team:
+                scim_group.team.name = str(value)[:64]
+                scim_group.team.save(update_fields=["name", "updated_at"])
+
+        elif op_type in ("replace", "add") and path.lower() == "description":
+            if scim_group.team:
+                scim_group.team.description = (str(value).strip() if value else None)
+                scim_group.team.save(update_fields=["description", "updated_at"])
 
         elif op_type == "add" and path.lower() == "members":
             members = value if isinstance(value, list) else [value]
