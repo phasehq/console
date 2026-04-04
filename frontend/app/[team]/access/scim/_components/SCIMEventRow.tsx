@@ -110,13 +110,6 @@ export function SCIMEventRow({ event }: { event: any }) {
                       {event.responseStatus}
                     </span>
                   </LogField>
-                  <div className="md:col-span-3">
-                    <LogField label="User agent">
-                      <span className="font-normal truncate max-w-lg inline-block align-bottom">
-                        {event.userAgent || '-'}
-                      </span>
-                    </LogField>
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -302,7 +302,7 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
           </div>
         ) : (
           <>
-            <SCIMEventsTable events={events} />
+            <SCIMEventsTable events={events} pageSize={PAGE_SIZE} />
 
             <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
               {!endOfList ? (

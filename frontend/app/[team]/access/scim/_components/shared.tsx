@@ -1,7 +1,11 @@
 'use client'
 
-import React from 'react'
+import React, { useContext } from 'react'
 import { FaKey } from 'react-icons/fa'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus, coldarkCold } from 'react-syntax-highlighter/dist/cjs/styles/prism'
+import { ThemeContext } from '@/contexts/themeContext'
+import CopyButton from '@/components/common/CopyButton'
 import { EntraIDLogo, OktaLogo, JumpCloudLogo } from '@/components/common/logos'
 
 export const PROVIDER_PATTERNS: {
@@ -89,11 +93,39 @@ export function LogField({ label, children }: { label: string; children: React.R
 }
 
 export function JsonBlock({ data }: { data: any }) {
+  const { theme } = useContext(ThemeContext)
+
   if (!data) return null
   const parsed = typeof data === 'string' ? JSON.parse(data) : data
+  const formatted = JSON.stringify(parsed, null, 2)
+
   return (
-    <pre className="mt-1 text-2xs font-mono bg-zinc-100 dark:bg-zinc-900 rounded p-3 overflow-auto max-h-64 whitespace-pre-wrap break-words text-zinc-800 dark:text-zinc-200">
-      {JSON.stringify(parsed, null, 2)}
-    </pre>
+    <div className="relative group/json mt-1">
+      <div className="absolute right-2 top-2 opacity-0 group-hover/json:opacity-100 transition-opacity z-10">
+        <CopyButton value={formatted} buttonVariant="secondary" />
+      </div>
+      <SyntaxHighlighter
+        language="json"
+        style={theme === 'dark' ? vscDarkPlus : coldarkCold}
+        customStyle={{
+          fontSize: '0.65rem',
+          fontFamily: 'var(--font-jetbrains-mono)',
+          lineHeight: '1.5',
+          margin: 0,
+          borderRadius: '0.375rem',
+          maxHeight: '16rem',
+          overflow: 'auto',
+          background: theme === 'dark' ? '#171717' : '#e4e4e7',
+        }}
+        codeTagProps={{
+          style: {
+            fontSize: '0.65rem',
+            fontFamily: 'var(--font-jetbrains-mono)',
+          },
+        }}
+      >
+        {formatted}
+      </SyntaxHighlighter>
+    </div>
   )
 }
