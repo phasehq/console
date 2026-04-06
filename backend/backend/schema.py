@@ -40,7 +40,11 @@ from api.utils.syncing.vercel.main import VercelTeamProjectsType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
 )
-from .graphene.mutations.syncing import CreateAzureKeyVaultSync, CreateRenderSync, CreateVercelSync
+from .graphene.mutations.syncing import (
+    CreateAzureKeyVaultSync,
+    CreateRenderSync,
+    CreateVercelSync,
+)
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
     CreateNetworkAccessPolicyMutation,
@@ -118,13 +122,24 @@ from .graphene.queries.service_accounts import (
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
 from .graphene.queries.teams import resolve_teams
-from .graphene.queries.scim import resolve_scim_tokens, resolve_scim_events
-from .graphene.mutations.scim import (
-    CreateSCIMTokenMutation,
-    DeleteSCIMTokenMutation,
-    ToggleSCIMMutation,
-    ToggleSCIMTokenMutation,
-)
+
+
+_SCIM_AVAILABLE = False
+try:
+    from ee.authentication.scim.graphene.queries import (
+        resolve_scim_tokens,
+        resolve_scim_events,
+    )
+    from ee.authentication.scim.graphene.mutations import (
+        CreateSCIMTokenMutation,
+        DeleteSCIMTokenMutation,
+        ToggleSCIMMutation,
+        ToggleSCIMTokenMutation,
+    )
+
+    _SCIM_AVAILABLE = True
+except ImportError:
+    pass
 from .graphene.mutations.teams import (
     AddTeamAppsMutation,
     AddTeamMembersMutation,
@@ -295,20 +310,22 @@ class Query(graphene.ObjectType):
         team_id=graphene.ID(required=False),
     )
 
-    scim_tokens = graphene.List(
-        SCIMTokenType,
-        organisation_id=graphene.ID(),
-    )
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        scim_tokens = graphene.List(
+            SCIMTokenType,
+            organisation_id=graphene.ID(),
+        )
 
-    scim_events = graphene.Field(
-        SCIMEventsResponseType,
-        organisation_id=graphene.ID(),
-        start=graphene.BigInt(required=False),
-        end=graphene.BigInt(required=False),
-        event_types=graphene.List(graphene.String, required=False),
-        token_id=graphene.ID(required=False),
-        status=graphene.String(required=False),
-    )
+        scim_events = graphene.Field(
+            SCIMEventsResponseType,
+            organisation_id=graphene.ID(),
+            start=graphene.BigInt(required=False),
+            end=graphene.BigInt(required=False),
+            event_types=graphene.List(graphene.String, required=False),
+            token_id=graphene.ID(required=False),
+            status=graphene.String(required=False),
+        )
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
@@ -592,8 +609,11 @@ class Query(graphene.ObjectType):
 
     # Teams
     resolve_teams = resolve_teams
-    resolve_scim_tokens = resolve_scim_tokens
-    resolve_scim_events = resolve_scim_events
+
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        resolve_scim_tokens = resolve_scim_tokens
+        resolve_scim_events = resolve_scim_events
 
     resolve_organisation_plan = resolve_organisation_plan
 
@@ -726,9 +746,7 @@ class Query(graphene.ObjectType):
         )
 
         return [
-            app_env
-            for app_env in app_environments
-            if app_env.id in accessible_env_ids
+            app_env for app_env in app_environments if app_env.id in accessible_env_ids
         ]
 
     def resolve_app_users(root, info, app_id):
@@ -791,7 +809,12 @@ class Query(graphene.ObjectType):
 
         # compute permission once and store it on the request context
         can_view_members = user_has_permission(
-            user, "read", "Members", secret.environment.app.organisation, True, app=secret.environment.app
+            user,
+            "read",
+            "Members",
+            secret.environment.app.organisation,
+            True,
+            app=secret.environment.app,
         ) or user_has_permission(
             user, "read", "Members", secret.environment.app.organisation, False
         )
@@ -965,7 +988,9 @@ class Query(graphene.ObjectType):
         ) or user_has_permission(user, "read", "Members", app.organisation, False)
         setattr(info.context, "can_view_members", can_see_members)
 
-        if not user_has_permission(user, "read", "Logs", app.organisation, True, app=app):
+        if not user_has_permission(
+            user, "read", "Logs", app.organisation, True, app=app
+        ):
             return SecretLogsResponseType(logs=[], count=0)
 
         # Base filter
@@ -1166,11 +1191,12 @@ class Mutation(graphene.ObjectType):
     remove_team_app = RemoveTeamAppMutation.Field()
     update_team_app_environments = UpdateTeamAppEnvironmentsMutation.Field()
 
-    # SCIM
-    create_scim_token = CreateSCIMTokenMutation.Field()
-    delete_scim_token = DeleteSCIMTokenMutation.Field()
-    toggle_scim = ToggleSCIMMutation.Field()
-    toggle_scim_token = ToggleSCIMTokenMutation.Field()
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        create_scim_token = CreateSCIMTokenMutation.Field()
+        delete_scim_token = DeleteSCIMTokenMutation.Field()
+        toggle_scim = ToggleSCIMMutation.Field()
+        toggle_scim_token = ToggleSCIMTokenMutation.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
