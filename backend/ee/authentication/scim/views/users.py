@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_base_url(request):
-    return f"{request.scheme}://{request.get_host()}"
+    return f"https://{request.get_host()}/service"
 
 
 def _extract_user_fields(data):
@@ -222,14 +222,17 @@ def _replace_user(request, scim_user):
     scim_user.save()
 
     # Handle activation state change
+    event_type = "user_updated"
     if active and not scim_user.active:
         reactivate_scim_user(scim_user)
+        event_type = "user_reactivated"
     elif not active and scim_user.active:
         deactivate_scim_user(scim_user)
+        event_type = "user_deactivated"
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(
-        request, "user_updated", "user", scim_user.id, scim_user.email,
+        request, event_type, "user", scim_user.id, scim_user.email,
         response_status=200, response_body=response_data,
     )
     return JsonResponse(response_data)

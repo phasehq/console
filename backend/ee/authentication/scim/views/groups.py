@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_base_url(request):
-    return f"{request.scheme}://{request.get_host()}"
+    return f"https://{request.get_host()}/service"
 
 
 def _provision_keys_for_membership(team, membership):
