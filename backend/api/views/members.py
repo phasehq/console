@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
@@ -32,7 +32,7 @@ from api.utils.access.permissions import (
 from api.utils.audit_logging import log_audit_event, get_actor_info, get_member_display_name
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
+from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_email_address
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_add_account
@@ -93,7 +93,7 @@ class PublicMembersView(APIView):
         super().initial(request, *args, **kwargs)
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
         _check_permission(request, action)
 
     def get(self, request, *args, **kwargs):
@@ -109,14 +109,13 @@ class PublicMembersView(APIView):
         org = _get_org(request)
         invited_by = request.auth.get("org_member")  # None for SA tokens
 
-        email = request.data.get("email", "").strip().lower()
+        raw_email = request.data.get("email", "")
         role_id = request.data.get("role_id")
 
-        if not email:
-            return Response(
-                {"error": "Missing required field: email"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        email, err = validate_email_address(raw_email)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+
         if not role_id:
             return Response(
                 {"error": "Missing required field: role_id"},
@@ -237,7 +236,7 @@ class PublicMemberDetailView(APIView):
         super().initial(request, *args, **kwargs)
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
         _check_permission(request, action)
 
     def _get_member(self, member_id, org):
@@ -261,8 +260,15 @@ class PublicMemberDetailView(APIView):
         if not member:
             return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Prevent self role-update
+        # The Owner role is immutable via the API — use the ownership transfer flow
+        if member.role.is_default and member.role.name.lower() == "owner":
+            return Response(
+                {"error": "The Owner's role cannot be changed via the API. Use the ownership transfer flow."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if request.auth["auth_type"] == "User":
+            # Prevent self role-update
             acting_member = request.auth["org_member"]
             if str(acting_member.id) == str(member.id):
                 return Response(
@@ -275,6 +281,13 @@ class PublicMemberDetailView(APIView):
             ):
                 return Response(
                     {"error": "You cannot update the role of a member with global access."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif request.auth["auth_type"] == "ServiceAccount":
+            # SAs cannot modify members with global-access roles (e.g. Admin)
+            if role_has_global_access(member.role):
+                return Response(
+                    {"error": "Service accounts cannot modify members with global access."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
@@ -339,11 +352,25 @@ class PublicMemberDetailView(APIView):
         if not member:
             return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Prevent self-removal
+        # The Owner cannot be removed via the API
+        if member.role.is_default and member.role.name.lower() == "owner":
+            return Response(
+                {"error": "The Owner cannot be removed via the API. Use the ownership transfer flow."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if request.auth["auth_type"] == "User":
+            # Prevent self-removal
             if str(request.auth["org_member"].id) == str(member.id):
                 return Response(
                     {"error": "You cannot remove yourself from the organisation."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif request.auth["auth_type"] == "ServiceAccount":
+            # SAs cannot remove members with global-access roles (e.g. Admin)
+            if role_has_global_access(member.role):
+                return Response(
+                    {"error": "Service accounts cannot remove members with global access."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
