@@ -7,13 +7,13 @@ from api.models import Organisation, OrganisationMember, Role, ServiceAccount
 from api.utils.access.permissions import user_has_permission
 from api.utils.access.roles import default_roles
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
+from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
@@ -28,6 +28,12 @@ VALID_ORG_PERMISSIONS = {
 VALID_APP_PERMISSIONS = {
     resource: set(actions) for resource, actions in _owner["app_permissions"].items()
 }
+
+
+def _normalize_permissions(permissions):
+    """Normalise camelCase keys to snake_case so GET responses can be round-tripped."""
+    key_map = {"appPermissions": "app_permissions", "globalAccess": "global_access"}
+    return {key_map.get(k, k): v for k, v in permissions.items()}
 
 
 def _validate_permissions(permissions):
@@ -123,7 +129,7 @@ class PublicRolesView(APIView):
 
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
 
         account = None
         is_sa = False
@@ -159,18 +165,9 @@ class PublicRolesView(APIView):
             )
 
         # Validate name
-        name = request.data.get("name")
-        if not name or not str(name).strip():
-            return Response(
-                {"error": "Missing required field: name"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        name = str(name).strip()
-        if len(name) > 64:
-            return Response(
-                {"error": "Role name cannot exceed 64 characters."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        name, err = validate_text_field(request.data.get("name"), "name", max_length=64)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
 
         # Duplicate name check
         if Role.objects.filter(organisation=org, name__iexact=name).exists():
@@ -187,6 +184,7 @@ class PublicRolesView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        permissions = _normalize_permissions(permissions)
         perm_error = _validate_permissions(permissions)
         if perm_error:
             return Response(
@@ -195,12 +193,11 @@ class PublicRolesView(APIView):
             )
 
         # Optional fields
-        description = request.data.get("description", "")
-        if description and len(str(description)) > 500:
-            return Response(
-                {"error": "Role description cannot exceed 500 characters."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        raw_desc = request.data.get("description", "")
+        description, err = validate_text_field(raw_desc, "description", max_length=500, required=False)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+        description = description or ""
 
         color = request.data.get("color", "")
         if color and len(str(color)) > 7:
@@ -261,7 +258,7 @@ class PublicRoleDetailView(APIView):
 
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
 
         account = None
         is_sa = False
@@ -316,8 +313,8 @@ class PublicRoleDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        name = request.data.get("name")
-        description = request.data.get("description")
+        raw_name = request.data.get("name")
+        raw_desc = request.data.get("description")
         color = request.data.get("color")
         permissions = request.data.get("permissions")
 
@@ -325,24 +322,16 @@ class PublicRoleDetailView(APIView):
             role, ["name", "description", "color", "permissions"], request.data
         )
 
-        if name is None and description is None and color is None and permissions is None:
+        if raw_name is None and raw_desc is None and color is None and permissions is None:
             return Response(
                 {"error": "At least one field must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if name is not None:
-            if not str(name).strip():
-                return Response(
-                    {"error": "Role name cannot be blank."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            name = str(name).strip()
-            if len(name) > 64:
-                return Response(
-                    {"error": "Role name cannot exceed 64 characters."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if raw_name is not None:
+            name, err = validate_text_field(raw_name, "name", max_length=64)
+            if err:
+                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
             # Duplicate name check (exclude self)
             if (
                 Role.objects.filter(organisation=org, name__iexact=name)
@@ -355,13 +344,11 @@ class PublicRoleDetailView(APIView):
                 )
             role.name = name
 
-        if description is not None:
-            if len(str(description)) > 500:
-                return Response(
-                    {"error": "Role description cannot exceed 500 characters."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            role.description = description
+        if raw_desc is not None:
+            description, err = validate_text_field(raw_desc, "description", max_length=500, required=False)
+            if err:
+                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+            role.description = description or ""
 
         if color is not None:
             if len(str(color)) > 7:
@@ -377,12 +364,23 @@ class PublicRoleDetailView(APIView):
                     {"error": "Permissions must be a JSON object."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            permissions = _normalize_permissions(permissions)
             perm_error = _validate_permissions(permissions)
             if perm_error:
                 return Response(
                     {"error": perm_error},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            # Prevent enabling global_access on a role that has service accounts assigned
+            enabling_global = permissions.get("global_access", False)
+            if enabling_global and not role.permissions.get("global_access", False):
+                if ServiceAccount.objects.filter(role=role, deleted_at=None).exists():
+                    return Response(
+                        {"error": "Cannot enable global access: role is currently assigned to one or more service accounts."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
             role.permissions = permissions
 
         role.save()
