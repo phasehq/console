@@ -14,14 +14,14 @@ from api.utils.crypto import (
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
+from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_add_app, can_use_custom_envs
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
@@ -53,7 +53,7 @@ class PublicAppsView(APIView):
 
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
 
         account = None
         is_sa = False
@@ -102,25 +102,15 @@ class PublicAppsView(APIView):
         org = self._get_org(request)
 
         # --- Validate input ---
-        name = request.data.get("name")
-        if not name or not str(name).strip():
-            return Response(
-                {"error": "Missing required field: name"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        name = str(name).strip()
-        if len(name) > 64:
-            return Response(
-                {"error": "App name cannot exceed 64 characters."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        name, err = validate_text_field(request.data.get("name"), "name", max_length=64)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
 
         description = request.data.get("description", None)
-        if description is not None and len(str(description)) > 10000:
-            return Response(
-                {"error": "App description cannot exceed 10,000 characters."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if description is not None:
+            description, err = validate_text_field(description, "description", max_length=10000, required=False)
+            if err:
+                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
 
         # --- Validate optional environments list ---
         custom_envs = request.data.get("environments", None)
@@ -289,7 +279,7 @@ class PublicAppDetailView(APIView):
 
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
 
         account = None
         is_sa = False
@@ -321,10 +311,10 @@ class PublicAppDetailView(APIView):
     def put(self, request, app_id, *args, **kwargs):
         app = request.auth["app"]
 
-        name = request.data.get("name")
-        description = request.data.get("description")
+        raw_name = request.data.get("name")
+        raw_desc = request.data.get("description")
 
-        if name is None and description is None:
+        if raw_name is None and raw_desc is None:
             return Response(
                 {"error": "At least one of 'name' or 'description' must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -334,25 +324,16 @@ class PublicAppDetailView(APIView):
             app, ["name", "description"], request.data
         )
 
-        if name is not None:
-            if not name or str(name).strip() == "":
-                return Response(
-                    {"error": "App name cannot be blank."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if len(str(name)) > 64:
-                return Response(
-                    {"error": "App name cannot exceed 64 characters."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            app.name = str(name).strip()
+        if raw_name is not None:
+            name, err = validate_text_field(raw_name, "name", max_length=64)
+            if err:
+                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+            app.name = name
 
-        if description is not None:
-            if len(str(description)) > 10000:
-                return Response(
-                    {"error": "App description cannot exceed 10,000 characters."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if raw_desc is not None:
+            description, err = validate_text_field(raw_desc, "description", max_length=10000, required=False)
+            if err:
+                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
             app.description = description
 
         app.save()

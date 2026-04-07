@@ -17,7 +17,7 @@ from backend.quotas import can_add_environment, can_use_custom_envs
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
@@ -43,7 +43,7 @@ class PublicEnvironmentsView(APIView):
 
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
 
         account = None
         is_sa = False
@@ -176,7 +176,7 @@ class PublicEnvironmentDetailView(APIView):
 
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
 
         account = None
         is_sa = False
