@@ -95,6 +95,10 @@ def deactivate_scim_user(scim_user):
         for tm in team_memberships:
             revoke_team_environment_keys(tm.team, member=scim_user.org_member)
 
+        # Remove team memberships so reactivation doesn't restore stale teams.
+        # The IdP's group push will re-add the user to the correct teams.
+        team_memberships.delete()
+
         # Wipe crypto material so user must redo key ceremony if reactivated
         scim_user.org_member.identity_key = ""
         scim_user.org_member.wrapped_keyring = ""
