@@ -1,5 +1,8 @@
 from api.models import EnvironmentToken, ServiceAccountToken, ServiceToken, UserToken
 from django.utils import timezone
+from django.utils.html import strip_tags
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError as DjangoValidationError
 import base64
 from api.utils.access.ip import get_client_ip
 
@@ -20,7 +23,10 @@ def get_resolver_request_meta(request):
 
 
 def get_token_type(auth_token):
-    return auth_token.split(" ")[1]
+    parts = auth_token.split(" ")
+    if len(parts) < 2 or not parts[1]:
+        return None
+    return parts[1]
 
 
 def get_env_from_service_token(auth_token):
@@ -99,6 +105,50 @@ def token_is_expired_or_deleted(auth_token):
     return token.deleted_at is not None or (
         token.expires_at is not None and token.expires_at < timezone.now()
     )
+
+
+def validate_text_field(value, field_name, max_length=None, required=True):
+    """Validate and sanitize a text field from request data.
+
+    Returns (cleaned_value, error_message).
+    If error_message is not None, the caller should return a 400 response.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        if required:
+            return None, f"Missing required field: {field_name}"
+        return None, None
+
+    if not isinstance(value, str):
+        return None, f"'{field_name}' must be a string."
+
+    cleaned = strip_tags(value).strip()
+    if required and not cleaned:
+        return None, f"Missing required field: {field_name}"
+
+    if max_length and len(cleaned) > max_length:
+        return None, f"'{field_name}' cannot exceed {max_length} characters."
+
+    return cleaned, None
+
+
+def validate_email_address(email):
+    """Validate an email address using Django's built-in validator.
+
+    Returns (cleaned_email, error_message).
+    """
+    if not email or not isinstance(email, str):
+        return None, "Missing required field: email"
+
+    cleaned = email.strip().lower()
+    if not cleaned:
+        return None, "Missing required field: email"
+
+    try:
+        validate_email(cleaned)
+    except DjangoValidationError:
+        return None, f"'{cleaned}' is not a valid email address."
+
+    return cleaned, None
 
 
 def encode_string_to_base64(s):
