@@ -24,10 +24,13 @@ def user_can_access_app(user_id, app_id):
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     App = apps.get_model("api", "App")
 
-    app = App.objects.get(id=app_id)
-    org_member = OrganisationMember.objects.get(
-        user_id=user_id, organisation=app.organisation, deleted_at=None
-    )
+    try:
+        app = App.objects.get(id=app_id)
+        org_member = OrganisationMember.objects.get(
+            user_id=user_id, organisation=app.organisation, deleted_at=None
+        )
+    except (App.DoesNotExist, OrganisationMember.DoesNotExist):
+        return False
     return org_member in app.members.all()
 
 
@@ -36,10 +39,13 @@ def user_can_access_environment(user_id, env_id):
     Environment = apps.get_model("api", "Environment")
     EnvironmentKey = apps.get_model("api", "EnvironmentKey")
 
-    env = Environment.objects.get(id=env_id)
-    org_member = OrganisationMember.objects.get(
-        organisation=env.app.organisation, user_id=user_id, deleted_at=None
-    )
+    try:
+        env = Environment.objects.get(id=env_id)
+        org_member = OrganisationMember.objects.get(
+            organisation=env.app.organisation, user_id=user_id, deleted_at=None
+        )
+    except (Environment.DoesNotExist, OrganisationMember.DoesNotExist):
+        return False
     return EnvironmentKey.objects.filter(
         user_id=org_member, environment_id=env_id
     ).exists()
@@ -50,10 +56,13 @@ def service_account_can_access_environment(account_id, env_id):
     EnvironmentKey = apps.get_model("api", "EnvironmentKey")
     ServiceAccount = apps.get_model("api", "ServiceAccount")
 
-    env = Environment.objects.get(id=env_id)
-    service_account = ServiceAccount.objects.get(
-        organisation=env.app.organisation, id=account_id, deleted_at=None
-    )
+    try:
+        env = Environment.objects.get(id=env_id)
+        service_account = ServiceAccount.objects.get(
+            organisation=env.app.organisation, id=account_id, deleted_at=None
+        )
+    except (Environment.DoesNotExist, ServiceAccount.DoesNotExist):
+        return False
     return EnvironmentKey.objects.filter(
         service_account=service_account, environment_id=env_id
     ).exists()
