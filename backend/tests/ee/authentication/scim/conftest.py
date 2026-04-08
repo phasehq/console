@@ -5,19 +5,6 @@ import pytest
 from django.test import RequestFactory
 from rest_framework.test import APIClient
 
-from api.models import (
-    CustomUser,
-    Organisation,
-    OrganisationMember,
-    Role,
-    SCIMEvent,
-    SCIMGroup,
-    SCIMToken,
-    SCIMUser,
-    Team,
-    TeamMembership,
-)
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -91,6 +78,8 @@ def make_patch_op(operations):
 @pytest.fixture
 def organisation(db):
     """Create an Enterprise org with scim_enabled=True."""
+    from api.models import Organisation
+
     return Organisation.objects.create(
         name="TestOrg-SCIM",
         identity_key="test-org-identity-key",
@@ -102,6 +91,8 @@ def organisation(db):
 @pytest.fixture
 def developer_role(organisation):
     """Create the default Developer role needed for SCIM provisioning."""
+    from api.models import Role
+
     return Role.objects.create(
         name="Developer",
         organisation=organisation,
@@ -114,6 +105,8 @@ def developer_role(organisation):
 @pytest.fixture
 def owner_role(organisation):
     """Create the Owner role."""
+    from api.models import Role
+
     return Role.objects.create(
         name="Owner",
         organisation=organisation,
@@ -126,6 +119,8 @@ def owner_role(organisation):
 @pytest.fixture
 def admin_user(db):
     """A non-SCIM admin user (the org owner)."""
+    from api.models import CustomUser
+
     user = CustomUser.objects.create(
         username="admin@testorg.com",
         email="admin@testorg.com",
@@ -138,6 +133,8 @@ def admin_user(db):
 @pytest.fixture
 def admin_member(organisation, admin_user, owner_role):
     """OrganisationMember for the admin user."""
+    from api.models import OrganisationMember
+
     return OrganisationMember.objects.create(
         user=admin_user,
         organisation=organisation,
@@ -151,6 +148,8 @@ def admin_member(organisation, admin_user, owner_role):
 @pytest.fixture
 def scim_token(organisation, admin_member):
     """Create a valid, active SCIM token."""
+    from api.models import SCIMToken
+
     return SCIMToken.objects.create(
         organisation=organisation,
         name="Test IdP",
@@ -172,6 +171,8 @@ def scim_client(scim_token):
 @pytest.fixture
 def scim_user_alice(organisation, developer_role):
     """A pre-provisioned SCIM user (Alice)."""
+    from api.models import CustomUser, OrganisationMember, SCIMUser
+
     user = CustomUser.objects.create(
         username="alice@example.com",
         email="alice@example.com",
@@ -203,6 +204,8 @@ def scim_user_alice(organisation, developer_role):
 @pytest.fixture
 def scim_user_bob(organisation, developer_role):
     """A second pre-provisioned SCIM user (Bob)."""
+    from api.models import CustomUser, OrganisationMember, SCIMUser
+
     user = CustomUser.objects.create(
         username="bob@example.com",
         email="bob@example.com",
@@ -234,6 +237,8 @@ def scim_user_bob(organisation, developer_role):
 @pytest.fixture
 def scim_group_engineering(organisation, scim_user_alice, scim_user_bob):
     """A SCIM-managed group (Team) with Alice and Bob as members."""
+    from api.models import SCIMGroup, Team, TeamMembership
+
     team = Team.objects.create(
         name="Engineering",
         organisation=organisation,
