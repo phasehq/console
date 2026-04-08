@@ -34,10 +34,3 @@ def pytest_configure():
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         }
     }
-
-    # Override database to use in-memory SQLite so tests don't need a Postgres service
-    settings.DATABASES["default"] = {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
-        "ATOMIC_REQUESTS": False,
-    }
