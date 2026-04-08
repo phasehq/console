@@ -371,7 +371,7 @@ class PublicServiceAccountDetailView(APIView):
         # Audit log
         old_vals = {}
         new_vals = {}
-        if name is not None and old_name != sa.name:
+        if raw_name is not None and old_name != sa.name:
             old_vals["name"] = old_name
             new_vals["name"] = sa.name
         if role_id is not None and old_role_name != (sa.role.name if sa.role else None):
