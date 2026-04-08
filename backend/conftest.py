@@ -1,6 +1,5 @@
 import os
 import django
-import pytest
 
 # Set environment variables required for settings.py to import successfully
 os.environ.setdefault("ALLOWED_HOSTS", "localhost")
@@ -23,10 +22,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 def pytest_configure():
     django.setup()
 
-
-@pytest.fixture(scope="session")
-def django_db_modify_db_settings():
-    """Use in-memory SQLite for tests so CI doesn't need a Postgres service."""
+    # Override database to use in-memory SQLite so tests don't need a Postgres service
     from django.conf import settings
 
     settings.DATABASES["default"] = {
