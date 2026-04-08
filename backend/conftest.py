@@ -21,12 +21,3 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
 def pytest_configure():
     django.setup()
-
-    # Override database to use in-memory SQLite so tests don't need a Postgres service
-    from django.conf import settings
-
-    settings.DATABASES["default"] = {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
-        "ATOMIC_REQUESTS": False,
-    }
