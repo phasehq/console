@@ -1,6 +1,5 @@
 import os
 import django
-import pytest
 
 # Set environment variables required for settings.py to import successfully
 os.environ.setdefault("ALLOWED_HOSTS", "localhost")
@@ -27,21 +26,16 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 def pytest_configure():
     django.setup()
 
-    # Override cache to in-memory so tests don't require a running Redis
     from django.conf import settings
 
+    # Override cache to in-memory so tests don't require a running Redis
     settings.CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         }
     }
 
-
-@pytest.fixture(scope="session")
-def django_db_modify_db_settings():
-    """Use in-memory SQLite for tests so CI doesn't need a Postgres service."""
-    from django.conf import settings
-
+    # Override database to use in-memory SQLite so tests don't need a Postgres service
     settings.DATABASES["default"] = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": ":memory:",
