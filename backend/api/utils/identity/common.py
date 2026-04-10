@@ -7,7 +7,7 @@ def resolve_service_account(account_id):
     from api.models import ServiceAccount
 
     try:
-        service_account = ServiceAccount.objects.get(id=account_id)
+        service_account = ServiceAccount.objects.get(id=account_id, deleted_at=None)
     except ServiceAccount.DoesNotExist:
         return None
     return service_account

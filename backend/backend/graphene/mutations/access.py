@@ -232,6 +232,8 @@ class CreateIdentityMutation(graphene.Mutation):
         trusted_principals = graphene.String(required=True)
         signature_ttl_seconds = graphene.Int(required=False)
         sts_endpoint = graphene.String(required=False)
+        tenant_id = graphene.String(required=False)
+        resource = graphene.String(required=False)
         token_name_pattern = graphene.String(required=False)
         default_ttl_seconds = graphene.Int(required=True)
         max_ttl_seconds = graphene.Int(required=True)
@@ -252,6 +254,8 @@ class CreateIdentityMutation(graphene.Mutation):
         description=None,
         signature_ttl_seconds=60,
         sts_endpoint="https://sts.amazonaws.com",
+        tenant_id=None,
+        resource=None,
         token_name_pattern=None,
     ):
         user = info.context.user
@@ -272,14 +276,39 @@ class CreateIdentityMutation(graphene.Mutation):
         # Convert comma-separated trusted_principals to list for consistency
         trusted_list = [p.strip() for p in trusted_principals.split(",") if p.strip()]
 
-        from api.utils.network import validate_url_is_safe
-        validate_url_is_safe(sts_endpoint)
+        if provider == "azure_entra":
+            if not tenant_id:
+                raise GraphQLError("Tenant ID is required for Azure identity")
+            if not resource:
+                raise GraphQLError("Resource is required for Azure identity")
 
-        config = {
-            "trustedPrincipals": trusted_list,
-            "signatureTtlSeconds": signature_ttl_seconds,
-            "stsEndpoint": sts_endpoint,
-        }
+            from api.utils.identity.azure import validate_tenant_id
+            try:
+                validate_tenant_id(tenant_id)
+            except ValueError as e:
+                raise GraphQLError(str(e))
+
+            from uuid import UUID
+            for sp_id in trusted_list:
+                try:
+                    UUID(sp_id)
+                except ValueError:
+                    raise GraphQLError(f"Invalid service principal ID format: '{sp_id}'. Must be a valid UUID.")
+
+            config = {
+                "tenantId": tenant_id,
+                "resource": resource,
+                "allowedServicePrincipalIds": trusted_list,
+            }
+        else:
+            from api.utils.network import validate_url_is_safe
+            validate_url_is_safe(sts_endpoint)
+
+            config = {
+                "trustedPrincipals": trusted_list,
+                "signatureTtlSeconds": signature_ttl_seconds,
+                "stsEndpoint": sts_endpoint,
+            }
 
         identity = Identity.objects.create(
             organisation=org,
@@ -303,6 +332,8 @@ class UpdateIdentityMutation(graphene.Mutation):
         trusted_principals = graphene.String(required=False)
         signature_ttl_seconds = graphene.Int(required=False)
         sts_endpoint = graphene.String(required=False)
+        tenant_id = graphene.String(required=False)
+        resource = graphene.String(required=False)
         token_name_pattern = graphene.String(required=False)
         default_ttl_seconds = graphene.Int(required=False)
         max_ttl_seconds = graphene.Int(required=False)
@@ -320,6 +351,8 @@ class UpdateIdentityMutation(graphene.Mutation):
         trusted_principals=None,
         signature_ttl_seconds=None,
         sts_endpoint=None,
+        tenant_id=None,
+        resource=None,
         token_name_pattern=None,
         default_ttl_seconds=None,
         max_ttl_seconds=None,
@@ -350,17 +383,41 @@ class UpdateIdentityMutation(graphene.Mutation):
 
         # Update provider-specific config atomically
         config_updates = {}
+        is_azure = (identity.provider or "").lower() == "azure_entra"
+
         if trusted_principals is not None:
-            config_updates["trustedPrincipals"] = [
+            trusted_list = [
                 p.strip() for p in trusted_principals.split(",") if p.strip()
             ]
-        if signature_ttl_seconds is not None:
-            config_updates["signatureTtlSeconds"] = signature_ttl_seconds
-        if sts_endpoint is not None:
-            from api.utils.network import validate_url_is_safe
+            if is_azure:
+                from uuid import UUID
+                for sp_id in trusted_list:
+                    try:
+                        UUID(sp_id)
+                    except ValueError:
+                        raise GraphQLError(f"Invalid service principal ID format: '{sp_id}'. Must be a valid UUID.")
+                config_updates["allowedServicePrincipalIds"] = trusted_list
+            else:
+                config_updates["trustedPrincipals"] = trusted_list
 
-            validate_url_is_safe(sts_endpoint)
-            config_updates["stsEndpoint"] = sts_endpoint
+        if is_azure:
+            if tenant_id is not None:
+                from api.utils.identity.azure import validate_tenant_id
+                try:
+                    validate_tenant_id(tenant_id)
+                except ValueError as e:
+                    raise GraphQLError(str(e))
+                config_updates["tenantId"] = tenant_id
+            if resource is not None:
+                config_updates["resource"] = resource
+        else:
+            if signature_ttl_seconds is not None:
+                config_updates["signatureTtlSeconds"] = signature_ttl_seconds
+            if sts_endpoint is not None:
+                from api.utils.network import validate_url_is_safe
+
+                validate_url_is_safe(sts_endpoint)
+                config_updates["stsEndpoint"] = sts_endpoint
 
         if config_updates:
             identity.config = {**(identity.config or {}), **config_updates}

@@ -34,6 +34,7 @@ def log_secret_event(
         value=secret.value,
         version=secret.version,
         comment=secret.comment,
+        type=secret.type,
         event_type=event_type,
         timestamp=timezone.now(),
         ip_address=ip_address,
