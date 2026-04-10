@@ -17,6 +17,7 @@ export default function GitHubEnterpriseProvider<P extends GithubProfile>(
     id: 'github-enterprise',
     name: 'GitHub Enterprise',
     type: 'oauth',
+    issuer: `${baseUrl}/login/oauth`,
     authorization: {
       url: `${baseUrl}/login/oauth/authorize`,
       params: { scope: 'read:user user:email' },
