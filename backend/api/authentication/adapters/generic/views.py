@@ -58,12 +58,12 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
         return resp.json()
 
     def _process_id_token(self, id_token, app):
-        jwks_response = requests.get(self.jwks_url)
-        jwks = jwks_response.json()
         try:
+            jwk_client = jwt.PyJWKClient(self.jwks_url)
+            signing_key = jwk_client.get_signing_key_from_jwt(id_token)
             return jwt.decode(
                 id_token,
-                key=jwks,
+                key=signing_key.key,
                 algorithms=["RS256"],
                 audience=app.client_id,
                 issuer=self.issuer,
