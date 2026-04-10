@@ -1,9 +1,7 @@
 import { MAX_INPUT_STRING_LENGTH } from '@/constants'
 import clsx from 'clsx'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { useEffect } from 'react'
-import { FaCheckCircle } from 'react-icons/fa'
-import { FaCheck, FaLock } from 'react-icons/fa6'
 import { MdVerified } from 'react-icons/md'
 
 const DOMAIN_BANLIST = [

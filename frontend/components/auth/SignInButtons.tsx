@@ -1,8 +1,8 @@
 'use client'
 
 import clsx from 'clsx'
-import { signIn, useSession } from 'next-auth/react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useSession } from '@/contexts/userContext'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import Spinner from '../common/Spinner'
 import {
@@ -95,17 +95,14 @@ export default function SignInButtons({
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const callbackUrl = searchParams?.get('callbackUrl')
-
   const handleProviderButtonClick = useCallback(
     (providerId: string) => {
       setLoading(true)
-      signIn(providerId, {
-        redirect: callbackUrl ? true : false,
-        callbackUrl: callbackUrl || '',
-      })
+      const callbackUrl = searchParams?.get('callbackUrl') || ''
+      const qs = callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''
+      window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/${providerId}/authorize/${qs}`
     },
-    [callbackUrl]
+    [searchParams]
   )
 
   useEffect(() => {

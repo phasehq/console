@@ -12,7 +12,7 @@ import { TransferOwnershipSection } from '@/components/settings/organisation/Tra
 import { userHasPermission } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaMoon, FaSun } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'

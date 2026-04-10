@@ -5,7 +5,7 @@ import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { FaEye, FaEyeSlash, FaLock, FaSignOutAlt, FaUnlock } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { OrganisationType } from '@/apollo/graphql'
@@ -84,7 +84,12 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   }, [keyring, pathname])
 
   useEffect(() => {
-    if (organisation.id) reset()
+    // Wait for both org data and user session to be available.
+    // The session email is needed as salt for the Argon2id KDF that
+    // derives the device vault key used to decrypt the keyring.
+    if (!organisation.id || !session?.user?.email) return
+
+    reset()
 
     const devicePassword = getDevicePassword(organisation.memberId!)
 
@@ -94,7 +99,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
       decryptKeyring(devicePassword)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisation.id])
+  }, [organisation.id, session?.user?.email])
 
   const closeModal = () => {
     setIsOpen(false)
