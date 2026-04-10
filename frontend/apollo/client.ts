@@ -1,20 +1,23 @@
 import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
-import { signOut, SignOutParams } from 'next-auth/react'
 import { UrlUtils } from '@/utils/auth'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
 
-export const handleSignout = async (options?: SignOutParams<true> | undefined) => {
+export const handleSignout = async () => {
   posthog.reset()
-  const response = await axios.post(
-    UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
-    {},
-    { withCredentials: true }
-  )
-  signOut(options)
+  try {
+    await axios.post(
+      UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
+      {},
+      { withCredentials: true }
+    )
+  } catch (e) {
+    // Logout may fail if session is already expired — still redirect
+  }
+  window.location.href = '/login'
 }
 
 const httpLink = new HttpLink({
