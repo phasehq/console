@@ -1,4 +1,4 @@
-import { EnvironmentType, SecretType } from '@/apollo/graphql'
+import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { Disclosure, Switch, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -11,10 +11,12 @@ import {
   FaTrashAlt,
   FaUndo,
   FaPlus,
+  FaLock,
+  FaCog,
 } from 'react-icons/fa'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
 import { Button } from '@/components/common/Button'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
@@ -24,12 +26,16 @@ import { arraysEqual } from '@/utils/crypto'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
+import { TypeSelector } from '@/components/environments/secrets/TypeSelector'
 import {
   PresentIndicator,
   SameAsProdIndicator,
   BlankIndicator,
   MissingIndicator,
 } from './SecretInfoLegend'
+import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
+import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
+import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 
 const INPUT_BASE_STYLE =
   'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
@@ -54,6 +60,7 @@ const EnvSecretComponent = ({
   addEnvValue,
   deleteEnvValue,
   revealOnHover,
+  currentSecretKey,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
@@ -70,6 +77,7 @@ const EnvSecretComponent = ({
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   revealOnHover?: boolean
+  currentSecretKey?: string
 }) => {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -78,9 +86,40 @@ const EnvSecretComponent = ({
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
   const isEmptyValue = clientEnvSecret.secret?.value === ''
 
-  const [showValue, setShowValue] = useState<boolean>(
-    valueIsNew || !serverEnvSecret || isEmptyValue || false
+  const isSealed = clientEnvSecret.secret?.type === ApiSecretTypeChoices.Sealed
+  const isConfig = clientEnvSecret.secret?.type === ApiSecretTypeChoices.Config
+  const isSealedAndSaved = serverEnvSecret?.secret?.type === ApiSecretTypeChoices.Sealed
+
+  const getInitialShowValue = () => {
+    if (valueIsNew) return true
+    if (isSealedAndSaved) return false
+    if (isConfig) return true
+    if (!serverEnvSecret || isEmptyValue) return true
+    return false
+  }
+
+  const [showValue, setShowValue] = useState<boolean>(getInitialShowValue())
+
+  // Secret reference autocomplete
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const handleValueChange = useCallback(
+    (v: string) => updateEnvValue(appSecretId, clientEnvSecret.env.id!, v),
+    [updateEnvValue, appSecretId, clientEnvSecret.env.id]
   )
+
+  const autocomplete = useSecretReferenceAutocomplete({
+    value: clientEnvSecret.secret?.value ?? '',
+    isRevealed: showValue,
+    textareaRef,
+    onChange: handleValueChange,
+    currentSecretKey,
+  })
+
+  const secretValue = clientEnvSecret.secret?.value ?? ''
+  const highlightContent =
+    showValue && secretValue.includes('${') ? (
+      <SecretReferenceHighlight value={secretValue} />
+    ) : undefined
 
   const isBoolean = clientEnvSecret?.secret
     ? ['true', 'false'].includes(clientEnvSecret.secret.value.toLowerCase())
@@ -96,6 +135,7 @@ const EnvSecretComponent = ({
     !serverEnvSecret
 
   const handleRevealSecret = async () => {
+    if (isSealedAndSaved) return
     setShowValue(true)
     if (serverEnvSecret?.secret?.id)
       await readSecret({ variables: { ids: [serverEnvSecret.secret!.id] } })
@@ -111,9 +151,13 @@ const EnvSecretComponent = ({
     if (isBoolean) setShowValue(true)
   }, [isBoolean])
 
-  const handleHideSecret = () => setShowValue(false)
+  const handleHideSecret = () => {
+    if (isSealedAndSaved) return
+    setShowValue(false)
+  }
 
   const toggleShowValue = () => {
+    if (isSealedAndSaved) return
     showValue ? handleHideSecret() : handleRevealSecret()
   }
 
@@ -231,24 +275,50 @@ const EnvSecretComponent = ({
                 </div>
               )}
               <MaskedTextarea
+                ref={textareaRef}
                 className={clsx(
                   INPUT_BASE_STYLE,
                   inputTextColor(),
                   'rounded-sm focus:outline-none'
                 )}
-                value={clientEnvSecret.secret.value}
-                onChange={(v) => updateEnvValue(appSecretId, clientEnvSecret.env.id!, v)}
+                value={isSealedAndSaved ? '' : clientEnvSecret.secret.value}
+                onChange={(v) => {
+                  handleValueChange(v)
+                  autocomplete.handleChange()
+                }}
+                onKeyDown={autocomplete.handleKeyDown}
+                onSelect={autocomplete.handleSelect}
+                onBlur={autocomplete.handleBlur}
+                onFocus={autocomplete.handleFocus}
                 isRevealed={showValue}
                 expanded={true}
+                disabled={isSealedAndSaved}
+                placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
+                highlightContent={highlightContent}
               />
             </div>
+            <ReferenceAutocompleteDropdown
+              suggestions={autocomplete.suggestions}
+              activeIndex={autocomplete.activeIndex}
+              onSelect={autocomplete.acceptSuggestion}
+              onNavigate={autocomplete.navigateToSuggestion}
+              visible={autocomplete.isOpen}
+            />
             {clientEnvSecret.secret !== null && (
               <div className="flex items-center gap-2 absolute inset-y-0 right-0 pl-32 pr-2 opacity-0 group-hover:opacity-100 transition ease bg-gradient-to-r from-transparent via-zinc-100/90 to-zinc-100 dark:via-zinc-800/90 dark:to-zinc-800 group-hover:via-zinc-200/90 group-hover:to-zinc-200 dark:group-hover:via-zinc-700/90 dark:group-hover:to-zinc-700">
-                <Button variant="outline" onClick={toggleShowValue}>
-                  {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
-                  {showValue ? 'Hide' : 'Show'}
-                </Button>
-                <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
+                {isSealedAndSaved ? (
+                  <span className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1" title="This secret is sealed and cannot be revealed">
+                    <FaLock /> Sealed
+                  </span>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={toggleShowValue}>
+                      {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
+                      {showValue ? 'Hide' : 'Show'}
+                    </Button>
+                    <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
+                  </>
+                )}
                 {userCanDeleteSecrets && (
                   <Button variant="danger" onClick={handleDeleteValue}>
                     <span className="py-1">{envStagedForDelete ? <FaUndo /> : <FaTrashAlt />}</span>
@@ -274,9 +344,11 @@ const areEnvSecretEqual = (
     prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
     prev.sameAsProd === next.sameAsProd &&
     prev.revealOnHover === next.revealOnHover &&
+    prev.currentSecretKey === next.currentSecretKey &&
     prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
     (p?.id ?? null) === (n?.id ?? null) &&
     (p?.value ?? '') === (n?.value ?? '') &&
+    (p?.type ?? null) === (n?.type ?? null) &&
     (p?.stagedForDelete ?? false) === (n?.stagedForDelete ?? false) &&
     prev.serverEnvSecret?.secret?.value === next.serverEnvSecret?.secret?.value
   )
@@ -293,6 +365,7 @@ interface AppSecretRowProps {
   serverAppSecret?: AppSecret
   stagedForDelete?: boolean // key-level delete
   updateKey: (id: string, v: string) => void
+  updateType: (id: string, type: ApiSecretTypeChoices) => void
   updateValue: (id: string, envId: string, v: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
@@ -309,6 +382,7 @@ const AppSecretRowComponent = ({
   serverAppSecret,
   stagedForDelete,
   updateKey,
+  updateType,
   updateValue,
   addEnvValue,
   deleteEnvValue,
@@ -323,6 +397,11 @@ const AppSecretRowComponent = ({
 
   const newEnvValueAdded = clientAppSecret.envs.some((env) => env?.secret?.id.includes('new'))
   const secretIsNew = !serverAppSecret
+
+  // Derive type from the first non-null env secret
+  const secretType = clientAppSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Config
+  const serverSecretType = serverAppSecret?.envs.find((env) => env.secret !== null)?.secret?.type
+  const isSealedAndSaved = serverSecretType === ApiSecretTypeChoices.Sealed
 
   const keyInputRef = useRef<HTMLInputElement>(null)
 
@@ -374,9 +453,12 @@ const AppSecretRowComponent = ({
     if (serverAppSecret) {
       const serverEnvVales = serverAppSecret.envs.map((env) => env.secret?.value)
       const clientEnvVales = clientAppSecret.envs.map((env) => env.secret?.value)
+      const serverEnvTypes = serverAppSecret.envs.map((env) => env.secret?.type)
+      const clientEnvTypes = clientAppSecret.envs.map((env) => env.secret?.type)
       if (
         serverAppSecret.key !== clientAppSecret.key ||
         !arraysEqual(serverEnvVales, clientEnvVales) ||
+        !arraysEqual(serverEnvTypes, clientEnvTypes) ||
         envValuesAreStagedForDelete() ||
         newEnvValueAdded
       ) {
@@ -492,19 +574,28 @@ const AppSecretRowComponent = ({
                   onFocus={(e) => e.stopPropagation()}
                 />
 
-                <div className="absolute inset-y-0 right-2 flex gap-1 items-center opacity-0 group-hover:opacity-100 transition ease">
-                  {userCanDeleteSecrets && (
-                    <Button
-                      title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
-                      variant="danger"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteKey(clientAppSecret.id)
-                      }}
-                    >
-                      {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
-                    </Button>
-                  )}
+                <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
+                  <div className="hidden group-hover:flex gap-1 items-center" onClick={(e) => e.stopPropagation()}>
+                    {!stagedForDelete && userCanUpdateSecrets && (
+                      <TypeSelector
+                        currentType={secretType}
+                        onChange={(type) => updateType(clientAppSecret.id, type)}
+                        disabled={isSealedAndSaved}
+                      />
+                    )}
+                    {userCanDeleteSecrets && (
+                      <Button
+                        title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
+                        variant="danger"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteKey(clientAppSecret.id)
+                        }}
+                      >
+                        {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </td>
@@ -565,6 +656,7 @@ const AppSecretRowComponent = ({
                         addEnvValue={addEnvValue}
                         deleteEnvValue={deleteEnvValue}
                         revealOnHover={revealOnHover}
+                        currentSecretKey={clientAppSecret.key}
                       />
                     ))}
                   </div>
@@ -593,6 +685,7 @@ const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) 
     const n = nextEnv[i].secret
     if ((p?.id ?? null) !== (n?.id ?? null)) return false
     if ((p?.value ?? '') !== (n?.value ?? '')) return false
+    if ((p?.type ?? null) !== (n?.type ?? null)) return false
     if ((p?.stagedForDelete ?? false) !== (n?.stagedForDelete ?? false)) return false
   }
   return true

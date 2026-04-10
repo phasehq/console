@@ -139,16 +139,16 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
   return (
     <section className="flex flex-col px-3 sm:px-4 lg:px-6">
-      <div className="pb-4 px-4 md:px-6 pt-4">
+      <div className="pb-4">
         <Link
           href={`/${params.team}/access/members`}
-          className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
+          className="text-neutral-500 inline-flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
         >
           <FaChevronLeft /> Back to members
         </Link>
       </div>
-      <div className="flex-grow overflow-y-auto px-4 md:px-6 space-y-6 pb-8">
-        <div className="pt-4">
+      <div className="flex-grow overflow-y-auto space-y-6 py-4">
+        <div>
           <div className="flex items-center gap-3">
             <Avatar member={member} size="xl" />
             <div className="flex flex-col gap-0.5">
