@@ -12,6 +12,11 @@ from api.views.auth import (
     secrets_tokens,
     root_endpoint,
 )
+from api.views.credentials_auth import (
+    auth_me,
+    SSOAuthorizeView,
+    SSOCallbackView,
+)
 from api.views.identities.aws.iam import aws_iam_auth
 from api.views.identities.azure.entra import azure_entra_auth
 from api.views.kms import kms
@@ -26,10 +31,14 @@ urlpatterns = [
         "493c5048-99f9-4eac-ad0d-98c3740b491f/health", health_check
     ),  # Legacy health check - TODO: Remove
     # Authentication and user management
-    path("accounts/", include("allauth.urls")),
-    path("auth/", include("dj_rest_auth.urls")),
-    path("social/login/", include("api.urls")),
+    path("accounts/", include("allauth.urls")),  # TODO Remove — legacy allauth views
+    path("auth/", include("dj_rest_auth.urls")),  # TODO Remove — legacy dj_rest_auth views
+    path("social/login/", include("api.urls")),  # TODO Remove — legacy SocialLoginView endpoints
     path("logout/", csrf_exempt(logout_view)),
+    # Auth endpoints
+    path("auth/me/", auth_me),
+    path("auth/sso/<str:provider>/authorize/", SSOAuthorizeView.as_view()),
+    path("auth/sso/<str:provider>/callback/", SSOCallbackView.as_view()),
     # GraphQL API
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     # OAuth integrations
