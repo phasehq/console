@@ -234,6 +234,23 @@ def github_integration_callback(request):
     org_id = state.get("orgId")
     name = state.get("name")
 
+    # Validate host_url to prevent SSRF
+    from urllib.parse import urlparse
+    from api.utils.network import validate_url_is_safe
+
+    parsed = urlparse(host_url)
+    if parsed.scheme not in ("https", "http"):
+        return redirect(
+            f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=invalid_host_url"
+        )
+
+    try:
+        validate_url_is_safe(host_url)
+    except Exception:
+        return redirect(
+            f"{os.getenv('ALLOWED_ORIGINS')}{original_url}?error=invalid_host_url"
+        )
+
     client_id = (
         os.getenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID")
         if is_enterprise
