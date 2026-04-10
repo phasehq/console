@@ -174,6 +174,14 @@ SOCIALACCOUNT_PROVIDERS = {
         },
         "SCOPE": ["openid", "email", "profile"],
     },
+    "authelia": {
+        "APP": {
+            "client_id": os.getenv("AUTHELIA_CLIENT_ID"),
+            "secret": get_secret("AUTHELIA_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "email", "profile"],
+    },
     "okta-oidc": {
         "APP": {
             "client_id": os.getenv("OKTA_OIDC_CLIENT_ID"),

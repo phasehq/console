@@ -331,7 +331,6 @@ class IdentityProviderType(graphene.ObjectType):
     name = graphene.String(required=True)
     description = graphene.String(required=True)
     icon_id = graphene.String(required=True)
-    supported = graphene.Boolean(required=True)
 
 
 class ServiceType(ObjectType):
@@ -423,7 +422,13 @@ class SecretEventType(DjangoObjectType):
             "user_agent",
             "environment",
             "path",
+            "type",
         )
+
+    def resolve_value(self, info):
+        if self.secret.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_user(self, info):
         # use the precomputed permission flag; return None if not allowed
@@ -468,6 +473,7 @@ class SecretType(DjangoObjectType):
             "version",
             "tags",
             "comment",
+            "type",
             "created_at",
             "updated_at",
             "history",
@@ -475,6 +481,11 @@ class SecretType(DjangoObjectType):
             "environment",
         )
         # interfaces = (relay.Node, )
+
+    def resolve_value(self, info):
+        if self.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_history(self, info):
         user = info.context.user
@@ -1035,9 +1046,15 @@ class AwsIamConfigType(graphene.ObjectType):
     sts_endpoint = graphene.String()
 
 
+class AzureEntraConfigType(graphene.ObjectType):
+    tenant_id = graphene.String()
+    resource = graphene.String()
+    allowed_service_principal_ids = graphene.List(graphene.String)
+
+
 class IdentityConfigUnion(graphene.Union):
     class Meta:
-        types = (AwsIamConfigType,)
+        types = (AwsIamConfigType, AzureEntraConfigType)
 
 
 class IdentityType(DjangoObjectType):
@@ -1061,6 +1078,13 @@ class IdentityType(DjangoObjectType):
                 trusted_principals=self.get_trusted_list(),
                 signature_ttl_seconds=ttl,
                 sts_endpoint=cfg.get("stsEndpoint"),
+            )
+
+        if provider == "azure_entra":
+            return AzureEntraConfigType(
+                tenant_id=cfg.get("tenantId"),
+                resource=cfg.get("resource"),
+                allowed_service_principal_ids=self.get_trusted_list(),
             )
 
         return None
