@@ -59,7 +59,7 @@ export default function Home() {
           <div className="mx-auto my-auto w-full px-8 space-y-8">
             <div className="space-y-1 text-center">
               <h1 className="text-2xl font-bold text-black dark:text-white">Welcome back</h1>
-              <p className="text-neutral-500">Choose a workspace</p>
+              <p className="text-neutral-500">Choose an organisation</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {organisations!.map((org: OrganisationType) => (
