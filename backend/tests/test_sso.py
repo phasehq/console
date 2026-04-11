@@ -1,4 +1,4 @@
-"""Tests for the new credential auth views that replace NextAuth.
+"""Tests for SSO auth views (api.views.sso).
 
 Uses unittest.TestCase (no database required) — all Django ORM
 interactions are mocked so these tests run in CI without Postgres.
@@ -11,7 +11,7 @@ from urllib.parse import urlparse, parse_qs
 from django.test import RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 
-from api.views.credentials_auth import (
+from api.views.sso import (
     auth_me,
     SSOAuthorizeView,
     SSOCallbackView,
@@ -246,7 +246,7 @@ class SSOAuthorizeViewTest(unittest.TestCase):
             "provider_id": "google",
         }
     })
-    @patch("api.views.credentials_auth._get_oidc_endpoints")
+    @patch("api.views.sso._get_oidc_endpoints")
     def test_oidc_provider_uses_discovery(self, mock_discovery):
         """OIDC providers fetch endpoints from discovery document."""
         mock_discovery.return_value = {
@@ -279,7 +279,7 @@ class SSOAuthorizeViewTest(unittest.TestCase):
             "provider_id": "google",
         }
     })
-    @patch("api.views.credentials_auth._get_oidc_endpoints")
+    @patch("api.views.sso._get_oidc_endpoints")
     def test_oidc_discovery_failure_returns_502(self, mock_discovery):
         """If OIDC discovery fails, return 502."""
         mock_discovery.return_value = None
@@ -349,20 +349,20 @@ class SSOCallbackViewTest(unittest.TestCase):
 class DomainWhitelistTest(unittest.TestCase):
     """Tests for email domain whitelist enforcement."""
 
-    @patch("api.views.credentials_auth.DOMAIN_WHITELIST", [])
+    @patch("api.views.sso.DOMAIN_WHITELIST", [])
     def test_no_whitelist_allows_all(self):
         self.assertTrue(_check_email_domain_allowed("user@anything.com"))
 
-    @patch("api.views.credentials_auth.DOMAIN_WHITELIST", ["acme.com", "example.org"])
+    @patch("api.views.sso.DOMAIN_WHITELIST", ["acme.com", "example.org"])
     def test_allowed_domain_passes(self):
         self.assertTrue(_check_email_domain_allowed("user@acme.com"))
         self.assertTrue(_check_email_domain_allowed("admin@example.org"))
 
-    @patch("api.views.credentials_auth.DOMAIN_WHITELIST", ["acme.com"])
+    @patch("api.views.sso.DOMAIN_WHITELIST", ["acme.com"])
     def test_blocked_domain_fails(self):
         self.assertFalse(_check_email_domain_allowed("user@other.com"))
 
-    @patch("api.views.credentials_auth.DOMAIN_WHITELIST", ["acme.com"])
+    @patch("api.views.sso.DOMAIN_WHITELIST", ["acme.com"])
     def test_case_insensitive(self):
         self.assertTrue(_check_email_domain_allowed("user@ACME.COM"))
 
@@ -370,7 +370,7 @@ class DomainWhitelistTest(unittest.TestCase):
 class CallbackUrlTest(unittest.TestCase):
     """Tests for callback URL generation."""
 
-    @patch("api.views.credentials_auth.FRONTEND_URL", "https://app.phase.dev")
+    @patch("api.views.sso.FRONTEND_URL", "https://app.phase.dev")
     def test_callback_url_uses_frontend_url(self):
         """Callback URL uses the frontend base URL for legacy compat."""
         url = _get_callback_url("google")

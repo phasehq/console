@@ -12,7 +12,7 @@ from api.views.auth import (
     secrets_tokens,
     root_endpoint,
 )
-from api.views.credentials_auth import (
+from api.views.sso import (
     auth_me,
     SSOAuthorizeView,
     SSOCallbackView,
