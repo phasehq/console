@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import path, include
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
@@ -31,9 +31,6 @@ urlpatterns = [
         "493c5048-99f9-4eac-ad0d-98c3740b491f/health", health_check
     ),  # Legacy health check - TODO: Remove
     # Authentication and user management
-    path("accounts/", include("allauth.urls")),  # TODO Remove — legacy allauth views
-    path("auth/", include("dj_rest_auth.urls")),  # TODO Remove — legacy dj_rest_auth views
-    path("social/login/", include("api.urls")),  # TODO Remove — legacy SocialLoginView endpoints
     path("logout/", csrf_exempt(logout_view)),
     # Auth endpoints
     path("auth/me/", auth_me),
