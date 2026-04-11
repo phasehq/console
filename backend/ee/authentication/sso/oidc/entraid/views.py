@@ -30,7 +30,7 @@ class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
 
         data["name"] = data.get("displayName")
         if data["name"] is None:
-            data["name"] = f"{data.get("givenName")} {data.get("surName")}"
+            data["name"] = "{} {}".format(data.get("givenName"), data.get("surName"))
         return data
 
     def complete_login(self, request, app, token, **kwargs):
