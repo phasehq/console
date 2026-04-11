@@ -11,10 +11,16 @@ export function middleware(request: NextRequest) {
 
   if (!sessionCookie) {
     const loginUrl = new URL('/login', request.url)
-    const fullPath = request.nextUrl.search
-      ? `${request.nextUrl.pathname}${request.nextUrl.search}`
-      : request.nextUrl.pathname
-    loginUrl.searchParams.set('callbackUrl', fullPath)
+    const pathname = request.nextUrl.pathname
+
+    // Only add callbackUrl for actual deep links, not the root
+    if (pathname !== '/') {
+      const fullPath = request.nextUrl.search
+        ? `${pathname}${request.nextUrl.search}`
+        : pathname
+      loginUrl.searchParams.set('callbackUrl', fullPath)
+    }
+
     return NextResponse.redirect(loginUrl)
   }
 

@@ -68,7 +68,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loading && authError && !PUBLIC_PATHS.some((p) => pathname?.startsWith(p))) {
       const currentPath = window.location.pathname + window.location.search
-      window.location.href = `/login?callbackUrl=${encodeURIComponent(currentPath)}`
+      if (currentPath && currentPath !== '/') {
+        window.location.href = `/login?callbackUrl=${encodeURIComponent(currentPath)}`
+      } else {
+        window.location.href = '/login'
+      }
     }
   }, [loading, authError, pathname])
 

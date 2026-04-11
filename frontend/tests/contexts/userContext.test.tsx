@@ -15,7 +15,8 @@ const { usePathname } = jest.requireMock('next/navigation') as {
   usePathname: jest.Mock
 }
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true
 
 function Consumer() {
   const { loading, error, user } = useUser()
@@ -52,7 +53,11 @@ describe('UserProvider', () => {
     originalLocation = window.location
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { href: 'http://localhost/current' },
+      value: {
+        href: 'http://localhost/acme/settings',
+        pathname: '/acme/settings',
+        search: '',
+      },
     })
   })
 
@@ -79,10 +84,10 @@ describe('UserProvider', () => {
     const content = container.firstElementChild as HTMLElement
     expect(content.dataset.loading).toBe('false')
     expect(content.dataset.error).toBe('true')
-    expect(window.location.href).toBe('http://localhost/current')
+    expect(window.location.href).toBe('http://localhost/acme/settings')
   })
 
-  it('redirects to login on 401 auth failures', async () => {
+  it('redirects to /login with callbackUrl when session expires on a deep link', async () => {
     mockedAxios.get.mockRejectedValue({ response: { status: 401 } })
 
     await act(async () => {
@@ -90,6 +95,61 @@ describe('UserProvider', () => {
     })
     await flushEffects()
 
-    expect(window.location.href).toContain('/login?callbackUrl=')
+    expect(window.location.href).toBe('/login?callbackUrl=%2Facme%2Fsettings')
+  })
+
+  it('redirects to clean /login when session expires on the root path', async () => {
+    usePathname.mockReturnValue('/')
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: 'http://localhost/', pathname: '/', search: '' },
+    })
+
+    mockedAxios.get.mockRejectedValue({ response: { status: 403 } })
+
+    await act(async () => {
+      root.render(React.createElement(UserProvider, null, React.createElement(Consumer)))
+    })
+    await flushEffects()
+
+    // Root path should not append a callbackUrl — clean /login
+    expect(window.location.href).toBe('/login')
+  })
+
+  it('preserves query string in callbackUrl', async () => {
+    usePathname.mockReturnValue('/acme/settings')
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        href: 'http://localhost/acme/settings?tab=account',
+        pathname: '/acme/settings',
+        search: '?tab=account',
+      },
+    })
+
+    mockedAxios.get.mockRejectedValue({ response: { status: 401 } })
+
+    await act(async () => {
+      root.render(React.createElement(UserProvider, null, React.createElement(Consumer)))
+    })
+    await flushEffects()
+
+    expect(window.location.href).toBe(
+      '/login?callbackUrl=%2Facme%2Fsettings%3Ftab%3Daccount'
+    )
+  })
+
+  it('does not redirect on public paths', async () => {
+    usePathname.mockReturnValue('/login')
+
+    mockedAxios.get.mockRejectedValue({ response: { status: 401 } })
+
+    await act(async () => {
+      root.render(React.createElement(UserProvider, null, React.createElement(Consumer)))
+    })
+    await flushEffects()
+
+    // Should stay on login, not redirect
+    expect(window.location.href).not.toContain('/login?callbackUrl=')
   })
 })
