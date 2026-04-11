@@ -90,6 +90,6 @@ describe('UserProvider', () => {
     })
     await flushEffects()
 
-    expect(window.location.href).toBe('/login')
+    expect(window.location.href).toContain('/login?callbackUrl=')
   })
 })
