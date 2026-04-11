@@ -486,16 +486,17 @@ class TestProcessIdToken(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_process_id_token_success(self, mock_get, mock_jwt_decode):
+    def test_process_id_token_success(self, mock_jwk_client_cls, mock_jwt_decode):
         # Arrange
         adapter = self._make_adapter()
 
-        mock_jwks = {"keys": [{"kty": "RSA", "kid": "authelia-key-1"}]}
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = mock_jwks
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         mock_jwt_decode.return_value = ID_TOKEN_CLAIMS
 
@@ -506,10 +507,11 @@ class TestProcessIdToken(unittest.TestCase):
         result = adapter._process_id_token(fake_jwt, app)
 
         # Assert
-        mock_get.assert_called_once_with(f"{AUTHELIA_BASE_URL}/jwks.json")
+        mock_jwk_client_cls.assert_called_once_with(f"{AUTHELIA_BASE_URL}/jwks.json")
+        mock_jwk_client.get_signing_key_from_jwt.assert_called_once_with(fake_jwt)
         mock_jwt_decode.assert_called_once_with(
             fake_jwt,
-            key=mock_jwks,
+            key="mock-key",
             algorithms=["RS256"],
             audience="phase-console",
             issuer=AUTHELIA_BASE_URL,
@@ -522,15 +524,17 @@ class TestProcessIdToken(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_process_id_token_invalid_raises_oauth2error(self, mock_get, mock_jwt_decode):
+    def test_process_id_token_invalid_raises_oauth2error(self, mock_jwk_client_cls, mock_jwt_decode):
         # Arrange
         adapter = self._make_adapter()
 
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = {"keys": []}
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         import jwt as pyjwt
 
@@ -758,15 +762,17 @@ class TestGetUserData(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_routes_to_id_token_processing_when_id_token_present(self, mock_get, mock_jwt_decode):
+    def test_routes_to_id_token_processing_when_id_token_present(self, mock_jwk_client_cls, mock_jwt_decode):
         # Arrange
         adapter = self._make_adapter()
 
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = {"keys": []}
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         mock_jwt_decode.return_value = ID_TOKEN_CLAIMS
 
