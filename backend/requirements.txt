@@ -42,11 +42,11 @@ packaging==24.1
 pluggy==1.5.0
 promise==2.3
 psycopg2-binary==2.9.10
-pyasn1==0.4.8
-pyasn1-modules==0.2.8
+pyasn1==0.6.3
+pyasn1-modules==0.4.1
 pycodestyle==2.10.0
 pycparser==2.21
-PyJWT==2.6.0
+PyJWT==2.12.0
 PyNaCl==1.5.0
 pynamodb==5.5.1
 pyOpenSSL==24.3.0
