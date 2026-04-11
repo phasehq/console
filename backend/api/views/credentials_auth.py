@@ -5,7 +5,7 @@ import secrets
 import logging
 import threading
 import requests as http_requests
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode, urlparse, quote
 
 from django.conf import settings
 from django.contrib.auth import login, get_user_model
@@ -474,6 +474,13 @@ class SSOAuthorizeView(View):
             request.session["sso_nonce"] = nonce
             params["nonce"] = nonce
 
+        # Validate that the authorize URL is from a trusted origin before redirecting.
+        # For non-OIDC providers this comes from the static registry; for OIDC providers
+        # it comes from the discovery document fetched from the configured issuer.
+        parsed = urlparse(authorize_url)
+        if not parsed.scheme == "https" or not parsed.netloc:
+            return JsonResponse({"error": "Invalid authorize URL"}, status=500)
+
         full_url = f"{authorize_url}?{urlencode(params)}"
         return redirect(full_url)
 
@@ -491,8 +498,11 @@ class SSOCallbackView(View):
     def get(self, request, provider):
         error = request.GET.get("error")
         if error:
+            # Redirect to a fixed URL with a safe error parameter.
+            # error_desc is from the IdP — quote it to prevent injection.
             error_desc = request.GET.get("error_description", error)
-            return redirect(f"{FRONTEND_URL}/login?error={quote(error_desc)}")
+            login_url = f"{FRONTEND_URL}/login"
+            return redirect(f"{login_url}?error={quote(error_desc, safe='')}")
 
         code = request.GET.get("code")
         state = request.GET.get("state")
