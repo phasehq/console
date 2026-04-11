@@ -288,9 +288,9 @@ class TestCompleteLogin(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_complete_login_with_id_token_from_kwargs_response(self, mock_get, mock_jwt_decode):
+    def test_complete_login_with_id_token_from_kwargs_response(self, mock_jwk_client_cls, mock_jwt_decode):
         """
         When id_token is available in kwargs["response"], it should be
         decoded via JWKS instead of hitting the userinfo endpoint.
@@ -303,10 +303,11 @@ class TestCompleteLogin(unittest.TestCase):
         mock_provider.sociallogin_from_response.return_value = mock_login
         adapter.get_provider = MagicMock(return_value=mock_provider)
 
-        mock_jwks = {"keys": [{"kty": "RSA", "kid": "test-key"}]}
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = mock_jwks
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         mock_jwt_decode.return_value = ID_TOKEN_CLAIMS
 
@@ -320,11 +321,11 @@ class TestCompleteLogin(unittest.TestCase):
             request, app, token, response={"id_token": fake_id_token_jwt}
         )
 
-        # Assert: JWKS endpoint was fetched and JWT was decoded
-        mock_get.assert_called_once_with(f"{AUTHELIA_BASE_URL}/jwks.json")
+        # Assert: PyJWKClient was used and JWT was decoded
+        mock_jwk_client_cls.assert_called_once_with(f"{AUTHELIA_BASE_URL}/jwks.json")
         mock_jwt_decode.assert_called_once_with(
             fake_id_token_jwt,
-            key=mock_jwks,
+            key="mock-key",
             algorithms=["RS256"],
             audience="phase-console",
             issuer=AUTHELIA_BASE_URL,
@@ -338,9 +339,9 @@ class TestCompleteLogin(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_complete_login_with_id_token_on_token_object(self, mock_get, mock_jwt_decode):
+    def test_complete_login_with_id_token_on_token_object(self, mock_jwk_client_cls, mock_jwt_decode):
         """
         When token.id_token is set directly (not the typical Authelia path,
         but supported by the generic adapter).
@@ -353,10 +354,11 @@ class TestCompleteLogin(unittest.TestCase):
         mock_provider.sociallogin_from_response.return_value = mock_login
         adapter.get_provider = MagicMock(return_value=mock_provider)
 
-        mock_jwks = {"keys": [{"kty": "RSA", "kid": "test-key"}]}
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = mock_jwks
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         mock_jwt_decode.return_value = ID_TOKEN_CLAIMS
 
@@ -371,7 +373,7 @@ class TestCompleteLogin(unittest.TestCase):
         # Assert: id_token from token object was used
         mock_jwt_decode.assert_called_once_with(
             fake_id_token_jwt,
-            key=mock_jwks,
+            key="mock-key",
             algorithms=["RS256"],
             audience="phase-console",
             issuer=AUTHELIA_BASE_URL,
