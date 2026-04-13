@@ -66,8 +66,21 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     objects = CustomUserManager()
 
+    @property
+    def auth_method(self):
+        """'password' if the user signed up with email/password, else 'sso'."""
+        return "password" if self.has_usable_password() else "sso"
+
     class Meta:
         verbose_name = "Custom User"
+
+
+class EmailVerification(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
 
 
 class Organisation(models.Model):
