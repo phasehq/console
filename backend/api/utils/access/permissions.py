@@ -70,6 +70,26 @@ def service_account_can_access_environment(account_id, env_id):
     ).exists()
 
 
+def user_is_team_member(user_id, team_id):
+    """Check if a user is a member of a team, or has global access (Owner/Admin)."""
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    Team = apps.get_model("api", "Team")
+    TeamMembership = apps.get_model("api", "TeamMembership")
+
+    team = Team.objects.get(id=team_id, deleted_at__isnull=True)
+    org_member = OrganisationMember.objects.get(
+        user_id=user_id, organisation=team.organisation, deleted_at=None
+    )
+
+    if role_has_global_access(org_member.role):
+        return True
+
+    return TeamMembership.objects.filter(
+        team=team,
+        org_member=org_member,
+    ).exists()
+
+
 def member_can_access_org(member_id, org_id):
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     return OrganisationMember.objects.filter(

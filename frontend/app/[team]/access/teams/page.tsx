@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
-import { userHasPermission } from '@/utils/access/permissions'
+import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
@@ -37,6 +37,10 @@ export default function Teams({ params }: { params: { team: string } }) {
 
   const userCanCreateTeams = organisation
     ? userHasPermission(organisation.role!.permissions, 'Teams', 'create')
+    : false
+
+  const userIsGlobalAccess = organisation
+    ? userHasGlobalAccess(organisation.role!.permissions)
     : false
 
   const { data, loading } = useQuery(GetTeams, {
@@ -147,6 +151,9 @@ export default function Teams({ params }: { params: { team: string } }) {
                       orgMembers.length > 5 ? orgMembers.length - 5 : 0
                     const surplusSaCount =
                       serviceAccounts.length > 3 ? serviceAccounts.length - 3 : 0
+                    const isMember =
+                      userIsGlobalAccess ||
+                      orgMembers.some((m) => m.orgMember?.id === organisation?.memberId)
 
                     return (
                       <tr key={team.id} className="group">
@@ -276,11 +283,13 @@ export default function Teams({ params }: { params: { team: string } }) {
                           </div>
                         </td>
                         <td className="px-6 py-2 whitespace-nowrap text-right">
-                          <Link href={`/${params.team}/access/teams/${team.id}`}>
-                            <Button variant="secondary">
-                              Manage <FaChevronRight />
-                            </Button>
-                          </Link>
+                          {isMember && (
+                            <Link href={`/${params.team}/access/teams/${team.id}`}>
+                              <Button variant="secondary">
+                                Manage <FaChevronRight />
+                              </Button>
+                            </Link>
+                          )}
                         </td>
                       </tr>
                     )
