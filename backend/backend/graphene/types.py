@@ -727,6 +727,7 @@ class ServiceAccountType(DjangoObjectType):
     app_memberships = graphene.List(graphene.NonNull(AppMembershipType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
     identities = graphene.List(graphene.NonNull(lambda: IdentityType))
+    team = graphene.Field(lambda: TeamType)
 
     class Meta:
         model = ServiceAccount
@@ -738,6 +739,7 @@ class ServiceAccountType(DjangoObjectType):
             "created_at",
             "updated_at",
             "deleted_at",
+            "team",
         )
 
     def resolve_server_side_key_management_enabled(self, info):

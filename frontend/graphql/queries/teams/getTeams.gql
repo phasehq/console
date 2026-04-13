@@ -50,6 +50,10 @@ query GetTeams($organisationId: ID!, $teamId: ID) {
           color
           permissions
         }
+        team {
+          id
+          name
+        }
       }
       email
       fullName

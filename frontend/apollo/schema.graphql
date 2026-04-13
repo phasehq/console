@@ -304,6 +304,7 @@ type ServiceAccountType {
   id: String!
   name: String!
   role: RoleType
+  team: TeamType
   identityKey: String
   createdAt: DateTime
   updatedAt: DateTime!
@@ -314,6 +315,56 @@ type ServiceAccountType {
   appMemberships: [AppMembershipType!]
   networkPolicies: [NetworkAccessPolicyType!]
   identities: [IdentityType!]
+}
+
+type TeamType {
+  id: String!
+  name: String!
+  description: String
+  memberRole: RoleType
+  serviceAccountRole: RoleType
+  isScimManaged: Boolean!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  members: [TeamMembershipType!]
+  apps: [AppType!]
+  appEnvironments: [TeamAppEnvironmentType!]
+  memberCount: Int
+}
+
+type TeamMembershipType {
+  id: String!
+  orgMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  createdAt: DateTime
+  email: String
+  fullName: String
+  avatarUrl: String
+}
+
+type AppType {
+  id: String!
+  name: String!
+  description: String
+  identityKey: String!
+  appVersion: Int!
+  appToken: String!
+  appSeed: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  sseEnabled: Boolean!
+  serviceAccounts: [ServiceAccountType]!
+  environments: [EnvironmentType]!
+  members: [OrganisationMemberType]!
+}
+
+type TeamAppEnvironmentType {
+  id: String!
+  app: AppMembershipType!
+  environment: EnvironmentType!
+  createdAt: DateTime
 }
 
 type ServiceAccountHandlerType {
@@ -371,18 +422,6 @@ type AzureEntraConfigType {
   tenantId: String
   resource: String
   allowedServicePrincipalIds: [String]
-}
-
-"""An enumeration."""
-enum ApiSecretEventTypeChoices {
-  """Secret"""
-  SECRET
-
-  """Sealed"""
-  SEALED
-
-  """Config"""
-  CONFIG
 }
 
 """An enumeration."""
@@ -641,56 +680,6 @@ type UserTokenType {
   updatedAt: DateTime!
   expiresAt: DateTime
   createdBy: OrganisationMemberType
-}
-
-type TeamType {
-  id: String!
-  name: String!
-  description: String
-  memberRole: RoleType
-  serviceAccountRole: RoleType
-  isScimManaged: Boolean!
-  createdBy: OrganisationMemberType
-  createdAt: DateTime
-  updatedAt: DateTime!
-  members: [TeamMembershipType!]
-  apps: [AppType!]
-  appEnvironments: [TeamAppEnvironmentType!]
-  memberCount: Int
-}
-
-type TeamMembershipType {
-  id: String!
-  orgMember: OrganisationMemberType
-  serviceAccount: ServiceAccountType
-  createdAt: DateTime
-  email: String
-  fullName: String
-  avatarUrl: String
-}
-
-type AppType {
-  id: String!
-  name: String!
-  description: String
-  identityKey: String!
-  appVersion: Int!
-  appToken: String!
-  appSeed: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  sseEnabled: Boolean!
-  serviceAccounts: [ServiceAccountType]!
-  environments: [EnvironmentType]!
-  members: [OrganisationMemberType]!
-}
-
-type TeamAppEnvironmentType {
-  id: String!
-  app: AppMembershipType!
-  environment: EnvironmentType!
-  createdAt: DateTime
 }
 
 type PhaseLicenseType {
@@ -1105,7 +1094,7 @@ type Mutation {
   addTeamApps(appEnvs: [AppEnvironmentInput!]!, teamId: ID!): AddTeamAppsMutation
   removeTeamApp(appId: ID!, teamId: ID!): RemoveTeamAppMutation
   updateTeamAppEnvironments(appId: ID!, envIds: [ID!]!, teamId: ID!): UpdateTeamAppEnvironmentsMutation
-  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
+  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String, teamId: ID): CreateServiceAccountMutation
   enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
   enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
@@ -1113,6 +1102,16 @@ type Mutation {
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
   createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
   deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
+
+  """
+  Transfer a service account between org-level and team ownership.
+  
+  - team_id=null: Promote team-owned SA to org-level (clears team FK).
+  - team_id=<id>: Assign SA to a team (narrows visibility to team members).
+  
+  Requires global_access (Owner/Admin only).
+  """
+  updateServiceAccountOwnership(serviceAccountId: ID!, teamId: ID): UpdateServiceAccountOwnershipMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
@@ -1424,6 +1423,18 @@ type CreateServiceAccountTokenMutation {
 
 type DeleteServiceAccountTokenMutation {
   ok: Boolean
+}
+
+"""
+Transfer a service account between org-level and team ownership.
+
+- team_id=null: Promote team-owned SA to org-level (clears team FK).
+- team_id=<id>: Assign SA to a team (narrows visibility to team members).
+
+Requires global_access (Owner/Admin only).
+"""
+type UpdateServiceAccountOwnershipMutation {
+  serviceAccount: ServiceAccountType
 }
 
 type InitEnvSync {

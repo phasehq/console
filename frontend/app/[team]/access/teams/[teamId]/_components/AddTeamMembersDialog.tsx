@@ -24,9 +24,11 @@ import { Tab } from '@headlessui/react'
 export const AddTeamMembersDialog = ({
   teamId,
   existingMembers,
+  mode = 'all',
 }: {
   teamId: string
   existingMembers: TeamMembershipType[]
+  mode?: 'all' | 'members' | 'service-accounts'
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -63,7 +65,7 @@ export const AddTeamMembersDialog = ({
 
   const availableSAs: ServiceAccountType[] =
     saData?.serviceAccounts?.filter(
-      (sa: ServiceAccountType) => !existingSaIds.has(sa.id)
+      (sa: ServiceAccountType) => !existingSaIds.has(sa.id) && !sa.team
     ) || []
 
   const filteredMembers =
@@ -100,7 +102,9 @@ export const AddTeamMembersDialog = ({
     })
   }
 
-  const totalSelected = selectedMembers.size + selectedSAs.size
+  const totalSelected =
+    (mode === 'service-accounts' ? 0 : selectedMembers.size) +
+    (mode === 'members' ? 0 : selectedSAs.size)
 
   const handleSubmit = async () => {
     if (totalSelected === 0) return
@@ -160,19 +164,107 @@ export const AddTeamMembersDialog = ({
 
   const selectedSummary = () => {
     const parts: string[] = []
-    if (selectedMembers.size > 0)
+    if (mode !== 'service-accounts' && selectedMembers.size > 0)
       parts.push(`${selectedMembers.size} member${selectedMembers.size !== 1 ? 's' : ''}`)
-    if (selectedSAs.size > 0)
+    if (mode !== 'members' && selectedSAs.size > 0)
       parts.push(`${selectedSAs.size} SA${selectedSAs.size !== 1 ? 's' : ''}`)
     return parts.length > 0 ? parts.join(', ') : '0 selected'
   }
 
+  const dialogTitle =
+    mode === 'members'
+      ? 'Add members to team'
+      : mode === 'service-accounts'
+        ? 'Add service accounts to team'
+        : 'Add members to team'
+
+  const buttonLabel =
+    mode === 'members'
+      ? 'Add Members'
+      : mode === 'service-accounts'
+        ? 'Add Service Accounts'
+        : 'Add Members'
+
+  const searchBar = (
+    <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+      <FaSearch className="text-neutral-500 text-xs shrink-0" />
+      <input
+        placeholder={mode === 'service-accounts' ? 'Search service accounts' : mode === 'members' ? 'Search members' : 'Search accounts'}
+        className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 w-full text-xs py-1.5"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+      />
+      <FaTimesCircle
+        className={clsx(
+          'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2 text-xs',
+          searchQuery ? 'opacity-100' : 'opacity-0'
+        )}
+        role="button"
+        onClick={() => setSearchQuery('')}
+      />
+    </div>
+  )
+
+  const membersList = (
+    <div className="max-h-80 overflow-y-auto divide-y divide-zinc-500/20">
+      {filteredMembers.length === 0 ? (
+        <p className="text-xs text-neutral-500 text-center py-4">
+          {availableMembers.length === 0
+            ? 'All organisation members are already in this team'
+            : 'No members match your search'}
+        </p>
+      ) : (
+        filteredMembers.map((member: OrganisationMemberType) => (
+          <div
+            key={member.id}
+            className="flex items-center justify-between py-1 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 rounded"
+            onClick={() => toggleMember(member.id)}
+          >
+            <ProfileCard member={member} size="md" />
+            <ToggleSwitch
+              size="sm"
+              value={selectedMembers.has(member.id)}
+              onToggle={() => toggleMember(member.id)}
+            />
+          </div>
+        ))
+      )}
+    </div>
+  )
+
+  const saList = (
+    <div className="max-h-80 overflow-y-auto divide-y divide-zinc-500/20">
+      {filteredSAs.length === 0 ? (
+        <p className="text-xs text-neutral-500 text-center py-4">
+          {availableSAs.length === 0
+            ? 'All service accounts are already in this team'
+            : 'No service accounts match your search'}
+        </p>
+      ) : (
+        filteredSAs.map((sa: ServiceAccountType) => (
+          <div
+            key={sa.id}
+            className="flex items-center justify-between py-1 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 rounded"
+            onClick={() => toggleSA(sa.id)}
+          >
+            <ProfileCard serviceAccount={sa} size="md" />
+            <ToggleSwitch
+              size="sm"
+              value={selectedSAs.has(sa.id)}
+              onToggle={() => toggleSA(sa.id)}
+            />
+          </div>
+        ))
+      )}
+    </div>
+  )
+
   return (
     <GenericDialog
-      title="Add members to team"
+      title={dialogTitle}
       buttonContent={
         <>
-          <FaPlus /> Add Members
+          <FaPlus /> {buttonLabel}
         </>
       }
       buttonVariant="primary"
@@ -180,117 +272,62 @@ export const AddTeamMembersDialog = ({
       onClose={reset}
     >
       <div className="space-y-3 pt-4">
-        <Tab.Group
-          onChange={() => {
-            setSearchQuery('')
-          }}
-        >
-          <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
-            <Tab
-              className={({ selected }) =>
-                clsx(
-                  'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease flex items-center gap-1.5',
-                  selected
-                    ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
-                    : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                )
-              }
-            >
-              <FaUsers className="text-xs" /> Members
-              {selectedMembers.size > 0 && (
-                <span className="text-2xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500">
-                  {selectedMembers.size}
-                </span>
-              )}
-            </Tab>
-            <Tab
-              className={({ selected }) =>
-                clsx(
-                  'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease flex items-center gap-1.5',
-                  selected
-                    ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
-                    : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                )
-              }
-            >
-              <FaRobot className="text-xs" /> Service Accounts
-              {selectedSAs.size > 0 && (
-                <span className="text-2xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500">
-                  {selectedSAs.size}
-                </span>
-              )}
-            </Tab>
-          </Tab.List>
+        {mode === 'all' ? (
+          <Tab.Group
+            onChange={() => {
+              setSearchQuery('')
+            }}
+          >
+            <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
+              <Tab
+                className={({ selected }) =>
+                  clsx(
+                    'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease flex items-center gap-1.5',
+                    selected
+                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                  )
+                }
+              >
+                <FaUsers className="text-xs" /> Members
+                {selectedMembers.size > 0 && (
+                  <span className="text-2xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500">
+                    {selectedMembers.size}
+                  </span>
+                )}
+              </Tab>
+              <Tab
+                className={({ selected }) =>
+                  clsx(
+                    'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease flex items-center gap-1.5',
+                    selected
+                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                  )
+                }
+              >
+                <FaRobot className="text-xs" /> Service Accounts
+                {selectedSAs.size > 0 && (
+                  <span className="text-2xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500">
+                    {selectedSAs.size}
+                  </span>
+                )}
+              </Tab>
+            </Tab.List>
 
-          <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-            <FaSearch className="text-neutral-500 text-xs shrink-0" />
-            <input
-              placeholder="Search accounts"
-              className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 w-full text-xs py-1.5"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <FaTimesCircle
-              className={clsx(
-                'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2 text-xs',
-                searchQuery ? 'opacity-100' : 'opacity-0'
-              )}
-              role="button"
-              onClick={() => setSearchQuery('')}
-            />
-          </div>
+            {searchBar}
 
-          <Tab.Panels>
-            <Tab.Panel className="max-h-80 overflow-y-auto divide-y divide-zinc-500/20">
-              {filteredMembers.length === 0 ? (
-                <p className="text-xs text-neutral-500 text-center py-4">
-                  {availableMembers.length === 0
-                    ? 'All organisation members are already in this team'
-                    : 'No members match your search'}
-                </p>
-              ) : (
-                filteredMembers.map((member: OrganisationMemberType) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center justify-between py-1 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 rounded"
-                    onClick={() => toggleMember(member.id)}
-                  >
-                    <ProfileCard member={member} size="md" />
-                    <ToggleSwitch
-                      size="sm"
-                      value={selectedMembers.has(member.id)}
-                      onToggle={() => toggleMember(member.id)}
-                    />
-                  </div>
-                ))
-              )}
-            </Tab.Panel>
-            <Tab.Panel className="max-h-80 overflow-y-auto divide-y divide-zinc-500/20">
-              {filteredSAs.length === 0 ? (
-                <p className="text-xs text-neutral-500 text-center py-4">
-                  {availableSAs.length === 0
-                    ? 'All service accounts are already in this team'
-                    : 'No service accounts match your search'}
-                </p>
-              ) : (
-                filteredSAs.map((sa: ServiceAccountType) => (
-                  <div
-                    key={sa.id}
-                    className="flex items-center justify-between py-1 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 rounded"
-                    onClick={() => toggleSA(sa.id)}
-                  >
-                    <ProfileCard serviceAccount={sa} size="md" />
-                    <ToggleSwitch
-                      size="sm"
-                      value={selectedSAs.has(sa.id)}
-                      onToggle={() => toggleSA(sa.id)}
-                    />
-                  </div>
-                ))
-              )}
-            </Tab.Panel>
-          </Tab.Panels>
-        </Tab.Group>
+            <Tab.Panels>
+              <Tab.Panel>{membersList}</Tab.Panel>
+              <Tab.Panel>{saList}</Tab.Panel>
+            </Tab.Panels>
+          </Tab.Group>
+        ) : (
+          <>
+            {searchBar}
+            {mode === 'members' ? membersList : saList}
+          </>
+        )}
 
         <div className="flex justify-between items-center">
           <span className="text-2xs text-neutral-500">{selectedSummary()}</span>
