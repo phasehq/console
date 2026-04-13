@@ -16,10 +16,13 @@ import { useRouter } from 'next/navigation'
 import { useContext } from 'react'
 import {
   FaBan,
+  FaBuilding,
   FaChevronLeft,
   FaClock,
   FaCog,
+  FaCrown,
   FaExternalLinkAlt,
+  FaLink,
   FaRobot,
   FaUsers,
 } from 'react-icons/fa'
@@ -28,6 +31,8 @@ import { AddTeamAppsDialog } from './_components/AddTeamAppsDialog'
 import { RemoveTeamMemberDialog } from './_components/RemoveTeamMemberDialog'
 import { UpdateTeamDialog } from './_components/UpdateTeamDialog'
 import { DeleteTeamDialog } from '../_components/DeleteTeamDialog'
+import { CreateServiceAccountDialog } from '../../service-accounts/_components/CreateServiceAccountDialog'
+import { DeleteServiceAccountDialog } from '../../service-accounts/_components/DeleteServiceAccountDialog'
 
 export default function TeamDetail({ params }: { params: { team: string; teamId: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -43,6 +48,10 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
 
   const userCanDeleteTeams = organisation
     ? userHasPermission(organisation.role!.permissions, 'Teams', 'delete')
+    : false
+
+  const userCanCreateSA = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create')
     : false
 
   const { data, loading } = useQuery(GetTeams, {
@@ -176,35 +185,34 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
           )}
         </div>
 
-        {/* Members Section */}
+        {/* Members Section (human users only) */}
         <div className="pt-4 space-y-3 border-t border-neutral-500/40">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-base font-medium">Members</div>
               <div className="text-neutral-500 text-sm">
-                Members and service accounts in this team
+                Organisation members in this team
               </div>
             </div>
             {userCanUpdateTeams && !team.isScimManaged && (
-              <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} />
+              <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="members" />
             )}
           </div>
 
           <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
-            {team.members && team.members.length > 0 ? (
-              team.members.map((membership: TeamMembershipType) => {
-                const isUser = !!membership.orgMember
-                const memberId = isUser ? membership.orgMember!.id : membership.serviceAccount!.id
-                const displayName = isUser
-                  ? membership.fullName || membership.email || 'Unknown'
-                  : membership.serviceAccount!.name || 'Service Account'
+            {(() => {
+              const humanMembers = (team.members || []).filter((m) => m.orgMember)
+              return humanMembers.length > 0 ? (
+                humanMembers.map((membership: TeamMembershipType) => {
+                  const memberId = membership.orgMember!.id
+                  const displayName = membership.fullName || membership.email || 'Unknown'
+                  const isTeamCreator = team.createdBy?.id === membership.orgMember?.id
 
-                return (
-                  <div
-                    key={membership.id}
-                    className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
-                  >
-                    {isUser ? (
+                  return (
+                    <div
+                      key={membership.id}
+                      className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
+                    >
                       <ProfileCard
                         user={{
                           name: membership.fullName,
@@ -213,58 +221,146 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                         }}
                         size="md"
                       />
-                    ) : (
-                      <ProfileCard
-                        serviceAccount={membership.serviceAccount!}
-                        size="md"
-                      />
-                    )}
 
-                    <div>
-                      {isUser && membership.orgMember?.role && (
-                        <RoleLabel role={membership.orgMember.role} size="xs" />
-                      )}
-                      {!isUser && membership.serviceAccount?.role && (
-                        <RoleLabel role={membership.serviceAccount.role} size="xs" />
-                      )}
-                    </div>
-
-                    <div className="text-2xs text-neutral-500">
-                      Added {relativeTimeFromDates(new Date(membership.createdAt))}
-                    </div>
-
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition ease">
-                      <Link
-                        href={
-                          isUser
-                            ? `/${params.team}/access/members/${memberId}`
-                            : `/${params.team}/access/service-accounts/${memberId}`
-                        }
-                        title={`View ${displayName}`}
-                      >
-                        <Button variant="secondary">
-                          <FaExternalLinkAlt /> Manage account
-                        </Button>
-                      </Link>
-                      {userCanUpdateTeams &&
-                        !team.isScimManaged &&
-                        !(isUser && team.createdBy?.id === membership.orgMember?.id) && (
-                          <RemoveTeamMemberDialog
-                            teamId={team.id}
-                            memberId={memberId}
-                            memberName={displayName}
-                            memberType={isUser ? 'USER' : 'SERVICE'}
-                          />
+                      <div className="flex items-center gap-1.5">
+                        {membership.orgMember?.role && (
+                          <RoleLabel role={membership.orgMember.role} size="xs" />
                         )}
+                        {isTeamCreator && (
+                          <FaCrown className="text-amber-500 text-xs shrink-0" title="Team owner" />
+                        )}
+                      </div>
+
+                      <div className="text-2xs text-neutral-500">
+                        Added {relativeTimeFromDates(new Date(membership.createdAt))}
+                      </div>
+
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition ease">
+                        <Link
+                          href={`/${params.team}/access/members/${memberId}`}
+                          title={`View ${displayName}`}
+                        >
+                          <Button variant="secondary">
+                            <FaExternalLinkAlt /> Manage account
+                          </Button>
+                        </Link>
+                        {userCanUpdateTeams &&
+                          !team.isScimManaged &&
+                          !(team.createdBy?.id === membership.orgMember?.id) && (
+                            <RemoveTeamMemberDialog
+                              teamId={team.id}
+                              memberId={memberId}
+                              memberName={displayName}
+                              memberType="USER"
+                            />
+                          )}
+                      </div>
                     </div>
-                  </div>
-                )
-              })
-            ) : (
-              <div className="py-8 text-center text-neutral-500">
-                This team does not have any members yet.
+                  )
+                })
+              ) : (
+                <div className="py-8 text-center text-neutral-500">
+                  This team does not have any members yet.
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+
+        {/* Service Accounts Section (all SAs with ownership column) */}
+        <div className="pt-4 space-y-3 border-t border-neutral-500/40">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-base font-medium">Service Accounts</div>
+              <div className="text-neutral-500 text-sm">
+                Service accounts in this team
               </div>
-            )}
+            </div>
+            <div className="flex items-center gap-2">
+              {userCanCreateSA && (
+                <CreateServiceAccountDialog
+                  teamId={team.id}
+                  teamName={team.name}
+                  teamRole={team.serviceAccountRole}
+                />
+              )}
+              {userCanUpdateTeams && !team.isScimManaged && (
+                <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="service-accounts" />
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+            {(() => {
+              const saMembers = (team.members || []).filter((m) => m.serviceAccount)
+              return saMembers.length > 0 ? (
+                saMembers.map((membership: TeamMembershipType) => {
+                  const sa = membership.serviceAccount!
+                  const isTeamOwned = sa.team?.id === team.id
+
+                  return (
+                    <div
+                      key={membership.id}
+                      className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center py-1.5 px-2 group"
+                    >
+                      <ProfileCard serviceAccount={sa} size="md" />
+
+                      <div>
+                        {sa.role && <RoleLabel role={sa.role} size="xs" />}
+                      </div>
+
+                      <div>
+                        {isTeamOwned ? (
+                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400" title="Owned by this team — bound to the team lifecycle">
+                            <FaLink className="text-[0.55rem]" />
+                            Team
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" title="Organisation-level account — visible org-wide">
+                            <FaBuilding className="text-[0.55rem]" />
+                            Organisation
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-2xs text-neutral-500">
+                        Added {relativeTimeFromDates(new Date(membership.createdAt))}
+                      </div>
+
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition ease">
+                        <Link
+                          href={`/${params.team}/access/service-accounts/${sa.id}`}
+                          title={`View ${sa.name}`}
+                        >
+                          <Button variant="secondary">
+                            <FaExternalLinkAlt /> Manage
+                          </Button>
+                        </Link>
+                        {isTeamOwned ? (
+                          userCanUpdateTeams && (
+                            <DeleteServiceAccountDialog account={sa} />
+                          )
+                        ) : (
+                          userCanUpdateTeams && !team.isScimManaged && (
+                            <RemoveTeamMemberDialog
+                              teamId={team.id}
+                              memberId={sa.id}
+                              memberName={sa.name || 'Service Account'}
+                              memberType="SERVICE"
+                            />
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
+                <div className="py-8 text-center text-neutral-500">
+                  No service accounts in this team.
+                  {userCanCreateSA && ' Create a team-owned service account or add an existing one.'}
+                </div>
+              )
+            })()}
           </div>
         </div>
 
