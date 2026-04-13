@@ -16,6 +16,7 @@ from api.utils.access.permissions import (
     role_has_global_access,
     user_has_permission,
     user_is_org_member,
+    user_is_team_member,
 )
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
 from datetime import datetime
@@ -28,17 +29,7 @@ def _check_team_sa_access(user, service_account):
     if service_account.team is None:
         return
 
-    org_member = OrganisationMember.objects.get(
-        user=user, organisation=service_account.organisation, deleted_at=None
-    )
-    if role_has_global_access(org_member.role):
-        return
-
-    if not TeamMembership.objects.filter(
-        team=service_account.team,
-        org_member=org_member,
-        team__deleted_at__isnull=True,
-    ).exists():
+    if not user_is_team_member(user.userId, service_account.team_id):
         raise GraphQLError("You don't have access to this Service Account")
 
 

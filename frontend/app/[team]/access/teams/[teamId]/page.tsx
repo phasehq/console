@@ -8,7 +8,7 @@ import { ProfileCard } from '@/components/common/ProfileCard'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
-import { userHasPermission } from '@/utils/access/permissions'
+import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
@@ -54,6 +54,10 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
     ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create')
     : false
 
+  const userIsGlobalAccess = organisation
+    ? userHasGlobalAccess(organisation.role!.permissions)
+    : false
+
   const { data, loading } = useQuery(GetTeams, {
     variables: { organisationId: organisation?.id, teamId: params.teamId },
     skip: !organisation || !userCanReadTeams,
@@ -95,6 +99,33 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
     return (
       <section className="p-4">
         <EmptyState title="Team not found" subtitle="This team may have been deleted.">
+          <Link
+            href={`/${params.team}/access/teams`}
+            className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
+          >
+            <FaChevronLeft /> Back to teams
+          </Link>
+        </EmptyState>
+      </section>
+    )
+
+  const userIsMember =
+    userIsGlobalAccess ||
+    team.members?.some((m) => m.orgMember?.id === organisation?.memberId) ||
+    false
+
+  if (!userIsMember)
+    return (
+      <section className="p-4">
+        <EmptyState
+          title="Access restricted"
+          subtitle="You are not a member of this team. Only team members and organisation admins can view this page."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBan />
+            </div>
+          }
+        >
           <Link
             href={`/${params.team}/access/teams`}
             className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
