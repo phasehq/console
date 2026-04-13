@@ -25,3 +25,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
 def pytest_configure():
     django.setup()
+
+    # Override cache to in-memory so tests don't require a running Redis
+    from django.conf import settings
+
+    settings.CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
