@@ -1,7 +1,8 @@
 import { ApiOrganisationPlanChoices, OrganisationMemberType, RoleType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
+import { Alert } from '@/components/common/Alert'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
-import { FaChevronDown, FaPlus } from 'react-icons/fa'
+import { FaChevronDown, FaLink, FaPlus } from 'react-icons/fa'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { GetServiceAccountHandlers } from '@/graphql/queries/service-accounts/getServiceAccountHandlers.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
@@ -28,7 +29,16 @@ import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 
 const bip39 = require('bip39')
 
-export const CreateServiceAccountDialog = () => {
+export const CreateServiceAccountDialog = ({
+  teamId,
+  teamName,
+  teamRole,
+}: {
+  teamId?: string
+  teamName?: string
+  teamRole?: RoleType | null
+} = {}) => {
+  const isTeamContext = !!teamId
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { data: roleData, loading: roleDataPending } = useQuery(GetRoles, {
@@ -74,13 +84,15 @@ export const CreateServiceAccountDialog = () => {
     ) || []
 
   useEffect(() => {
-    if (roleData?.roles) {
+    if (isTeamContext && teamRole) {
+      setRole(teamRole)
+    } else if (roleData?.roles) {
       const defaultRole = roleData?.roles.find(
         (role: RoleType) => role.name?.toLowerCase() === 'service'
       )
       if (defaultRole) setRole(defaultRole)
     }
-  }, [roleData])
+  }, [roleData, isTeamContext, teamRole])
 
   const handleCreateServiceAccount = (e: { preventDefault: () => void }) => {
     return new Promise<boolean>((resolve) => {
@@ -132,6 +144,7 @@ export const CreateServiceAccountDialog = () => {
             serverWrappedKeyring: serverKeys?.serverEncryptedKeyring || null,
             serverWrappedRecovery: serverKeys?.serverEncryptedMnemonic || null,
             handlers: handlerKeys,
+            teamId: teamId || null,
           },
           refetchQueries: [
             {
@@ -153,12 +166,17 @@ export const CreateServiceAccountDialog = () => {
     })
   }
 
+  const buttonLabel = isTeamContext ? 'Create Team Service Account' : 'Create Service Account'
+  const dialogTitle = isTeamContext
+    ? 'Create a Team Service Account'
+    : 'Create a new Service Account'
+
   if (upsell)
     return (
       <UpsellDialog
         buttonLabel={
           <>
-            <FaPlus /> Create Service Account
+            <FaPlus /> {buttonLabel}
           </>
         }
       />
@@ -166,65 +184,82 @@ export const CreateServiceAccountDialog = () => {
 
   return (
     <GenericDialog
-      title="Create a new Service Account"
+      title={dialogTitle}
       buttonContent={
         <>
-          <FaPlus /> Create Service Account
+          {isTeamContext ? <FaLink /> : <FaPlus />} {buttonLabel}
         </>
       }
-      buttonVariant="primary"
-      size="lg"
+      buttonVariant={isTeamContext ? 'secondary' : 'primary'}
+      size="md"
       ref={dialogRef}
     >
-      <form onSubmit={handleCreateServiceAccount}>
-        <div className="grid grid-cols-2 gap-6">
-          <Input value={name} setValue={setName} label="Account name" required maxLength={32} />
-          <div className="space-y-1 w-full">
-            <label className="block text-neutral-500 text-sm mb-2" htmlFor="role">
-              Role
-            </label>
-            <Listbox value={role} onChange={setRole} name="role">
-              {({ open }) => (
-                <>
-                  <Listbox.Button as={Fragment} aria-required>
-                    <div
-                      className={clsx(
-                        'py-2 flex items-center gap-4 w-full rounded-md h-10 cursor-pointer'
-                      )}
-                    >
-                      {role ? <RoleLabel role={role} /> : <>Select a role</>}
-                      <FaChevronDown
-                        className={clsx(
-                          'transition-transform ease duration-300 text-neutral-500',
-                          open ? 'rotate-180' : 'rotate-0'
-                        )}
-                      />
-                    </div>
-                  </Listbox.Button>
-                  <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none">
-                    {roleOptions.map((role: RoleType) => (
-                      <Listbox.Option key={role.name} value={role} as={Fragment}>
-                        {({ active, selected }) => (
-                          <div
+      <form onSubmit={handleCreateServiceAccount} className="pt-4">
+        <div className="space-y-6">
+          {isTeamContext && (
+            <Alert variant="info" icon size="sm">
+              <span className="text-xs">
+                This service account will be owned by <strong>{teamName}</strong> and only visible
+                to team members. It cannot be removed from the team — only deleted or transferred.
+              </span>
+            </Alert>
+          )}
+          <div className="grid grid-cols-2 gap-6">
+            <Input value={name} setValue={setName} label="Account name" required maxLength={32} />
+            <div className="space-y-1 w-full">
+              <label className="block text-neutral-500 text-sm mb-2" htmlFor="role">
+                Role
+              </label>
+              {isTeamContext && teamRole ? (
+                <div className="py-2 flex items-center gap-2 h-10">
+                  <RoleLabel role={teamRole} />
+                  <span className="text-2xs text-neutral-500">(set by team)</span>
+                </div>
+              ) : (
+                <Listbox value={role} onChange={setRole} name="role">
+                  {({ open }) => (
+                    <>
+                      <Listbox.Button as={Fragment} aria-required>
+                        <div
+                          className={clsx(
+                            'py-2 flex items-center gap-4 w-full rounded-md h-10 cursor-pointer'
+                          )}
+                        >
+                          {role ? <RoleLabel role={role} /> : <>Select a role</>}
+                          <FaChevronDown
                             className={clsx(
-                              'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                              active && 'bg-zinc-300 dark:bg-zinc-700'
+                              'transition-transform ease duration-300 text-neutral-500',
+                              open ? 'rotate-180' : 'rotate-0'
                             )}
-                          >
-                            <RoleLabel role={role} />
-                          </div>
-                        )}
-                      </Listbox.Option>
-                    ))}
-                  </Listbox.Options>
-                </>
+                          />
+                        </div>
+                      </Listbox.Button>
+                      <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none">
+                        {roleOptions.map((role: RoleType) => (
+                          <Listbox.Option key={role.name} value={role} as={Fragment}>
+                            {({ active, selected }) => (
+                              <div
+                                className={clsx(
+                                  'flex items-center gap-2 p-2 cursor-pointer rounded-full',
+                                  active && 'bg-zinc-300 dark:bg-zinc-700'
+                                )}
+                              >
+                                <RoleLabel role={role} />
+                              </div>
+                            )}
+                          </Listbox.Option>
+                        ))}
+                      </Listbox.Options>
+                    </>
+                  )}
+                </Listbox>
               )}
-            </Listbox>
+            </div>
           </div>
         </div>
         <div className="flex justify-end items-center gap-2 pt-6">
           <Button type="submit" variant="primary" isLoading={createPending}>
-            Create Service Account
+            {buttonLabel}
           </Button>
         </div>
       </form>
