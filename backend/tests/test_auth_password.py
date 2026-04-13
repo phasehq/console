@@ -1,0 +1,1028 @@
+"""Tests for password auth endpoints (api.views.auth_password).
+
+Uses unittest.TestCase with mocked ORM — no database required.
+Throttling is disabled for all tests via setUp() cache clearing.
+"""
+
+import json
+import unittest
+from datetime import timedelta
+from unittest.mock import patch, MagicMock
+
+from django.core.cache import cache
+from django.test import RequestFactory
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.utils import timezone
+from rest_framework.test import APIRequestFactory, force_authenticate
+
+from api.views.auth_password import (
+    password_register,
+    password_login,
+    password_change,
+    password_reset_via_recovery,
+    verify_email,
+    resend_verification,
+    email_check,
+)
+
+
+class _ThrottleClearMixin:
+    """Clear DRF throttle cache before each test."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
+
+def _add_session_to_request(request):
+    """Attach session support to a bare RequestFactory request."""
+    middleware = SessionMiddleware(lambda req: None)
+    middleware.process_request(request)
+    request.session.save()
+
+
+def _make_post(path, data, user=None):
+    """Create a POST request with JSON body and session."""
+    factory = APIRequestFactory()
+    request = factory.post(path, data=data, format="json")
+    _add_session_to_request(request)
+    if user:
+        force_authenticate(request, user=user)
+    return request
+
+
+def _make_get(path):
+    """Create a GET request with session."""
+    factory = RequestFactory()
+    request = factory.get(path)
+    _add_session_to_request(request)
+    return request
+
+
+# ---------------------------------------------------------------------------
+# password_register
+# ---------------------------------------------------------------------------
+
+class PasswordRegisterTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for POST /auth/password/register/."""
+
+    VALID_PAYLOAD = {
+        "email": "alice@example.com",
+        "authHash": "a" * 64,
+        "fullName": "Alice Test",
+    }
+
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password._send_verification_email")
+    @patch("api.views.auth_password.EmailVerification")
+    @patch("api.views.auth_password.get_user_model")
+    def test_register_creates_user(
+        self, mock_get_user, mock_ev, mock_send_email, mock_tx
+    ):
+        """Successful registration creates user + verification token."""
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = False
+        mock_get_user.return_value = User
+
+        new_user = MagicMock()
+        new_user.active = True
+        User.objects.create_user.return_value = new_user
+
+        request = _make_post("/auth/password/register/", self.VALID_PAYLOAD)
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        self.assertIn("Verification", data["message"])
+
+        User.objects.create_user.assert_called_once()
+        mock_ev.objects.create.assert_called_once()
+        mock_send_email.assert_called_once()
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_register_rejects_duplicate_email(self, mock_get_user):
+        """Registration fails if email already exists."""
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = True
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/password/register/", self.VALID_PAYLOAD)
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_register_rejects_missing_fields(self):
+        """Registration fails with missing required fields."""
+        request = _make_post("/auth/password/register/", {"email": "a@b.com"})
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_register_rejects_invalid_email(self):
+        """Registration fails with badly formatted email."""
+        payload = dict(self.VALID_PAYLOAD, email="not-an-email")
+        request = _make_post("/auth/password/register/", payload)
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 400)
+
+
+# ---------------------------------------------------------------------------
+# verify_email
+# ---------------------------------------------------------------------------
+
+class VerifyEmailTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for GET /auth/verify-email/<token>/."""
+
+    @patch("api.views.auth_password.EmailVerification")
+    def test_valid_token_activates_user(self, mock_ev_cls):
+        """Valid non-expired token activates user and sets verified."""
+        ev = MagicMock()
+        ev.verified = False
+        ev.expires_at = timezone.now() + timedelta(hours=1)
+        ev.user = MagicMock()
+        mock_ev_cls.objects.select_related.return_value.get.return_value = ev
+
+        request = _make_get("/auth/verify-email/test-token/")
+        response = verify_email(request, "test-token")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("verified=true", response.url)
+        self.assertTrue(ev.verified)
+        ev.save.assert_called()
+        ev.user.save.assert_called()
+
+    @patch("api.views.auth_password.EmailVerification")
+    def test_expired_token_rejected(self, mock_ev_cls):
+        """Expired token redirects with error."""
+        ev = MagicMock()
+        ev.verified = False
+        ev.expires_at = timezone.now() - timedelta(hours=1)
+        mock_ev_cls.objects.select_related.return_value.get.return_value = ev
+
+        request = _make_get("/auth/verify-email/expired-token/")
+        response = verify_email(request, "expired-token")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("verification_expired", response.url)
+
+    @patch("api.views.auth_password.EmailVerification")
+    def test_invalid_token_rejected(self, mock_ev_cls):
+        """Non-existent token redirects with error."""
+        from api.models import EmailVerification as EV
+
+        mock_ev_cls.DoesNotExist = EV.DoesNotExist
+        mock_ev_cls.objects.select_related.return_value.get.side_effect = EV.DoesNotExist
+
+        request = _make_get("/auth/verify-email/bad-token/")
+        response = verify_email(request, "bad-token")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("invalid_verification_token", response.url)
+
+    @patch("api.views.auth_password.EmailVerification")
+    def test_already_verified_redirects_success(self, mock_ev_cls):
+        """Already-verified token is idempotent."""
+        ev = MagicMock()
+        ev.verified = True
+        mock_ev_cls.objects.select_related.return_value.get.return_value = ev
+
+        request = _make_get("/auth/verify-email/already-done/")
+        response = verify_email(request, "already-done")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("verified=true", response.url)
+
+
+# ---------------------------------------------------------------------------
+# password_login
+# ---------------------------------------------------------------------------
+
+class PasswordLoginTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for POST /auth/password/login/."""
+
+    @patch("api.views.auth_password.login")
+    @patch("api.views.auth_password.get_user_model")
+    def test_login_succeeds_with_correct_hash(self, mock_get_user, mock_login):
+        """Correct authHash logs user in and returns user info."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = True
+        user.userId = "uuid-123"
+        user.email = "alice@example.com"
+        user.full_name = ""
+        user.auth_method = "password"
+        user.check_password.return_value = True
+        user.socialaccount_set.first.return_value = None
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post(
+            "/auth/password/login/",
+            {"email": "alice@example.com", "authHash": "a" * 64},
+        )
+        response = password_login(request)
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data["email"], "alice@example.com")
+        self.assertEqual(data["authMethod"], "password")
+        mock_login.assert_called_once()
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_login_fails_with_wrong_hash(self, mock_get_user):
+        """Wrong authHash returns 401."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = True
+        user.check_password.return_value = False
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post(
+            "/auth/password/login/",
+            {"email": "alice@example.com", "authHash": "wrong"},
+        )
+        response = password_login(request)
+
+        self.assertEqual(response.status_code, 401)
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_login_fails_if_not_verified(self, mock_get_user):
+        """Unverified user (active=False) returns 403."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = False
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post(
+            "/auth/password/login/",
+            {"email": "alice@example.com", "authHash": "a" * 64},
+        )
+        response = password_login(request)
+
+        self.assertEqual(response.status_code, 403)
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_login_fails_for_nonexistent_user(self, mock_get_user):
+        """Non-existent email returns 401 (same as wrong password)."""
+        User = MagicMock()
+        from api.models import CustomUser
+
+        User.DoesNotExist = CustomUser.DoesNotExist
+        User.objects.get.side_effect = CustomUser.DoesNotExist
+        mock_get_user.return_value = User
+
+        request = _make_post(
+            "/auth/password/login/",
+            {"email": "nobody@example.com", "authHash": "a" * 64},
+        )
+        response = password_login(request)
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_login_rejects_missing_fields(self):
+        """Missing email or authHash returns 400."""
+        request = _make_post("/auth/password/login/", {"email": "a@b.com"})
+        response = password_login(request)
+
+        self.assertEqual(response.status_code, 400)
+
+
+# ---------------------------------------------------------------------------
+# password_change
+# ---------------------------------------------------------------------------
+
+class PasswordChangeTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for POST /auth/password/change/."""
+
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password.login")
+    @patch("api.views.auth_password.OrganisationMember")
+    def test_change_password_succeeds(self, mock_om, mock_login, mock_tx):
+        """Valid current hash updates password and re-encrypts per-org keyring."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+        user.check_password.return_value = True
+
+        request = _make_post(
+            "/auth/password/change/",
+            {
+                "currentAuthHash": "old" * 20,
+                "newAuthHash": "new" * 20,
+                "orgKeys": [
+                    {"orgId": "org-1", "wrappedKeyring": "wk_1", "wrappedRecovery": "wr_1"},
+                    {"orgId": "org-2", "wrappedKeyring": "wk_2", "wrappedRecovery": "wr_2"},
+                ],
+            },
+            user=user,
+        )
+        response = password_change(request)
+
+        self.assertEqual(response.status_code, 200)
+        user.set_password.assert_called_once_with("new" * 20)
+        user.save.assert_called()
+        # Should update each org separately, not bulk
+        self.assertEqual(mock_om.objects.filter.call_count, 2)
+        mock_login.assert_called_once()
+
+    def test_change_rejects_wrong_current_password(self):
+        """Wrong current password returns 401."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+        user.check_password.return_value = False
+
+        request = _make_post(
+            "/auth/password/change/",
+            {
+                "currentAuthHash": "wrong",
+                "newAuthHash": "new" * 20,
+                "orgKeys": [{"orgId": "org-1", "wrappedKeyring": "wk", "wrappedRecovery": "wr"}],
+            },
+            user=user,
+        )
+        response = password_change(request)
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_change_rejects_sso_user(self):
+        """SSO users (unusable password) get 400."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = False
+
+        request = _make_post(
+            "/auth/password/change/",
+            {
+                "currentAuthHash": "x",
+                "newAuthHash": "y",
+                "orgKeys": [{"orgId": "org-1", "wrappedKeyring": "wk", "wrappedRecovery": "wr"}],
+            },
+            user=user,
+        )
+        response = password_change(request)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_change_rejects_missing_fields(self):
+        """Missing fields return 400."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+
+        request = _make_post(
+            "/auth/password/change/",
+            {"currentAuthHash": "x"},
+            user=user,
+        )
+        response = password_change(request)
+
+        self.assertEqual(response.status_code, 400)
+
+
+# ---------------------------------------------------------------------------
+# Verification email logging
+# ---------------------------------------------------------------------------
+
+class VerificationEmailLoggingTest(_ThrottleClearMixin, unittest.TestCase):
+    """Ensure verification URL is always logged."""
+
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password._send_verification_email")
+    @patch("api.views.auth_password.EmailVerification")
+    @patch("api.views.auth_password.get_user_model")
+    def test_verification_url_logged(
+        self, mock_get_user, mock_ev, mock_send_email, mock_tx
+    ):
+        """Registration always calls _send_verification_email which logs."""
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = False
+        new_user = MagicMock()
+        User.objects.create_user.return_value = new_user
+        mock_get_user.return_value = User
+
+        payload = {
+            "email": "bob@example.com",
+            "authHash": "h" * 64,
+        }
+        request = _make_post("/auth/password/register/", payload)
+        password_register(request)
+
+        mock_send_email.assert_called_once()
+        call_args = mock_send_email.call_args
+        self.assertEqual(call_args[0][0], "bob@example.com")
+        self.assertIn("/auth/verify-email/", call_args[0][1])
+
+
+# ---------------------------------------------------------------------------
+# password_reset_via_recovery
+# ---------------------------------------------------------------------------
+
+class PasswordResetViaRecoveryTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for POST /auth/password/reset-via-recovery/."""
+
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password.login")
+    @patch("api.views.auth_password.OrganisationMember")
+    @patch("api.views.auth_password.Organisation")
+    def test_resets_password_with_valid_proof(self, mock_org, mock_om, mock_login, mock_tx):
+        """Password user can reset auth hash with correct identity key."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+
+        org = MagicMock()
+        org.identity_key = "valid_key"
+        mock_org.objects.get.return_value = org
+        mock_om.objects.filter.return_value.exists.return_value = True
+
+        request = _make_post(
+            "/auth/password/reset-via-recovery/",
+            {"newAuthHash": "new" * 20, "identityKey": "valid_key", "orgId": "org-1"},
+            user=user,
+        )
+        response = password_reset_via_recovery(request)
+
+        self.assertEqual(response.status_code, 200)
+        user.set_password.assert_called_once_with("new" * 20)
+        user.save.assert_called()
+        mock_login.assert_called_once()
+
+    @patch("api.views.auth_password.Organisation")
+    def test_rejects_invalid_identity_key(self, mock_org):
+        """Wrong identity key returns 403."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+
+        org = MagicMock()
+        org.identity_key = "real_key"
+        mock_org.objects.get.return_value = org
+
+        request = _make_post(
+            "/auth/password/reset-via-recovery/",
+            {"newAuthHash": "x", "identityKey": "wrong_key", "orgId": "org-1"},
+            user=user,
+        )
+        response = password_reset_via_recovery(request)
+
+        self.assertEqual(response.status_code, 403)
+        user.set_password.assert_not_called()
+
+    def test_noop_for_sso_user(self):
+        """SSO user gets a no-op success (no password to reset)."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = False
+
+        request = _make_post(
+            "/auth/password/reset-via-recovery/",
+            {"newAuthHash": "x", "identityKey": "k", "orgId": "org-1"},
+            user=user,
+        )
+        response = password_reset_via_recovery(request)
+
+        self.assertEqual(response.status_code, 200)
+        user.set_password.assert_not_called()
+
+    def test_rejects_missing_fields(self):
+        """Missing required fields returns 400."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+
+        request = _make_post(
+            "/auth/password/reset-via-recovery/",
+            {"newAuthHash": "x"},
+            user=user,
+        )
+        response = password_reset_via_recovery(request)
+
+        self.assertEqual(response.status_code, 400)
+
+
+# ---------------------------------------------------------------------------
+# email_check
+# ---------------------------------------------------------------------------
+
+class EmailCheckTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for POST /auth/email/check/."""
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_returns_credentials_for_password_user(self, mock_get_user):
+        """Known password user returns authMethod=credentials."""
+        User = MagicMock()
+        user = MagicMock()
+        user.has_usable_password.return_value = True
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/email/check/", {"email": "alice@example.com"})
+        response = email_check(request)
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data["authMethod"], "credentials")
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_returns_sso_for_sso_user(self, mock_get_user):
+        """Known SSO user returns authMethod=sso with provider."""
+        User = MagicMock()
+        user = MagicMock()
+        user.has_usable_password.return_value = False
+        social_acc = MagicMock()
+        social_acc.provider = "google"
+        user.socialaccount_set.first.return_value = social_acc
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/email/check/", {"email": "bob@example.com"})
+        response = email_check(request)
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data["authMethod"], "sso")
+        self.assertEqual(data["ssoProvider"], "google")
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_returns_credentials_for_unknown_email(self, mock_get_user):
+        """Unknown email returns authMethod=credentials (no enumeration leak)."""
+        User = MagicMock()
+        from api.models import CustomUser
+        User.DoesNotExist = CustomUser.DoesNotExist
+        User.objects.get.side_effect = CustomUser.DoesNotExist
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/email/check/", {"email": "nobody@example.com"})
+        response = email_check(request)
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data["authMethod"], "credentials")
+
+    def test_rejects_missing_email(self):
+        """Missing email returns 400."""
+        request = _make_post("/auth/email/check/", {})
+        response = email_check(request)
+
+        self.assertEqual(response.status_code, 400)
+
+
+# ---------------------------------------------------------------------------
+# resend_verification
+# ---------------------------------------------------------------------------
+
+class ResendVerificationTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for POST /auth/verify-email/resend/."""
+
+    @patch("api.views.auth_password._send_verification_email")
+    @patch("api.views.auth_password.EmailVerification")
+    @patch("api.views.auth_password.get_user_model")
+    def test_resend_creates_new_token(self, mock_get_user, mock_ev, mock_send_email):
+        """Resend deletes old token and creates new one."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = False
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/verify-email/resend/", {"email": "alice@example.com"})
+        response = resend_verification(request)
+
+        self.assertEqual(response.status_code, 200)
+        mock_ev.objects.filter.return_value.delete.assert_called_once()
+        mock_ev.objects.create.assert_called_once()
+        mock_send_email.assert_called_once()
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_resend_does_not_leak_for_unknown_email(self, mock_get_user):
+        """Unknown email gets same success message (no enumeration)."""
+        User = MagicMock()
+        from api.models import CustomUser
+        User.DoesNotExist = CustomUser.DoesNotExist
+        User.objects.get.side_effect = CustomUser.DoesNotExist
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/verify-email/resend/", {"email": "unknown@example.com"})
+        response = resend_verification(request)
+
+        self.assertEqual(response.status_code, 200)
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_resend_noop_for_already_active_user(self, mock_get_user):
+        """Already-active user gets same success message, no new token."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = True
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/verify-email/resend/", {"email": "active@example.com"})
+        response = resend_verification(request)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_resend_rejects_missing_email(self):
+        """Missing email returns 400."""
+        request = _make_post("/auth/verify-email/resend/", {})
+        response = resend_verification(request)
+
+        self.assertEqual(response.status_code, 400)
+
+
+# ---------------------------------------------------------------------------
+# skip email verification flag
+# ---------------------------------------------------------------------------
+
+class SkipEmailVerificationTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for SKIP_EMAIL_VERIFICATION env var."""
+
+    @patch("api.views.auth_password._skip_email_verification", return_value=True)
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password.EmailVerification")
+    @patch("api.views.auth_password.get_user_model")
+    def test_register_skips_verification(self, mock_get_user, mock_ev, mock_tx, mock_skip):
+        """With SKIP_EMAIL_VERIFICATION, user is active immediately."""
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = False
+        new_user = MagicMock()
+        User.objects.create_user.return_value = new_user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/password/register/", {
+            "email": "quick@example.com",
+            "authHash": "a" * 64,
+        })
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        self.assertTrue(data["verificationSkipped"])
+        # User should be set to active=True (skip_verification)
+        self.assertTrue(new_user.active)
+        # No verification token should be created
+        mock_ev.objects.create.assert_not_called()
+
+    @patch("api.views.auth_password._skip_email_verification", return_value=False)
+    @patch("api.views.auth_password._send_verification_email")
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password.EmailVerification")
+    @patch("api.views.auth_password.get_user_model")
+    def test_register_requires_verification_by_default(
+        self, mock_get_user, mock_ev, mock_tx, mock_send_email, mock_skip
+    ):
+        """Without flag, user is inactive and verification token is created."""
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = False
+        new_user = MagicMock()
+        User.objects.create_user.return_value = new_user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/password/register/", {
+            "email": "normal@example.com",
+            "authHash": "a" * 64,
+        })
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        self.assertNotIn("verificationSkipped", data)
+        mock_ev.objects.create.assert_called_once()
+        mock_send_email.assert_called_once()
+
+
+# ===========================================================================
+# End-to-end flow tests (multi-step scenarios)
+# ===========================================================================
+
+class PasswordSignupFlowTest(_ThrottleClearMixin, unittest.TestCase):
+    """Full password signup flow: register → verify → login."""
+
+    @patch("api.views.auth_password.login")
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password._send_verification_email")
+    @patch("api.views.auth_password.EmailVerification")
+    @patch("api.views.auth_password.get_user_model")
+    def test_full_password_signup_flow(
+        self, mock_get_user, mock_ev, mock_send_email, mock_tx, mock_login
+    ):
+        """Register → verify email → login succeeds."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = False
+        user.userId = "uuid-pw-1"
+        user.email = "newuser@example.com"
+        user.full_name = ""
+        user.auth_method = "password"
+        user.has_usable_password.return_value = True
+        user.socialaccount_set.first.return_value = None
+
+        User.objects.filter.return_value.exists.return_value = False
+        User.objects.create_user.return_value = user
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        # Step 1: Register
+        reg_request = _make_post("/auth/password/register/", {
+            "email": "newuser@example.com",
+            "authHash": "h" * 64,
+        })
+        reg_response = password_register(reg_request)
+        self.assertEqual(reg_response.status_code, 201)
+        mock_send_email.assert_called_once()
+
+        # Step 2: Verify email
+        ev = MagicMock()
+        ev.verified = False
+        ev.expires_at = timezone.now() + timedelta(hours=1)
+        ev.user = user
+        mock_ev.objects.select_related.return_value.get.return_value = ev
+
+        verify_request = _make_get("/auth/verify-email/token123/")
+        verify_response = verify_email(verify_request, "token123")
+        self.assertEqual(verify_response.status_code, 302)
+        self.assertIn("verified=true", verify_response.url)
+
+        # Step 3: Login (user now active)
+        user.active = True
+        user.check_password.return_value = True
+
+        login_request = _make_post("/auth/password/login/", {
+            "email": "newuser@example.com",
+            "authHash": "h" * 64,
+        })
+        login_response = password_login(login_request)
+        self.assertEqual(login_response.status_code, 200)
+        data = json.loads(login_response.content)
+        self.assertEqual(data["authMethod"], "password")
+        mock_login.assert_called_once()
+
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password.EmailVerification")
+    @patch("api.views.auth_password.get_user_model")
+    def test_login_blocked_before_verification(
+        self, mock_get_user, mock_ev, mock_tx
+    ):
+        """User cannot login before verifying email."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = False
+        User.objects.filter.return_value.exists.return_value = False
+        User.objects.create_user.return_value = user
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        # Register
+        reg_request = _make_post("/auth/password/register/", {
+            "email": "unverified@example.com",
+            "authHash": "h" * 64,
+        })
+        password_register(reg_request)
+
+        # Try to login without verifying — should fail
+        login_request = _make_post("/auth/password/login/", {
+            "email": "unverified@example.com",
+            "authHash": "h" * 64,
+        })
+        login_response = password_login(login_request)
+        self.assertEqual(login_response.status_code, 403)
+
+
+class SSOSignupFlowTest(_ThrottleClearMixin, unittest.TestCase):
+    """SSO login creates user with unusable password."""
+
+    def test_sso_user_has_unusable_password(self):
+        """SSO-created user has auth_method=sso and can't password-login."""
+        user = MagicMock()
+        user.has_usable_password.return_value = False
+        user.auth_method = "sso"
+
+        # Verify auth_method is sso
+        self.assertEqual(user.auth_method, "sso")
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_sso_user_cannot_password_login(self, mock_get_user):
+        """SSO user with unusable password fails password login."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = True
+        user.check_password.return_value = False  # unusable password always fails
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/password/login/", {
+            "email": "sso-user@example.com",
+            "authHash": "anything",
+        })
+        response = password_login(request)
+        self.assertEqual(response.status_code, 401)
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_email_check_routes_sso_user_to_provider(self, mock_get_user):
+        """email_check returns SSO provider for SSO user."""
+        User = MagicMock()
+        user = MagicMock()
+        user.has_usable_password.return_value = False
+        social_acc = MagicMock()
+        social_acc.provider = "okta-oidc"
+        user.socialaccount_set.first.return_value = social_acc
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/email/check/", {"email": "sso-user@example.com"})
+        response = email_check(request)
+
+        data = json.loads(response.content)
+        self.assertEqual(data["authMethod"], "sso")
+        self.assertEqual(data["ssoProvider"], "okta-oidc")
+
+
+class EmailCheckNoEnumerationTest(_ThrottleClearMixin, unittest.TestCase):
+    """email_check must not leak whether an email is registered."""
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_unknown_and_password_user_same_response(self, mock_get_user):
+        """Unknown email and password user both return 'credentials'."""
+        User = MagicMock()
+        from api.models import CustomUser
+
+        # Unknown email
+        User.DoesNotExist = CustomUser.DoesNotExist
+        User.objects.get.side_effect = CustomUser.DoesNotExist
+        mock_get_user.return_value = User
+
+        req1 = _make_post("/auth/email/check/", {"email": "unknown@example.com"})
+        resp1 = email_check(req1)
+        data1 = json.loads(resp1.content)
+
+        # Password user
+        User.objects.get.side_effect = None
+        pw_user = MagicMock()
+        pw_user.has_usable_password.return_value = True
+        User.objects.get.return_value = pw_user
+
+        req2 = _make_post("/auth/email/check/", {"email": "known@example.com"})
+        resp2 = email_check(req2)
+        data2 = json.loads(resp2.content)
+
+        # Both should return identical authMethod
+        self.assertEqual(data1["authMethod"], data2["authMethod"])
+        self.assertEqual(data1["authMethod"], "credentials")
+
+
+class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
+    """Password change: updates auth hash + re-encrypts per-org keyrings."""
+
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password.login")
+    @patch("api.views.auth_password.OrganisationMember")
+    def test_password_change_updates_per_org_keyrings(self, mock_om, mock_login, mock_tx):
+        """Changing password updates auth hash and wrapped keys for each org."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+        user.check_password.return_value = True
+
+        request = _make_post(
+            "/auth/password/change/",
+            {
+                "currentAuthHash": "old_hash",
+                "newAuthHash": "new_hash",
+                "orgKeys": [
+                    {"orgId": "org-a", "wrappedKeyring": "wk_a", "wrappedRecovery": "wr_a"},
+                    {"orgId": "org-b", "wrappedKeyring": "wk_b", "wrappedRecovery": "wr_b"},
+                ],
+            },
+            user=user,
+        )
+        response = password_change(request)
+
+        self.assertEqual(response.status_code, 200)
+        user.set_password.assert_called_once_with("new_hash")
+        # Each org updated separately — not one bulk update
+        self.assertEqual(mock_om.objects.filter.call_count, 2)
+        mock_login.assert_called_once()
+
+
+class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
+    """Recovery via mnemonic: password user resets auth hash without old password."""
+
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password.login")
+    @patch("api.views.auth_password.OrganisationMember")
+    @patch("api.views.auth_password.Organisation")
+    def test_password_user_recovery_resets_auth(self, mock_org, mock_om, mock_login, mock_tx):
+        """Password user can reset auth hash with valid identity key proof."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+
+        org = MagicMock()
+        org.identity_key = "matching_key"
+        mock_org.objects.get.return_value = org
+        mock_om.objects.filter.return_value.exists.return_value = True
+
+        request = _make_post(
+            "/auth/password/reset-via-recovery/",
+            {"newAuthHash": "recovered_hash", "identityKey": "matching_key", "orgId": "org-1"},
+            user=user,
+        )
+        response = password_reset_via_recovery(request)
+
+        self.assertEqual(response.status_code, 200)
+        user.set_password.assert_called_once_with("recovered_hash")
+        mock_login.assert_called_once()
+
+    @patch("api.views.auth_password.Organisation")
+    def test_recovery_rejects_wrong_identity_key(self, mock_org):
+        """Wrong identity key is rejected."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+
+        org = MagicMock()
+        org.identity_key = "real_key"
+        mock_org.objects.get.return_value = org
+
+        request = _make_post(
+            "/auth/password/reset-via-recovery/",
+            {"newAuthHash": "hash", "identityKey": "wrong_key", "orgId": "org-1"},
+            user=user,
+        )
+        response = password_reset_via_recovery(request)
+
+        self.assertEqual(response.status_code, 403)
+        user.set_password.assert_not_called()
+
+    def test_sso_user_recovery_skips_auth_reset(self):
+        """SSO user recovery doesn't touch password (no-op)."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = False
+
+        request = _make_post(
+            "/auth/password/reset-via-recovery/",
+            {"newAuthHash": "anything", "identityKey": "k", "orgId": "org-1"},
+            user=user,
+        )
+        response = password_reset_via_recovery(request)
+
+        self.assertEqual(response.status_code, 200)
+        user.set_password.assert_not_called()
+
+
+class CrossAuthMethodTest(_ThrottleClearMixin, unittest.TestCase):
+    """Tests for cross-auth-method edge cases."""
+
+    def test_sso_user_cannot_change_password(self):
+        """SSO users are blocked from password change."""
+        user = MagicMock()
+        user.is_authenticated = True
+        user.has_usable_password.return_value = False
+
+        request = _make_post(
+            "/auth/password/change/",
+            {
+                "currentAuthHash": "x",
+                "newAuthHash": "y",
+                "orgKeys": [{"orgId": "org-1", "wrappedKeyring": "wk", "wrappedRecovery": "wr"}],
+            },
+            user=user,
+        )
+        response = password_change(request)
+        self.assertEqual(response.status_code, 400)
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_email_check_password_user_gets_credentials(self, mock_get_user):
+        """Password user routed to credentials (password field)."""
+        User = MagicMock()
+        user = MagicMock()
+        user.has_usable_password.return_value = True
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/email/check/", {"email": "pw@example.com"})
+        response = email_check(request)
+        data = json.loads(response.content)
+        self.assertEqual(data["authMethod"], "credentials")
+
+    @patch("api.views.auth_password.get_user_model")
+    def test_email_check_sso_user_gets_provider(self, mock_get_user):
+        """SSO user routed to their SSO provider."""
+        User = MagicMock()
+        user = MagicMock()
+        user.has_usable_password.return_value = False
+        social = MagicMock()
+        social.provider = "github"
+        user.socialaccount_set.first.return_value = social
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/email/check/", {"email": "sso@example.com"})
+        response = email_check(request)
+        data = json.loads(response.content)
+        self.assertEqual(data["authMethod"], "sso")
+        self.assertEqual(data["ssoProvider"], "github")
