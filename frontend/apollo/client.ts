@@ -48,7 +48,9 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
 
   if (networkError) {
     console.log(`[Network error]: ${networkError}`)
-    if (networkError.message.includes('403')) handleSignout()
+    const publicPaths = ['/login', '/signup', '/lockbox']
+    const isPublicPage = publicPaths.some((p) => window.location.pathname.startsWith(p))
+    if (networkError.message.includes('403') && !isPublicPage) handleSignout()
   }
 })
 

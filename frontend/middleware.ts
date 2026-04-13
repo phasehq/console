@@ -39,6 +39,6 @@ export const config = {
      * - register (registration page)
      * - lockbox (public lockbox viewer)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|favicon.svg|assets|login|register|lockbox|api/health).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|favicon.svg|assets|login|signup|register|lockbox|api/health).*)',
   ],
 }

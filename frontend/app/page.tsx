@@ -32,7 +32,7 @@ export default function Home() {
   useEffect(() => {
     if (!loading && organisations !== null) {
       // if there is no org membership, send to onboarding
-      if (organisations.length === 0) router.push('/signup')
+      if (organisations.length === 0) router.push('/onboard')
       // if there is a single org membership, send to org home
       else if (organisations.length === 1) {
         const organisation = organisations[0]

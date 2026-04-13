@@ -152,4 +152,26 @@ describe('UserProvider', () => {
     // Should stay on login, not redirect
     expect(window.location.href).not.toContain('/login?callbackUrl=')
   })
+
+  it('does not redirect on /signup (public path for registration)', async () => {
+    usePathname.mockReturnValue('/signup')
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        href: 'http://localhost/signup',
+        pathname: '/signup',
+        search: '',
+      },
+    })
+
+    mockedAxios.get.mockRejectedValue({ response: { status: 403 } })
+
+    await act(async () => {
+      root.render(React.createElement(UserProvider, null, React.createElement(Consumer)))
+    })
+    await flushEffects()
+
+    // Should stay on signup, not redirect to login
+    expect(window.location.href).toBe('http://localhost/signup')
+  })
 })

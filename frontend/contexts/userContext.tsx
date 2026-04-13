@@ -27,7 +27,7 @@ const UserContext = createContext<UserContextValue>({
   refetch: async () => {},
 })
 
-const PUBLIC_PATHS = ['/login', '/register', '/lockbox']
+const PUBLIC_PATHS = ['/login', '/signup', '/lockbox']
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserData | null>(null)
