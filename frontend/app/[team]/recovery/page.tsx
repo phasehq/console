@@ -21,12 +21,17 @@ import {
   organisationSeed,
   organisationKeyring,
   deviceVaultKey,
+  passwordAuthHash,
   encryptAccountKeyring,
   encryptAccountRecovery,
 } from '@/utils/crypto'
+import { useUser } from '@/contexts/userContext'
+import axios from 'axios'
+import { UrlUtils } from '@/utils/auth'
 
 export default function Recovery({ params }: { params: { team: string } }) {
   const { data: session } = useSession()
+  const { user } = useUser()
   const [inputs, setInputs] = useState<Array<string>>([])
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
@@ -88,13 +93,33 @@ export default function Recovery({ params }: { params: { team: string } }) {
 
         setKeyring(accountKeyRing)
 
-        await updateWrappedSecrets({
-          variables: {
-            orgId: org!.id,
-            wrappedKeyring: encryptedKeyring,
-            wrappedRecovery: encryptedMnemonic,
-          },
-        })
+        if (user?.authMethod === 'password') {
+          const newAuthHash = await passwordAuthHash(deviceKey)
+          await axios.post(
+            UrlUtils.makeUrl(
+              process.env.NEXT_PUBLIC_BACKEND_API_BASE!,
+              'auth',
+              'password',
+              'reset-via-recovery'
+            ),
+            {
+              newAuthHash,
+              identityKey: accountKeyRing.publicKey,
+              orgId: org!.id,
+              wrappedKeyring: encryptedKeyring,
+              wrappedRecovery: encryptedMnemonic,
+            },
+            { withCredentials: true }
+          )
+        } else {
+          await updateWrappedSecrets({
+            variables: {
+              orgId: org!.id,
+              wrappedKeyring: encryptedKeyring,
+              wrappedRecovery: encryptedMnemonic,
+            },
+          })
+        }
 
         if (savePassword) {
           setDevicePassword(org?.memberId!, pw)
