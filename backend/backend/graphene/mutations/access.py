@@ -4,8 +4,9 @@ from api.models import (
     OrganisationMember,
     Role,
     ServiceAccount,
+    TeamMembership,
 )
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import user_has_permission, role_has_global_access
 from backend.graphene.types import NetworkAccessPolicyType, RoleType, IdentityType
 from api.models import Identity
 from django.utils import timezone
@@ -490,6 +491,12 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
                 "You don't have the permissions required to delete Network Access Policies in this organisation"
             )
 
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation_id=organisation_id,
+            deleted_at=None,
+        )
+
         for account_input in account_inputs:
             account_filter = {
                 "organisation_id": organisation_id,
@@ -501,6 +508,21 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
                 if account_input.account_type == AccountTypeEnum.USER
                 else ServiceAccount.objects.get(**account_filter)
             )
+
+            # For team-owned SAs, verify team membership
+            if (
+                account_input.account_type != AccountTypeEnum.USER
+                and account.team is not None
+                and not role_has_global_access(org_member.role)
+                and not TeamMembership.objects.filter(
+                    team=account.team,
+                    org_member=org_member,
+                    team__deleted_at__isnull=True,
+                ).exists()
+            ):
+                raise GraphQLError(
+                    "You don't have access to this Service Account"
+                )
 
             account.network_policies.set(
                 NetworkAccessPolicy.objects.filter(id__in=account_input.policy_ids)

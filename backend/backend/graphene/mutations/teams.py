@@ -8,6 +8,7 @@ from api.models import (
     OrganisationMember,
     Role,
     ServiceAccount,
+    ServiceAccountToken,
     Team,
     TeamAppEnvironment,
     TeamMembership,
@@ -184,6 +185,15 @@ class DeleteTeamMutation(graphene.Mutation):
         # Revoke all team environment key grants
         revoke_team_environment_keys(team)
 
+        # Soft-delete team-owned service accounts and their tokens
+        now = timezone.now()
+        for sa in ServiceAccount.objects.filter(team=team, deleted_at__isnull=True):
+            sa.deleted_at = now
+            sa.save()
+            ServiceAccountToken.objects.filter(
+                service_account=sa, deleted_at__isnull=True
+            ).update(deleted_at=now)
+
         team.deleted_at = timezone.now()
         team.save()
 
@@ -285,6 +295,12 @@ class RemoveTeamMemberMutation(graphene.Mutation):
             revoke_team_environment_keys(team, member=member)
         else:
             member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
+            # Block removing a team-owned SA from its owning team
+            if member.team_id == team.id:
+                raise GraphQLError(
+                    "This service account is owned by this team and cannot be removed. "
+                    "Delete the service account instead, or transfer ownership first."
+                )
             membership = TeamMembership.objects.get(team=team, service_account=member)
             revoke_team_environment_keys(team, member=member)
 

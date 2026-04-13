@@ -1,9 +1,10 @@
 from api.utils.access.permissions import (
+    role_has_global_access,
     user_can_access_app,
     user_has_permission,
     user_is_org_member,
 )
-from api.models import App, Organisation, OrganisationMember, Role, ServiceAccount
+from api.models import App, Organisation, OrganisationMember, Role, ServiceAccount, TeamMembership
 from .access import resolve_organisation_global_access_users
 from django.db.models import Q
 from graphql import GraphQLError
@@ -18,7 +19,20 @@ def resolve_service_accounts(root, info, org_id, service_account_id=None):
         if service_account_id is not None:
             filter["id"] = service_account_id
 
-        return ServiceAccount.objects.filter(**filter)
+        qs = ServiceAccount.objects.filter(**filter)
+
+        # Team-owned SAs: only visible to team members + global_access users
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user, organisation=org, deleted_at=None
+        )
+        if not role_has_global_access(org_member.role):
+            user_team_ids = TeamMembership.objects.filter(
+                org_member=org_member,
+                team__deleted_at__isnull=True,
+            ).values_list("team_id", flat=True)
+            qs = qs.filter(Q(team__isnull=True) | Q(team_id__in=user_team_ids))
+
+        return qs
 
 
 def resolve_service_account_handlers(root, info, org_id):

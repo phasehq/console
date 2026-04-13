@@ -34,6 +34,7 @@ from backend.graphene.mutations.service_accounts import (
     EnableServiceAccountServerSideKeyManagementMutation,
     UpdateServiceAccountHandlersMutation,
     UpdateServiceAccountMutation,
+    UpdateServiceAccountOwnershipMutation,
 )
 from api.utils.syncing.vercel.main import VercelTeamProjectsType
 from .graphene.queries.syncing import (
@@ -1150,6 +1151,7 @@ class Mutation(graphene.ObjectType):
     delete_service_account = DeleteServiceAccountMutation.Field()
     create_service_account_token = CreateServiceAccountTokenMutation.Field()
     delete_service_account_token = DeleteServiceAccountTokenMutation.Field()
+    update_service_account_ownership = UpdateServiceAccountOwnershipMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
     delete_env_sync = DeleteSync.Field()
