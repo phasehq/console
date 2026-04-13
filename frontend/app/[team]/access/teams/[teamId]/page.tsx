@@ -308,15 +308,15 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {userCanUpdateTeams && !team.isScimManaged && (
+                <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="service-accounts" buttonVariant="secondary" />
+              )}
               {userCanCreateSA && (
                 <CreateServiceAccountDialog
                   teamId={team.id}
                   teamName={team.name}
                   teamRole={team.serviceAccountRole}
                 />
-              )}
-              {userCanUpdateTeams && !team.isScimManaged && (
-                <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="service-accounts" />
               )}
             </div>
           </div>
