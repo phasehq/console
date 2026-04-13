@@ -183,6 +183,76 @@ describe('Account Recovery Encryption and Decryption Tests', () => {
   })
 })
 
+describe('Password Auth Hash Tests', () => {
+  const password = 'correct-horse-staple-battery'
+  const email = 'satoshi@gmx.com'
+
+  test('passwordAuthHash produces consistent output for same masterKey', async () => {
+    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
+    const masterKey = await deviceVaultKey(password, email)
+    const hash1 = await passwordAuthHash(masterKey)
+    const hash2 = await passwordAuthHash(masterKey)
+    expect(hash1).toBe(hash2)
+  })
+
+  test('passwordAuthHash output is 64-char hex string (32 bytes)', async () => {
+    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
+    const masterKey = await deviceVaultKey(password, email)
+    const hash = await passwordAuthHash(masterKey)
+    expect(hash).toMatch(/^[a-f0-9]{64}$/)
+  })
+
+  test('passwordAuthHash differs from masterKey', async () => {
+    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
+    const masterKey = await deviceVaultKey(password, email)
+    const hash = await passwordAuthHash(masterKey)
+    expect(hash).not.toBe(masterKey)
+  })
+
+  test('different masterKeys produce different authHashes', async () => {
+    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
+    const masterKey1 = await deviceVaultKey(password, email)
+    const masterKey2 = await deviceVaultKey('different-password-here!!', email)
+    const hash1 = await passwordAuthHash(masterKey1)
+    const hash2 = await passwordAuthHash(masterKey2)
+    expect(hash1).not.toBe(hash2)
+  })
+
+  test('authHash cannot reverse to masterKey (one-way)', async () => {
+    // This is a property test: authHash is a BLAKE2b hash of masterKey,
+    // so the authHash should not contain the masterKey as a substring
+    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
+    const masterKey = await deviceVaultKey(password, email)
+    const hash = await passwordAuthHash(masterKey)
+    expect(hash).not.toBe(masterKey)
+    expect(masterKey).not.toContain(hash)
+    expect(hash).not.toContain(masterKey)
+  })
+
+  test('full double-derivation: password → masterKey → authHash', async () => {
+    // Verifies the complete protocol works end-to-end
+    const { deviceVaultKey, passwordAuthHash, encryptAccountKeyring, decryptAccountKeyring } =
+      await import('@/utils/crypto')
+
+    const masterKey = await deviceVaultKey(password, email)
+    const authHash = await passwordAuthHash(masterKey)
+
+    // masterKey encrypts keyring (client-side)
+    const keyring = {
+      symmetricKey: 'a'.repeat(64),
+      privateKey: 'b'.repeat(128),
+      publicKey: 'c'.repeat(64),
+    }
+    const encrypted = await encryptAccountKeyring(keyring, masterKey)
+    const decrypted = await decryptAccountKeyring(encrypted, masterKey)
+    expect(decrypted).toEqual(keyring)
+
+    // authHash is what goes to the server (different from masterKey)
+    expect(authHash).not.toBe(masterKey)
+    expect(authHash).toMatch(/^[a-f0-9]{64}$/)
+  })
+})
+
 describe('Wrapped Key Share Tests', () => {
   const exampleKeyShare = 'examplekeysharedata'
   const wrapKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' // Example wrap key, 64-character hex string

@@ -87,6 +87,29 @@ export const deviceVaultKey = async (password: string, email: string): Promise<s
 }
 
 /**
+ * Derives an authentication hash from the masterKey (output of deviceVaultKey).
+ * This hash is sent to the server for password verification — the server never
+ * sees the masterKey itself (which encrypts the keyring).
+ *
+ * BLAKE2b-256 with key="phaseAuth" is essentially free (~microseconds) on top
+ * of the Argon2id derivation that produces masterKey.
+ *
+ * @param {string} masterKey - hex-encoded masterKey from deviceVaultKey()
+ * @returns {Promise<string>} - hex-encoded auth hash to send to server
+ */
+export const passwordAuthHash = async (masterKey: string): Promise<string> => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  const hash = sodium.crypto_generichash(
+    32,
+    sodium.from_hex(masterKey),
+    sodium.from_string('phaseAuth')
+  )
+  return sodium.to_hex(hash)
+}
+
+/**
  * Encrypts the account keyring for local storage
  *
  * @param {OrganisationKeyring} keyring - Account keyring
