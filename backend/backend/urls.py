@@ -17,6 +17,15 @@ from api.views.sso import (
     SSOAuthorizeView,
     SSOCallbackView,
 )
+from api.views.auth_password import (
+    password_register,
+    password_login,
+    password_change,
+    password_reset_via_recovery,
+    verify_email,
+    resend_verification,
+    email_check,
+)
 from api.views.identities.aws.iam import aws_iam_auth
 from api.views.identities.azure.entra import azure_entra_auth
 from api.views.kms import kms
@@ -36,6 +45,14 @@ urlpatterns = [
     path("auth/me/", auth_me),
     path("auth/sso/<str:provider>/authorize/", SSOAuthorizeView.as_view()),
     path("auth/sso/<str:provider>/callback/", SSOCallbackView.as_view()),
+    # Password auth
+    path("auth/password/register/", password_register),
+    path("auth/password/login/", password_login),
+    path("auth/password/change/", password_change),
+    path("auth/password/reset-via-recovery/", password_reset_via_recovery),
+    path("auth/verify-email/resend/", resend_verification),
+    path("auth/verify-email/<str:token>/", verify_email),
+    path("auth/email/check/", email_check),
     # GraphQL API
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     # OAuth integrations
