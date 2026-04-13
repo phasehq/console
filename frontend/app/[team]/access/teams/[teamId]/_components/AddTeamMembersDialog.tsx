@@ -1,10 +1,6 @@
 'use client'
 
-import {
-  OrganisationMemberType,
-  ServiceAccountType,
-  TeamMembershipType,
-} from '@/apollo/graphql'
+import { OrganisationMemberType, ServiceAccountType, TeamMembershipType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
@@ -20,15 +16,18 @@ import { FaPlus, FaSearch, FaTimesCircle, FaUsers, FaRobot } from 'react-icons/f
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { Tab } from '@headlessui/react'
+import { Alert } from '@/components/common/Alert'
 
 export const AddTeamMembersDialog = ({
   teamId,
   existingMembers,
   mode = 'all',
+  buttonVariant = 'primary',
 }: {
   teamId: string
   existingMembers: TeamMembershipType[]
   mode?: 'all' | 'members' | 'service-accounts'
+  buttonVariant?: 'primary' | 'secondary'
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -79,9 +78,7 @@ export const AddTeamMembersDialog = ({
 
   const filteredSAs =
     searchQuery !== ''
-      ? availableSAs.filter((sa) =>
-          sa.name?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+      ? availableSAs.filter((sa) => sa.name?.toLowerCase().includes(searchQuery.toLowerCase()))
       : availableSAs
 
   const toggleMember = (id: string) => {
@@ -145,9 +142,7 @@ export const AddTeamMembersDialog = ({
       if (selectedMembers.size > 0)
         parts.push(`${selectedMembers.size} member${selectedMembers.size !== 1 ? 's' : ''}`)
       if (selectedSAs.size > 0)
-        parts.push(
-          `${selectedSAs.size} service account${selectedSAs.size !== 1 ? 's' : ''}`
-        )
+        parts.push(`${selectedSAs.size} service account${selectedSAs.size !== 1 ? 's' : ''}`)
       toast.success(`Added ${parts.join(' and ')} to team`)
       reset()
       dialogRef.current?.closeModal()
@@ -189,7 +184,13 @@ export const AddTeamMembersDialog = ({
     <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
       <FaSearch className="text-neutral-500 text-xs shrink-0" />
       <input
-        placeholder={mode === 'service-accounts' ? 'Search service accounts' : mode === 'members' ? 'Search members' : 'Search accounts'}
+        placeholder={
+          mode === 'service-accounts'
+            ? 'Search service accounts'
+            : mode === 'members'
+              ? 'Search members'
+              : 'Search accounts'
+        }
         className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 w-full text-xs py-1.5"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
@@ -267,7 +268,7 @@ export const AddTeamMembersDialog = ({
           <FaPlus /> {buttonLabel}
         </>
       }
-      buttonVariant="primary"
+      buttonVariant={buttonVariant}
       ref={dialogRef}
       onClose={reset}
     >
@@ -324,6 +325,11 @@ export const AddTeamMembersDialog = ({
           </Tab.Group>
         ) : (
           <>
+            {mode === 'service-accounts' && (
+              <Alert variant="warning" icon size="sm">
+                These accounts can be managed by other teams or users outside this team.
+              </Alert>
+            )}
             {searchBar}
             {mode === 'members' ? membersList : saList}
           </>

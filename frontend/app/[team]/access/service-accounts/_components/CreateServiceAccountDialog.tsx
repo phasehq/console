@@ -190,7 +190,7 @@ export const CreateServiceAccountDialog = ({
           {isTeamContext ? <FaLink /> : <FaPlus />} {buttonLabel}
         </>
       }
-      buttonVariant={isTeamContext ? 'secondary' : 'primary'}
+      buttonVariant="primary"
       size="md"
       ref={dialogRef}
     >
@@ -200,7 +200,7 @@ export const CreateServiceAccountDialog = ({
             <Alert variant="info" icon size="sm">
               <span className="text-xs">
                 This service account will be owned by <strong>{teamName}</strong> and only visible
-                to team members. It cannot be removed from the team — only deleted or transferred.
+                to team members.
               </span>
             </Alert>
           )}
