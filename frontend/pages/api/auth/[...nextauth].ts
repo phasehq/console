@@ -48,6 +48,7 @@ export const authOptions: NextAuthOptionsCallback = (_req, res) => {
         GitHubProvider({
           clientId: process.env.GITHUB_CLIENT_ID,
           clientSecret: clientSecret,
+          issuer: 'https://github.com/login/oauth',
         })
       )
     }
