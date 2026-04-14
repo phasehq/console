@@ -35,11 +35,11 @@ export const Checkbox = (props: {
           styles.box,
           label && styles.offset,
           checked
-            ? 'bg-emerald-500 dark:bg-emerald-600 ring-emerald-500'
+            ? 'bg-emerald-500 ring-emerald-500 dark:bg-emerald-400/20 dark:ring-emerald-400/20'
             : 'bg-zinc-100 dark:bg-zinc-800 ring-neutral-500/40 group-hover:ring-neutral-500/60'
         )}
       >
-        {checked && <FaCheck className={clsx('text-white', styles.icon)} />}
+        {checked && <FaCheck className={clsx('text-white dark:text-emerald-400', styles.icon)} />}
       </div>
       {label && <span className="text-xs text-neutral-500 text-left select-none">{label}</span>}
     </button>
