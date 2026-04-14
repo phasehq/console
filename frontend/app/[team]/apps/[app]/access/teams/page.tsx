@@ -8,7 +8,7 @@ import { useQuery } from '@apollo/client'
 import { useContext } from 'react'
 import { FaBan, FaExclamationTriangle, FaRobot, FaUsers } from 'react-icons/fa'
 import { RoleLabel } from '@/components/users/RoleLabel'
-import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { AddTeamToAppDialog } from './_components/AddTeamToAppDialog'
@@ -20,17 +20,10 @@ import Link from 'next/link'
 export default function AppTeams({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanReadTeams = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
-    : false
+  const { hasPermission, isGlobalAccess: userIsGlobalAccess } = useAppPermissions(params.app)
 
-  const userCanUpdateTeams = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Teams', 'update')
-    : false
-
-  const userIsGlobalAccess = organisation
-    ? userHasGlobalAccess(organisation.role!.permissions)
-    : false
+  const userCanReadTeams = hasPermission('Teams', 'read', true)
+  const userCanUpdateTeams = hasPermission('Teams', 'update', true)
 
   const { data: teamsData, loading: teamsLoading } = useQuery(GetTeams, {
     variables: { organisationId: organisation?.id },

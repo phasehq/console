@@ -16,7 +16,7 @@ import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { FaServer } from 'react-icons/fa6'
 import { organisationContext } from '@/contexts/organisationContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/crypto'
-import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import Link from 'next/link'
 
 export const EnableSSEDialog = (props: { appId: string }) => {
@@ -29,9 +29,9 @@ export const EnableSSEDialog = (props: { appId: string }) => {
   const [enableSse, { loading }] = useMutation(InitAppSyncing)
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
 
-  const userCanEnableSSE = organisation
-    ? userHasPermission(organisation.role?.permissions, 'EncryptionMode', 'update', true)
-    : false
+  const { hasPermission } = useAppPermissions(appId)
+
+  const userCanEnableSSE = hasPermission('EncryptionMode', 'update', true)
 
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {

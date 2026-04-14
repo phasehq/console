@@ -8,6 +8,7 @@ import { ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaBan, FaRobot, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { TeamLabel } from '@/components/teams/TeamLabel'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -25,22 +26,16 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
   const [searchQuery, setSearchQuery] = useState('')
 
   // Permissions
-  const userCanReadAppSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(params.app)
+
+  const userCanReadAppSA = hasPermission('ServiceAccounts', 'read', true)
 
   // AppServiceAccounts:create + ServiceAccounts: read
-  const userCanAddAppSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create', true) &&
-      userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
-    : false
-  const userCanRemoveAppSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete', true)
-    : false
+  const userCanAddAppSA =
+    hasPermission('ServiceAccounts', 'create', true) && hasPermission('ServiceAccounts', 'read')
+  const userCanRemoveAppSA = hasPermission('ServiceAccounts', 'delete', true)
 
-  const userCanReadTeams = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
-    : false
+  const userCanReadTeams = hasPermission('Teams', 'read')
 
   const { data, loading } = useQuery(GetAppServiceAccounts, {
     variables: { appId: params.app },
