@@ -52,6 +52,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     userId = models.TextField(default=uuid4, primary_key=True, editable=False)
     username = models.CharField(max_length=64, unique=True, null=False, blank=False)
     email = models.EmailField(max_length=100, unique=True, null=False, blank=False)
+    full_name = models.CharField(max_length=128, blank=True, default="")
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["email"]
