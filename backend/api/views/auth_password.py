@@ -160,6 +160,8 @@ def password_register(request):
             password=auth_hash,
         )
         user.active = skip_verification
+        if full_name:
+            user.full_name = full_name
         user.save()
 
         if not skip_verification:
