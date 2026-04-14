@@ -72,12 +72,13 @@ class PasswordRegisterTest(_ThrottleClearMixin, unittest.TestCase):
         "fullName": "Alice Test",
     }
 
+    @patch("api.views.auth_password._smtp_configured", return_value=True)
     @patch("api.views.auth_password.transaction")
     @patch("api.views.auth_password._send_verification_email")
     @patch("api.views.auth_password.EmailVerification")
     @patch("api.views.auth_password.get_user_model")
     def test_register_creates_user(
-        self, mock_get_user, mock_ev, mock_send_email, mock_tx
+        self, mock_get_user, mock_ev, mock_send_email, mock_tx, mock_smtp
     ):
         """Successful registration creates user + verification token."""
         User = MagicMock()
@@ -420,12 +421,13 @@ class PasswordChangeTest(_ThrottleClearMixin, unittest.TestCase):
 class VerificationEmailLoggingTest(_ThrottleClearMixin, unittest.TestCase):
     """Ensure verification URL is always logged."""
 
+    @patch("api.views.auth_password._smtp_configured", return_value=True)
     @patch("api.views.auth_password.transaction")
     @patch("api.views.auth_password._send_verification_email")
     @patch("api.views.auth_password.EmailVerification")
     @patch("api.views.auth_password.get_user_model")
     def test_verification_url_logged(
-        self, mock_get_user, mock_ev, mock_send_email, mock_tx
+        self, mock_get_user, mock_ev, mock_send_email, mock_tx, mock_smtp
     ):
         """Registration always calls _send_verification_email which logs."""
         User = MagicMock()
@@ -696,13 +698,14 @@ class SkipEmailVerificationTest(_ThrottleClearMixin, unittest.TestCase):
         # No verification token should be created
         mock_ev.objects.create.assert_not_called()
 
+    @patch("api.views.auth_password._smtp_configured", return_value=True)
     @patch("api.views.auth_password._skip_email_verification", return_value=False)
     @patch("api.views.auth_password._send_verification_email")
     @patch("api.views.auth_password.transaction")
     @patch("api.views.auth_password.EmailVerification")
     @patch("api.views.auth_password.get_user_model")
     def test_register_requires_verification_by_default(
-        self, mock_get_user, mock_ev, mock_tx, mock_send_email, mock_skip
+        self, mock_get_user, mock_ev, mock_tx, mock_send_email, mock_skip, mock_smtp
     ):
         """Without flag, user is inactive and verification token is created."""
         User = MagicMock()
@@ -731,13 +734,14 @@ class SkipEmailVerificationTest(_ThrottleClearMixin, unittest.TestCase):
 class PasswordSignupFlowTest(_ThrottleClearMixin, unittest.TestCase):
     """Full password signup flow: register → verify → login."""
 
+    @patch("api.views.auth_password._smtp_configured", return_value=True)
     @patch("api.views.auth_password.login")
     @patch("api.views.auth_password.transaction")
     @patch("api.views.auth_password._send_verification_email")
     @patch("api.views.auth_password.EmailVerification")
     @patch("api.views.auth_password.get_user_model")
     def test_full_password_signup_flow(
-        self, mock_get_user, mock_ev, mock_send_email, mock_tx, mock_login
+        self, mock_get_user, mock_ev, mock_send_email, mock_tx, mock_login, mock_smtp
     ):
         """Register → verify email → login succeeds."""
         User = MagicMock()
@@ -790,11 +794,12 @@ class PasswordSignupFlowTest(_ThrottleClearMixin, unittest.TestCase):
         self.assertEqual(data["authMethod"], "password")
         mock_login.assert_called_once()
 
+    @patch("api.views.auth_password._smtp_configured", return_value=True)
     @patch("api.views.auth_password.transaction")
     @patch("api.views.auth_password.EmailVerification")
     @patch("api.views.auth_password.get_user_model")
     def test_login_blocked_before_verification(
-        self, mock_get_user, mock_ev, mock_tx
+        self, mock_get_user, mock_ev, mock_tx, mock_smtp
     ):
         """User cannot login before verifying email."""
         User = MagicMock()
