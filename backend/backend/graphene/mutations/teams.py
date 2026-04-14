@@ -40,6 +40,13 @@ def _check_team_membership(user, team):
         raise GraphQLError("You don't have access to this team")
 
 
+def _is_team_creator(user, team):
+    """Check if the user is the creator of the team."""
+    if team.created_by is None:
+        return False
+    return team.created_by.user_id == user.userId
+
+
 class CreateTeamMutation(graphene.Mutation):
     class Arguments:
         organisation_id = graphene.ID(required=True)
@@ -355,8 +362,8 @@ class AddTeamAppsMutation(graphene.Mutation):
         for app_env in app_envs:
             app = App.objects.get(id=app_env.app_id, organisation=org)
 
-            # Check app-level Teams permission (respects team role overrides)
-            if not user_has_permission(user, "create", "Teams", org, is_app_resource=True, app=app):
+            # Check app-level Teams permission (team creators always have access)
+            if not _is_team_creator(user, team) and not user_has_permission(user, "create", "Teams", org, is_app_resource=True, app=app):
                 raise GraphQLError(
                     f"You don't have permission to add teams to app '{app.name}'"
                 )
@@ -409,8 +416,8 @@ class RemoveTeamAppMutation(graphene.Mutation):
 
         app = App.objects.get(id=app_id, organisation=org)
 
-        # Check app-level Teams permission (respects team role overrides)
-        if not user_has_permission(user, "delete", "Teams", org, is_app_resource=True, app=app):
+        # Check app-level Teams permission (team creators always have access)
+        if not _is_team_creator(user, team) and not user_has_permission(user, "delete", "Teams", org, is_app_resource=True, app=app):
             raise GraphQLError(
                 "You don't have permission to remove teams from this app"
             )
@@ -447,8 +454,8 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
 
         app = App.objects.get(id=app_id, organisation=org)
 
-        # Check app-level Teams permission (respects team role overrides)
-        if not user_has_permission(user, "update", "Teams", org, is_app_resource=True, app=app):
+        # Check app-level Teams permission (team creators always have access)
+        if not _is_team_creator(user, team) and not user_has_permission(user, "update", "Teams", org, is_app_resource=True, app=app):
             raise GraphQLError(
                 "You don't have permission to manage team environments for this app"
             )
