@@ -195,7 +195,11 @@ class OrganisationMemberType(DjangoObjectType):
     def resolve_full_name(self, info):
         social_acc = self.user.socialaccount_set.first()
         if social_acc:
-            return social_acc.extra_data.get("name")
+            name = social_acc.extra_data.get("name")
+            if name:
+                return name
+        if self.user.full_name:
+            return self.user.full_name
         return None
 
     def resolve_avatar_url(self, info):
