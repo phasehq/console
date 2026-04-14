@@ -10,7 +10,7 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { UpdateTeamOp } from '@/graphql/mutations/teams/updateTeam.gql'
 import { useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useRef, useState } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { FaCog, FaChevronDown, FaUserShield, FaRobot } from 'react-icons/fa'
 import { Listbox } from '@headlessui/react'
 import clsx from 'clsx'
@@ -116,7 +116,16 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
     (team.serviceAccountRole as RoleType) || null
   )
 
-  const roleOptions = roleData?.roles || []
+  // Sync state when team prop updates (e.g. after refetch)
+  useEffect(() => {
+    setName(team.name)
+    setDescription(team.description || '')
+    setMemberRole((team.memberRole as RoleType) || null)
+    setSaRole((team.serviceAccountRole as RoleType) || null)
+  }, [team.name, team.description, team.memberRole, team.serviceAccountRole])
+
+  const roleOptions: RoleType[] =
+    roleData?.roles?.filter((role: RoleType) => role.name?.toLowerCase() !== 'owner') || []
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

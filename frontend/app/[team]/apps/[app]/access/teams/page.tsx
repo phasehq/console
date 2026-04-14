@@ -6,17 +6,16 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { useQuery } from '@apollo/client'
 import { useContext } from 'react'
-import { FaBan, FaExclamationTriangle, FaUsers } from 'react-icons/fa'
-import { userHasPermission } from '@/utils/access/permissions'
+import { FaBan, FaExclamationTriangle, FaRobot, FaUsers } from 'react-icons/fa'
+import { RoleLabel } from '@/components/users/RoleLabel'
+import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
-import { Avatar } from '@/components/common/Avatar'
-import { RoleLabel } from '@/components/users/RoleLabel'
 import { AddTeamToAppDialog } from './_components/AddTeamToAppDialog'
 import { RemoveTeamFromAppDialog } from './_components/RemoveTeamFromAppDialog'
 import { ManageTeamEnvsDialog } from './_components/ManageTeamEnvsDialog'
 import Link from 'next/link'
-import clsx from 'clsx'
+
 
 export default function AppTeams({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -27,6 +26,10 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
 
   const userCanUpdateTeams = organisation
     ? userHasPermission(organisation.role!.permissions, 'Teams', 'update')
+    : false
+
+  const userIsGlobalAccess = organisation
+    ? userHasGlobalAccess(organisation.role!.permissions)
     : false
 
   const { data: teamsData, loading: teamsLoading } = useQuery(GetTeams, {
@@ -123,10 +126,11 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                     (tae: TeamAppEnvironmentType | null) => tae?.app?.id === params.app
                   ) || []
 
-                const orgMembers = team.members?.filter((m) => m.orgMember) || []
-                const sas = team.members?.filter((m) => m.serviceAccount) || []
-                const surplusMemberCount = orgMembers.length > 5 ? orgMembers.length - 5 : 0
-                const surplusSaCount = sas.length > 3 ? sas.length - 3 : 0
+                const memberCount = team.members?.filter((m) => m.orgMember).length || 0
+                const saCount = team.members?.filter((m) => m.serviceAccount).length || 0
+                const isTeamOwner =
+                  userIsGlobalAccess ||
+                  team.createdBy?.id === organisation?.memberId
 
                 return (
                   <tr key={team.id} className="group">
@@ -144,78 +148,26 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                       </Link>
                     </td>
                     <td className="hidden md:table-cell px-6 py-2">
-                      <div className="space-y-1.5">
-                        {orgMembers.length > 0 && (
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-1.5">
-                              <div className="flex items-center">
-                                {orgMembers.slice(0, 5).map((m, i) => (
-                                  <div
-                                    key={m.id}
-                                    className={clsx('rounded-full', i !== 0 && '-ml-2')}
-                                    style={{ zIndex: i }}
-                                  >
-                                    <Avatar
-                                      user={{
-                                        name: m.fullName,
-                                        email: m.email,
-                                        image: m.avatarUrl,
-                                      }}
-                                      size="xs"
-                                      showTitle={false}
-                                    />
-                                  </div>
-                                ))}
-                                {surplusMemberCount > 0 && (
-                                  <span className="text-neutral-500 text-xs ml-1">
-                                    +{surplusMemberCount}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-2xs text-neutral-500">
-                                {orgMembers.length} member
-                                {orgMembers.length !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                            {team.memberRole && (
-                              <RoleLabel role={team.memberRole} size="xs" />
-                            )}
+                      <div className="space-y-1">
+                        {memberCount > 0 && (
+                          <div className="flex items-center gap-1.5 text-2xs text-neutral-500">
+                            <FaUsers className="text-xs" />
+                            <span>
+                              {memberCount} member{memberCount !== 1 ? 's' : ''}
+                            </span>
+                            {team.memberRole && <RoleLabel role={team.memberRole} size="xs" />}
                           </div>
                         )}
-                        {sas.length > 0 && (
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-1.5">
-                              <div className="flex items-center">
-                                {sas.slice(0, 3).map((m, i) => (
-                                  <div
-                                    key={m.id}
-                                    className={clsx('rounded-full', i !== 0 && '-ml-2')}
-                                    style={{ zIndex: i }}
-                                  >
-                                    <Avatar
-                                      serviceAccount={m.serviceAccount!}
-                                      size="xs"
-                                      showTitle={false}
-                                    />
-                                  </div>
-                                ))}
-                                {surplusSaCount > 0 && (
-                                  <span className="text-neutral-500 text-xs ml-1">
-                                    +{surplusSaCount}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-2xs text-neutral-500">
-                                {sas.length} Service Account
-                                {sas.length !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                            {team.serviceAccountRole && (
-                              <RoleLabel role={team.serviceAccountRole} size="xs" />
-                            )}
+                        {saCount > 0 && (
+                          <div className="flex items-center gap-1.5 text-2xs text-neutral-500">
+                            <FaRobot className="text-xs" />
+                            <span>
+                              {saCount} service account{saCount !== 1 ? 's' : ''}
+                            </span>
+                            {team.serviceAccountRole && <RoleLabel role={team.serviceAccountRole} size="xs" />}
                           </div>
                         )}
-                        {orgMembers.length === 0 && sas.length === 0 && (
+                        {memberCount === 0 && saCount === 0 && (
                           <span className="text-2xs text-neutral-500">No members</span>
                         )}
                       </div>
@@ -228,8 +180,9 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                           appId={params.app}
                           appEnvironments={appEnvironments}
                           teamEnvs={teamEnvs as TeamAppEnvironmentType[]}
+                          canManage={isTeamOwner && userCanUpdateTeams}
                         />
-                        {userCanUpdateTeams && (
+                        {isTeamOwner && userCanUpdateTeams && (
                           <div className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
                             <RemoveTeamFromAppDialog
                               teamId={team.id}

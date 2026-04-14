@@ -3,7 +3,7 @@
 import { EnvironmentType, TeamAppEnvironmentType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
-import { ToggleSwitch } from '@/components/common/ToggleSwitch'
+import { Checkbox } from '@/components/common/Checkbox'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -20,12 +20,14 @@ export const ManageTeamEnvsDialog = ({
   appId,
   appEnvironments,
   teamEnvs,
+  canManage = true,
 }: {
   teamId: string
   teamName: string
   appId: string
   appEnvironments: EnvironmentType[]
   teamEnvs: TeamAppEnvironmentType[]
+  canManage?: boolean
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const [updateEnvs, { loading }] = useMutation(UpdateTeamAppEnvironmentsOp)
@@ -120,7 +122,7 @@ export const ManageTeamEnvsDialog = ({
       <span className="text-zinc-900 dark:text-zinc-100 text-2xs font-medium">
         {scopeLabel || 'None'}
       </span>
-      <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center gap-2">
+      {canManage && <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center gap-2">
         <GenericDialog
           ref={dialogRef}
           title={`Manage environment access for ${teamName}`}
@@ -145,7 +147,7 @@ export const ManageTeamEnvsDialog = ({
                 onClick={toggleAll}
               >
                 <span className="text-2xs text-neutral-500">All environments</span>
-                <ToggleSwitch size="sm" value={allSelected} onToggle={toggleAll} />
+                <Checkbox size="sm" checked={allSelected} onChange={toggleAll} />
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {appEnvironments.map((env) => {
@@ -162,10 +164,10 @@ export const ManageTeamEnvsDialog = ({
                       onClick={() => toggleEnv(env.id)}
                     >
                       <span className="text-2xs text-zinc-900 dark:text-zinc-100">{env.name}</span>
-                      <ToggleSwitch
+                      <Checkbox
                         size="sm"
-                        value={isSelected}
-                        onToggle={() => toggleEnv(env.id)}
+                        checked={isSelected}
+                        onChange={() => toggleEnv(env.id)}
                       />
                     </div>
                   )
@@ -187,7 +189,7 @@ export const ManageTeamEnvsDialog = ({
             </div>
           </form>
         </GenericDialog>
-      </div>
+      </div>}
     </div>
   )
 }

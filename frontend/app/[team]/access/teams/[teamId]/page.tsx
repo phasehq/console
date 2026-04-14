@@ -42,18 +42,6 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
     ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
     : false
 
-  const userCanUpdateTeams = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Teams', 'update')
-    : false
-
-  const userCanDeleteTeams = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Teams', 'delete')
-    : false
-
-  const userCanCreateSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create')
-    : false
-
   const userIsGlobalAccess = organisation
     ? userHasGlobalAccess(organisation.role!.permissions)
     : false
@@ -113,6 +101,19 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
     userIsGlobalAccess ||
     team.members?.some((m) => m.orgMember?.id === organisation?.memberId) ||
     false
+
+  // Team owner (creator) retains full access; other members use effective permissions
+  const isTeamOwner = team.createdBy?.id === organisation?.memberId
+
+  // Effective permissions: team member role override takes precedence over org-level role
+  const effectivePermissions = team.memberRole?.permissions ?? organisation.role!.permissions
+
+  const canUpdateTeam =
+    userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'Teams', 'update')
+  const canDeleteTeam =
+    userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'Teams', 'delete')
+  const canCreateSA =
+    userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'create')
 
   if (!userIsMember)
     return (
@@ -184,7 +185,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
               </span>
             </div>
             <div className="flex flex-col items-end gap-2">
-              {userCanUpdateTeams && !team.isScimManaged && <UpdateTeamDialog team={team} />}
+              {canUpdateTeam && !team.isScimManaged && <UpdateTeamDialog team={team} />}
               <span
                 className="text-neutral-500 text-2xs flex items-center gap-1 cursor-help"
                 title={new Date(team.createdAt).toLocaleString()}
@@ -195,37 +196,21 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
             </div>
           </div>
 
-          {/* Role overrides */}
-          {(team.memberRole || team.serviceAccountRole) && (
-            <div className="flex items-center gap-4 mt-3">
-              {team.memberRole && (
-                <div className="flex items-center gap-1.5 text-xs text-neutral-500">
-                  <FaUsers className="text-xs" />
-                  <span>Member role:</span>
-                  <RoleLabel role={team.memberRole} />
-                </div>
-              )}
-              {team.serviceAccountRole && (
-                <div className="flex items-center gap-1.5 text-xs text-neutral-500">
-                  <FaRobot className="text-xs" />
-                  <span>SA role:</span>
-                  <RoleLabel role={team.serviceAccountRole} />
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Members Section (human users only) */}
         <div className="pt-4 space-y-3 border-t border-neutral-500/40">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-base font-medium">Members</div>
+              <div className="text-base font-medium flex items-center gap-2">
+                Members
+                {team.memberRole && <RoleLabel role={team.memberRole} size="xs" />}
+              </div>
               <div className="text-neutral-500 text-sm">
                 Organisation members in this team
               </div>
             </div>
-            {userCanUpdateTeams && !team.isScimManaged && (
+            {canUpdateTeam && !team.isScimManaged && (
               <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="members" />
             )}
           </div>
@@ -254,7 +239,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                       />
 
                       <div className="flex items-center gap-1.5">
-                        {membership.orgMember?.role && (
+                        {!team.memberRole && membership.orgMember?.role && (
                           <RoleLabel role={membership.orgMember.role} size="xs" />
                         )}
                         {isTeamCreator && (
@@ -275,7 +260,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                             <FaExternalLinkAlt /> Manage account
                           </Button>
                         </Link>
-                        {userCanUpdateTeams &&
+                        {canUpdateTeam &&
                           !team.isScimManaged &&
                           !(team.createdBy?.id === membership.orgMember?.id) && (
                             <RemoveTeamMemberDialog
@@ -302,16 +287,19 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
         <div className="pt-4 space-y-3 border-t border-neutral-500/40">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-base font-medium">Service Accounts</div>
+              <div className="text-base font-medium flex items-center gap-2">
+                Service Accounts
+                {team.serviceAccountRole && <RoleLabel role={team.serviceAccountRole} size="xs" />}
+              </div>
               <div className="text-neutral-500 text-sm">
                 Service accounts in this team
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {userCanUpdateTeams && !team.isScimManaged && (
+              {canUpdateTeam && !team.isScimManaged && (
                 <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="service-accounts" buttonVariant="secondary" />
               )}
-              {userCanCreateSA && (
+              {canCreateSA && (
                 <CreateServiceAccountDialog
                   teamId={team.id}
                   teamName={team.name}
@@ -337,7 +325,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                       <ProfileCard serviceAccount={sa} size="md" />
 
                       <div>
-                        {sa.role && <RoleLabel role={sa.role} size="xs" />}
+                        {!team.serviceAccountRole && sa.role && <RoleLabel role={sa.role} size="xs" />}
                       </div>
 
                       <div>
@@ -368,11 +356,11 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                           </Button>
                         </Link>
                         {isTeamOwned ? (
-                          userCanUpdateTeams && (
+                          canUpdateTeam && (
                             <DeleteServiceAccountDialog account={sa} />
                           )
                         ) : (
-                          userCanUpdateTeams && !team.isScimManaged && (
+                          canUpdateTeam && !team.isScimManaged && (
                             <RemoveTeamMemberDialog
                               teamId={team.id}
                               memberId={sa.id}
@@ -388,7 +376,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
               ) : (
                 <div className="py-8 text-center text-neutral-500">
                   No service accounts in this team.
-                  {userCanCreateSA && ' Create a team-owned service account or add an existing one.'}
+                  {canCreateSA && ' Create a team-owned service account or add an existing one.'}
                 </div>
               )
             })()}
@@ -404,7 +392,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                 Apps and environments this team has access to
               </div>
             </div>
-            {userCanUpdateTeams && <AddTeamAppsDialog team={team} />}
+            {canUpdateTeam && <AddTeamAppsDialog team={team} />}
           </div>
 
           <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
@@ -462,7 +450,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
         </div>
 
         {/* Danger Zone */}
-        {userCanDeleteTeams && !team.isScimManaged && (
+        {canDeleteTeam && !team.isScimManaged && (userIsGlobalAccess || team.createdBy?.id === organisation?.memberId) && (
           <div className="pt-4 space-y-2 border-t border-neutral-500/40">
             <div>
               <div className="text-base font-medium">Danger Zone</div>
