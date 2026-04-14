@@ -1092,6 +1092,13 @@ class Team(models.Model):
     )
 
     is_scim_managed = models.BooleanField(default=False)
+    owner = models.ForeignKey(
+        OrganisationMember,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="owned_teams",
+    )
     created_by = models.ForeignKey(
         OrganisationMember,
         null=True,

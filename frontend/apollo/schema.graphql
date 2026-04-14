@@ -324,6 +324,7 @@ type TeamType {
   memberRole: RoleType
   serviceAccountRole: RoleType
   isScimManaged: Boolean!
+  owner: OrganisationMemberType
   createdBy: OrganisationMemberType
   createdAt: DateTime
   updatedAt: DateTime!
@@ -1071,6 +1072,7 @@ type Mutation {
   deleteIdentity(id: ID!): DeleteIdentityMutation
   createTeam(description: String, memberRoleId: ID, name: String!, organisationId: ID!, serviceAccountRoleId: ID): CreateTeamMutation
   updateTeam(description: String, memberRoleId: ID, name: String, serviceAccountRoleId: ID, teamId: ID!): UpdateTeamMutation
+  transferTeamOwnership(newOwnerId: ID!, teamId: ID!): TransferTeamOwnershipMutation
   deleteTeam(teamId: ID!): DeleteTeamMutation
   addTeamMembers(memberIds: [ID!]!, memberType: MemberType = USER, teamId: ID!): AddTeamMembersMutation
   removeTeamMember(memberId: ID!, memberType: MemberType = USER, teamId: ID!): RemoveTeamMemberMutation
@@ -1337,6 +1339,10 @@ type CreateTeamMutation {
 }
 
 type UpdateTeamMutation {
+  team: TeamType
+}
+
+type TransferTeamOwnershipMutation {
   team: TeamType
 }
 

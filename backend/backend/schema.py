@@ -133,6 +133,7 @@ from .graphene.mutations.teams import (
     DeleteTeamMutation,
     RemoveTeamAppMutation,
     RemoveTeamMemberMutation,
+    TransferTeamOwnershipMutation,
     UpdateTeamAppEnvironmentsMutation,
     UpdateTeamMutation,
 )
@@ -1155,6 +1156,7 @@ class Mutation(graphene.ObjectType):
     # Teams
     create_team = CreateTeamMutation.Field()
     update_team = UpdateTeamMutation.Field()
+    transfer_team_ownership = TransferTeamOwnershipMutation.Field()
     delete_team = DeleteTeamMutation.Field()
     add_team_members = AddTeamMembersMutation.Field()
     remove_team_member = RemoveTeamMemberMutation.Field()
