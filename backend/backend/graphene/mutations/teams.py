@@ -355,6 +355,12 @@ class AddTeamAppsMutation(graphene.Mutation):
         for app_env in app_envs:
             app = App.objects.get(id=app_env.app_id, organisation=org)
 
+            # Check app-level Teams permission (respects team role overrides)
+            if not user_has_permission(user, "create", "Teams", org, is_app_resource=True, app=app):
+                raise GraphQLError(
+                    f"You don't have permission to add teams to app '{app.name}'"
+                )
+
             # Actor must have access to the app
             if not user_can_access_app(user.userId, app.id):
                 raise GraphQLError(
@@ -403,6 +409,12 @@ class RemoveTeamAppMutation(graphene.Mutation):
 
         app = App.objects.get(id=app_id, organisation=org)
 
+        # Check app-level Teams permission (respects team role overrides)
+        if not user_has_permission(user, "delete", "Teams", org, is_app_resource=True, app=app):
+            raise GraphQLError(
+                "You don't have permission to remove teams from this app"
+            )
+
         # Revoke grants before removing the app-env links
         revoke_team_environment_keys(team, app=app)
 
@@ -434,6 +446,12 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         _check_team_membership(user, team)
 
         app = App.objects.get(id=app_id, organisation=org)
+
+        # Check app-level Teams permission (respects team role overrides)
+        if not user_has_permission(user, "update", "Teams", org, is_app_resource=True, app=app):
+            raise GraphQLError(
+                "You don't have permission to manage team environments for this app"
+            )
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
