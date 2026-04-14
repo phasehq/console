@@ -9,7 +9,18 @@ import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissio
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { FaBan, FaBoxOpen, FaBuilding, FaChevronDown, FaChevronLeft, FaCog, FaEdit, FaNetworkWired, FaUsers, FaUsersCog } from 'react-icons/fa'
+import {
+  FaBan,
+  FaBoxOpen,
+  FaBuilding,
+  FaChevronDown,
+  FaChevronLeft,
+  FaCog,
+  FaEdit,
+  FaNetworkWired,
+  FaUsers,
+  FaUsersCog,
+} from 'react-icons/fa'
 import { FaServer, FaArrowDownUpLock } from 'react-icons/fa6'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
@@ -280,7 +291,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                     {account.team.name}
                   </Link>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" title="Organisation-level account — visible org-wide">
+                  <span
+                    className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400"
+                    title="Organisation-level account — visible org-wide"
+                  >
                     <FaBuilding className="text-[0.55rem]" />
                     Organisation
                   </span>
@@ -314,10 +328,11 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           {/* Role Selector and Description */}
           <div className="space-y-2">
             <div className="text-sm w-max flex items-center gap-2">
-              <ServiceAccountRoleSelector account={account} displayOnly={!userCanUpdateSA || isTeamOwned} />
-              {isTeamOwned && (
-                <span className="text-2xs text-neutral-500">(managed by team)</span>
-              )}
+              <ServiceAccountRoleSelector
+                account={account}
+                displayOnly={!userCanUpdateSA || isTeamOwned}
+              />
+              {isTeamOwned && <span className="text-2xs text-neutral-500">(managed by team)</span>}
             </div>
 
             <div className="flex flex-col gap-1">
@@ -452,10 +467,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                       variant="primary"
                       onClick={handleOwnershipSave}
                       isLoading={savingOwnership}
-                      disabled={
-                        isMultiTeamOrg ||
-                        selectedTeamId === (account.team?.id || null)
-                      }
+                      disabled={isMultiTeamOrg || selectedTeamId === (account.team?.id || null)}
                     >
                       Save
                     </Button>
@@ -470,9 +482,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           <div className="py-4 space-y-3">
             <div>
               <div className="text-base font-medium">Teams</div>
-              <div className="text-neutral-500 text-sm">
-                Teams this account belongs to
-              </div>
+              <div className="text-neutral-500 text-sm">Teams this account belongs to</div>
             </div>
 
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
@@ -490,7 +500,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                         >
                           {team.name}
                         </Link>
-                        {team.serviceAccountRole && <RoleLabel role={team.serviceAccountRole} size="xs" />}
+                        {team.serviceAccountRole && (
+                          <RoleLabel role={team.serviceAccountRole} size="xs" />
+                        )}
                       </div>
                       {team.description && (
                         <div className="text-2xs text-neutral-500 truncate max-w-md">
@@ -540,7 +552,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                     team.
                   </>
                 ) : (
-                  'Manage the Apps and Environments that this account has access to'
+                  'Manage the Apps and Environments that this account has direct access to'
                 )}
               </div>
             </div>
@@ -665,7 +677,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             {!userCanManageTeamSA ? (
               <div className="py-6 text-center text-neutral-500 text-sm">
                 You must be a member of the{' '}
-                <Link href={`/${params.team}/access/teams/${account.team!.id}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                <Link
+                  href={`/${params.team}/access/teams/${account.team!.id}`}
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
                   {account.team!.name}
                 </Link>{' '}
                 team to manage network policies for this account.
@@ -717,13 +732,14 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           <div className="py-4 space-y-3">
             <div>
               <div className="text-base font-medium">Tokens</div>
-              <div className="text-neutral-500 text-sm">
-                Service account access tokens
-              </div>
+              <div className="text-neutral-500 text-sm">Service account access tokens</div>
             </div>
             <div className="py-6 text-center text-neutral-500 text-sm">
               You must be a member of the{' '}
-              <Link href={`/${params.team}/access/teams/${account.team!.id}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+              <Link
+                href={`/${params.team}/access/teams/${account.team!.id}`}
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+              >
                 {account.team!.name}
               </Link>{' '}
               team to manage tokens for this account.

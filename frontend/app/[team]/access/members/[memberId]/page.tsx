@@ -11,7 +11,12 @@ import { useContext, useMemo } from 'react'
 import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey, FaNetworkWired } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
-import { OrganisationMemberType, UserTokenType, AppMembershipType, TeamType } from '@/apollo/graphql'
+import {
+  OrganisationMemberType,
+  UserTokenType,
+  AppMembershipType,
+  TeamType,
+} from '@/apollo/graphql'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { DeleteMemberConfirmDialog } from '../_components/DeleteMemberConfirmDialog'
 import { RoleSelector } from '../_components/RoleSelector'
@@ -223,9 +228,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <div className="pt-4 space-y-3 border-t border-neutral-500/40">
             <div>
               <div className="text-base font-medium">Teams</div>
-              <div className="text-neutral-500 text-sm">
-                Teams this member belongs to
-              </div>
+              <div className="text-neutral-500 text-sm">Teams this member belongs to</div>
             </div>
 
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
@@ -282,7 +285,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
               <div>
                 <div className="text-base font-medium">App Access</div>
                 <div className="text-neutral-500 text-sm">
-                  Apps and Environments this member has access to
+                  Apps and Environments this member has direct access to
                 </div>
               </div>
               {userCanWriteAppMemberships && !member.self && (
