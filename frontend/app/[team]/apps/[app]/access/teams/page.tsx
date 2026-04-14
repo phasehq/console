@@ -20,7 +20,7 @@ import Link from 'next/link'
 export default function AppTeams({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const { hasPermission, isGlobalAccess: userIsGlobalAccess } = useAppPermissions(params.app)
+  const { hasPermission } = useAppPermissions(params.app)
 
   const userCanReadTeams = hasPermission('Teams', 'read', true)
   const userCanUpdateTeams = hasPermission('Teams', 'update', true)
@@ -122,7 +122,6 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                 const memberCount = team.members?.filter((m) => m.orgMember).length || 0
                 const saCount = team.members?.filter((m) => m.serviceAccount).length || 0
                 const isTeamOwner =
-                  userIsGlobalAccess ||
                   team.createdBy?.id === organisation?.memberId
 
                 return (
@@ -173,9 +172,9 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                           appId={params.app}
                           appEnvironments={appEnvironments}
                           teamEnvs={teamEnvs as TeamAppEnvironmentType[]}
-                          canManage={isTeamOwner && userCanUpdateTeams}
+                          canManage={isTeamOwner || userCanUpdateTeams}
                         />
-                        {isTeamOwner && userCanUpdateTeams && (
+                        {(isTeamOwner || userCanUpdateTeams) && (
                           <div className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
                             <RemoveTeamFromAppDialog
                               teamId={team.id}
