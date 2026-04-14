@@ -1,5 +1,5 @@
 import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Disclosure, Switch, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
@@ -21,7 +21,7 @@ import { Button } from '@/components/common/Button'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
-import { usePathname } from 'next/navigation'
+import { usePathname, useParams } from 'next/navigation'
 import { arraysEqual } from '@/utils/crypto'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
@@ -81,6 +81,8 @@ const EnvSecretComponent = ({
 }) => {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const params = useParams<{ app: string }>()
+  const { hasPermission } = useAppPermissions(params!.app)
   const [readSecret] = useMutation(LogSecretReads)
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
@@ -127,12 +129,8 @@ const EnvSecretComponent = ({
   const booleanValue = clientEnvSecret.secret?.value.toLowerCase() === 'true'
 
   // Permissions
-  const userCanUpdateSecrets =
-    userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
-    !serverEnvSecret
-  const userCanDeleteSecrets =
-    userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
-    !serverEnvSecret
+  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || !serverEnvSecret
+  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || !serverEnvSecret
 
   const handleRevealSecret = async () => {
     if (isSealedAndSaved) return
@@ -390,6 +388,8 @@ const AppSecretRowComponent = ({
   revealOnHover,
 }: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const routeParams = useParams<{ app: string }>()
+  const { hasPermission } = useAppPermissions(routeParams!.app)
 
   const { id } = clientAppSecret
   const handleOpen = () => expand(id)
@@ -419,11 +419,9 @@ const AppSecretRowComponent = ({
     })
   }
 
-  // Permisssions
-  const userCanUpdateSecrets =
-    userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) || secretIsNew
-  const userCanDeleteSecrets =
-    userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) || secretIsNew
+  // Permissions
+  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || secretIsNew
+  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || secretIsNew
 
   const prodSecret = clientAppSecret.envs.find(
     (env) => env.env.envType?.toLowerCase() === 'prod'

@@ -23,7 +23,7 @@ import {
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
@@ -51,18 +51,14 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
-  const userCanReadAppSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read', true)
-    : false
-  const userCanReadEnvironments = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(appId)
+
+  const userCanReadAppSA = hasPermission('ServiceAccounts', 'read', true)
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
 
   // AppServiceAccounts:create + ServiceAccounts: read
-  const userCanAddAppSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create', true) &&
-      userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
-    : false
+  const userCanAddAppSA =
+    hasPermission('ServiceAccounts', 'create', true) && hasPermission('ServiceAccounts', 'read')
 
   const { data: serviceAccountsData } = useQuery(GetServiceAccounts, {
     variables: {

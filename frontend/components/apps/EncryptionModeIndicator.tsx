@@ -7,7 +7,7 @@ import { FaCog, FaServer } from 'react-icons/fa'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
 import { Button } from '../common/Button'
 import clsx from 'clsx'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 
 export const SseLabel = ({ sseEnabled }: { sseEnabled: boolean }) => (
   <div
@@ -37,12 +37,9 @@ export const EncryptionModeIndicator = (props: { app: AppType; asMenu?: boolean 
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanReadEncMode = userHasPermission(
-    organisation?.role?.permissions,
-    'EncryptionMode',
-    'read',
-    true
-  )
+  const { hasPermission } = useAppPermissions(app.id)
+
+  const userCanReadEncMode = hasPermission('EncryptionMode', 'read', true)
 
   if (!asMenu) return <SseLabel sseEnabled={app.sseEnabled!} />
 

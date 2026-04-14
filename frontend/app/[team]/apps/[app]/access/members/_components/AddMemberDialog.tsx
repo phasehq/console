@@ -27,7 +27,7 @@ import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
@@ -51,18 +51,14 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
-  const userCanReadAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'read', true)
-    : false
-  const userCanReadEnvironments = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(appId)
+
+  const userCanReadAppMembers = hasPermission('Members', 'read', true)
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
 
   // AppMembers:create + OrgMembers: read
-  const userCanAddAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'create', true) &&
-      userHasPermission(organisation?.role?.permissions, 'Members', 'read')
-    : false
+  const userCanAddAppMembers =
+    hasPermission('Members', 'create', true) && hasPermission('Members', 'read')
 
   const { data: orgMembersData } = useQuery(GetOrganisationMembers, {
     variables: {

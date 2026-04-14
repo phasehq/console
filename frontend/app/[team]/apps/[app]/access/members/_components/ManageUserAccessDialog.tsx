@@ -12,7 +12,8 @@ import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import { userHasGlobalAccess } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
@@ -38,11 +39,11 @@ export const ManageUserAccessDialog = ({
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
+  const { hasPermission } = useAppPermissions(appId)
+
   // AppMembers:update + Environments:read
-  const userCanUpdateMemberAccess = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'update', true) &&
-      userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
-    : false
+  const userCanUpdateMemberAccess =
+    hasPermission('Members', 'update', true) && hasPermission('Environments', 'read', true)
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
   const [updateScope] = useMutation(UpdateEnvScope)

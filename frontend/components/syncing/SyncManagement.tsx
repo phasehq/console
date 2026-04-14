@@ -19,7 +19,7 @@ import { ProviderCredentialPicker } from './ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { toast } from 'react-toastify'
 import { Switch } from '@headlessui/react'
-import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { usePathname } from 'next/navigation'
 import { ServiceInfo } from './ServiceInfo'
 
@@ -35,9 +35,10 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(sync.authentication!)
   const [isActive, setIsActive] = useState<boolean>(sync.isActive)
 
+  const { hasPermission } = useAppPermissions(sync.environment.app.id)
+
   const userCanTriggerSyncs =
-    userHasPermission(organisation?.role?.permissions, 'Integrations', 'create', true) ||
-    userHasPermission(organisation?.role?.permissions, 'Integrations', 'update', true)
+    hasPermission('Integrations', 'create', true) || hasPermission('Integrations', 'update', true)
 
   const handleSync = async () => {
     await triggerSync({
@@ -87,23 +88,9 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
 
   const isSyncing = sync.status === ApiEnvironmentSyncStatusChoices.InProgress
 
-  const userCanReadCredentials = userHasPermission(
-    organisation?.role?.permissions,
-    'IntegrationCredentials',
-    'read'
-  )
-  const userCanUpdateSyncs = userHasPermission(
-    organisation?.role?.permissions,
-    'Integrations',
-    'update',
-    true
-  )
-  const userCanDeleteSyncs = userHasPermission(
-    organisation?.role?.permissions,
-    'Integrations',
-    'delete',
-    true
-  )
+  const userCanReadCredentials = hasPermission('IntegrationCredentials', 'read')
+  const userCanUpdateSyncs = hasPermission('Integrations', 'update', true)
+  const userCanDeleteSyncs = hasPermission('Integrations', 'delete', true)
 
   return (
     <div className="space-y-3 pt-4">

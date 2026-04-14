@@ -10,7 +10,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
 import { clsx } from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Avatar } from '@/components/common/Avatar'
 import { CreateServiceTokenDialog } from './CreateServiceTokenDialog'
 import { MdKey } from 'react-icons/md'
@@ -26,17 +26,12 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
   const [deleteServiceToken] = useMutation(RevokeServiceToken)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const { hasPermission } = useAppPermissions(appId)
 
-  const userCanReadTokens = userHasPermission(
-    organisation?.role?.permissions,
-    'Tokens',
-    'read',
-    true
-  )
+  const userCanReadTokens = hasPermission('Tokens', 'read', true)
 
   const usercanCreateTokens =
-    userHasPermission(organisation?.role?.permissions, 'Tokens', 'create', true) &&
-    userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
+    hasPermission('Tokens', 'create', true) && hasPermission('Environments', 'read', true)
 
   const { data: serviceTokensData, loading } = useQuery(GetServiceTokens, {
     variables: {
@@ -154,13 +149,9 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
 
     const isExpired = token.expiresAt === null ? false : new Date(token.expiresAt) < new Date()
 
-    const userCanReadEnvironments = organisation
-      ? userHasPermission(organisation.role?.permissions, 'Environments', 'read', true)
-      : false
+    const userCanReadEnvironments = hasPermission('Environments', 'read', true)
 
-    const userCanDeleteTokens = organisation
-      ? userHasPermission(organisation.role?.permissions, 'Tokens', 'delete', true)
-      : false
+    const userCanDeleteTokens = hasPermission('Tokens', 'delete', true)
 
     const identityKeys = token.keys.map((key) => key.identityKey)
 

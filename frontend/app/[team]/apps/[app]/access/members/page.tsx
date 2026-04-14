@@ -10,6 +10,7 @@ import { FaBan, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import { useSession } from 'next-auth/react'
 import { Avatar } from '@/components/common/Avatar'
 import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { TeamLabel } from '@/components/teams/TeamLabel'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -26,22 +27,16 @@ export default function Members({ params }: { params: { team: string; app: strin
   const [searchQuery, setSearchQuery] = useState('')
 
   // Permissions
-  const userCanReadAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(params.app)
+
+  const userCanReadAppMembers = hasPermission('Members', 'read', true)
 
   // AppMembers:create + OrgMembers: read
-  const userCanAddAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'create', true) &&
-      userHasPermission(organisation?.role?.permissions, 'Members', 'read')
-    : false
-  const userCanRemoveAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'delete', true)
-    : false
+  const userCanAddAppMembers =
+    hasPermission('Members', 'create', true) && hasPermission('Members', 'read')
+  const userCanRemoveAppMembers = hasPermission('Members', 'delete', true)
 
-  const userCanReadTeams = organisation
-    ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
-    : false
+  const userCanReadTeams = hasPermission('Teams', 'read')
 
   const { data, loading } = useQuery(GetAppMembers, {
     variables: { appId: params.app },

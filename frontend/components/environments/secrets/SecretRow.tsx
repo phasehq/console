@@ -22,7 +22,8 @@ import { ShareSecretDialog } from './ShareSecretDialog'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import { Switch } from '@headlessui/react'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
+import { useParams } from 'next/navigation'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 import { TypeSelector } from './TypeSelector'
 import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
@@ -53,14 +54,12 @@ function SecretRow(props: {
   } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const routeParams = useParams<{ app: string }>()
+  const { hasPermission } = useAppPermissions(routeParams!.app)
 
   // Permissions
-  const userCanUpdateSecrets =
-    userHasPermission(organisation?.role?.permissions, 'Secrets', 'update', true) ||
-    !canonicalSecret
-  const userCanDeleteSecrets =
-    userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
-    !canonicalSecret
+  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || !canonicalSecret
+  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || !canonicalSecret
 
   const isConfig = secret.type === ApiSecretTypeChoices.Config
   const isNewSecret = canonicalSecret === undefined
