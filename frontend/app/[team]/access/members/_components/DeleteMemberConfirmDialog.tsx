@@ -54,7 +54,19 @@ export const DeleteMemberConfirmDialog = (props: {
     : false
 
   const allowDelete =
-    !member.self! && activeUserCanDeleteUsers && member.role!.name!.toLowerCase() !== 'owner'
+    !member.self! &&
+    activeUserCanDeleteUsers &&
+    member.role!.name!.toLowerCase() !== 'owner' &&
+    !member.scimManaged
+
+  if (member.scimManaged) {
+    return (
+      <p className="text-xs text-neutral-500 italic">
+        This member is managed by SCIM and cannot be removed from the console. Deprovision them
+        from your identity provider.
+      </p>
+    )
+  }
 
   if (!allowDelete) return <></>
 

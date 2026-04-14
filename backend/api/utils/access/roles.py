@@ -17,6 +17,7 @@ default_roles = {
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "Teams": ["create", "read", "update", "delete"],
+            "SCIM": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -51,6 +52,7 @@ default_roles = {
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "Teams": ["create", "read", "update", "delete"],
+            "SCIM": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -84,6 +86,7 @@ default_roles = {
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "Teams": ["create", "read", "update", "delete"],
+            "SCIM": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -121,6 +124,7 @@ default_roles = {
             ],
             "NetworkAccessPolicies": ["read"],
             "Teams": ["read"],
+            "SCIM": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -154,6 +158,7 @@ default_roles = {
             "IntegrationCredentials": ["read"],
             "NetworkAccessPolicies": ["read"],
             "Teams": [],
+            "SCIM": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update", "delete"],

@@ -15,6 +15,7 @@ query GetOrganisationMemberDetail($organisationId: ID!, $id: ID) {
     createdAt
     lastLogin
     self
+    scimManaged
     appMemberships {
       id
       name

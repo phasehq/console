@@ -5,6 +5,8 @@ type Query {
   networkAccessPolicies(organisationId: ID): [NetworkAccessPolicyType]
   identities(organisationId: ID): [IdentityType]
   teams(organisationId: ID, teamId: ID): [TeamType]
+  scimTokens(organisationId: ID): [SCIMTokenType]
+  scimEvents(organisationId: ID, start: BigInt, end: BigInt, eventTypes: [String], tokenId: ID, status: String): SCIMEventsResponseType
   organisationNameAvailable(name: String): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -72,6 +74,7 @@ type OrganisationType {
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
   pricingVersion: Int!
+  scimEnabled: Boolean!
   role: RoleType
   memberId: ID
   keyring: String
@@ -163,6 +166,7 @@ type OrganisationMemberType {
   avatarUrl: String
   self: Boolean
   lastLogin: DateTime
+  scimManaged: Boolean
   appMemberships: [AppMembershipType!]
   tokens: [UserTokenType!]
   networkPolicies: [NetworkAccessPolicyType!]
@@ -683,6 +687,96 @@ type UserTokenType {
   createdBy: OrganisationMemberType
 }
 
+type SCIMTokenType {
+  id: String!
+  name: String!
+  tokenPrefix: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  expiresAt: DateTime
+  lastUsedAt: DateTime
+  isActive: Boolean!
+}
+
+type SCIMEventsResponseType {
+  events: [SCIMEventType]
+  count: Int
+}
+
+type SCIMEventType {
+  id: String!
+  scimToken: SCIMTokenType
+  eventType: ApiSCIMEventEventTypeChoices!
+  status: ApiSCIMEventStatusChoices!
+  resourceType: ApiSCIMEventResourceTypeChoices!
+  resourceId: String!
+  resourceName: String!
+  detail: JSONString!
+  requestMethod: String!
+  requestPath: String!
+  requestBody: JSONString
+  responseStatus: Int
+  responseBody: JSONString
+  ipAddress: String
+  userAgent: String
+  timestamp: DateTime!
+}
+
+"""An enumeration."""
+enum ApiSCIMEventEventTypeChoices {
+  """User Created"""
+  USER_CREATED
+
+  """User Updated"""
+  USER_UPDATED
+
+  """User Deactivated"""
+  USER_DEACTIVATED
+
+  """User Reactivated"""
+  USER_REACTIVATED
+
+  """Group Created"""
+  GROUP_CREATED
+
+  """Group Updated"""
+  GROUP_UPDATED
+
+  """Group Deleted"""
+  GROUP_DELETED
+
+  """Member Added to Group"""
+  MEMBER_ADDED
+
+  """Member Removed from Group"""
+  MEMBER_REMOVED
+}
+
+"""An enumeration."""
+enum ApiSCIMEventStatusChoices {
+  """Success"""
+  SUCCESS
+
+  """Error"""
+  ERROR
+}
+
+"""An enumeration."""
+enum ApiSCIMEventResourceTypeChoices {
+  """User"""
+  USER
+
+  """Group"""
+  GROUP
+}
+
+"""
+The `BigInt` scalar type represents non-fractional whole numeric values.
+`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
+compatible type.
+"""
+scalar BigInt
+
 type PhaseLicenseType {
   id: String
   customerName: String
@@ -781,13 +875,6 @@ interface Node {
   """The ID of the object"""
   id: ID!
 }
-
-"""
-The `BigInt` scalar type represents non-fractional whole numeric values.
-`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
-compatible type.
-"""
-scalar BigInt
 
 type SecretLogsResponseType {
   logs: [SecretEventType]
@@ -1096,6 +1183,14 @@ type Mutation {
   addTeamApps(appEnvs: [AppEnvironmentInput!]!, teamId: ID!): AddTeamAppsMutation
   removeTeamApp(appId: ID!, teamId: ID!): RemoveTeamAppMutation
   updateTeamAppEnvironments(appId: ID!, envIds: [ID!]!, teamId: ID!): UpdateTeamAppEnvironmentsMutation
+  createScimToken(expiryDays: Int, name: String!, organisationId: ID!): CreateSCIMTokenMutation
+  deleteScimToken(tokenId: ID!): DeleteSCIMTokenMutation
+
+  """Master switch: enable/disable SCIM for the organisation."""
+  toggleScim(enabled: Boolean!, organisationId: ID!): ToggleSCIMMutation
+
+  """Per-provider toggle: enable/disable a single SCIM token."""
+  toggleScimToken(isActive: Boolean!, tokenId: ID!): ToggleSCIMTokenMutation
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String, teamId: ID): CreateServiceAccountMutation
   enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
   enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
@@ -1390,6 +1485,25 @@ type RemoveTeamAppMutation {
 
 type UpdateTeamAppEnvironmentsMutation {
   team: TeamType
+}
+
+type CreateSCIMTokenMutation {
+  token: String
+  scimToken: SCIMTokenType
+}
+
+type DeleteSCIMTokenMutation {
+  ok: Boolean
+}
+
+"""Master switch: enable/disable SCIM for the organisation."""
+type ToggleSCIMMutation {
+  ok: Boolean
+}
+
+"""Per-provider toggle: enable/disable a single SCIM token."""
+type ToggleSCIMTokenMutation {
+  ok: Boolean
 }
 
 type CreateServiceAccountMutation {

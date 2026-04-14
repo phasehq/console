@@ -27,5 +27,6 @@ query GetOrganisations {
     keyring
     recovery
     pricingVersion
+    scimEnabled
   }
 }

@@ -1,0 +1,7 @@
+mutation InitAccountKeys($orgId: ID!, $identityKey: String!, $wrappedKeyring: String!, $wrappedRecovery: String!) {
+  updateMemberWrappedSecrets(orgId: $orgId, identityKey: $identityKey, wrappedKeyring: $wrappedKeyring, wrappedRecovery: $wrappedRecovery) {
+    orgMember {
+      id
+    }
+  }
+}
