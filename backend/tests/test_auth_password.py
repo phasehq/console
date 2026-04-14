@@ -99,6 +99,9 @@ class PasswordRegisterTest(_ThrottleClearMixin, unittest.TestCase):
         mock_ev.objects.create.assert_called_once()
         mock_send_email.assert_called_once()
 
+        # Verify full_name was saved on the user object
+        self.assertEqual(new_user.full_name, "Alice Test")
+
     @patch("api.views.auth_password.get_user_model")
     def test_register_rejects_duplicate_email(self, mock_get_user):
         """Registration fails if email already exists."""
@@ -226,8 +229,35 @@ class PasswordLoginTest(_ThrottleClearMixin, unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(data["email"], "alice@example.com")
+        self.assertEqual(data["fullName"], "alice@example.com")  # no full_name, falls back to email
         self.assertEqual(data["authMethod"], "password")
         mock_login.assert_called_once()
+
+    @patch("api.views.auth_password.login")
+    @patch("api.views.auth_password.get_user_model")
+    def test_login_returns_full_name_for_password_user(self, mock_get_user, mock_login):
+        """Login returns stored full_name for password-only users."""
+        User = MagicMock()
+        user = MagicMock()
+        user.active = True
+        user.userId = "uuid-123"
+        user.email = "alice@example.com"
+        user.full_name = "Alice Test"
+        user.auth_method = "password"
+        user.check_password.return_value = True
+        user.socialaccount_set.first.return_value = None
+        User.objects.get.return_value = user
+        mock_get_user.return_value = User
+
+        request = _make_post(
+            "/auth/password/login/",
+            {"email": "alice@example.com", "authHash": "a" * 64},
+        )
+        response = password_login(request)
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data["fullName"], "Alice Test")
 
     @patch("api.views.auth_password.get_user_model")
     def test_login_fails_with_wrong_hash(self, mock_get_user):
