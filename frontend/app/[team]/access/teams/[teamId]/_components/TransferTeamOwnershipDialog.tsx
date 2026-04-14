@@ -39,7 +39,7 @@ export const TransferTeamOwnershipDialog = ({ team }: { team: TeamType }) => {
       })
       const newOwner = humanMembers.find((m) => m.orgMember.id === selectedMemberId)
       toast.success(
-        `Transferred ownership to ${newOwner?.fullName || newOwner?.email || 'member'}`
+        `Transferred ownership to ${newOwner?.orgMember.fullName || newOwner?.orgMember.email || 'member'}`
       )
       setSelectedMemberId(null)
       dialogRef.current?.closeModal()
@@ -67,7 +67,7 @@ export const TransferTeamOwnershipDialog = ({ team }: { team: TeamType }) => {
             : 'This team has no owner. Select a team member to assign as owner.'}
         </p>
 
-        <div className="max-h-64 overflow-y-auto space-y-1">
+        <div className="max-h-[60vh] overflow-y-auto space-y-1">
           {humanMembers.map((membership) => {
             const isCurrentOwner = team.owner?.id === membership.orgMember.id
             const isSelected = selectedMemberId === membership.orgMember.id
@@ -89,11 +89,7 @@ export const TransferTeamOwnershipDialog = ({ team }: { team: TeamType }) => {
               >
                 <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 w-full">
                   <ProfileCard
-                    user={{
-                      name: membership.fullName,
-                      email: membership.email,
-                      image: membership.avatarUrl,
-                    }}
+                    member={membership.orgMember}
                     size="md"
                   />
                   <div>
