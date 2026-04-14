@@ -2,7 +2,7 @@ import { ApiOrganisationPlanChoices, OrganisationMemberType, RoleType } from '@/
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
-import { FaChevronDown, FaLink, FaPlus } from 'react-icons/fa'
+import { FaChevronDown, FaPlus, FaUsersCog } from 'react-icons/fa'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { GetServiceAccountHandlers } from '@/graphql/queries/service-accounts/getServiceAccountHandlers.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
@@ -187,7 +187,7 @@ export const CreateServiceAccountDialog = ({
       title={dialogTitle}
       buttonContent={
         <>
-          {isTeamContext ? <FaLink /> : <FaPlus />} {buttonLabel}
+          {isTeamContext ? <FaUsersCog /> : <FaPlus />} {buttonLabel}
         </>
       }
       buttonVariant="primary"

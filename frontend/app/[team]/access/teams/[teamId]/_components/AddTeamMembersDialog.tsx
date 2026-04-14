@@ -3,7 +3,7 @@
 import { OrganisationMemberType, ServiceAccountType, TeamMembershipType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
-import { ToggleSwitch } from '@/components/common/ToggleSwitch'
+import { Checkbox } from '@/components/common/Checkbox'
 import { ProfileCard } from '@/components/common/ProfileCard'
 import { organisationContext } from '@/contexts/organisationContext'
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
@@ -162,7 +162,7 @@ export const AddTeamMembersDialog = ({
     if (mode !== 'service-accounts' && selectedMembers.size > 0)
       parts.push(`${selectedMembers.size} member${selectedMembers.size !== 1 ? 's' : ''}`)
     if (mode !== 'members' && selectedSAs.size > 0)
-      parts.push(`${selectedSAs.size} SA${selectedSAs.size !== 1 ? 's' : ''}`)
+      parts.push(`${selectedSAs.size} service account${selectedSAs.size !== 1 ? 's' : ''}`)
     return parts.length > 0 ? parts.join(', ') : '0 selected'
   }
 
@@ -181,7 +181,7 @@ export const AddTeamMembersDialog = ({
         : 'Add Members'
 
   const searchBar = (
-    <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+    <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2">
       <FaSearch className="text-neutral-500 text-xs shrink-0" />
       <input
         placeholder={
@@ -191,7 +191,7 @@ export const AddTeamMembersDialog = ({
               ? 'Search members'
               : 'Search accounts'
         }
-        className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 w-full text-xs py-1.5"
+        className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-neutral-500 w-full text-xs py-1.5"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
       />
@@ -207,7 +207,7 @@ export const AddTeamMembersDialog = ({
   )
 
   const membersList = (
-    <div className="max-h-80 overflow-y-auto divide-y divide-zinc-500/20">
+    <div className="max-h-[60vh] overflow-y-auto divide-y divide-zinc-500/20 pr-2">
       {filteredMembers.length === 0 ? (
         <p className="text-xs text-neutral-500 text-center py-4">
           {availableMembers.length === 0
@@ -222,10 +222,10 @@ export const AddTeamMembersDialog = ({
             onClick={() => toggleMember(member.id)}
           >
             <ProfileCard member={member} size="md" />
-            <ToggleSwitch
+            <Checkbox
               size="sm"
-              value={selectedMembers.has(member.id)}
-              onToggle={() => toggleMember(member.id)}
+              checked={selectedMembers.has(member.id)}
+              onChange={() => toggleMember(member.id)}
             />
           </div>
         ))
@@ -234,7 +234,7 @@ export const AddTeamMembersDialog = ({
   )
 
   const saList = (
-    <div className="max-h-80 overflow-y-auto divide-y divide-zinc-500/20">
+    <div className="max-h-[60vh] overflow-y-auto divide-y divide-zinc-500/20 pr-2">
       {filteredSAs.length === 0 ? (
         <p className="text-xs text-neutral-500 text-center py-4">
           {availableSAs.length === 0
@@ -249,10 +249,10 @@ export const AddTeamMembersDialog = ({
             onClick={() => toggleSA(sa.id)}
           >
             <ProfileCard serviceAccount={sa} size="md" />
-            <ToggleSwitch
+            <Checkbox
               size="sm"
-              value={selectedSAs.has(sa.id)}
-              onToggle={() => toggleSA(sa.id)}
+              checked={selectedSAs.has(sa.id)}
+              onChange={() => toggleSA(sa.id)}
             />
           </div>
         ))

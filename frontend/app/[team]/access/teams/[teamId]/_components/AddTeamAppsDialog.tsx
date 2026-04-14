@@ -3,7 +3,7 @@
 import { AppType, TeamType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
-import { ToggleSwitch } from '@/components/common/ToggleSwitch'
+import { Checkbox } from '@/components/common/Checkbox'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
@@ -12,7 +12,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { FaExclamationTriangle, FaSearch, FaTimesCircle, FaChevronDown } from 'react-icons/fa'
+import { FaChevronDown, FaExclamationTriangle, FaExternalLinkAlt, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { Disclosure } from '@headlessui/react'
@@ -133,11 +133,11 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
           teams.
         </p>
 
-        <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+        <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2">
           <FaSearch className="text-neutral-500 text-xs shrink-0" />
           <input
             placeholder="Search apps"
-            className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 w-full text-xs py-1.5"
+            className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-neutral-500 w-full text-xs py-1.5"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -190,10 +190,10 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
                           onClick={() => toggleAllEnvs(app.id, envIds)}
                         >
                           <span className="text-2xs text-neutral-500">All environments</span>
-                          <ToggleSwitch
+                          <Checkbox
                             size="sm"
-                            value={!!allEnvsSelected}
-                            onToggle={() => toggleAllEnvs(app.id, envIds)}
+                            checked={!!allEnvsSelected}
+                            onChange={() => toggleAllEnvs(app.id, envIds)}
                           />
                         </div>
                         <div className="flex flex-wrap gap-1.5">
@@ -212,10 +212,10 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
                                 onClick={() => toggleEnv(app.id, env.id)}
                               >
                                 <span className="text-2xs text-zinc-900 dark:text-zinc-100">{env.name}</span>
-                                <ToggleSwitch
+                                <Checkbox
                                   size="sm"
-                                  value={isSelected}
-                                  onToggle={() => toggleEnv(app.id, env.id)}
+                                  checked={isSelected}
+                                  onChange={() => toggleEnv(app.id, env.id)}
                                 />
                               </div>
                             )
@@ -229,25 +229,43 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
             })}
 
             {filteredNonSseApps.length > 0 && (
-              <div className="pt-2">
-                <div className="flex items-center gap-1.5 text-2xs text-amber-500 mb-1">
-                  <FaExclamationTriangle className="shrink-0" />
-                  <span>These apps need SSE enabled in settings before they can be assigned:</span>
-                </div>
-                <p className="text-2xs text-neutral-500 px-0.5">
-                  {filteredNonSseApps.map((app: AppType, i: number) => (
-                    <span key={app.id}>
-                      <Link
-                        href={`/${params!.team}/apps/${app.id}/settings`}
-                        className="text-zinc-900 dark:text-zinc-100 hover:text-emerald-500 dark:hover:text-emerald-400 underline underline-offset-2 decoration-neutral-500/40 hover:decoration-emerald-500 transition"
-                      >
-                        {app.name}
-                      </Link>
-                      {i < filteredNonSseApps.length - 1 && ', '}
-                    </span>
-                  ))}
-                </p>
-              </div>
+              <>
+                <div className="border-t border-zinc-500/20" />
+                <Disclosure>
+                  {({ open }) => (
+                    <div>
+                      <Disclosure.Button className="w-full flex items-center justify-between py-2 px-3 text-2xs text-amber-500">
+                        <div className="flex items-center gap-1.5">
+                          <FaExclamationTriangle className="shrink-0" />
+                          <span>{filteredNonSseApps.length} hidden app{filteredNonSseApps.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <FaChevronDown
+                          className={clsx(
+                            'text-neutral-500 text-2xs transition-transform',
+                            open && 'rotate-180'
+                          )}
+                        />
+                      </Disclosure.Button>
+                      <Disclosure.Panel className="space-y-1">
+                        <p className="text-2xs text-neutral-500 mb-2">
+                          These apps need SSE enabled in settings before they can be assigned to teams.
+                        </p>
+                        {filteredNonSseApps.map((app: AppType) => (
+                          <div key={app.id} className="flex items-center justify-between py-1.5 px-2">
+                            <Link
+                              href={`/${params!.team}/apps/${app.id}/settings`}
+                              className="font-medium text-xs text-zinc-900 dark:text-zinc-100 hover:text-emerald-500 dark:hover:text-emerald-400 transition"
+                            >
+                              {app.name}
+                            </Link>
+                            <FaExternalLinkAlt className="text-neutral-500 text-2xs shrink-0" />
+                          </div>
+                        ))}
+                      </Disclosure.Panel>
+                    </div>
+                  )}
+                </Disclosure>
+              </>
             )}
           </div>
         )}
