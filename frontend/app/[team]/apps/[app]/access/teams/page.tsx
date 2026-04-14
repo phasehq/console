@@ -122,7 +122,7 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                 const memberCount = team.members?.filter((m) => m.orgMember).length || 0
                 const saCount = team.members?.filter((m) => m.serviceAccount).length || 0
                 const isTeamOwner =
-                  team.createdBy?.id === organisation?.memberId
+                  team.owner?.id === organisation?.memberId
 
                 return (
                   <tr key={team.id} className="group">

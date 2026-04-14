@@ -1149,6 +1149,7 @@ class TeamType(DjangoObjectType):
             "member_role",
             "service_account_role",
             "is_scim_managed",
+            "owner",
             "created_by",
             "created_at",
             "updated_at",

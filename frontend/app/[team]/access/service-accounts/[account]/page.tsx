@@ -114,8 +114,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
   const userCanManageOwnership = useMemo(() => {
     if (userIsGlobalAccess) return true
-    if (ownerTeam?.createdBy?.id && organisation?.memberId) {
-      return ownerTeam.createdBy.id === organisation.memberId
+    if (ownerTeam?.owner?.id && organisation?.memberId) {
+      return ownerTeam.owner.id === organisation.memberId
     }
     return false
   }, [userIsGlobalAccess, ownerTeam, organisation])

@@ -34,6 +34,7 @@ import { DeleteTeamDialog } from '../_components/DeleteTeamDialog'
 import { CreateServiceAccountDialog } from '../../service-accounts/_components/CreateServiceAccountDialog'
 import { DeleteServiceAccountDialog } from '../../service-accounts/_components/DeleteServiceAccountDialog'
 import { RemoveTeamAppDialog } from './_components/RemoveTeamAppDialog'
+import { TransferTeamOwnershipDialog } from './_components/TransferTeamOwnershipDialog'
 
 export default function TeamDetail({ params }: { params: { team: string; teamId: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -103,8 +104,8 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
     team.members?.some((m) => m.orgMember?.id === organisation?.memberId) ||
     false
 
-  // Team owner (creator) retains full access; other members use effective permissions
-  const isTeamOwner = team.createdBy?.id === organisation?.memberId
+  // Team owner retains full access; other members use effective permissions
+  const isTeamOwner = team.owner?.id === organisation?.memberId
 
   // Effective permissions: team member role override takes precedence over org-level role
   const effectivePermissions = team.memberRole?.permissions ?? organisation.role!.permissions
@@ -223,7 +224,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                 humanMembers.map((membership: TeamMembershipType) => {
                   const memberId = membership.orgMember!.id
                   const displayName = membership.fullName || membership.email || 'Unknown'
-                  const isTeamCreator = team.createdBy?.id === membership.orgMember?.id
+                  const isMemberOwner = team.owner?.id === membership.orgMember?.id
 
                   return (
                     <div
@@ -243,7 +244,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                         {!team.memberRole && membership.orgMember?.role && (
                           <RoleLabel role={membership.orgMember.role} size="xs" />
                         )}
-                        {isTeamCreator && (
+                        {isMemberOwner && (
                           <FaCrown className="text-amber-500 text-xs shrink-0" title="Team owner" />
                         )}
                       </div>
@@ -263,7 +264,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                         </Link>
                         {canUpdateTeam &&
                           !team.isScimManaged &&
-                          !(team.createdBy?.id === membership.orgMember?.id) && (
+                          !isMemberOwner && (
                             <RemoveTeamMemberDialog
                               teamId={team.id}
                               memberId={memberId}
@@ -457,8 +458,32 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
           </div>
         </div>
 
+        {/* Ownership */}
+        {(userIsGlobalAccess || isTeamOwner) && (
+          <div className="pt-4 space-y-3 border-t border-neutral-500/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-base font-medium">Ownership</div>
+                <div className="text-neutral-500 text-sm">
+                  {team.owner ? (
+                    <>
+                      Owned by{' '}
+                      <span className="text-zinc-900 dark:text-zinc-100">
+                        {team.owner.fullName || team.owner.email}
+                      </span>
+                    </>
+                  ) : (
+                    'This team has no owner. Assign one to enable owner-level management.'
+                  )}
+                </div>
+              </div>
+              <TransferTeamOwnershipDialog team={team} />
+            </div>
+          </div>
+        )}
+
         {/* Danger Zone */}
-        {canDeleteTeam && !team.isScimManaged && (userIsGlobalAccess || team.createdBy?.id === organisation?.memberId) && (
+        {canDeleteTeam && !team.isScimManaged && (userIsGlobalAccess || isTeamOwner) && (
           <div className="pt-4 space-y-2 border-t border-neutral-500/40">
             <div>
               <div className="text-base font-medium">Danger Zone</div>

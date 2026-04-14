@@ -18,6 +18,12 @@ query GetTeams($organisationId: ID!, $teamId: ID) {
       permissions
     }
     isScimManaged
+    owner {
+      id
+      fullName
+      email
+      avatarUrl
+    }
     createdBy {
       id
       fullName
