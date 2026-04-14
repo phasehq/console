@@ -1170,7 +1170,7 @@ class AuthMeProviderDataTest(unittest.TestCase):
         self.assertEqual(data["fullName"], "Alice Johnson")
 
     def test_no_social_account_falls_back_to_email(self):
-        """User with no social account gets email as fullName."""
+        """User with no social account and no full_name gets email as fullName."""
         request = self.factory.get("/auth/me/")
         user = MagicMock()
         user.is_authenticated = True
@@ -1186,6 +1186,23 @@ class AuthMeProviderDataTest(unittest.TestCase):
         data = json.loads(response.content)
         self.assertEqual(data["fullName"], "alice@test.com")
         self.assertIsNone(data["avatarUrl"])
+
+    def test_no_social_account_uses_user_full_name(self):
+        """User with no social account but stored full_name gets it as fullName."""
+        request = self.factory.get("/auth/me/")
+        user = MagicMock()
+        user.is_authenticated = True
+        user.userId = "user-uuid"
+        user.email = "alice@test.com"
+        user.full_name = "Alice Test"
+        user.auth_method = "password"
+        user.socialaccount_set.first.return_value = None
+        request.user = user
+        _add_session(request)
+
+        response = auth_me(request)
+        data = json.loads(response.content)
+        self.assertEqual(data["fullName"], "Alice Test")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
