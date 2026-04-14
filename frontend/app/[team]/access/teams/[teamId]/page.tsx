@@ -33,6 +33,7 @@ import { UpdateTeamDialog } from './_components/UpdateTeamDialog'
 import { DeleteTeamDialog } from '../_components/DeleteTeamDialog'
 import { CreateServiceAccountDialog } from '../../service-accounts/_components/CreateServiceAccountDialog'
 import { DeleteServiceAccountDialog } from '../../service-accounts/_components/DeleteServiceAccountDialog'
+import { RemoveTeamAppDialog } from './_components/RemoveTeamAppDialog'
 
 export default function TeamDetail({ params }: { params: { team: string; teamId: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -427,9 +428,8 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                     </div>
                   </div>
 
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
                     <Link
-                      className="opacity-0 group-hover:opacity-100 transition ease"
                       href={`/${params.team}/apps/${appId}/access/teams`}
                       title={`Manage team access to ${app.name}`}
                     >
@@ -437,6 +437,14 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                         Manage
                       </Button>
                     </Link>
+                    {canUpdateTeam && (
+                      <RemoveTeamAppDialog
+                        teamId={team.id}
+                        teamName={team.name}
+                        appId={appId}
+                        appName={app.name}
+                      />
+                    )}
                   </div>
                 </div>
               ))
