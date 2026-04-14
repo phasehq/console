@@ -22,7 +22,7 @@ import {
   FaCog,
   FaCrown,
   FaExternalLinkAlt,
-  FaLink,
+  FaUsersCog,
   FaRobot,
   FaUsers,
 } from 'react-icons/fa'
@@ -343,7 +343,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                       <div>
                         {isTeamOwned ? (
                           <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400" title="Owned by this team — bound to the team lifecycle">
-                            <FaLink className="text-[0.55rem]" />
+                            <FaUsersCog className="text-[0.55rem]" />
                             Team
                           </span>
                         ) : (
@@ -424,13 +424,16 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                     <div className="text-2xs uppercase tracking-widest text-neutral-500 mb-1">
                       Environments
                     </div>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {envs.map((tae) => (
-                        <span
-                          key={tae.id}
-                          className="text-2xs px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                        >
-                          {tae.environment!.name}
+                    <div className="text-xs text-zinc-700 dark:text-zinc-300">
+                      {envs.map((tae, i) => (
+                        <span key={tae.id}>
+                          <Link
+                            href={`/${params.team}/apps/${appId}/environments/${tae.environment!.id}`}
+                            className="hover:text-emerald-500 dark:hover:text-emerald-400 transition"
+                          >
+                            {tae.environment!.name}
+                          </Link>
+                          {i < envs.length - 1 && ' + '}
                         </span>
                       ))}
                     </div>

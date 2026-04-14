@@ -9,7 +9,7 @@ import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissio
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { FaBan, FaBoxOpen, FaBuilding, FaChevronDown, FaChevronLeft, FaCog, FaEdit, FaLink, FaNetworkWired, FaUsers } from 'react-icons/fa'
+import { FaBan, FaBoxOpen, FaBuilding, FaChevronDown, FaChevronLeft, FaCog, FaEdit, FaNetworkWired, FaUsers, FaUsersCog } from 'react-icons/fa'
 import { FaServer, FaArrowDownUpLock } from 'react-icons/fa6'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
@@ -276,7 +276,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                     className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 hover:bg-blue-500/25 transition ease"
                     title={`Owned by team "${account.team.name}" — bound to the team lifecycle`}
                   >
-                    <FaLink className="text-[0.55rem]" />
+                    <FaUsersCog className="text-[0.55rem]" />
                     {account.team.name}
                   </Link>
                 ) : (

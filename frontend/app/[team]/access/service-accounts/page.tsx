@@ -7,7 +7,7 @@ import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServic
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import { useContext, useState } from 'react'
-import { FaBan, FaBuilding, FaChevronRight, FaLink, FaSearch, FaTimesCircle } from 'react-icons/fa'
+import { FaBan, FaBuilding, FaChevronRight, FaSearch, FaTimesCircle, FaUsersCog } from 'react-icons/fa'
 import { CreateServiceAccountDialog } from './_components/CreateServiceAccountDialog'
 import { FaRobot } from 'react-icons/fa6'
 import { relativeTimeFromDates } from '@/utils/time'
@@ -141,7 +141,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                             className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 hover:bg-blue-500/25 transition ease"
                             title={`Owned by team "${account.team.name}" — bound to the team lifecycle`}
                           >
-                            <FaLink className="text-[0.55rem]" />
+                            <FaUsersCog className="text-[0.55rem]" />
                             {account.team.name}
                           </Link>
                         ) : (

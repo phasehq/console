@@ -23,24 +23,25 @@ export const Checkbox = (props: {
       role="checkbox"
       aria-checked={checked}
       disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={clsx('flex items-start gap-3 group', disabled && 'opacity-50 cursor-not-allowed')}
+      onClick={(e) => {
+        e.stopPropagation()
+        onChange(!checked)
+      }}
+      className={clsx('flex gap-3 group', label ? 'items-start' : 'items-center', disabled && 'opacity-50 cursor-not-allowed')}
     >
       <div
         className={clsx(
-          'flex items-center justify-center shrink-0 rounded ring-1 ring-inset transition ease',
+          'flex items-center justify-center shrink-0 rounded-full ring-1 ring-inset transition ease',
           styles.box,
-          styles.offset,
+          label && styles.offset,
           checked
-            ? 'bg-emerald-500 ring-emerald-500'
+            ? 'bg-emerald-500 dark:bg-emerald-600 ring-emerald-500'
             : 'bg-zinc-100 dark:bg-zinc-800 ring-neutral-500/40 group-hover:ring-neutral-500/60'
         )}
       >
         {checked && <FaCheck className={clsx('text-white', styles.icon)} />}
       </div>
-      {label && (
-        <span className="text-xs text-neutral-500 text-left select-none">{label}</span>
-      )}
+      {label && <span className="text-xs text-neutral-500 text-left select-none">{label}</span>}
     </button>
   )
 }
