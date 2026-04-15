@@ -250,6 +250,12 @@ class EnableServiceAccountClientSideKeyManagementMutation(graphene.Mutation):
 
         _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
+        # Team-owned SAs must always use server-side KMS
+        if service_account.team is not None:
+            raise GraphQLError(
+                "Team-owned service accounts require server-side key management and cannot be switched to client-side."
+            )
+
         # Delete server-wrapped keys to disable server-side key management
         service_account.server_wrapped_keyring = None
         service_account.server_wrapped_recovery = None
