@@ -294,7 +294,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
               {account.serverSideKeyManagementEnabled ? 'Server-side' : 'Client-side'} KMS
             </span>
-            {effectiveCanUpdateSA && hasTeamAccess && (
+            {effectiveCanUpdateSA && hasTeamAccess && !account.team?.id && (
               <KeyManagementDialog
                 serviceAccount={account}
                 buttonVariant={'secondary'}
