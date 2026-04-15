@@ -48,12 +48,12 @@ SCIM_USER_ATTR_MAP = {
     "username": "email__iexact",
     "externalid": "external_id",
     "emails.value": "email__iexact",
-    "displayname": "display_name__icontains",
+    "displayname": "display_name__iexact",
 }
 
 # Maps SCIM group attribute names to Django ORM lookups
 SCIM_GROUP_ATTR_MAP = {
-    "displayname": "display_name__icontains",
+    "displayname": "display_name__iexact",
     "externalid": "external_id",
 }
 

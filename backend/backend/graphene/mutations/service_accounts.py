@@ -2,6 +2,7 @@ import graphene
 from django.db import transaction
 from graphql import GraphQLError
 from api.models import (
+    App,
     Organisation,
     OrganisationMember,
     Role,
@@ -9,28 +10,75 @@ from api.models import (
     ServiceAccountHandler,
     ServiceAccountToken,
     Team,
+    TeamAppEnvironment,
     TeamMembership,
     Identity,
 )
+from api.utils.keys import provision_team_environment_keys
 from api.utils.access.permissions import (
     role_has_global_access,
+    role_has_permission,
     user_has_permission,
     user_is_org_member,
-    user_is_team_member,
 )
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
 from datetime import datetime
 from django.conf import settings
 
 
-def _check_team_sa_access(user, service_account):
-    """For team-owned SAs, verify the user is a team member or has global access.
-    Org-level SAs (team=null) pass through — existing permission checks are sufficient."""
+def _check_sa_permission(user, service_account, action, resource):
+    """
+    Unified permission check for service account operations.
+
+    For team-owned SAs, resolves the effective role using the team's member_role override:
+    - Team owner → always allowed
+    - Global access (Owner/Admin) → always allowed
+    - Team member → uses team member_role if set, else falls back to org role
+    - Non-team member → denied
+
+    For org-level SAs: uses standard org permission check.
+    """
+    org = service_account.organisation
+
     if service_account.team is None:
+        # Org-level SA: standard permission check
+        if not user_has_permission(user, action, resource, org):
+            raise GraphQLError(
+                f"You don't have the permissions required to {action} {resource} in this organisation"
+            )
         return
 
-    if not user_is_team_member(user.userId, service_account.team_id):
+    # Team-owned SA
+    try:
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=org, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
         raise GraphQLError("You don't have access to this Service Account")
+
+    # Global access users (Owner/Admin) always allowed
+    if role_has_global_access(org_member.role):
+        return
+
+    # Team owner always allowed
+    if service_account.team.owner_id is not None and service_account.team.owner_id == org_member.id:
+        return
+
+    # Check team membership
+    if not TeamMembership.objects.filter(
+        team=service_account.team,
+        org_member=org_member,
+        team__deleted_at__isnull=True,
+    ).exists():
+        raise GraphQLError("You don't have access to this Service Account")
+
+    # Resolve effective role: team member_role if set, else org role
+    effective_role = service_account.team.member_role or org_member.role
+
+    if not role_has_permission(effective_role, action, resource):
+        raise GraphQLError(
+            f"You don't have the permissions required to {action} {resource}"
+        )
 
 
 class ServiceAccountHandlerInput(graphene.InputObjectType):
@@ -70,10 +118,37 @@ class CreateServiceAccountMutation(graphene.Mutation):
         user = info.context.user
         org = Organisation.objects.get(id=organisation_id)
 
-        if not user_has_permission(user, "create", "ServiceAccounts", org):
-            raise GraphQLError(
-                "You don't have the permissions required to create Service Accounts in this organisation"
+        # Permission check: team-owned SAs use team member_role override
+        team = None
+        if team_id:
+            team = Team.objects.get(id=team_id, organisation=org, deleted_at__isnull=True)
+            org_member = OrganisationMember.objects.get(
+                user=user, organisation=org, deleted_at=None
             )
+
+            if not role_has_global_access(org_member.role):
+                is_team_owner = team.owner_id is not None and team.owner_id == org_member.id
+
+                if not is_team_owner:
+                    # Must be a team member
+                    if not TeamMembership.objects.filter(
+                        team=team, org_member=org_member
+                    ).exists():
+                        raise GraphQLError(
+                            "You must be a member of the team to create a team-owned Service Account"
+                        )
+
+                    # Check effective role: team member_role if set, else org role
+                    effective_role = team.member_role or org_member.role
+                    if not role_has_permission(effective_role, "create", "ServiceAccounts"):
+                        raise GraphQLError(
+                            "You don't have the permissions required to create Service Accounts"
+                        )
+        else:
+            if not user_has_permission(user, "create", "ServiceAccounts", org):
+                raise GraphQLError(
+                    "You don't have the permissions required to create Service Accounts in this organisation"
+                )
 
         if handlers is None or len(handlers) == 0:
             raise GraphQLError("At least one service account handler must be provided")
@@ -84,22 +159,6 @@ class CreateServiceAccountMutation(graphene.Mutation):
             raise GraphQLError(
                 f"Service Accounts cannot be assigned the '{role.name}' role."
             )
-
-        # Validate team ownership if creating a team-owned SA
-        team = None
-        if team_id:
-            team = Team.objects.get(id=team_id, organisation=org, deleted_at__isnull=True)
-            org_member = OrganisationMember.objects.get(
-                user=user, organisation=org, deleted_at=None
-            )
-            # User must be a member of the team (or have global access)
-            if not role_has_global_access(org_member.role):
-                if not TeamMembership.objects.filter(
-                    team=team, org_member=org_member
-                ).exists():
-                    raise GraphQLError(
-                        "You must be a member of the team to create a team-owned Service Account"
-                    )
 
         with transaction.atomic():
             service_account = ServiceAccount.objects.create(
@@ -122,9 +181,22 @@ class CreateServiceAccountMutation(graphene.Mutation):
 
             # Auto-add team-owned SA as a member of the team
             if team:
-                TeamMembership.objects.get_or_create(
+                membership, _ = TeamMembership.objects.get_or_create(
                     team=team, service_account=service_account
                 )
+
+                # Provision environment keys for the SA on all team apps
+                app_ids = (
+                    TeamAppEnvironment.objects.filter(team=team)
+                    .values_list("app_id", flat=True)
+                    .distinct()
+                )
+                for app_id in app_ids:
+                    app = App.objects.get(id=app_id)
+                    if app.sse_enabled:
+                        provision_team_environment_keys(
+                            team, app, members=[membership]
+                        )
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
@@ -154,14 +226,7 @@ class EnableServiceAccountServerSideKeyManagementMutation(graphene.Mutation):
         user = info.context.user
         service_account = ServiceAccount.objects.get(id=service_account_id)
 
-        if not user_has_permission(
-            user, "update", "ServiceAccounts", service_account.organisation
-        ):
-            raise GraphQLError(
-                "You don't have the permissions required to update Service Accounts in this organisation"
-            )
-
-        _check_team_sa_access(user, service_account)
+        _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
         service_account.server_wrapped_keyring = server_wrapped_keyring
         service_account.server_wrapped_recovery = server_wrapped_recovery
@@ -183,14 +248,7 @@ class EnableServiceAccountClientSideKeyManagementMutation(graphene.Mutation):
         user = info.context.user
         service_account = ServiceAccount.objects.get(id=service_account_id)
 
-        if not user_has_permission(
-            user, "update", "ServiceAccounts", service_account.organisation
-        ):
-            raise GraphQLError(
-                "You don't have the permissions required to update Service Accounts in this organisation"
-            )
-
-        _check_team_sa_access(user, service_account)
+        _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
         # Delete server-wrapped keys to disable server-side key management
         service_account.server_wrapped_keyring = None
@@ -216,14 +274,7 @@ class UpdateServiceAccountMutation(graphene.Mutation):
         user = info.context.user
         service_account = ServiceAccount.objects.get(id=service_account_id)
 
-        if not user_has_permission(
-            user, "update", "ServiceAccounts", service_account.organisation
-        ):
-            raise GraphQLError(
-                "You don't have the permissions required to update Service Accounts in this organisation"
-            )
-
-        _check_team_sa_access(user, service_account)
+        _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
         role = Role.objects.get(id=role_id, organisation=service_account.organisation)
 
@@ -291,14 +342,7 @@ class DeleteServiceAccountMutation(graphene.Mutation):
         user = info.context.user
         service_account = ServiceAccount.objects.get(id=service_account_id)
 
-        if not user_has_permission(
-            user, "delete", "ServiceAccounts", service_account.organisation
-        ):
-            raise GraphQLError(
-                "You don't have the permissions required to delete Service Accounts in this organisation"
-            )
-
-        _check_team_sa_access(user, service_account)
+        _check_sa_permission(user, service_account, "delete", "ServiceAccounts")
 
         service_account.delete()
 
@@ -339,14 +383,7 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
             user=user, organisation=service_account.organisation, deleted_at=None
         )
 
-        if not user_has_permission(
-            user, "create", "ServiceAccountTokens", service_account.organisation
-        ):
-            raise GraphQLError(
-                "You don't have the permissions required to create Service Tokens in this organisation"
-            )
-
-        _check_team_sa_access(user, service_account)
+        _check_sa_permission(user, service_account, "create", "ServiceAccountTokens")
 
         if expiry is not None:
             expires_at = datetime.fromtimestamp(expiry / 1000)
@@ -377,18 +414,89 @@ class DeleteServiceAccountTokenMutation(graphene.Mutation):
         user = info.context.user
         token = ServiceAccountToken.objects.get(id=token_id)
 
-        if not user_has_permission(
-            user, "delete", "ServiceAccountTokens", token.service_account.organisation
-        ):
-            raise GraphQLError(
-                "You don't have the permissions required to delete Service Tokens in this organisation"
-            )
-
-        _check_team_sa_access(user, token.service_account)
+        _check_sa_permission(user, token.service_account, "delete", "ServiceAccountTokens")
 
         token.delete()
 
         return DeleteServiceAccountTokenMutation(ok=True)
+
+
+class CreateServerSideServiceAccountTokenMutation(graphene.Mutation):
+    """Create a service account token using server-side key management.
+
+    The server decrypts the SA keyring, generates a token with key splitting,
+    and returns the full token string. Requires SSK to be enabled on the SA.
+    This allows team members who are not SA handlers to create tokens.
+    """
+
+    class Arguments:
+        service_account_id = graphene.ID(required=True)
+        name = graphene.String(required=True)
+        expiry = graphene.BigInt(required=False)
+
+    token_string = graphene.String()
+    token = graphene.Field(ServiceAccountTokenType)
+
+    @classmethod
+    def mutate(cls, root, info, service_account_id, name, expiry=None):
+        import json
+        from api.utils.crypto import (
+            get_server_keypair,
+            decrypt_asymmetric,
+            split_secret_hex,
+            wrap_share_hex,
+            random_hex,
+            ed25519_to_kx,
+        )
+
+        user = info.context.user
+        service_account = ServiceAccount.objects.get(id=service_account_id)
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=service_account.organisation, deleted_at=None
+        )
+
+        _check_sa_permission(user, service_account, "create", "ServiceAccountTokens")
+
+        if not service_account.server_wrapped_keyring:
+            raise GraphQLError(
+                "Server-side key management must be enabled to create tokens this way"
+            )
+
+        # Decrypt SA keyring using server keypair
+        pk, sk = get_server_keypair()
+        keyring_json = decrypt_asymmetric(
+            service_account.server_wrapped_keyring, sk.hex(), pk.hex()
+        )
+        keyring = json.loads(keyring_json)
+        kx_pub, kx_priv = ed25519_to_kx(keyring["publicKey"], keyring["privateKey"])
+
+        # Generate token material
+        wrap_key = random_hex(32)
+        token_value = random_hex(32)
+        share_a, share_b = split_secret_hex(kx_priv)
+        wrapped_share_b = wrap_share_hex(share_b, wrap_key)
+
+        if expiry is not None:
+            expires_at = datetime.fromtimestamp(expiry / 1000)
+        else:
+            expires_at = None
+
+        token = ServiceAccountToken.objects.create(
+            service_account=service_account,
+            name=name,
+            identity_key=kx_pub,
+            token=token_value,
+            wrapped_key_share=wrapped_share_b,
+            created_by=org_member,
+            expires_at=expires_at,
+        )
+
+        full_token = f"pss_service:v2:{token_value}:{kx_pub}:{share_a}:{wrap_key}"
+
+        return CreateServerSideServiceAccountTokenMutation(
+            token_string=full_token,
+            token=token,
+        )
 
 
 class UpdateServiceAccountOwnershipMutation(graphene.Mutation):

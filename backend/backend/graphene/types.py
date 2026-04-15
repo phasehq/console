@@ -1170,9 +1170,9 @@ class TeamType(DjangoObjectType):
         return self.memberships.select_related(
             "org_member__user", "service_account"
         ).exclude(
-            org_member__deleted_at__isnull=False,
+            org_member__isnull=False, org_member__deleted_at__isnull=False,
         ).exclude(
-            service_account__deleted_at__isnull=False,
+            service_account__isnull=False, service_account__deleted_at__isnull=False,
         )
 
     def resolve_apps(self, info):
@@ -1186,9 +1186,9 @@ class TeamType(DjangoObjectType):
 
     def resolve_member_count(self, info):
         return self.memberships.exclude(
-            org_member__deleted_at__isnull=False,
+            org_member__isnull=False, org_member__deleted_at__isnull=False,
         ).exclude(
-            service_account__deleted_at__isnull=False,
+            service_account__isnull=False, service_account__deleted_at__isnull=False,
         ).count()
 
 

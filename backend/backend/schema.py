@@ -28,6 +28,7 @@ from ee.integrations.secrets.dynamic.graphene.queries import (
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
+    CreateServerSideServiceAccountTokenMutation,
     DeleteServiceAccountMutation,
     DeleteServiceAccountTokenMutation,
     EnableServiceAccountClientSideKeyManagementMutation,
@@ -1210,6 +1211,7 @@ class Mutation(graphene.ObjectType):
     update_service_account = UpdateServiceAccountMutation.Field()
     delete_service_account = DeleteServiceAccountMutation.Field()
     create_service_account_token = CreateServiceAccountTokenMutation.Field()
+    create_server_side_service_account_token = CreateServerSideServiceAccountTokenMutation.Field()
     delete_service_account_token = DeleteServiceAccountTokenMutation.Field()
     update_service_account_ownership = UpdateServiceAccountOwnershipMutation.Field()
 

@@ -12,8 +12,32 @@ from graphql import GraphQLError
 
 def resolve_service_accounts(root, info, org_id, service_account_id=None):
     org = Organisation.objects.get(id=org_id)
-    if user_has_permission(info.context.user.userId, "read", "ServiceAccounts", org):
 
+    has_org_permission = user_has_permission(info.context.user.userId, "read", "ServiceAccounts", org)
+
+    # Team-based access: if requesting a specific SA, allow access if user shares a team with it
+    has_team_access = False
+    if not has_org_permission and service_account_id is not None:
+        try:
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user, organisation=org, deleted_at=None
+            )
+            user_team_ids = TeamMembership.objects.filter(
+                org_member=org_member,
+                team__deleted_at__isnull=True,
+            ).values_list("team_id", flat=True)
+            has_team_access = ServiceAccount.objects.filter(
+                id=service_account_id,
+                deleted_at=None,
+                team_id__in=user_team_ids,
+            ).exists() or TeamMembership.objects.filter(
+                service_account_id=service_account_id,
+                team_id__in=user_team_ids,
+            ).exists()
+        except OrganisationMember.DoesNotExist:
+            pass
+
+    if has_org_permission or has_team_access:
         filter = {"organisation": org, "deleted_at": None}
 
         if service_account_id is not None:
@@ -21,7 +45,7 @@ def resolve_service_accounts(root, info, org_id, service_account_id=None):
 
         qs = ServiceAccount.objects.filter(**filter)
 
-        # Team-owned SAs: only visible to team members + global_access users
+        # Non-global-access users: scope to org-level SAs + SAs in their teams
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=org, deleted_at=None
         )
@@ -30,7 +54,15 @@ def resolve_service_accounts(root, info, org_id, service_account_id=None):
                 org_member=org_member,
                 team__deleted_at__isnull=True,
             ).values_list("team_id", flat=True)
-            qs = qs.filter(Q(team__isnull=True) | Q(team_id__in=user_team_ids))
+            if has_org_permission:
+                # Org permission: see org-level + team-scoped SAs in user's teams
+                qs = qs.filter(Q(team__isnull=True) | Q(team_id__in=user_team_ids))
+            else:
+                # Team access only: only see SAs that are in shared teams
+                qs = qs.filter(
+                    Q(team_id__in=user_team_ids) |
+                    Q(team_memberships__team_id__in=user_team_ids)
+                ).distinct()
 
         return qs
 
