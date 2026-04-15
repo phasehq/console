@@ -119,7 +119,7 @@ export const CreateTeamDialog = () => {
     setSaRole(null)
   }
 
-  const roleOptions = roleData?.roles || []
+  const roleOptions = roleData?.roles?.filter((role: RoleType) => role.name?.toLowerCase() !== 'owner') || []
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

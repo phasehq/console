@@ -293,7 +293,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {canUpdateTeam && !team.isScimManaged && (
+              {canUpdateTeam && (
                 <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="service-accounts" buttonVariant="secondary" />
               )}
               {canCreateSA && (
@@ -354,10 +354,10 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                         </Link>
                         {isTeamOwned ? (
                           canUpdateTeam && (
-                            <DeleteServiceAccountDialog account={sa} />
+                            <DeleteServiceAccountDialog account={sa} onDelete={() => {}} />
                           )
                         ) : (
-                          canUpdateTeam && !team.isScimManaged && (
+                          canUpdateTeam && (
                             <RemoveTeamMemberDialog
                               teamId={team.id}
                               memberId={sa.id}
