@@ -4,6 +4,7 @@ import { Alert } from '@/components/common/Alert'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { FaChevronDown, FaPlus, FaUsersCog } from 'react-icons/fa'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetServiceAccountHandlers } from '@/graphql/queries/service-accounts/getServiceAccountHandlers.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { GetServerKey } from '@/graphql/queries/syncing/getServerKey.gql'
@@ -104,9 +105,10 @@ export const CreateServiceAccountDialog = ({
         const accountSeed = await organisationSeed(mnemonic, organisation!.id)
         const keyring = await organisationKeyring(accountSeed)
 
-        // Wrap keys for server if required
+        // Wrap keys for server if required.
+        // Team-owned SAs always enable SSK so all team members can generate tokens server-side.
         let serverKeys = undefined
-        if (thirdParty) {
+        if (thirdParty || isTeamContext) {
           const serverKey = serverKeyData.serverPublicKey
 
           const serverEncryptedKeyring = await encryptAsymmetric(JSON.stringify(keyring), serverKey)
@@ -151,6 +153,14 @@ export const CreateServiceAccountDialog = ({
               query: GetServiceAccounts,
               variables: { orgId: organisation!.id },
             },
+            ...(teamId
+              ? [
+                  {
+                    query: GetTeams,
+                    variables: { organisationId: organisation!.id, teamId },
+                  },
+                ]
+              : []),
           ],
         })
 
