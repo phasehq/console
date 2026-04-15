@@ -66,7 +66,9 @@ def service_account_can_access_environment(account_id, env_id):
         organisation=env.app.organisation, id=account_id, deleted_at=None
     )
     return EnvironmentKey.objects.filter(
-        service_account=service_account, environment_id=env_id
+        service_account=service_account,
+        environment_id=env_id,
+        deleted_at__isnull=True,
     ).exists()
 
 
@@ -123,10 +125,10 @@ def _check_app_permission(account, action, resource, app, is_service_account=Fal
     """
     Check app-level permission considering both individual and team access.
 
-    - Individual access: uses org role's app_permissions
-    - Team access: uses team role's app_permissions (override model)
-    - Multiple teams: union — if ANY team role grants the permission, allow it
-    - Team role is null: uses org role (team is purely an access group)
+    Union semantics: if ANY access grant (individual or team) permits the
+    action, the user is allowed.  Individual access uses the org role;
+    each team uses its role override (or falls back to the org role when
+    no override is set).
     """
     Team = apps.get_model("api", "Team")
 
@@ -141,9 +143,10 @@ def _check_app_permission(account, action, resource, app, is_service_account=Fal
         role_field = "member_role"
         membership_filter = {"memberships__org_member": account}
 
-    # Individual access → org role, no team override
+    # Individual access → check org role (one grant in the union)
     if has_individual:
-        return role_has_permission(org_role, action, resource, is_app_resource=True)
+        if role_has_permission(org_role, action, resource, is_app_resource=True):
+            return True
 
     # Team access — find all teams granting access to this app
     teams = Team.objects.filter(
@@ -152,19 +155,19 @@ def _check_app_permission(account, action, resource, app, is_service_account=Fal
         **membership_filter,
     ).distinct()
 
-    if not teams.exists():
-        return False  # No access
-
-    # Union: if ANY team role grants this permission, allow it
     for team in teams:
         team_role = getattr(team, role_field)
         if team_role is None:
-            # No team role → use org role (most permissive possible)
+            # No team role → use org role
             if role_has_permission(org_role, action, resource, is_app_resource=True):
                 return True
         else:
             if role_has_permission(team_role, action, resource, is_app_resource=True):
                 return True
+
+    # Must have at least one access grant to reach here with a chance of True
+    if not has_individual and not teams.exists():
+        return False
 
     return False
 
