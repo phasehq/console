@@ -52,26 +52,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   const [savingOwnership, setSavingOwnership] = useState(false)
   const ownershipDialogRef = useRef<{ closeModal: () => void }>(null)
 
-  const userCanReadSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
-    : false
-
-  const userCanReadAppMemberships = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read', true)
-    : false
-
-  const userCanViewNetworkAccess = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'NetworkAccessPolicies', 'read')
-    : false
-
-  const userCanUpdateSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update')
-    : false
-
-  const userCanDeleteSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete')
-    : false
-
+  // Org-level permissions (always use org role, not overridden by team)
   const userCanReadTeams = organisation
     ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
     : false
@@ -80,9 +61,14 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     ? userHasGlobalAccess(organisation.role!.permissions)
     : false
 
+  const userCanViewNetworkAccess = organisation
+    ? userHasPermission(organisation?.role?.permissions, 'NetworkAccessPolicies', 'read')
+    : false
+
+  // Always attempt the query — backend will return data if user has team-based access
   const { data, loading } = useQuery(GetServiceAccountDetail, {
     variables: { orgId: organisation?.id, id: params.account },
-    skip: !organisation || !userCanReadSA,
+    skip: !organisation,
     fetchPolicy: 'cache-and-network',
   })
 
@@ -97,6 +83,37 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   const account: ServiceAccountType = data?.serviceAccounts[0]
   const isTeamOwned = !!account?.team
 
+  // Team membership and ownership (from SA query's team data — no GetTeams dependency)
+  const isTeamOwner = isTeamOwned && account?.team?.owner?.id === organisation?.memberId
+  const isTeamMember =
+    isTeamOwned &&
+    (account?.team?.members?.some((m) => m.orgMember?.id === organisation?.memberId) ?? false)
+
+  // Effective permissions for SA-related checks.
+  // For team-owned SAs: team memberRole if set, else org role.
+  // For org-level SAs: org role.
+  // Team owner bypasses all permission checks via isTeamOwner.
+  const effectivePermissions = useMemo(() => {
+    if (!organisation?.role?.permissions) return null
+    if (!isTeamOwned || !account?.team) return organisation.role!.permissions
+    if (isTeamMember && account.team.memberRole?.permissions) {
+      return account.team.memberRole.permissions
+    }
+    return organisation.role!.permissions
+  }, [organisation, isTeamOwned, isTeamMember, account])
+
+  // Whether user has basic access to this team-owned SA
+  const hasTeamAccess = !isTeamOwned || isTeamOwner || isTeamMember || userIsGlobalAccess
+
+  // SA-related permissions (team role override applies, team owner gets full access)
+  const effectiveCanUpdateSA =
+    isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'update')
+  const effectiveCanDeleteSA =
+    isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'delete')
+  const effectiveCanReadAppMemberships =
+    isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'read', true)
+
+  // Teams this SA belongs to (for the teams section list)
   const accountTeams = useMemo(() => {
     if (!teamsData?.teams || !account) return []
     return (teamsData.teams as TeamType[]).filter((team) =>
@@ -106,21 +123,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
   const isMultiTeamOrg = !isTeamOwned && accountTeams.length > 1
 
-  // Ownership can be changed by global_access users, or the creator of the owning team
-  const ownerTeam = useMemo(() => {
-    if (!account?.team || !teamsData?.teams) return null
-    return (teamsData.teams as TeamType[]).find((t) => t.id === account.team?.id) || null
-  }, [teamsData, account])
+  // Ownership management: global access or team owner
+  const userCanManageOwnership = userIsGlobalAccess || isTeamOwner
 
-  const userCanManageOwnership = useMemo(() => {
-    if (userIsGlobalAccess) return true
-    if (ownerTeam?.owner?.id && organisation?.memberId) {
-      return ownerTeam.owner.id === organisation.memberId
-    }
-    return false
-  }, [userIsGlobalAccess, ownerTeam, organisation])
-
-  // Non global-access users only see teams they're a member of
+  // Non global-access users only see teams they're a member of (for ownership dialog)
   const availableTeams = useMemo(() => {
     if (!teamsData?.teams) return []
     const allTeams = teamsData.teams as TeamType[]
@@ -130,18 +136,11 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     )
   }, [teamsData, userIsGlobalAccess, organisation])
 
-  // For team-owned SAs, only team members + global_access can manage
-  const userCanManageTeamSA = useMemo(() => {
-    if (!isTeamOwned) return true // org-level SAs use existing permission checks
-    if (userIsGlobalAccess) return true
-    return ownerTeam?.members?.some((m) => m.orgMember?.id === organisation?.memberId) ?? false
-  }, [isTeamOwned, userIsGlobalAccess, ownerTeam, organisation])
-
   const nameUpdated = account ? account.name !== name : false
 
   const updateName = async () => {
-    if (!userCanUpdateSA) {
-      toast.error("You don't have the permissions requried to update Service Accounts")
+    if (!effectiveCanUpdateSA) {
+      toast.error("You don't have the permissions required to update Service Accounts")
     }
     await updateAccount({
       variables: {
@@ -194,23 +193,6 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     if (account) setName(account.name)
   }, [account])
 
-  if (!userCanReadSA)
-    return (
-      <section>
-        <EmptyState
-          title="Access restricted"
-          subtitle="You don't have the permissions required to view service accounts in this organisation."
-          graphic={
-            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-              <FaBan />
-            </div>
-          }
-        >
-          <></>
-        </EmptyState>
-      </section>
-    )
-
   if (loading)
     return (
       <div>
@@ -255,7 +237,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-base font-medium"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  readOnly={!userCanUpdateSA}
+                  readOnly={!effectiveCanUpdateSA}
                   maxLength={64}
                 />
                 {nameUpdated ? (
@@ -312,8 +294,12 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
               {account.serverSideKeyManagementEnabled ? 'Server-side' : 'Client-side'} KMS
             </span>
-            {userCanUpdateSA && userCanManageTeamSA && (
-              <KeyManagementDialog serviceAccount={account} buttonVariant={'secondary'} />
+            {effectiveCanUpdateSA && hasTeamAccess && (
+              <KeyManagementDialog
+                serviceAccount={account}
+                buttonVariant={'secondary'}
+                effectivePermissions={effectivePermissions}
+              />
             )}
           </div>
         </div>
@@ -330,7 +316,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <div className="text-sm w-max flex items-center gap-2">
               <ServiceAccountRoleSelector
                 account={account}
-                displayOnly={!userCanUpdateSA || isTeamOwned}
+                displayOnly={!effectiveCanUpdateSA || isTeamOwned}
               />
               {isTeamOwned && <span className="text-2xs text-neutral-500">(managed by team)</span>}
             </div>
@@ -556,7 +542,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                 )}
               </div>
             </div>
-            {!isTeamOwned && userCanReadAppMemberships && account.appMemberships?.length! > 0 && (
+            {!isTeamOwned && effectiveCanReadAppMemberships && account.appMemberships?.length! > 0 && (
               <AddAppButton
                 serviceAccountId={params.account}
                 appMemberships={account.appMemberships ?? []}
@@ -564,7 +550,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             )}
           </div>
 
-          {userCanReadAppMemberships ? (
+          {effectiveCanReadAppMemberships ? (
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {account.appMemberships && account.appMemberships.length > 0 ? (
                 account.appMemberships.map((appMembership) => (
@@ -630,7 +616,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                       </div>
                     }
                   >
-                    {!isTeamOwned && userCanReadAppMemberships && (
+                    {!isTeamOwned && effectiveCanReadAppMemberships && (
                       <AddAppButton
                         serviceAccountId={params.account}
                         appMemberships={account.appMemberships ?? []}
@@ -669,12 +655,12 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   Manage the network access policy for this Account
                 </div>
               </div>
-              {userCanManageTeamSA && account.networkPolicies?.length! > 0 && (
+              {hasTeamAccess && account.networkPolicies?.length! > 0 && (
                 <UpdateAccountNetworkPolicies account={account} />
               )}
             </div>
 
-            {!userCanManageTeamSA ? (
+            {!hasTeamAccess ? (
               <div className="py-6 text-center text-neutral-500 text-sm">
                 You must be a member of the{' '}
                 <Link
@@ -726,8 +712,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           </div>
         )}
 
-        {userCanManageTeamSA ? (
-          <ServiceAccountTokens account={account} />
+        {hasTeamAccess ? (
+          <ServiceAccountTokens account={account} effectivePermissions={effectivePermissions} />
         ) : (
           <div className="py-4 space-y-3">
             <div>
@@ -747,7 +733,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           </div>
         )}
 
-        {userCanDeleteSA && userCanManageTeamSA && (
+        {effectiveCanDeleteSA && hasTeamAccess && (
           <div className="space-y-2 py-4">
             <div>
               <div className="text-base font-medium">Danger Zone</div>
