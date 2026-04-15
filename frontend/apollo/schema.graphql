@@ -1198,6 +1198,15 @@ type Mutation {
   updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
   createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+
+  """
+  Create a service account token using server-side key management.
+  
+  The server decrypts the SA keyring, generates a token with key splitting,
+  and returns the full token string. Requires SSK to be enabled on the SA.
+  This allows team members who are not SA handlers to create tokens.
+  """
+  createServerSideServiceAccountToken(expiry: BigInt, name: String!, serviceAccountId: ID!): CreateServerSideServiceAccountTokenMutation
   deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
 
   """
@@ -1538,6 +1547,18 @@ type DeleteServiceAccountMutation {
 }
 
 type CreateServiceAccountTokenMutation {
+  token: ServiceAccountTokenType
+}
+
+"""
+Create a service account token using server-side key management.
+
+The server decrypts the SA keyring, generates a token with key splitting,
+and returns the full token string. Requires SSK to be enabled on the SA.
+This allows team members who are not SA handlers to create tokens.
+"""
+type CreateServerSideServiceAccountTokenMutation {
+  tokenString: String
   token: ServiceAccountTokenType
 }
 
