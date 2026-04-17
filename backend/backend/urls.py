@@ -14,6 +14,7 @@ from api.views.auth import (
 )
 from api.views.sso import (
     auth_me,
+    OrgSSOAuthorizeView,
     SSOAuthorizeView,
     SSOCallbackView,
 )
@@ -43,6 +44,7 @@ urlpatterns = [
     path("logout/", csrf_exempt(logout_view)),
     # Auth endpoints
     path("auth/me/", auth_me),
+    path("auth/sso/org/<str:config_id>/authorize/", OrgSSOAuthorizeView.as_view()),
     path("auth/sso/<str:provider>/authorize/", SSOAuthorizeView.as_view()),
     path("auth/sso/<str:provider>/callback/", SSOCallbackView.as_view()),
     # Password auth

@@ -18,6 +18,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import AnonRateThrottle
 
 from allauth.socialaccount.models import SocialApp, SocialAccount, SocialToken, SocialLogin
+from api.models import OrganisationSSOProvider
 
 logger = logging.getLogger(__name__)
 
@@ -401,15 +402,100 @@ def auth_me(request):
     if not full_name and hasattr(user, "full_name") and user.full_name:
         full_name = user.full_name
 
+    # Auth method from session (set at login time)
+    auth_method = request.session.get("auth_method", "sso")
+    auth_sso_org_id = request.session.get("auth_sso_org_id")
+
     return JsonResponse(
         {
             "userId": str(user.userId),
             "email": user.email,
             "fullName": full_name or user.email,
             "avatarUrl": avatar_url,
-            "authMethod": getattr(user, "auth_method", "sso"),
+            "authMethod": auth_method,
+            "authSsoOrgId": auth_sso_org_id,
         }
     )
+
+
+# --- Org-level SSO Authorize ---
+
+class OrgSSOAuthorizeView(View):
+    """
+    GET /auth/sso/org/<config_id>/authorize/
+
+    Loads SSO config from DB for the given org provider, builds the
+    OIDC authorization URL, and redirects the user to the IdP.
+    """
+
+    def get(self, request, config_id):
+        from api.utils.sso import get_org_sso_config
+
+        try:
+            org_provider, config = get_org_sso_config(config_id)
+        except Exception:
+            return JsonResponse(
+                {"error": "SSO provider not found or not enabled."},
+                status=404,
+            )
+
+        # Build issuer + callback from provider registry
+        from api.utils.sso import get_org_provider_meta, resolve_issuer
+
+        meta = get_org_provider_meta(org_provider.provider_type)
+        if not meta:
+            return JsonResponse({"error": "Unsupported provider type."}, status=400)
+
+        issuer = resolve_issuer(org_provider.provider_type, config)
+        if not issuer:
+            return JsonResponse({"error": "Could not determine OIDC issuer."}, status=400)
+
+        endpoints = _get_oidc_endpoints(issuer)
+        if not endpoints:
+            return JsonResponse(
+                {"error": "Failed to discover OIDC endpoints. Please check OIDC configuration."},
+                status=502,
+            )
+
+        callback_url = _get_callback_url(meta["callback_slug"])
+
+        state = secrets.token_urlsafe(32)
+        nonce = secrets.token_urlsafe(32)
+
+        request.session["sso_state"] = state
+        request.session["sso_provider"] = meta["callback_slug"]
+        request.session["sso_callback_url"] = callback_url
+        request.session["sso_token_url"] = endpoints["token_url"]
+        request.session["sso_nonce"] = nonce
+        # Mark this as org-level SSO so the callback loads config from DB
+        request.session["sso_org_config_id"] = str(org_provider.id)
+
+        # djangorestframework_camel_case.CamelCaseMiddleWare rewrites
+        # incoming query params from camelCase to snake_case, so the
+        # frontend's ?callbackUrl= arrives here as 'callback_url'. Read both
+        # for safety.
+        callback_url_param = request.GET.get("callback_url") or request.GET.get("callbackUrl")
+        if callback_url_param:
+            request.session["sso_return_to"] = callback_url_param
+
+        request.session.save()
+
+        params = {
+            "client_id": config["client_id"],
+            "redirect_uri": callback_url,
+            "scope": "openid profile email",
+            "state": state,
+            "response_type": "code",
+            "nonce": nonce,
+        }
+
+        authorize_url = endpoints["authorize_url"]
+        parsed = urlparse(authorize_url)
+        if not parsed.scheme == "https" or not parsed.netloc:
+            return JsonResponse({"error": "Invalid authorize URL"}, status=500)
+
+        full_url = f"{authorize_url}?{urlencode(params)}"
+        return redirect(full_url)
 
 
 # --- SSO Authorize ---
@@ -452,7 +538,7 @@ class SSOAuthorizeView(View):
 
         # Preserve the original deep link so the user lands on the page
         # they requested after SSO completes (e.g. /team/settings)
-        callback_url_param = request.GET.get("callbackUrl")
+        callback_url_param = request.GET.get("callback_url") or request.GET.get("callbackUrl")
         if callback_url_param:
             request.session["sso_return_to"] = callback_url_param
 
@@ -514,10 +600,29 @@ class SSOCallbackView(View):
         if not expected_state or state != expected_state:
             return redirect(f"{FRONTEND_URL}/login?error=invalid_state")
 
-        if provider not in SSO_PROVIDER_REGISTRY:
-            return redirect(f"{FRONTEND_URL}/login?error=unknown_provider")
+        # Check if this is an org-level SSO callback
+        org_config_id = request.session.get("sso_org_config_id")
+        if org_config_id:
+            from api.utils.sso import get_org_sso_config
 
-        config = SSO_PROVIDER_REGISTRY[provider]
+            try:
+                org_provider, org_config = get_org_sso_config(org_config_id)
+            except Exception:
+                return redirect(f"{FRONTEND_URL}/login?error=sso_config_not_found")
+
+            from api.utils.sso import get_org_provider_meta
+
+            adapter_info = get_org_provider_meta(org_provider.provider_type)
+            if not adapter_info:
+                return redirect(f"{FRONTEND_URL}/login?error=unsupported_provider")
+
+            config = {**org_config, **adapter_info, "is_oidc": True}
+
+        elif provider not in SSO_PROVIDER_REGISTRY:
+            return redirect(f"{FRONTEND_URL}/login?error=unknown_provider")
+        else:
+            config = SSO_PROVIDER_REGISTRY[provider]
+
         callback_url = request.session.get("sso_callback_url", _get_callback_url(provider))
         token_url = request.session.get("sso_token_url", config.get("token_url", ""))
 
@@ -587,12 +692,23 @@ class SSOCallbackView(View):
                 logger.warning(f"SSO login failed to authenticate user for {provider}")
                 return redirect(f"{FRONTEND_URL}/login?error=login_failed")
 
+            # Tag session with auth method
+            request.session["auth_method"] = "sso"
+            if org_config_id:
+                # Resolve the SSO provider config to its org ID
+                try:
+                    sso_provider_obj = OrganisationSSOProvider.objects.get(id=org_config_id)
+                    request.session["auth_sso_org_id"] = str(sso_provider_obj.organisation_id)
+                    request.session["auth_sso_provider_id"] = str(sso_provider_obj.id)
+                except OrganisationSSOProvider.DoesNotExist:
+                    pass
+
             # Restore the original deep link, then clean up SSO session data
             return_to = request.session.pop("sso_return_to", None)
-            for key in ["sso_state", "sso_provider", "sso_callback_url", "sso_token_url", "sso_nonce"]:
+            for key in ["sso_state", "sso_provider", "sso_callback_url", "sso_token_url", "sso_nonce", "sso_org_config_id"]:
                 request.session.pop(key, None)
 
-            if return_to and return_to.startswith("/"):
+            if return_to and return_to.startswith("/") and not return_to.startswith("//"):
                 return redirect(FRONTEND_URL + return_to)
             return redirect(FRONTEND_URL + "/")
 
