@@ -52,6 +52,13 @@ from .graphene.mutations.access import (
     UpdateCustomRoleMutation,
     UpdateNetworkAccessPolicyMutation,
 )
+from .graphene.mutations.sso import (
+    CreateOrganisationSSOProviderMutation,
+    UpdateOrganisationSSOProviderMutation,
+    DeleteOrganisationSSOProviderMutation,
+    TestOrganisationSSOProviderMutation,
+    UpdateOrganisationSecurityMutation,
+)
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     StripeSubscriptionDetails,
@@ -199,6 +206,7 @@ from .graphene.types import (
     OrganisationMemberInviteType,
     OrganisationMemberType,
     OrganisationPlanType,
+    OrganisationSSOProviderType,
     OrganisationType,
     PhaseLicenseType,
     ProviderCredentialsType,
@@ -1089,6 +1097,13 @@ class Mutation(graphene.ObjectType):
     create_identity = CreateIdentityMutation.Field()
     update_identity = UpdateIdentityMutation.Field()
     delete_identity = DeleteIdentityMutation.Field()
+
+    # SSO
+    create_organisation_sso_provider = CreateOrganisationSSOProviderMutation.Field()
+    update_organisation_sso_provider = UpdateOrganisationSSOProviderMutation.Field()
+    delete_organisation_sso_provider = DeleteOrganisationSSOProviderMutation.Field()
+    test_organisation_sso_provider = TestOrganisationSSOProviderMutation.Field()
+    update_organisation_security = UpdateOrganisationSecurityMutation.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
