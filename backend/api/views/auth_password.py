@@ -1,15 +1,3 @@
-"""Password-based authentication endpoints.
-
-Implements the client-side double-derivation protocol:
-  password + email → Argon2id → masterKey (stays on client, encrypts keyring)
-                                    ↓
-                              BLAKE2b-256 → authHash (sent to server)
-                                    ↓
-                              Django set_password(authHash) → Argon2id stored
-
-The server never sees the plaintext password or the masterKey.
-"""
-
 import json
 import logging
 import os
@@ -51,6 +39,7 @@ from api.models import (
     EmailVerification,
     Organisation,
     OrganisationMember,
+    OrganisationSSOProvider,
 )
 
 logger = logging.getLogger(__name__)
@@ -282,6 +271,9 @@ def password_login(request):
         return JsonResponse({"error": "Invalid email or password."}, status=401)
 
     login(request, user)
+    request.session["auth_method"] = "password"
+    request.session.pop("auth_sso_org_id", None)
+    request.session.pop("auth_sso_provider_id", None)
 
     social_acc = user.socialaccount_set.first()
     avatar_url = None
@@ -297,6 +289,12 @@ def password_login(request):
         full_name = extra.get("name", "")
     if not full_name and hasattr(user, "full_name") and user.full_name:
         full_name = user.full_name
+
+    try:
+        from api.emails import send_login_email
+        send_login_email(request, user.email, full_name or user.email, "Password")
+    except Exception as email_err:
+        logger.error(f"Failed to send password login email: {email_err}")
 
     return JsonResponse(
         {
@@ -361,8 +359,16 @@ def password_change(request):
                     wrapped_recovery=wrapped_recovery or "",
                 )
 
-    # Re-login so the session hash stays valid after password change
+    # Re-login so the session hash stays valid after password change.
+    prev_auth_method = request.session.get("auth_method", "password")
+    prev_sso_org_id = request.session.get("auth_sso_org_id")
+    prev_sso_provider_id = request.session.get("auth_sso_provider_id")
     login(request, user)
+    request.session["auth_method"] = prev_auth_method
+    if prev_sso_org_id:
+        request.session["auth_sso_org_id"] = prev_sso_org_id
+    if prev_sso_provider_id:
+        request.session["auth_sso_provider_id"] = prev_sso_provider_id
 
     return JsonResponse({"message": "Password changed successfully."})
 
@@ -424,7 +430,15 @@ def password_reset_via_recovery(request):
             )
 
     # Re-login so the session hash stays valid
+    prev_auth_method = request.session.get("auth_method", "password")
+    prev_sso_org_id = request.session.get("auth_sso_org_id")
+    prev_sso_provider_id = request.session.get("auth_sso_provider_id")
     login(request, user)
+    request.session["auth_method"] = prev_auth_method
+    if prev_sso_org_id:
+        request.session["auth_sso_org_id"] = prev_sso_org_id
+    if prev_sso_provider_id:
+        request.session["auth_sso_provider_id"] = prev_sso_provider_id
 
     return JsonResponse({"message": "Password reset successfully."})
 
@@ -435,14 +449,18 @@ def password_reset_via_recovery(request):
 @permission_classes([AllowAny])
 @throttle_classes([EmailCheckThrottle])
 def email_check(request):
-    """Resolve the auth method for a given email.
+    """Return all available auth methods for a given email.
 
-    Returns which authentication flow the frontend should present:
-      - "credentials": show password field (user exists with password, OR unknown email)
-      - "sso": redirect to their SSO provider
-
-    Deliberately does NOT distinguish "unknown email" from "password user"
-    to prevent email enumeration.
+    Response shape:
+      {
+        "authMethods": {
+          "password": true/false,
+          "sso": [
+            {"id": "config-uuid", "providerType": "oidc", "enforced": false},
+            ...
+          ]
+        }
+      }
     """
     User = get_user_model()
 
@@ -450,16 +468,42 @@ def email_check(request):
     if not email:
         return JsonResponse({"error": "Email is required."}, status=400)
 
+    # Default: password user (minimal enumeration)
+    default_response = {
+        "authMethods": {
+            "password": True,
+            "sso": [],
+        }
+    }
+
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
-        return JsonResponse({"authMethod": "credentials"})
+        return JsonResponse(default_response)
+
+    has_password = user.has_usable_password()
 
     # SSO user — find which provider they used
-    if not user.has_usable_password():
-        social_acc = user.socialaccount_set.first()
-        if social_acc:
-            return JsonResponse({"authMethod": "sso", "ssoProvider": social_acc.provider})
+    org_providers = OrganisationSSOProvider.objects.filter(
+        organisation__organisationmember__user=user,
+        organisation__organisationmember__deleted_at=None,
+        enabled=True,
+    ).select_related("organisation").distinct()
 
-    # Password user or edge case (no password, no social account) — show password field
-    return JsonResponse({"authMethod": "credentials"})
+    sso_methods = [
+        {
+            "id": str(provider.id),
+            "providerType": "oidc",
+            "provider": provider.provider_type,
+            "providerName": provider.name,
+            "enforced": provider.organisation.require_sso,
+        }
+        for provider in org_providers
+    ]
+
+    return JsonResponse({
+        "authMethods": {
+            "password": has_password,
+            "sso": sso_methods,
+        }
+    })

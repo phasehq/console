@@ -543,45 +543,52 @@ class PasswordResetViaRecoveryTest(_ThrottleClearMixin, unittest.TestCase):
 class EmailCheckTest(_ThrottleClearMixin, unittest.TestCase):
     """Tests for POST /auth/email/check/."""
 
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
     @patch("api.views.auth_password.get_user_model")
-    def test_returns_credentials_for_password_user(self, mock_get_user):
-        """Known password user returns authMethod=credentials."""
+    def test_returns_credentials_for_password_user(self, mock_get_user, mock_om, mock_sso):
+        """Known password user returns password=True, sso=[]."""
         User = MagicMock()
         user = MagicMock()
         user.has_usable_password.return_value = True
+        user.socialaccount_set.first.return_value = None
         User.objects.get.return_value = user
         mock_get_user.return_value = User
+        mock_om.objects.filter.return_value.select_related.return_value = []
 
         request = _make_post("/auth/email/check/", {"email": "alice@example.com"})
         response = email_check(request)
 
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertEqual(data["authMethod"], "credentials")
+        self.assertTrue(data["authMethods"]["password"])
+        self.assertEqual(data["authMethods"]["sso"], [])
 
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
     @patch("api.views.auth_password.get_user_model")
-    def test_returns_sso_for_sso_user(self, mock_get_user):
-        """Known SSO user returns authMethod=sso with provider."""
+    def test_returns_empty_sso_for_instance_sso_user(self, mock_get_user, mock_om, mock_sso):
+        """Instance-level SSO users get sso=[] (buttons are on the first screen)."""
         User = MagicMock()
         user = MagicMock()
         user.has_usable_password.return_value = False
-        social_acc = MagicMock()
-        social_acc.provider = "google"
-        user.socialaccount_set.first.return_value = social_acc
         User.objects.get.return_value = user
         mock_get_user.return_value = User
+        mock_om.objects.filter.return_value.select_related.return_value = []
 
         request = _make_post("/auth/email/check/", {"email": "bob@example.com"})
         response = email_check(request)
 
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertEqual(data["authMethod"], "sso")
-        self.assertEqual(data["ssoProvider"], "google")
+        self.assertFalse(data["authMethods"]["password"])
+        self.assertEqual(data["authMethods"]["sso"], [])
 
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
     @patch("api.views.auth_password.get_user_model")
-    def test_returns_credentials_for_unknown_email(self, mock_get_user):
-        """Unknown email returns authMethod=credentials (no enumeration leak)."""
+    def test_returns_credentials_for_unknown_email(self, mock_get_user, mock_om, mock_sso):
+        """Unknown email returns password=True, sso=[] (no enumeration leak)."""
         User = MagicMock()
         from api.models import CustomUser
         User.DoesNotExist = CustomUser.DoesNotExist
@@ -593,7 +600,8 @@ class EmailCheckTest(_ThrottleClearMixin, unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertEqual(data["authMethod"], "credentials")
+        self.assertTrue(data["authMethods"]["password"])
+        self.assertEqual(data["authMethods"]["sso"], [])
 
     def test_rejects_missing_email(self):
         """Missing email returns 400."""
@@ -855,32 +863,34 @@ class SSOSignupFlowTest(_ThrottleClearMixin, unittest.TestCase):
         response = password_login(request)
         self.assertEqual(response.status_code, 401)
 
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
     @patch("api.views.auth_password.get_user_model")
-    def test_email_check_routes_sso_user_to_provider(self, mock_get_user):
-        """email_check returns SSO provider for SSO user."""
+    def test_email_check_instance_sso_user_gets_empty_sso(self, mock_get_user, mock_om, mock_sso):
+        """Instance-level SSO user gets sso=[] (buttons are on the first screen)."""
         User = MagicMock()
         user = MagicMock()
         user.has_usable_password.return_value = False
-        social_acc = MagicMock()
-        social_acc.provider = "okta-oidc"
-        user.socialaccount_set.first.return_value = social_acc
         User.objects.get.return_value = user
         mock_get_user.return_value = User
+        mock_om.objects.filter.return_value.select_related.return_value = []
 
         request = _make_post("/auth/email/check/", {"email": "sso-user@example.com"})
         response = email_check(request)
 
         data = json.loads(response.content)
-        self.assertEqual(data["authMethod"], "sso")
-        self.assertEqual(data["ssoProvider"], "okta-oidc")
+        self.assertFalse(data["authMethods"]["password"])
+        self.assertEqual(data["authMethods"]["sso"], [])
 
 
 class EmailCheckNoEnumerationTest(_ThrottleClearMixin, unittest.TestCase):
     """email_check must not leak whether an email is registered."""
 
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
     @patch("api.views.auth_password.get_user_model")
-    def test_unknown_and_password_user_same_response(self, mock_get_user):
-        """Unknown email and password user both return 'credentials'."""
+    def test_unknown_and_password_user_same_response(self, mock_get_user, mock_om, mock_sso):
+        """Unknown email and password user both return password=True, sso=[]."""
         User = MagicMock()
         from api.models import CustomUser
 
@@ -897,15 +907,18 @@ class EmailCheckNoEnumerationTest(_ThrottleClearMixin, unittest.TestCase):
         User.objects.get.side_effect = None
         pw_user = MagicMock()
         pw_user.has_usable_password.return_value = True
+        pw_user.socialaccount_set.first.return_value = None
         User.objects.get.return_value = pw_user
+        mock_om.objects.filter.return_value.select_related.return_value = []
 
         req2 = _make_post("/auth/email/check/", {"email": "known@example.com"})
         resp2 = email_check(req2)
         data2 = json.loads(resp2.content)
 
-        # Both should return identical authMethod
-        self.assertEqual(data1["authMethod"], data2["authMethod"])
-        self.assertEqual(data1["authMethod"], "credentials")
+        # Both should return identical authMethods
+        self.assertEqual(data1["authMethods"], data2["authMethods"])
+        self.assertTrue(data1["authMethods"]["password"])
+        self.assertEqual(data1["authMethods"]["sso"], [])
 
 
 class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
@@ -1030,34 +1043,39 @@ class CrossAuthMethodTest(_ThrottleClearMixin, unittest.TestCase):
         response = password_change(request)
         self.assertEqual(response.status_code, 400)
 
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
     @patch("api.views.auth_password.get_user_model")
-    def test_email_check_password_user_gets_credentials(self, mock_get_user):
-        """Password user routed to credentials (password field)."""
+    def test_email_check_password_user_gets_credentials(self, mock_get_user, mock_om, mock_sso):
+        """Password user returns password=True."""
         User = MagicMock()
         user = MagicMock()
         user.has_usable_password.return_value = True
+        user.socialaccount_set.first.return_value = None
         User.objects.get.return_value = user
         mock_get_user.return_value = User
+        mock_om.objects.filter.return_value.select_related.return_value = []
 
         request = _make_post("/auth/email/check/", {"email": "pw@example.com"})
         response = email_check(request)
         data = json.loads(response.content)
-        self.assertEqual(data["authMethod"], "credentials")
+        self.assertTrue(data["authMethods"]["password"])
+        self.assertEqual(data["authMethods"]["sso"], [])
 
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
     @patch("api.views.auth_password.get_user_model")
-    def test_email_check_sso_user_gets_provider(self, mock_get_user):
-        """SSO user routed to their SSO provider."""
+    def test_email_check_instance_sso_user_gets_empty_sso(self, mock_get_user, mock_om, mock_sso):
+        """Instance-level SSO user gets sso=[] (buttons are on the first screen)."""
         User = MagicMock()
         user = MagicMock()
         user.has_usable_password.return_value = False
-        social = MagicMock()
-        social.provider = "github"
-        user.socialaccount_set.first.return_value = social
         User.objects.get.return_value = user
         mock_get_user.return_value = User
+        mock_om.objects.filter.return_value.select_related.return_value = []
 
         request = _make_post("/auth/email/check/", {"email": "sso@example.com"})
         response = email_check(request)
         data = json.loads(response.content)
-        self.assertEqual(data["authMethod"], "sso")
-        self.assertEqual(data["ssoProvider"], "github")
+        self.assertFalse(data["authMethods"]["password"])
+        self.assertEqual(data["authMethods"]["sso"], [])
