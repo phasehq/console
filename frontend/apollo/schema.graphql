@@ -71,11 +71,13 @@ type OrganisationType {
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
   pricingVersion: Int!
+  requireSso: Boolean!
   role: RoleType
   memberId: ID
   keyring: String
   recovery: String
   planDetail: OrganisationPlanType
+  ssoProviders: [OrganisationSSOProviderType]
 }
 
 """
@@ -130,23 +132,25 @@ type SeatsUsed {
   total: Int
 }
 
-type NetworkAccessPolicyType {
+type OrganisationSSOProviderType {
   id: String!
+  providerType: ApiOrganisationSSOProviderProviderTypeChoices!
   name: String!
-  organisation: OrganisationType!
-
-  """
-  Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
-  """
-  allowedIps: String!
-  isGlobal: Boolean!
+  enabled: Boolean!
   createdAt: DateTime!
-  createdBy: OrganisationMemberType
   updatedAt: DateTime!
+  publicConfig: JSONString
+  createdBy: OrganisationMemberType
   updatedBy: OrganisationMemberType
-  members: [OrganisationMemberType!]!
-  serviceAccounts: [ServiceAccountType!]
-  organisationMembers: [OrganisationMemberType!]
+}
+
+"""An enumeration."""
+enum ApiOrganisationSSOProviderProviderTypeChoices {
+  """Microsoft Entra ID"""
+  ENTRA_ID
+
+  """Okta"""
+  OKTA
 }
 
 type OrganisationMemberType {
@@ -342,6 +346,25 @@ type ServiceAccountTokenType {
   lastUsed: DateTime
 }
 
+type NetworkAccessPolicyType {
+  id: String!
+  name: String!
+  organisation: OrganisationType!
+
+  """
+  Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
+  """
+  allowedIps: String!
+  isGlobal: Boolean!
+  createdAt: DateTime!
+  createdBy: OrganisationMemberType
+  updatedAt: DateTime!
+  updatedBy: OrganisationMemberType
+  members: [OrganisationMemberType!]!
+  serviceAccounts: [ServiceAccountType!]
+  organisationMembers: [OrganisationMemberType!]
+}
+
 type IdentityType {
   id: String!
   organisation: OrganisationType!
@@ -370,18 +393,6 @@ type AzureEntraConfigType {
   tenantId: String
   resource: String
   allowedServicePrincipalIds: [String]
-}
-
-"""An enumeration."""
-enum ApiSecretEventTypeChoices {
-  """Secret"""
-  SECRET
-
-  """Sealed"""
-  SEALED
-
-  """Config"""
-  CONFIG
 }
 
 """An enumeration."""
@@ -1063,6 +1074,11 @@ type Mutation {
   createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
   updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
   deleteIdentity(id: ID!): DeleteIdentityMutation
+  createOrganisationSsoProvider(config: JSONString!, name: String!, orgId: ID!, providerType: String!): CreateOrganisationSSOProviderMutation
+  updateOrganisationSsoProvider(config: JSONString, enabled: Boolean, name: String, providerId: ID!): UpdateOrganisationSSOProviderMutation
+  deleteOrganisationSsoProvider(providerId: ID!): DeleteOrganisationSSOProviderMutation
+  testOrganisationSsoProvider(providerId: ID!): TestOrganisationSSOProviderMutation
+  updateOrganisationSecurity(orgId: ID!, requireSso: Boolean!): UpdateOrganisationSecurityMutation
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
   enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
   enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
@@ -1306,6 +1322,28 @@ type UpdateIdentityMutation {
 
 type DeleteIdentityMutation {
   ok: Boolean
+}
+
+type CreateOrganisationSSOProviderMutation {
+  providerId: ID
+}
+
+type UpdateOrganisationSSOProviderMutation {
+  ok: Boolean
+}
+
+type DeleteOrganisationSSOProviderMutation {
+  ok: Boolean
+}
+
+type TestOrganisationSSOProviderMutation {
+  success: Boolean
+  error: String
+}
+
+type UpdateOrganisationSecurityMutation {
+  ok: Boolean
+  sessionInvalidated: Boolean
 }
 
 type CreateServiceAccountMutation {

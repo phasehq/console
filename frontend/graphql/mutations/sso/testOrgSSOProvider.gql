@@ -1,0 +1,6 @@
+mutation TestOrgSSOProvider($providerId: ID!) {
+  testOrganisationSsoProvider(providerId: $providerId) {
+    success
+    error
+  }
+}
