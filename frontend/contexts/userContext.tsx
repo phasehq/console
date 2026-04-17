@@ -11,6 +11,7 @@ interface UserData {
   fullName: string
   avatarUrl: string | null
   authMethod: 'password' | 'sso'
+  authSsoOrgId: string | null
 }
 
 interface UserContextValue {

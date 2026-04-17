@@ -38,6 +38,19 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
         return
       }
 
+      if (code === 'SSO_REQUIRED') {
+        // Org requires SSO and the current session was not established via
+        // the org's SSO flow. Send the user back to the lobby where the org
+        // card surfaces the "Sign in with <provider>" prompt. Avoid a redirect
+        // loop if we're already at the lobby.
+        if (window.location.pathname !== '/') {
+          window.location.href = '/'
+        } else {
+          toast.error(err.message)
+        }
+        return
+      }
+
       // Default error handling (toast)
       toast.error(err.message)
       console.log(
