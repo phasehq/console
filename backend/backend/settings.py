@@ -278,6 +278,7 @@ REST_FRAMEWORK = {
 GRAPHENE = {
     "SCHEMA": "backend.schema.schema",
     "MIDDLEWARE": [
+        "backend.graphene.middleware.OrgSSOEnforcementMiddleware",
         "backend.graphene.middleware.IPWhitelistMiddleware",
     ],
 }
