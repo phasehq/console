@@ -11,6 +11,7 @@ from django.utils import timezone
 import logging
 from api.authentication.adapters.generic.provider import GenericOpenIDConnectProvider
 from api.authentication.adapters.generic.views import GenericOpenIDConnectAdapter
+from api.emails import send_login_email
 from api.models import ActivatedPhaseLicense
 
 logger = logging.getLogger(__name__)
@@ -33,20 +34,15 @@ class JumpCloudOpenIDConnectAdapter(GenericOpenIDConnectAdapter):
     }
 
     def complete_login(self, request, app, token, **kwargs):
-        if settings.APP_HOST == "cloud":
-            error = "OIDC is not available in cloud mode"
-            logger.error(f"OIDC login failed: {str(error)}")
-            raise OAuth2Error(str(error))
+        if settings.APP_HOST != "cloud":
+            activated_license_exists = ActivatedPhaseLicense.objects.filter(
+                expires_at__gte=timezone.now()
+            ).exists()
 
-        # Check for a valid license
-        activated_license_exists = ActivatedPhaseLicense.objects.filter(
-            expires_at__gte=timezone.now()
-        ).exists()
-
-        if not activated_license_exists and not settings.PHASE_LICENSE:
-            error = "You need a license to login via OIDC."
-            logger.error(f"OIDC login failed: {str(error)}")
-            raise OAuth2Error(str(error))
+            if not activated_license_exists and not settings.PHASE_LICENSE:
+                error = "You need a license to login via OIDC."
+                logger.error(f"OIDC login failed: {str(error)}")
+                raise OAuth2Error(str(error))
 
         try:
             id_token = getattr(token, "id_token", None)
@@ -60,6 +56,14 @@ class JumpCloudOpenIDConnectAdapter(GenericOpenIDConnectAdapter):
 
             # Create social login object without creating user
             login = self.get_provider().sociallogin_from_response(request, extra_data)
+
+            try:
+                email = login.user.email if login.user else extra_data.get("email", "")
+                full_name = extra_data.get("name", "")
+                if email:
+                    send_login_email(request, email, full_name, "JumpCloud")
+            except Exception as email_err:
+                logger.error(f"Failed to send JumpCloud login email: {email_err}")
 
             return login
 

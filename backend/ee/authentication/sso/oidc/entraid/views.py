@@ -35,20 +35,15 @@ class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
 
     def complete_login(self, request, app, token, **kwargs):
 
-        if settings.APP_HOST == "cloud":
-            error = "OIDC is not available in cloud mode"
-            logger.error(f"OIDC login failed: {str(error)}")
-            raise OAuth2Error(str(error))
+        if settings.APP_HOST != "cloud":
+            activated_license_exists = ActivatedPhaseLicense.objects.filter(
+                expires_at__gte=timezone.now()
+            ).exists()
 
-        # Check for a valid license
-        activated_license_exists = ActivatedPhaseLicense.objects.filter(
-            expires_at__gte=timezone.now()
-        ).exists()
-
-        if not activated_license_exists and not settings.PHASE_LICENSE:
-            error = "You need a license to login via OIDC."
-            logger.error(f"OIDC login failed: {str(error)}")
-            raise OAuth2Error(str(error))
+            if not activated_license_exists and not settings.PHASE_LICENSE:
+                error = "You need a license to login via OIDC."
+                logger.error(f"OIDC login failed: {str(error)}")
+                raise OAuth2Error(str(error))
 
         headers = {"Authorization": "Bearer {0}".format(token.token)}
         response = (
