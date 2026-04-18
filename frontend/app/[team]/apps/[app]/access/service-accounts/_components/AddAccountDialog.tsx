@@ -97,6 +97,8 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
 
   const accountOptions =
     serviceAccountsData?.serviceAccounts
+      // Team-owned SAs can only be granted app access via their owning team
+      .filter((account: ServiceAccountType) => !account.team)
       .filter(
         (account: ServiceAccountType) =>
           !data?.appServiceAccounts
