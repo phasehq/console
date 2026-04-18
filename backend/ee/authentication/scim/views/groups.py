@@ -19,6 +19,8 @@ from ee.authentication.scim.negotiation import SCIMJSONParser, SCIMJSONRenderer
 from api.models import (
     SCIMGroup,
     SCIMUser,
+    ServiceAccount,
+    ServiceAccountToken,
     Team,
     TeamAppEnvironment,
     TeamMembership,
@@ -386,9 +388,22 @@ def _delete_group(request, scim_group):
         response_status=204,
     )
     if scim_group.team:
-        revoke_team_environment_keys(scim_group.team)
         from django.utils import timezone
-        scim_group.team.deleted_at = timezone.now()
+        now = timezone.now()
+
+        revoke_team_environment_keys(scim_group.team)
+
+        # Soft-delete team-owned service accounts and their tokens — mirrors DeleteTeamMutation
+        for sa in ServiceAccount.objects.filter(
+            team=scim_group.team, deleted_at__isnull=True
+        ):
+            sa.deleted_at = now
+            sa.save()
+            ServiceAccountToken.objects.filter(
+                service_account=sa, deleted_at__isnull=True
+            ).update(deleted_at=now)
+
+        scim_group.team.deleted_at = now
         scim_group.team.save(update_fields=["deleted_at"])
 
     scim_group.delete()
