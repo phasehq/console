@@ -8,17 +8,15 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import {
   FaBan,
   FaBoxOpen,
   FaBuilding,
-  FaChevronDown,
   FaChevronLeft,
   FaCog,
   FaEdit,
   FaNetworkWired,
-  FaUsers,
   FaUsersCog,
 } from 'react-icons/fa'
 import { FaServer, FaArrowDownUpLock } from 'react-icons/fa6'
@@ -38,19 +36,11 @@ import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountN
 import { ServiceAccountTokens } from './_components/ServiceAccountTokens'
 import { KeyManagementDialog } from '@/components/service-accounts/KeyManagementDialog'
 import { ServiceAccountIdentities } from './_components/ServiceAccountIdentities'
-import { UpdateServiceAccountOwnershipOp } from '@/graphql/mutations/service-accounts/updateServiceAccountOwnership.gql'
-import GenericDialog from '@/components/common/GenericDialog'
-import { Alert } from '@/components/common/Alert'
-import { Listbox } from '@headlessui/react'
-import clsx from 'clsx'
 
 export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [name, setName] = useState('')
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
-  const [savingOwnership, setSavingOwnership] = useState(false)
-  const ownershipDialogRef = useRef<{ closeModal: () => void }>(null)
 
   // Org-level permissions (always use org role, not overridden by team)
   const userCanReadTeams = organisation
@@ -78,7 +68,6 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   })
 
   const [updateAccount] = useMutation(UpdateServiceAccountOp)
-  const [updateOwnership] = useMutation(UpdateServiceAccountOwnershipOp)
 
   const account: ServiceAccountType = data?.serviceAccounts[0]
   const isTeamOwned = !!account?.team
@@ -121,21 +110,6 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     )
   }, [teamsData, account])
 
-  const isMultiTeamOrg = !isTeamOwned && accountTeams.length > 1
-
-  // Ownership management: global access or team owner
-  const userCanManageOwnership = userIsGlobalAccess || isTeamOwner
-
-  // Non global-access users only see teams they're a member of (for ownership dialog)
-  const availableTeams = useMemo(() => {
-    if (!teamsData?.teams) return []
-    const allTeams = teamsData.teams as TeamType[]
-    if (userIsGlobalAccess) return allTeams
-    return allTeams.filter((t) =>
-      t.members?.some((m) => m.orgMember?.id === organisation?.memberId)
-    )
-  }, [teamsData, userIsGlobalAccess, organisation])
-
   const nameUpdated = account ? account.name !== name : false
 
   const updateName = async () => {
@@ -160,34 +134,6 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   }
 
   const resetName = () => setName(account.name)
-
-  const handleOwnershipSave = async () => {
-    setSavingOwnership(true)
-    try {
-      await updateOwnership({
-        variables: {
-          serviceAccountId: account.id,
-          teamId: selectedTeamId,
-        },
-        refetchQueries: [
-          {
-            query: GetServiceAccountDetail,
-            variables: { orgId: organisation?.id, id: params.account },
-          },
-        ],
-      })
-      toast.success(
-        selectedTeamId
-          ? 'Service account assigned to team'
-          : 'Service account promoted to organisation level'
-      )
-      if (ownershipDialogRef.current) ownershipDialogRef.current.closeModal()
-    } catch (e: any) {
-      toast.error(e.message)
-    } finally {
-      setSavingOwnership(false)
-    }
-  }
 
   useEffect(() => {
     if (account) setName(account.name)
@@ -328,141 +274,6 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             </div>
           </div>
         </div>
-
-        {userCanManageOwnership && userCanReadTeams && (
-          <div className="py-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-base font-medium">Ownership</div>
-                <div className="text-neutral-500 text-sm">
-                  {account.team
-                    ? 'This account is owned by a team and only visible to team members.'
-                    : 'This account is organisation-level and visible to all members with permission.'}
-                </div>
-              </div>
-              <GenericDialog
-                title="Manage Ownership"
-                buttonContent={<>Manage</>}
-                buttonVariant="secondary"
-                size="sm"
-                ref={ownershipDialogRef}
-                onOpen={() => {
-                  setSelectedTeamId(account.team?.id || null)
-                  setSavingOwnership(false)
-                }}
-              >
-                <div className="pt-4 space-y-4">
-                  <p className="text-sm text-neutral-500">
-                    Change who owns and manages this service account.
-                  </p>
-
-                  <Listbox
-                    value={selectedTeamId}
-                    onChange={setSelectedTeamId}
-                    disabled={isMultiTeamOrg}
-                  >
-                    {({ open }) => (
-                      <div className="relative">
-                        <Listbox.Button
-                          className={clsx(
-                            'w-full flex items-center justify-between gap-2 py-2 px-3 rounded-md bg-zinc-100 dark:bg-zinc-800 text-sm',
-                            isMultiTeamOrg ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
-                          )}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            {selectedTeamId ? (
-                              <>
-                                <FaUsers className="text-blue-500 text-xs" />
-                                {availableTeams.find((t) => t.id === selectedTeamId)?.name ||
-                                  account.team?.name}
-                              </>
-                            ) : (
-                              <>
-                                <FaBuilding className="text-neutral-500 text-xs" />
-                                Organisation (no team)
-                              </>
-                            )}
-                          </span>
-                          <FaChevronDown
-                            className={clsx(
-                              'transition-transform ease duration-300 text-neutral-500 text-xs',
-                              open ? 'rotate-180' : 'rotate-0'
-                            )}
-                          />
-                        </Listbox.Button>
-                        <Listbox.Options className="absolute z-10 mt-1 w-full bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-2xl p-1 max-h-60 overflow-auto focus:outline-none">
-                          {userIsGlobalAccess && (
-                            <Listbox.Option value={null} as={Fragment}>
-                              {({ active, selected }) => (
-                                <div
-                                  className={clsx(
-                                    'px-3 py-2 cursor-pointer rounded text-sm flex items-center gap-1.5',
-                                    active && 'bg-zinc-300 dark:bg-zinc-700',
-                                    selected && 'font-medium'
-                                  )}
-                                >
-                                  <FaBuilding className="text-neutral-500 text-xs" />
-                                  Organisation (no team)
-                                </div>
-                              )}
-                            </Listbox.Option>
-                          )}
-                          {availableTeams.map((t) => (
-                            <Listbox.Option key={t.id} value={t.id} as={Fragment}>
-                              {({ active, selected }) => (
-                                <div
-                                  className={clsx(
-                                    'px-3 py-2 cursor-pointer rounded text-sm flex items-center gap-1.5',
-                                    active && 'bg-zinc-300 dark:bg-zinc-700',
-                                    selected && 'font-medium'
-                                  )}
-                                >
-                                  <FaUsers className="text-blue-500 text-xs" />
-                                  {t.name}
-                                </div>
-                              )}
-                            </Listbox.Option>
-                          ))}
-                        </Listbox.Options>
-                      </div>
-                    )}
-                  </Listbox>
-
-                  {isMultiTeamOrg && (
-                    <Alert variant="info" icon size="sm">
-                      <span className="text-xs">
-                        This account is a member of multiple teams and cannot be assigned to a
-                        specific team. Remove the account from all but one team before changing
-                        ownership.
-                      </span>
-                    </Alert>
-                  )}
-
-                  {isTeamOwned && selectedTeamId === null && (
-                    <Alert variant="warning" icon size="sm">
-                      <span className="text-xs">
-                        Promoting this account to organisation level will make it visible and
-                        manageable by all users with the relevant permissions. The existing team
-                        membership will be preserved.
-                      </span>
-                    </Alert>
-                  )}
-
-                  <div className="flex justify-end pt-2">
-                    <Button
-                      variant="primary"
-                      onClick={handleOwnershipSave}
-                      isLoading={savingOwnership}
-                      disabled={isMultiTeamOrg || selectedTeamId === (account.team?.id || null)}
-                    >
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              </GenericDialog>
-            </div>
-          </div>
-        )}
 
         {userCanReadTeams && (
           <div className="py-4 space-y-3">
