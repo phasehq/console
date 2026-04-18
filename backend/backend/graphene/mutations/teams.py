@@ -1,5 +1,6 @@
 import graphene
 from graphql import GraphQLError
+from django.db import transaction
 from django.utils import timezone
 from api.models import (
     App,
@@ -59,6 +60,7 @@ class CreateTeamMutation(graphene.Mutation):
     team = graphene.Field(TeamType)
 
     @classmethod
+    @transaction.atomic
     def mutate(
         cls,
         root,
@@ -230,6 +232,7 @@ class DeleteTeamMutation(graphene.Mutation):
     ok = graphene.Boolean()
 
     @classmethod
+    @transaction.atomic
     def mutate(cls, root, info, team_id):
         user = info.context.user
         team = Team.objects.get(id=team_id, deleted_at__isnull=True)
@@ -275,6 +278,7 @@ class AddTeamMembersMutation(graphene.Mutation):
     team = graphene.Field(TeamType)
 
     @classmethod
+    @transaction.atomic
     def mutate(cls, root, info, team_id, member_ids, member_type=MemberType.USER):
         user = info.context.user
         team = Team.objects.get(id=team_id, deleted_at__isnull=True)
@@ -341,6 +345,7 @@ class RemoveTeamMemberMutation(graphene.Mutation):
     team = graphene.Field(TeamType)
 
     @classmethod
+    @transaction.atomic
     def mutate(cls, root, info, team_id, member_id, member_type=MemberType.USER):
         user = info.context.user
         team = Team.objects.get(id=team_id, deleted_at__isnull=True)
@@ -394,6 +399,7 @@ class AddTeamAppsMutation(graphene.Mutation):
     team = graphene.Field(TeamType)
 
     @classmethod
+    @transaction.atomic
     def mutate(cls, root, info, team_id, app_envs):
         user = info.context.user
         team = Team.objects.get(id=team_id, deleted_at__isnull=True)
@@ -449,6 +455,7 @@ class RemoveTeamAppMutation(graphene.Mutation):
     team = graphene.Field(TeamType)
 
     @classmethod
+    @transaction.atomic
     def mutate(cls, root, info, team_id, app_id):
         user = info.context.user
         team = Team.objects.get(id=team_id, deleted_at__isnull=True)
@@ -487,6 +494,7 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
     team = graphene.Field(TeamType)
 
     @classmethod
+    @transaction.atomic
     def mutate(cls, root, info, team_id, app_id, env_ids):
         user = info.context.user
         team = Team.objects.get(id=team_id, deleted_at__isnull=True)
