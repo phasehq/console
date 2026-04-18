@@ -19,6 +19,7 @@ from api.models import (
     App,
     Environment,
     EnvironmentKey,
+    EnvironmentKeyGrant,
     EnvironmentSync,
     EnvironmentToken,
     Organisation,
@@ -164,22 +165,30 @@ class CreateEnvironmentMutation(graphene.Mutation):
             )
 
             # Add the org owner to the environment
-            EnvironmentKey.objects.create(
+            owner_key = EnvironmentKey.objects.create(
                 environment=environment,
                 user=org_owner,
                 identity_key=environment_data.identity_key,
                 wrapped_seed=environment_data.wrapped_seed,
                 wrapped_salt=environment_data.wrapped_salt,
             )
+            EnvironmentKeyGrant.objects.create(
+                environment_key=owner_key,
+                grant_type="individual",
+            )
 
             # Add admins to the environment
             for key in admin_keys:
-                EnvironmentKey.objects.create(
+                admin_key = EnvironmentKey.objects.create(
                     environment=environment,
                     user_id=key.user_id,
                     wrapped_seed=key.wrapped_seed,
                     wrapped_salt=key.wrapped_salt,
                     identity_key=key.identity_key,
+                )
+                EnvironmentKeyGrant.objects.create(
+                    environment_key=admin_key,
+                    grant_type="individual",
                 )
 
             # Add Server keys if provided
@@ -351,6 +360,10 @@ class CreateEnvironmentKeyMutation(graphene.Mutation):
             wrapped_seed=wrapped_seed,
             wrapped_salt=wrapped_salt,
         )
+        EnvironmentKeyGrant.objects.create(
+            environment_key=environment_key,
+            grant_type="individual",
+        )
 
         return CreateEnvironmentKeyMutation(environment_key=environment_key)
 
@@ -403,13 +416,14 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                 )
 
         with transaction.atomic():
-            # delete all existing keys for this member
-            EnvironmentKey.objects.filter(**key_to_delete_filter).delete()
+            # Soft-delete existing keys (preserves grant history, avoids CASCADE)
+            old_keys = EnvironmentKey.objects.filter(**key_to_delete_filter)
+            EnvironmentKeyGrant.objects.filter(environment_key__in=old_keys).delete()
+            old_keys.update(deleted_at=timezone.now())
 
-            # set new keys
+            # Create new keys with individual grants
             for key in env_keys:
-
-                EnvironmentKey.objects.create(
+                new_key = EnvironmentKey.objects.create(
                     environment_id=key.env_id,
                     user_id=key.user_id if member_type == MemberType.USER else None,
                     service_account_id=(
@@ -418,6 +432,11 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                     wrapped_seed=key.wrapped_seed,
                     wrapped_salt=key.wrapped_salt,
                     identity_key=key.identity_key,
+                )
+                EnvironmentKeyGrant.objects.create(
+                    environment_key=new_key,
+                    grant_type="individual",
+                    team=None,
                 )
 
         return UpdateMemberEnvScopeMutation(app=app)
