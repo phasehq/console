@@ -162,6 +162,7 @@ export const CreateServiceAccountDialog = ({
                 ]
               : []),
           ],
+          awaitRefetchQueries: true,
         })
 
         setCreatePending(false)
