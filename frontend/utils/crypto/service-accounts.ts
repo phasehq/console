@@ -75,28 +75,33 @@ export const updateServiceAccountHandlers = async (orgId: string, userKeyring: O
     let handlerInputs: ServiceAccountHandlerInput[] = [] 
 
     const handlerInputPromises = serviceAccounts.map(async (account: ServiceAccountType) => {
-  
+
       // Get the account wrapped keys for the current user
-      const selfHandler: ServiceAccountHandlerType = account.handlers?.find(
+      const selfHandler: ServiceAccountHandlerType | undefined = account.handlers?.find(
         (handler) => handler?.user.self === true
-      )!
-      
+      ) ?? undefined
+
+      // Skip accounts the current user can't unwrap:
+      // - Team-owned SAs use server-side KMS and have no handlers
+      // - Org-level SAs where the current user isn't a handler belong to someone else
+      if (!selfHandler) return []
+
       // Unwrap the keyring and recovery for this account
       const serviceAccountKeyringString = await decryptAsymmetric(
         selfHandler.wrappedKeyring,
         userKxKeys.privateKey,
         userKxKeys.publicKey
       )
-    
+
       const serviceAccountRecoveryString = await decryptAsymmetric(
         selfHandler.wrappedRecovery,
         userKxKeys.privateKey,
         userKxKeys.publicKey
       )
-    
+
       // Wrap the keyring and recovery for each handler
       const handlerWrappingPromises = handlers.map(async (handler: OrganisationMemberType) => {
-        
+
         const kxKey = await getUserKxPublicKey(handler.identityKey!)
         const wrappedKeyring = await encryptAsymmetric(serviceAccountKeyringString, kxKey)
         const wrappedRecovery = await encryptAsymmetric(serviceAccountRecoveryString, kxKey)
@@ -107,9 +112,9 @@ export const updateServiceAccountHandlers = async (orgId: string, userKeyring: O
           wrappedRecovery,
         }
       })
-    
+
       const handlerKeys = await Promise.all(handlerWrappingPromises)
-      
+
       return handlerKeys // Return the result of this async operation
     })
 
