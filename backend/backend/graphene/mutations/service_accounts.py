@@ -319,10 +319,24 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
                 "You are not a member of this organisation and cannot perform this operation"
             )
 
-        ServiceAccountHandler.objects.filter(service_account__organisation=org).delete()
+        if not user_has_permission(user, "update", "ServiceAccounts", org):
+            raise GraphQLError(
+                "You don't have permission to manage service accounts"
+            )
+
+        # Only delete handlers for SAs referenced in the incoming list.
+        # This prevents wiping handlers for team-owned SAs the caller can't see.
+        sa_ids = set(h.service_account_id for h in handlers)
+        ServiceAccountHandler.objects.filter(
+            service_account__organisation=org,
+            service_account_id__in=sa_ids,
+            service_account__deleted_at__isnull=True,
+        ).delete()
 
         for handler in handlers:
-            service_account = ServiceAccount.objects.get(id=handler.service_account_id)
+            service_account = ServiceAccount.objects.get(
+                id=handler.service_account_id, deleted_at__isnull=True
+            )
 
             if not ServiceAccountHandler.objects.filter(
                 service_account=service_account, user_id=handler.member_id
