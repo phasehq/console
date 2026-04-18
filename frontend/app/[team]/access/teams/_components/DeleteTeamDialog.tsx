@@ -48,17 +48,27 @@ export const DeleteTeamDialog = ({
   return (
     <GenericDialog
       title={`Delete ${teamName}`}
-      buttonContent={<FaTrashAlt />}
+      buttonContent={
+        <div className="py-1">
+          <FaTrashAlt />
+        </div>
+      }
       buttonVariant="danger"
-      buttonProps={{ classString: 'py-0.5' }}
       ref={dialogRef}
       onClose={() => setConfirmName('')}
     >
       <div className="space-y-4 pt-4">
-        <p className="text-sm text-neutral-500">
-          This will permanently delete the team <strong>{teamName}</strong> and revoke all
-          environment key grants associated with it. This action cannot be undone.
-        </p>
+        <div className="text-sm text-neutral-500 space-y-2">
+          <p>
+            Deleting <strong>{teamName}</strong> will:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Revoke all team-based environment access grants</li>
+            <li>Delete all team-owned service accounts and revoke their tokens</li>
+            <li>Remove all team memberships</li>
+          </ul>
+          <p>This action cannot be undone.</p>
+        </div>
         <div className="space-y-2">
           <label className="block text-neutral-500 text-xs">
             Type <strong>{teamName}</strong> to confirm
