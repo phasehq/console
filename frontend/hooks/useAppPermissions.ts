@@ -69,7 +69,13 @@ export function useAppPermissions(appId: string) {
 
       hasTeamAccess = true
 
-      if (team.memberRole?.permissions) {
+      // Team owners retain their full org role for their team's apps —
+      // they manage the team and its access grants, so the role override doesn't restrict them.
+      const isTeamOwner = team.owner?.id === organisation.memberId
+
+      if (isTeamOwner) {
+        sources.push(organisation.role!.permissions!)
+      } else if (team.memberRole?.permissions) {
         // Team has a role override → it REPLACES the org role for this access path
         sources.push(team.memberRole.permissions)
       } else {

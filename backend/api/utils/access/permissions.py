@@ -157,8 +157,15 @@ def _check_app_permission(account, action, resource, app, is_service_account=Fal
 
     for team in teams:
         team_role = getattr(team, role_field)
-        if team_role is None:
-            # No team role → use org role
+        # Team owners retain their full org role for team-accessed apps —
+        # they manage the team and its access grants, so overrides don't apply to them.
+        is_team_owner = (
+            not is_service_account
+            and team.owner_id is not None
+            and team.owner_id == account.id
+        )
+        if team_role is None or is_team_owner:
+            # No team role, or user is team owner → use org role
             if role_has_permission(org_role, action, resource, is_app_resource=True):
                 return True
         else:
