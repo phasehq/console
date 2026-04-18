@@ -6,6 +6,7 @@ EnvironmentKeys for each team member using ServerEnvironmentKey data.
 """
 
 from django.apps import apps
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from nacl.bindings import crypto_sign_ed25519_pk_to_curve25519
 from api.utils.crypto import (
@@ -96,12 +97,22 @@ def provision_team_environment_keys(team, app, members=None):
                 wrapped_seed, wrapped_salt = server_wrap_env_key_for_member(
                     env, account.identity_key
                 )
-                env_key = EnvironmentKey.objects.create(
-                    **key_filter,
-                    identity_key=account.identity_key,
-                    wrapped_seed=wrapped_seed,
-                    wrapped_salt=wrapped_salt,
-                )
+                # Nested atomic + IntegrityError recovery: a concurrent provisioning
+                # (e.g. simultaneous AddTeamApps and AddTeamMembers, or SCIM sync races)
+                # may insert the key between our filter and create. The unique
+                # constraint catches it — re-fetch instead of propagating the error.
+                try:
+                    with transaction.atomic():
+                        env_key = EnvironmentKey.objects.create(
+                            **key_filter,
+                            identity_key=account.identity_key,
+                            wrapped_seed=wrapped_seed,
+                            wrapped_salt=wrapped_salt,
+                        )
+                except IntegrityError:
+                    env_key = EnvironmentKey.objects.get(
+                        deleted_at__isnull=True, **key_filter
+                    )
 
             EnvironmentKeyGrant.objects.get_or_create(
                 environment_key=env_key,
