@@ -901,10 +901,12 @@ class TestPatchGroup:
 
 class TestDeleteGroup:
 
+    @patch(f"{_P}.ServiceAccountToken")
+    @patch(f"{_P}.ServiceAccount")
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.revoke_team_environment_keys")
     @patch(f"{_P}.SCIMGroup")
-    def test_delete_returns_204(self, MockSCIMGroup, mock_revoke, mock_log, scim_client):
+    def test_delete_returns_204(self, MockSCIMGroup, mock_revoke, mock_log, MockSA, MockSAToken, scim_client):
         eng = make_mock_scim_group(display_name="Engineering")
         MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
         MockSCIMGroup.DoesNotExist = Exception
@@ -912,10 +914,12 @@ class TestDeleteGroup:
         resp = scim_client.delete(group_url(eng.id))
         assert resp.status_code == 204
 
+    @patch(f"{_P}.ServiceAccountToken")
+    @patch(f"{_P}.ServiceAccount")
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.revoke_team_environment_keys")
     @patch(f"{_P}.SCIMGroup")
-    def test_delete_soft_deletes_team(self, MockSCIMGroup, mock_revoke, mock_log, scim_client):
+    def test_delete_soft_deletes_team(self, MockSCIMGroup, mock_revoke, mock_log, MockSA, MockSAToken, scim_client):
         eng = make_mock_scim_group(display_name="Engineering")
         MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
         MockSCIMGroup.DoesNotExist = Exception
@@ -924,10 +928,12 @@ class TestDeleteGroup:
         assert eng.team.deleted_at is not None
         eng.team.save.assert_called()
 
+    @patch(f"{_P}.ServiceAccountToken")
+    @patch(f"{_P}.ServiceAccount")
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.revoke_team_environment_keys")
     @patch(f"{_P}.SCIMGroup")
-    def test_delete_removes_scim_group_record(self, MockSCIMGroup, mock_revoke, mock_log, scim_client):
+    def test_delete_removes_scim_group_record(self, MockSCIMGroup, mock_revoke, mock_log, MockSA, MockSAToken, scim_client):
         eng = make_mock_scim_group(display_name="Engineering")
         MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
         MockSCIMGroup.DoesNotExist = Exception
@@ -935,10 +941,12 @@ class TestDeleteGroup:
         scim_client.delete(group_url(eng.id))
         eng.delete.assert_called_once()
 
+    @patch(f"{_P}.ServiceAccountToken")
+    @patch(f"{_P}.ServiceAccount")
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.revoke_team_environment_keys")
     @patch(f"{_P}.SCIMGroup")
-    def test_delete_logs_event(self, MockSCIMGroup, mock_revoke, mock_log, scim_client):
+    def test_delete_logs_event(self, MockSCIMGroup, mock_revoke, mock_log, MockSA, MockSAToken, scim_client):
         eng = make_mock_scim_group(display_name="Engineering")
         MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
         MockSCIMGroup.DoesNotExist = Exception
@@ -958,11 +966,13 @@ class TestDeleteGroup:
         resp = scim_client.delete(group_url("nonexistent-id"))
         assert resp.status_code == 404
 
+    @patch(f"{_P}.ServiceAccountToken")
+    @patch(f"{_P}.ServiceAccount")
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.revoke_team_environment_keys")
     @patch(f"{_P}.SCIMGroup")
     def test_delete_revokes_team_environment_keys(
-        self, MockSCIMGroup, mock_revoke, mock_log, scim_client
+        self, MockSCIMGroup, mock_revoke, mock_log, MockSA, MockSAToken, scim_client
     ):
         eng = make_mock_scim_group(display_name="Engineering")
         MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
