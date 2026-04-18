@@ -1,5 +1,10 @@
 import re
 
+# Cap filter input to bound regex matching time. Real SCIM filters are short
+# (typically a single `attr eq "value"` clause); anything over this is rejected
+# to prevent polynomial backtracking on adversarial whitespace-heavy input.
+MAX_FILTER_LENGTH = 1024
+
 
 def parse_scim_filter(filter_string):
     """
@@ -11,7 +16,7 @@ def parse_scim_filter(filter_string):
 
     Returns a list of (attribute, operator, value) tuples.
     """
-    if not filter_string:
+    if not filter_string or len(filter_string) > MAX_FILTER_LENGTH:
         return []
 
     clauses = []
