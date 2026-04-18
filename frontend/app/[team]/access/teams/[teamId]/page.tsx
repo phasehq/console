@@ -116,6 +116,8 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
     userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'Teams', 'delete')
   const canCreateSA =
     userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'create')
+  const canDeleteSA =
+    userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'delete')
 
   if (!userIsMember)
     return (
@@ -353,7 +355,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                           </Button>
                         </Link>
                         {isTeamOwned ? (
-                          canUpdateTeam && (
+                          canDeleteSA && (
                             <DeleteServiceAccountDialog account={sa} onDelete={() => {}} />
                           )
                         ) : (
