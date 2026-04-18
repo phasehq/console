@@ -185,7 +185,7 @@ def _create_user(request, org):
             status="error", response_status=500,
             response_body={"detail": str(e)},
         )
-        return scim_server_error(str(e))
+        return scim_server_error()
 
     if not active:
         deactivate_scim_user(scim_user)

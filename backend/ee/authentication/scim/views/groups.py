@@ -196,9 +196,9 @@ def _create_group(request, org):
             is_scim_managed=True,
             created_by=None,
         )
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to create team for SCIM group")
-        return scim_server_error(str(e))
+        return scim_server_error()
 
     # Create SCIMGroup
     try:
