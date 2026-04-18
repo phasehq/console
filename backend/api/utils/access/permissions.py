@@ -52,7 +52,7 @@ def user_can_access_environment(user_id, env_id):
         organisation=env.app.organisation, user_id=user_id, deleted_at=None
     )
     return EnvironmentKey.objects.filter(
-        user_id=org_member, environment_id=env_id
+        user_id=org_member, environment_id=env_id, deleted_at__isnull=True
     ).exists()
 
 
