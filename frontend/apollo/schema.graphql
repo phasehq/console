@@ -1208,16 +1208,6 @@ type Mutation {
   """
   createServerSideServiceAccountToken(expiry: BigInt, name: String!, serviceAccountId: ID!): CreateServerSideServiceAccountTokenMutation
   deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
-
-  """
-  Transfer a service account between org-level and team ownership.
-  
-  - team_id=null: Promote team-owned SA to org-level (clears team FK).
-  - team_id=<id>: Assign SA to a team (narrows visibility to team members).
-  
-  Requires global_access (Owner/Admin only).
-  """
-  updateServiceAccountOwnership(serviceAccountId: ID!, teamId: ID): UpdateServiceAccountOwnershipMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
   triggerSync(syncId: ID): TriggerSync
@@ -1564,18 +1554,6 @@ type CreateServerSideServiceAccountTokenMutation {
 
 type DeleteServiceAccountTokenMutation {
   ok: Boolean
-}
-
-"""
-Transfer a service account between org-level and team ownership.
-
-- team_id=null: Promote team-owned SA to org-level (clears team FK).
-- team_id=<id>: Assign SA to a team (narrows visibility to team members).
-
-Requires global_access (Owner/Admin only).
-"""
-type UpdateServiceAccountOwnershipMutation {
-  serviceAccount: ServiceAccountType
 }
 
 type InitEnvSync {
