@@ -20,8 +20,9 @@ def parse_scim_filter(filter_string):
         return []
 
     clauses = []
-    # Split on ' and ' (case-insensitive)
-    parts = re.split(r"\s+and\s+", filter_string, flags=re.IGNORECASE)
+    # Split on ' and ' (case-insensitive). Lookarounds keep the pattern
+    # non-backtracking: no `\s+` quantifier means no polynomial worst case.
+    parts = re.split(r"(?<=\s)and(?=\s)", filter_string, flags=re.IGNORECASE)
 
     for part in parts:
         part = part.strip()
