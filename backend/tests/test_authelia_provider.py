@@ -153,7 +153,7 @@ class TestOIDCDiscovery(unittest.TestCase):
         adapter._fetch_oidc_config()
 
         # Assert: endpoints come from the discovery response, not defaults
-        mock_get.assert_called_with(adapter.oidc_config_url)
+        mock_get.assert_called_with(adapter.oidc_config_url, allow_redirects=False)
         self.assertEqual(adapter.access_token_url, OIDC_DISCOVERY_RESPONSE["token_endpoint"])
         self.assertEqual(adapter.authorize_url, OIDC_DISCOVERY_RESPONSE["authorization_endpoint"])
         self.assertEqual(adapter.profile_url, OIDC_DISCOVERY_RESPONSE["userinfo_endpoint"])

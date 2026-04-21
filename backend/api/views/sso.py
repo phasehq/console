@@ -19,6 +19,8 @@ from rest_framework.throttling import AnonRateThrottle
 
 from allauth.socialaccount.models import SocialApp, SocialAccount, SocialToken, SocialLogin
 from api.models import OrganisationSSOProvider
+from api.utils.network import validate_url_is_safe
+from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,28 @@ _oidc_cache_lock = threading.Lock()
 _OIDC_CACHE_TTL = 3600  # 1 hour
 
 
+def _safe_oidc_request(method, url, **kwargs):
+    """Wrapper around requests.{get,post} that blocks SSRF to private
+    IPs when running on cloud. Redirects are disabled so a 30x response
+    can't pivot the fetch to an internal service after validation.
+
+    Self-hosted deployments bypass the IP allowlist — customers may
+    legitimately point at internal OIDC servers — but redirects are
+    still disabled for consistency.
+
+    DNS TOCTOU (rebinding between validate_url_is_safe's resolution and
+    requests' resolution) is a known limitation; mitigating it would
+    require a custom transport that pins the resolved IP.
+    """
+    if settings.APP_HOST == "cloud":
+        try:
+            validate_url_is_safe(url)
+        except ValidationError:
+            raise ValueError(f"URL rejected by safety check: {url}")
+    kwargs.setdefault("allow_redirects", False)
+    return http_requests.request(method, url, **kwargs)
+
+
 def _get_oidc_endpoints(issuer):
     """Fetch OIDC discovery document with a TTL cache."""
     now = time.time()
@@ -60,12 +84,24 @@ def _get_oidc_endpoints(issuer):
 
     discovery_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
     try:
-        resp = http_requests.get(discovery_url, timeout=10)
+        resp = _safe_oidc_request("GET", discovery_url, timeout=10)
         resp.raise_for_status()
         config = resp.json()
+        authorize_url = config["authorization_endpoint"]
+        token_url = config["token_endpoint"]
+        # Validate endpoints returned by discovery before trusting them —
+        # a hostile discovery doc could otherwise point token_endpoint at
+        # an internal service to exfil client_secret.
+        if settings.APP_HOST == "cloud":
+            try:
+                validate_url_is_safe(token_url)
+            except ValidationError:
+                raise ValueError(
+                    f"Discovery returned unsafe token_endpoint: {token_url}"
+                )
         endpoints = {
-            "authorize_url": config["authorization_endpoint"],
-            "token_url": config["token_endpoint"],
+            "authorize_url": authorize_url,
+            "token_url": token_url,
         }
         with _oidc_cache_lock:
             _oidc_cache[issuer] = {"endpoints": endpoints, "fetched_at": now}
@@ -371,7 +407,7 @@ def _exchange_code_for_token(token_url, payload, auth_method, client_id, client_
         body.pop("client_id", None)
         body.pop("client_secret", None)
 
-    resp = http_requests.post(token_url, data=body, headers=headers, timeout=15)
+    resp = _safe_oidc_request("POST", token_url, data=body, headers=headers, timeout=15)
     resp.raise_for_status()
     return resp.json()
 

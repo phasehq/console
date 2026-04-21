@@ -3,7 +3,11 @@ import jwt
 import logging
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter, OAuth2Error
 from allauth.socialaccount.models import SocialAccount
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+
+from api.utils.network import validate_url_is_safe
 
 
 logger = logging.getLogger(__name__)
@@ -28,19 +32,43 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
             if not self.oidc_config_url:
                 raise ValueError("OIDC configuration URL not set")
 
-            oidc_config_response = requests.get(self.oidc_config_url)
+            self._assert_url_safe(self.oidc_config_url)
+            oidc_config_response = requests.get(
+                self.oidc_config_url, allow_redirects=False
+            )
             oidc_config = oidc_config_response.json()
 
-            self.access_token_url = oidc_config["token_endpoint"]
+            token_endpoint = oidc_config["token_endpoint"]
+            jwks_uri = oidc_config["jwks_uri"]
+            userinfo_endpoint = oidc_config["userinfo_endpoint"]
+            # Endpoints returned by discovery flow back out to server-side
+            # fetches (token exchange, userinfo, JWKS). Validate before
+            # trusting any of them.
+            self._assert_url_safe(token_endpoint)
+            self._assert_url_safe(jwks_uri)
+            self._assert_url_safe(userinfo_endpoint)
+
+            self.access_token_url = token_endpoint
             self.authorize_url = oidc_config["authorization_endpoint"]
-            self.profile_url = oidc_config["userinfo_endpoint"]
-            self.jwks_url = oidc_config["jwks_uri"]
+            self.profile_url = userinfo_endpoint
+            self.jwks_url = jwks_uri
             self.issuer = oidc_config["issuer"]
         except Exception as e:
             logger.error(f"Failed to fetch OIDC configuration: {e}")
             if not self.default_config:
                 raise
             self._set_default_config()
+
+    @staticmethod
+    def _assert_url_safe(url):
+        """Reject URLs that resolve to private networks on cloud.
+        Self-hosted deployments may legitimately use internal OIDC."""
+        if settings.APP_HOST != "cloud":
+            return
+        try:
+            validate_url_is_safe(url)
+        except ValidationError:
+            raise OAuth2Error(f"URL rejected by safety check: {url}")
 
     def _set_default_config(self):
         for key, value in self.default_config.items():
