@@ -137,7 +137,7 @@ class OrganisationSSOProvider(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
         "OrganisationMember",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="sso_providers_created",
@@ -145,7 +145,7 @@ class OrganisationSSOProvider(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         "OrganisationMember",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="sso_providers_updated",
