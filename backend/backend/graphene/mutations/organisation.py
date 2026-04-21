@@ -258,6 +258,15 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
                 id=invite_id, valid=True, expires_at__gte=timezone.now()
             )
 
+            # The invite is bound to a specific email. A valid session alone
+            # is not enough — the authenticated caller's email MUST match
+            # the invitee. Otherwise a leaked invite_id could be claimed by
+            # any account holder. resolve_validate_invite already enforces
+            # this for the read path, but this mutation is the canonical
+            # write gate and must enforce independently.
+            if invite.invitee_email.lower() != info.context.user.email.lower():
+                raise GraphQLError("This invite is for another user")
+
             org = Organisation.objects.get(id=org_id)
 
             role = (

@@ -1577,5 +1577,86 @@ class TestSSOSSRFGuardTest(unittest.TestCase):
         self.assertIn("Failed to reach", result.error)
 
 
+class InviteAcceptanceEmailMatchTest(unittest.TestCase):
+    """Regression: accepting an organisation invite requires the caller's
+    authenticated email to match the invite's invitee_email. Otherwise
+    a leaked invite_id (forwarded email, URL history, log dump) could
+    be claimed by any authenticated account."""
+
+    def _make_info(self, user_email):
+        info = MagicMock()
+        user = MagicMock()
+        user.email = user_email
+        user.userId = "user-uuid"
+        info.context.user = user
+        return info
+
+    @patch("backend.graphene.mutations.organisation.user_is_org_member")
+    @patch("backend.graphene.mutations.organisation.OrganisationMemberInvite")
+    def test_mismatched_email_raises(self, mock_invite_cls, mock_is_member):
+        from backend.graphene.mutations.organisation import (
+            CreateOrganisationMemberMutation,
+        )
+        from graphql import GraphQLError
+
+        mock_is_member.return_value = False
+        mock_invite_cls.objects.filter.return_value.exists.return_value = True
+        invite = MagicMock()
+        invite.invitee_email = "alice@example.com"
+        mock_invite_cls.objects.get.return_value = invite
+
+        info = self._make_info(user_email="eve@attacker.com")
+
+        with self.assertRaises(GraphQLError) as cm:
+            CreateOrganisationMemberMutation.mutate(
+                None,
+                info,
+                org_id="org-1",
+                identity_key="k",
+                wrapped_keyring="wk",
+                wrapped_recovery="wr",
+                invite_id="inv-1",
+            )
+        self.assertIn("another user", str(cm.exception))
+
+    @patch("backend.graphene.mutations.organisation.user_is_org_member")
+    @patch("backend.graphene.mutations.organisation.OrganisationMemberInvite")
+    def test_email_match_is_case_insensitive(
+        self, mock_invite_cls, mock_is_member
+    ):
+        """Invite address 'Alice@Example.com' must match caller
+        'alice@example.com'. Emails are case-insensitive."""
+        from backend.graphene.mutations.organisation import (
+            CreateOrganisationMemberMutation,
+        )
+        from graphql import GraphQLError
+
+        mock_is_member.return_value = False
+        mock_invite_cls.objects.filter.return_value.exists.return_value = True
+        invite = MagicMock()
+        invite.invitee_email = "Alice@Example.com"
+        mock_invite_cls.objects.get.return_value = invite
+
+        info = self._make_info(user_email="alice@example.com")
+
+        # Must NOT raise the "another user" error — it would proceed to
+        # run the rest of the mutation, which will fail on unmocked
+        # dependencies. We care here only that the email check passes.
+        try:
+            CreateOrganisationMemberMutation.mutate(
+                None,
+                info,
+                org_id="org-1",
+                identity_key="k",
+                wrapped_keyring="wk",
+                wrapped_recovery="wr",
+                invite_id="inv-1",
+            )
+        except GraphQLError as e:
+            self.assertNotIn("another user", str(e))
+        except Exception:
+            pass  # downstream unmocked collaborators — fine
+
+
 if __name__ == "__main__":
     unittest.main()
