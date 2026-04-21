@@ -1009,6 +1009,100 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
         with self.assertRaises(SSORequiredError):
             mw.resolve(self._next, None, info, env_id="env-1")
 
+    @patch("backend.graphene.middleware.Environment")
+    @patch("backend.graphene.middleware.App")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_resolves_org_via_secret_id(
+        self, mock_org_cls, mock_app_cls, mock_env_cls
+    ):
+        """A non-SSO session must not be able to read/mutate a secret
+        inside an SSO-enforced org via the secret's id alone. This
+        was the core middleware bypass bug."""
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+
+        with patch("api.models.Secret") as mock_secret_cls:
+            mock_secret_cls.objects.only.return_value.get.return_value = MagicMock(
+                environment_id="env-1"
+            )
+            mock_env_cls.objects.only.return_value.get.return_value = MagicMock(
+                app_id="app-1"
+            )
+            mock_app_cls.objects.only.return_value.get.return_value = MagicMock(
+                organisation_id="org-1"
+            )
+
+            org = MagicMock(require_sso=True, name="acme")
+            org.id = "org-1"
+            mock_org_cls.objects.only.return_value.get.return_value = org
+
+            mw = OrgSSOEnforcementMiddleware()
+            info = self._make_info(session_auth_method="password")
+            with self.assertRaises(SSORequiredError):
+                mw.resolve(self._next, None, info, secret_id="sec-1")
+
+    @patch("backend.graphene.middleware.OrganisationMember")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_resolves_org_via_member_id(self, mock_org_cls, mock_member_cls):
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+
+        mock_member_cls.objects.only.return_value.get.return_value = MagicMock(
+            organisation_id="org-1"
+        )
+        org = MagicMock(require_sso=True, name="acme")
+        org.id = "org-1"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._make_info(session_auth_method="password")
+        with self.assertRaises(SSORequiredError):
+            mw.resolve(self._next, None, info, member_id="mem-1")
+
+    @patch("backend.graphene.middleware.Organisation")
+    def test_resolves_org_via_service_account_id(self, mock_org_cls):
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+
+        with patch("api.models.ServiceAccount") as mock_sa_cls:
+            mock_sa_cls.objects.only.return_value.get.return_value = MagicMock(
+                organisation_id="org-1"
+            )
+            org = MagicMock(require_sso=True, name="acme")
+            org.id = "org-1"
+            mock_org_cls.objects.only.return_value.get.return_value = org
+
+            mw = OrgSSOEnforcementMiddleware()
+            info = self._make_info(session_auth_method="password")
+            with self.assertRaises(SSORequiredError):
+                mw.resolve(self._next, None, info, service_account_id="sa-1")
+
+    @patch("backend.graphene.middleware.Organisation")
+    def test_resolves_org_via_invite_id(self, mock_org_cls):
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+
+        with patch("api.models.OrganisationMemberInvite") as mock_invite_cls:
+            mock_invite_cls.objects.only.return_value.get.return_value = MagicMock(
+                organisation_id="org-1"
+            )
+            org = MagicMock(require_sso=True, name="acme")
+            org.id = "org-1"
+            mock_org_cls.objects.only.return_value.get.return_value = org
+
+            mw = OrgSSOEnforcementMiddleware()
+            info = self._make_info(session_auth_method="password")
+            with self.assertRaises(SSORequiredError):
+                mw.resolve(self._next, None, info, invite_id="inv-1")
+
     def test_nonexistent_org_passes_through(self):
         """If the org can't be loaded, don't block — let the resolver decide."""
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware

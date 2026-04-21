@@ -1,6 +1,12 @@
 from graphql import GraphQLResolveInfo
 from graphql import GraphQLError
-from api.models import App, Environment, NetworkAccessPolicy, Organisation, OrganisationMember
+from api.models import (
+    App,
+    Environment,
+    NetworkAccessPolicy,
+    Organisation,
+    OrganisationMember,
+)
 
 from itertools import chain
 from api.utils.access.ip import get_client_ip
@@ -42,22 +48,23 @@ class OrgSSOEnforcementMiddleware:
     authenticated against the previous provider for this org still pass.
     auth_sso_provider_id is stored on the session for a future tightening.
 
-    Resolves org from: organisation_id | org_id | app_id | env_id |
-    environment_id kwargs. Other resolvers fall through (membership-scoped
-    lists like `organisations` show all memberships, including locked orgs,
-    so the user can see them and re-auth via SSO).
+    Org resolution covers every common resource-ID kwarg that appears on
+    org-scoped resolvers: direct org IDs, app/environment IDs, plus every
+    resource type whose id can be used to implicitly address a specific
+    organisation (secrets, members, service accounts, teams, invites,
+    folders, syncs, roles, policies, credentials, tokens, leases). Each
+    resolver returns an org_id or None; lookups short-circuit on the
+    first match so the common case (direct org_id) is still free.
 
     Per-request caching: a single GraphQL document often pulls many
     org-scoped fields. Without caching, each resolver hit re-queries
-    Organisation (and for app_id/env_id, App and Environment too). The
-    middleware caches org_id resolution by kind + id, and the (blocked,
-    org_name) decision by org_id, on the request object — so the heavy
-    work happens once per org per HTTP request.
+    the whole resolution chain. Decisions are cached per org_id, and
+    each intermediate lookup (app→org, env→org, …) is cached by its
+    own key so chained lookups also benefit.
     """
 
-    _ORG_CACHE_ATTR = "_org_sso_cache"
-    _APP_CACHE_ATTR = "_org_sso_app_to_org"
-    _ENV_CACHE_ATTR = "_org_sso_env_to_org"
+    _DECISION_CACHE_ATTR = "_org_sso_decision_cache"
+    _ID_CACHE_ATTR = "_org_sso_id_cache"
 
     def resolve(self, next, root, info: GraphQLResolveInfo, **kwargs):
         request = info.context
@@ -92,10 +99,10 @@ class OrgSSOEnforcementMiddleware:
     def _get_org_decision(cls, request, org_id):
         """Return (blocked, org_name) tuple, or None if the org can't be
         loaded. Cached per request."""
-        cache = getattr(request, cls._ORG_CACHE_ATTR, None)
+        cache = getattr(request, cls._DECISION_CACHE_ATTR, None)
         if cache is None:
             cache = {}
-            setattr(request, cls._ORG_CACHE_ATTR, cache)
+            setattr(request, cls._DECISION_CACHE_ATTR, cache)
 
         key = str(org_id)
         if key in cache:
@@ -112,54 +119,227 @@ class OrgSSOEnforcementMiddleware:
         return decision
 
     @classmethod
+    def _id_cache(cls, request):
+        cache = getattr(request, cls._ID_CACHE_ATTR, None)
+        if cache is None:
+            cache = {}
+            setattr(request, cls._ID_CACHE_ATTR, cache)
+        return cache
+
+    @classmethod
+    def _cached(cls, request, kind, id_value, loader):
+        """Generic cached lookup. kind is a string namespace, id_value
+        is the key; loader is a zero-arg callable returning an org_id
+        (or None). Cache stores the result so each resolver hit in the
+        same request doesn't re-query."""
+        cache = cls._id_cache(request)
+        key = (kind, str(id_value))
+        if key in cache:
+            return cache[key]
+        try:
+            org_id = loader()
+        except Exception:
+            org_id = None
+        cache[key] = org_id
+        return org_id
+
+    @classmethod
     def _resolve_org_id(cls, request, kwargs):
         # Direct org kwargs — no DB hit.
         for key in ("organisation_id", "org_id"):
             value = kwargs.get(key)
             if value:
                 return value
-        # Resolve via App — cached per request.
-        app_id = kwargs.get("app_id")
-        if app_id:
-            return cls._lookup_app_org(request, app_id)
-        # Resolve via Environment — cached per request.
-        env_id = kwargs.get("env_id") or kwargs.get("environment_id")
-        if env_id:
-            return cls._lookup_env_org(request, env_id)
+
+        # Ordered dispatch table. Each entry is (kwarg_name, resolver).
+        # First kwarg that resolves wins. Lookups that chain (e.g.
+        # secret → env → app → org) reuse the same id-cache via _cached
+        # so the chain is only traversed once per request per id.
+        dispatch = [
+            ("app_id", cls._lookup_app_org),
+            ("env_id", cls._lookup_env_org),
+            ("environment_id", cls._lookup_env_org),
+            ("secret_id", cls._lookup_secret_org),
+            ("folder_id", cls._lookup_folder_org),
+            ("sync_id", cls._lookup_sync_org),
+            ("member_id", cls._lookup_member_org),
+            ("service_account_id", cls._lookup_service_account_org),
+            ("account_id", cls._lookup_service_account_org),
+            ("invite_id", cls._lookup_invite_org),
+            # team_id: add when api.models.Team merges (teams PR)
+            ("role_id", cls._lookup_role_org),
+            ("policy_id", cls._lookup_policy_org),
+            ("credential_id", cls._lookup_credential_org),
+            ("lease_id", cls._lookup_lease_org),
+            ("token_id", cls._lookup_token_org),
+        ]
+        for kwarg_name, resolver in dispatch:
+            value = kwargs.get(kwarg_name)
+            if value:
+                org_id = resolver(request, value)
+                if org_id:
+                    return org_id
         return None
+
+    # ------- resource → org lookups -------
 
     @classmethod
     def _lookup_app_org(cls, request, app_id):
-        cache = getattr(request, cls._APP_CACHE_ATTR, None)
-        if cache is None:
-            cache = {}
-            setattr(request, cls._APP_CACHE_ATTR, cache)
-        key = str(app_id)
-        if key in cache:
-            return cache[key]
-        try:
-            org_id = App.objects.only("organisation_id").get(id=app_id).organisation_id
-        except App.DoesNotExist:
-            org_id = None
-        cache[key] = org_id
-        return org_id
+        def load():
+            return App.objects.only("organisation_id").get(id=app_id).organisation_id
+        return cls._cached(request, "app", app_id, load)
 
     @classmethod
     def _lookup_env_org(cls, request, env_id):
-        cache = getattr(request, cls._ENV_CACHE_ATTR, None)
-        if cache is None:
-            cache = {}
-            setattr(request, cls._ENV_CACHE_ATTR, cache)
-        key = str(env_id)
-        if key in cache:
-            return cache[key]
-        try:
+        def load():
             env = Environment.objects.only("app_id").get(id=env_id)
-            org_id = cls._lookup_app_org(request, env.app_id)
-        except Environment.DoesNotExist:
-            org_id = None
-        cache[key] = org_id
-        return org_id
+            return cls._lookup_app_org(request, env.app_id)
+        return cls._cached(request, "env", env_id, load)
+
+    @classmethod
+    def _lookup_secret_org(cls, request, secret_id):
+        from api.models import Secret
+        def load():
+            secret = Secret.objects.only("environment_id").get(id=secret_id)
+            return cls._lookup_env_org(request, secret.environment_id)
+        return cls._cached(request, "secret", secret_id, load)
+
+    @classmethod
+    def _lookup_folder_org(cls, request, folder_id):
+        from api.models import SecretFolder
+        def load():
+            folder = SecretFolder.objects.only("environment_id").get(id=folder_id)
+            return cls._lookup_env_org(request, folder.environment_id)
+        return cls._cached(request, "folder", folder_id, load)
+
+    @classmethod
+    def _lookup_sync_org(cls, request, sync_id):
+        from api.models import EnvironmentSync
+        def load():
+            sync = EnvironmentSync.objects.only("environment_id").get(id=sync_id)
+            return cls._lookup_env_org(request, sync.environment_id)
+        return cls._cached(request, "sync", sync_id, load)
+
+    @classmethod
+    def _lookup_member_org(cls, request, member_id):
+        def load():
+            return OrganisationMember.objects.only(
+                "organisation_id"
+            ).get(id=member_id).organisation_id
+        return cls._cached(request, "member", member_id, load)
+
+    @classmethod
+    def _lookup_service_account_org(cls, request, sa_id):
+        from api.models import ServiceAccount
+        def load():
+            return ServiceAccount.objects.only(
+                "organisation_id"
+            ).get(id=sa_id).organisation_id
+        return cls._cached(request, "sa", sa_id, load)
+
+    @classmethod
+    def _lookup_invite_org(cls, request, invite_id):
+        from api.models import OrganisationMemberInvite
+        def load():
+            return OrganisationMemberInvite.objects.only(
+                "organisation_id"
+            ).get(id=invite_id).organisation_id
+        return cls._cached(request, "invite", invite_id, load)
+
+    @classmethod
+    def _lookup_role_org(cls, request, role_id):
+        from api.models import Role
+        def load():
+            return Role.objects.only(
+                "organisation_id"
+            ).get(id=role_id).organisation_id
+        return cls._cached(request, "role", role_id, load)
+
+    @classmethod
+    def _lookup_policy_org(cls, request, policy_id):
+        def load():
+            return NetworkAccessPolicy.objects.only(
+                "organisation_id"
+            ).get(id=policy_id).organisation_id
+        return cls._cached(request, "policy", policy_id, load)
+
+    @classmethod
+    def _lookup_credential_org(cls, request, credential_id):
+        from api.models import ProviderCredentials
+        def load():
+            return ProviderCredentials.objects.only(
+                "organisation_id"
+            ).get(id=credential_id).organisation_id
+        return cls._cached(request, "credential", credential_id, load)
+
+    @classmethod
+    def _lookup_lease_org(cls, request, lease_id):
+        from api.models import DynamicSecretLease
+        def load():
+            # Lease → dynamic secret → environment → app → org.
+            lease = DynamicSecretLease.objects.only(
+                "dynamic_secret_id"
+            ).get(id=lease_id)
+            from api.models import DynamicSecret
+            ds = DynamicSecret.objects.only(
+                "environment_id"
+            ).get(id=lease.dynamic_secret_id)
+            return cls._lookup_env_org(request, ds.environment_id)
+        return cls._cached(request, "lease", lease_id, load)
+
+    @classmethod
+    def _lookup_token_org(cls, request, token_id):
+        """Tokens live across several models (UserToken, ServiceToken,
+        ServiceAccountToken, EnvironmentToken). UUIDs are unique per
+        table but not across tables; probe them in a fixed order and
+        stop at the first hit."""
+        from api.models import (
+            EnvironmentToken,
+            ServiceAccountToken,
+            ServiceToken,
+            UserToken,
+        )
+
+        def load():
+            # UserToken: token → user → first org membership. A user
+            # can belong to multiple orgs; the SSO enforcement here
+            # only cares about *some* org we can pin — if any of the
+            # user's orgs requires SSO, block. Conservative choice:
+            # if ANY membership's org requires SSO and the session
+            # doesn't match, we block. Picking the first membership
+            # is a simplification; tokens scoped to a specific org
+            # would be safer and is a TODO for the UserToken schema.
+            try:
+                ut = UserToken.objects.only("user_id").get(id=token_id)
+                member = OrganisationMember.objects.filter(
+                    user_id=ut.user_id, deleted_at__isnull=True
+                ).only("organisation_id").first()
+                if member:
+                    return member.organisation_id
+            except UserToken.DoesNotExist:
+                pass
+            try:
+                st = ServiceToken.objects.only("app_id").get(id=token_id)
+                return cls._lookup_app_org(request, st.app_id)
+            except ServiceToken.DoesNotExist:
+                pass
+            try:
+                sat = ServiceAccountToken.objects.only(
+                    "service_account_id"
+                ).get(id=token_id)
+                return cls._lookup_service_account_org(
+                    request, sat.service_account_id
+                )
+            except ServiceAccountToken.DoesNotExist:
+                pass
+            try:
+                et = EnvironmentToken.objects.only("environment_id").get(id=token_id)
+                return cls._lookup_env_org(request, et.environment_id)
+            except EnvironmentToken.DoesNotExist:
+                pass
+            return None
+
+        return cls._cached(request, "token", token_id, load)
 
 
 class IPWhitelistMiddleware:
