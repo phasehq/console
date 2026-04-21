@@ -22,6 +22,7 @@ from api.views.sso import (
     _exchange_code_for_token,
     _get_oidc_endpoints,
     _get_or_create_social_app,
+    _complete_login_bypassing_allauth,
 )
 
 
@@ -555,3 +556,131 @@ class SSRFGuardTest(unittest.TestCase):
         )
         self.assertEqual(mock_request.call_args.args[0], "POST")
         self.assertFalse(mock_request.call_args.kwargs.get("allow_redirects"))
+
+
+class SocialAccountLookupTest(unittest.TestCase):
+    """Regression: the SSO login flow resolves identity by (provider, uid)
+    first, only falling back to email lookup for brand-new IdP identities.
+    Looking up CustomUser by the current IdP email would orphan an
+    existing user whose IdP-side email has since changed, taking all of
+    their OrganisationMembers with it.
+    """
+
+    def _make_social_login(self, provider, uid, email):
+        sl = MagicMock()
+        sl.account.provider = provider
+        sl.account.uid = uid
+        sl.account.extra_data = {"email": email, "email_verified": True}
+        sl.user.email = email
+        return sl
+
+    def _make_token(self):
+        token = MagicMock()
+        token.token = "access-token"
+        token.token_secret = ""
+        token.app = MagicMock()
+        return token
+
+    @patch("api.views.sso.login")
+    @patch("api.views.sso.SocialToken")
+    @patch("api.views.sso.SocialAccount")
+    @patch("api.views.sso.get_user_model")
+    def test_idp_email_change_reuses_existing_user(
+        self, mock_get_user_model, mock_sa_cls, mock_token_cls, mock_login
+    ):
+        """IdP identity (provider, uid) already linked → use that user
+        even when the incoming email no longer matches the stored
+        CustomUser.email. Under the buggy lookup-by-email-first path
+        this would create a duplicate CustomUser.
+        """
+        original_user = MagicMock()
+        original_user.email = "bob@old.com"
+        existing_sa = MagicMock()
+        existing_sa.user = original_user
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.return_value = existing_sa
+
+        User = MagicMock()
+        mock_get_user_model.return_value = User
+
+        request = MagicMock()
+        social_login = self._make_social_login("google", "G1", "bob@new.com")
+
+        _complete_login_bypassing_allauth(request, social_login, self._make_token())
+
+        mock_sa_cls.objects.get.assert_called_once_with(
+            provider="google", uid="G1"
+        )
+        User.objects.get.assert_not_called()
+        User.objects.create_user.assert_not_called()
+        mock_sa_cls.objects.create.assert_not_called()
+        existing_sa.save.assert_called_once()
+        mock_login.assert_called_once_with(request, original_user)
+
+    @patch("api.views.sso.login")
+    @patch("api.views.sso.SocialToken")
+    @patch("api.views.sso.SocialAccount")
+    @patch("api.views.sso.get_user_model")
+    def test_new_idp_identity_links_to_existing_user_by_email(
+        self, mock_get_user_model, mock_sa_cls, mock_token_cls, mock_login
+    ):
+        """SocialAccount miss → resolve to an existing user by email.
+        This is the common 'user signed up with password, now adds SSO'
+        path."""
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist
+
+        existing_user = MagicMock()
+        existing_user.email = "alice@example.com"
+        User = MagicMock()
+        User.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        User.objects.get.return_value = existing_user
+        mock_get_user_model.return_value = User
+
+        request = MagicMock()
+        social_login = self._make_social_login(
+            "google", "G-NEW", "alice@example.com"
+        )
+
+        _complete_login_bypassing_allauth(request, social_login, self._make_token())
+
+        User.objects.create_user.assert_not_called()
+        mock_sa_cls.objects.create.assert_called_once()
+        create_kwargs = mock_sa_cls.objects.create.call_args.kwargs
+        self.assertEqual(create_kwargs["provider"], "google")
+        self.assertEqual(create_kwargs["uid"], "G-NEW")
+        self.assertEqual(create_kwargs["user"], existing_user)
+        mock_login.assert_called_once_with(request, existing_user)
+
+    @patch("api.views.sso.login")
+    @patch("api.views.sso.SocialToken")
+    @patch("api.views.sso.SocialAccount")
+    @patch("api.views.sso.get_user_model")
+    def test_new_idp_identity_and_new_email_creates_user(
+        self, mock_get_user_model, mock_sa_cls, mock_token_cls, mock_login
+    ):
+        """SocialAccount miss + user-by-email miss → create fresh user."""
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist
+
+        User = MagicMock()
+        User.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        User.objects.get.side_effect = User.DoesNotExist
+        new_user = MagicMock()
+        User.objects.create_user.return_value = new_user
+        mock_get_user_model.return_value = User
+
+        request = MagicMock()
+        social_login = self._make_social_login(
+            "google", "G2", "newcomer@example.com"
+        )
+
+        _complete_login_bypassing_allauth(request, social_login, self._make_token())
+
+        User.objects.create_user.assert_called_once_with(
+            username="newcomer@example.com",
+            email="newcomer@example.com",
+            password=None,
+        )
+        mock_sa_cls.objects.create.assert_called_once()
+        mock_login.assert_called_once_with(request, new_user)

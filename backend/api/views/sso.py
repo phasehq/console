@@ -442,25 +442,34 @@ def _complete_login_bypassing_allauth(request, social_login, token, *, org_confi
             )
             raise ValueError("Email not verified by identity provider.")
 
-    # Find or create the Django user
+    # Resolve the Django user. Look up by (provider, uid) FIRST — this IdP
+    # identity may already be linked to a user whose email on the IdP side
+    # has since changed. If we used the current email to resolve, we would
+    # create a fresh CustomUser and orphan the existing one, taking every
+    # OrganisationMember with it. Only fall back to email lookup (or user
+    # creation) for IdP identities we've never seen before.
+    provider = social_login.account.provider
+    uid = social_login.account.uid
     try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        user = User.objects.create_user(
-            username=email,
-            email=email,
-            password=None,
+        sa = SocialAccount.objects.get(provider=provider, uid=uid)
+        user = sa.user
+        sa.extra_data = extra_data
+        sa.save(update_fields=["extra_data"])
+    except SocialAccount.DoesNotExist:
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            user = User.objects.create_user(
+                username=email,
+                email=email,
+                password=None,
+            )
+        sa = SocialAccount.objects.create(
+            provider=provider,
+            uid=uid,
+            user=user,
+            extra_data=extra_data,
         )
-
-    # Find or create the SocialAccount linking this provider to the user
-    sa, created = SocialAccount.objects.update_or_create(
-        provider=social_login.account.provider,
-        uid=social_login.account.uid,
-        defaults={
-            "user": user,
-            "extra_data": extra_data,
-        },
-    )
 
     # Save the SocialToken if we have one
     if token and token.token:

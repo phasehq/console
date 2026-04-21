@@ -896,7 +896,12 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
         return request
 
     def _run_new_user(self, provider_slug):
-        """A brand-new user logs in via the given provider."""
+        """A brand-new user logs in via the given provider.
+
+        Identity resolution walks (provider, uid) → email → create. For a
+        first-time login both lookups miss; we fall through to
+        User.create_user + SocialAccount.create.
+        """
         fixture = PROVIDERS[provider_slug]
         request = self._make_request()
 
@@ -917,26 +922,34 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
         new_user = MagicMock()
         mock_user_cls.objects.create_user.return_value = new_user
 
-        mock_sa = MagicMock()
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist()
 
         with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
-             patch("api.views.sso.SocialAccount.objects.update_or_create", return_value=(mock_sa, True)), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
              patch("api.views.sso.SocialToken.objects.update_or_create"), \
              patch("api.views.sso.login") as mock_login:
 
             user = _complete_login_bypassing_allauth(request, social_login, mock_token)
 
-        # User created with correct email
+        # First-time identity: both lookups miss, user + SocialAccount created.
         mock_user_cls.objects.create_user.assert_called_once_with(
             username=fixture["expected_email"].lower().strip(),
             email=fixture["expected_email"].lower().strip(),
             password=None,
         )
+        mock_sa_cls.objects.create.assert_called_once()
         mock_login.assert_called_once_with(request, new_user)
         return user
 
     def _run_existing_user(self, provider_slug):
-        """An existing user logs in again via the given provider."""
+        """A returning user signs in via the given provider.
+
+        The (provider, uid) lookup hits an existing SocialAccount; we reuse
+        its user even if the IdP-side email changed since the last login.
+        The email-based User lookup must NOT be invoked for this path.
+        """
         fixture = PROVIDERS[provider_slug]
         request = self._make_request()
 
@@ -953,22 +966,29 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
 
         existing_user = MagicMock()
         mock_user_cls = MagicMock()
-        mock_user_cls.objects.get.return_value = existing_user
 
         mock_sa = MagicMock()
+        mock_sa.user = existing_user
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.return_value = mock_sa
 
         with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
-             patch("api.views.sso.SocialAccount.objects.update_or_create", return_value=(mock_sa, False)), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
              patch("api.views.sso.SocialToken.objects.update_or_create"), \
              patch("api.views.sso.login") as mock_login:
 
             user = _complete_login_bypassing_allauth(request, social_login, mock_token)
 
-        # Existing user found — no create_user call
+        # Identity resolved by (provider, uid) — no user-by-email query,
+        # no user creation, no SocialAccount creation.
         mock_user_cls.objects.create_user.assert_not_called()
-        mock_user_cls.objects.get.assert_called_once_with(
-            email=fixture["expected_email"].lower().strip()
+        mock_user_cls.objects.get.assert_not_called()
+        mock_sa_cls.objects.get.assert_called_once_with(
+            provider=fixture["registry"]["provider_id"],
+            uid=fixture["uid"],
         )
+        mock_sa_cls.objects.create.assert_not_called()
         mock_login.assert_called_once_with(request, existing_user)
         return user
 
