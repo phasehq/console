@@ -307,24 +307,58 @@ def _get_callback_url(provider_slug):
     return f"{FRONTEND_URL}/api/auth/callback/{provider_slug}"
 
 
-def _get_or_create_social_app(config):
-    """Get or create a persisted SocialApp so that SocialToken ForeignKeys work."""
+def _get_or_create_social_app(config, *, org_config_id=None):
+    """Get or create a persisted SocialApp so that SocialToken ForeignKeys work.
+
+    Instance-level SSO has exactly one SocialApp per provider_id.
+
+    Org-level SSO requires disambiguation: two orgs configuring the same
+    provider type (both Okta) share provider_id="okta-oidc" but each
+    registers a distinct client_id with its IdP. Keying solely on
+    provider would cause Org B's save to clobber Org A's credentials.
+    We key org-level rows on (provider, client_id), which is unique per
+    IdP registration.
+    """
+    provider = config["provider_id"]
+    client_id = config["client_id"]
+    client_secret = config["client_secret"]
+
+    if org_config_id:
+        app = SocialApp.objects.filter(
+            provider=provider, client_id=client_id
+        ).first()
+        if app is None:
+            # Concurrent first-logins on the same org-config could both
+            # miss this lookup and race to create() — the duplicate row
+            # is harmless, subsequent logins will pick whichever exists.
+            app = SocialApp.objects.create(
+                provider=provider,
+                name=f"{provider}:{org_config_id}",
+                client_id=client_id,
+                secret=client_secret,
+            )
+            return app
+        if app.secret != client_secret:
+            app.secret = client_secret
+            app.save(update_fields=["secret"])
+        return app
+
+    # Instance-level: one row per provider_id.
     app, created = SocialApp.objects.get_or_create(
-        provider=config["provider_id"],
+        provider=provider,
         defaults={
-            "name": config["provider_id"],
-            "client_id": config["client_id"],
-            "secret": config["client_secret"],
+            "name": provider,
+            "client_id": client_id,
+            "secret": client_secret,
         },
     )
     if not created:
-        # Update credentials if they changed in settings
         changed = False
-        if app.client_id != config["client_id"]:
-            app.client_id = config["client_id"]
+        if app.client_id != client_id:
+            app.client_id = client_id
             changed = True
-        if app.secret != config["client_secret"]:
-            app.secret = config["client_secret"]
+        if app.secret != client_secret:
+            app.secret = client_secret
             changed = True
         if changed:
             app.save()
@@ -690,8 +724,11 @@ class SSOCallbackView(View):
         try:
             adapter = _get_adapter_instance(config, request)
 
-            # Use a persisted SocialApp so SocialToken ForeignKeys work
-            app = _get_or_create_social_app(config)
+            # Use a persisted SocialApp so SocialToken ForeignKeys work.
+            # For org-level SSO, scope the SocialApp to the config_id so
+            # multiple orgs configuring the same provider_id don't
+            # overwrite each other's credentials.
+            app = _get_or_create_social_app(config, org_config_id=org_config_id)
 
             token = SocialToken(token=access_token, app=app)
             if token_data.get("refresh_token"):

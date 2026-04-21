@@ -21,6 +21,7 @@ from api.views.sso import (
     _safe_oidc_request,
     _exchange_code_for_token,
     _get_oidc_endpoints,
+    _get_or_create_social_app,
 )
 
 
@@ -465,6 +466,75 @@ class SSRFGuardTest(unittest.TestCase):
 
         endpoints = _get_oidc_endpoints("https://issuer.example.com")
         self.assertIsNone(endpoints)
+
+    @patch("api.views.sso.SocialApp")
+    def test_org_level_socialapp_isolated_per_client_id(self, mock_social_app):
+        """Two orgs configuring the same provider_id must get distinct
+        SocialApp rows — their (provider, client_id) discriminator
+        prevents Org B's secret from overwriting Org A's.
+        """
+        existing = MagicMock()
+        existing.client_id = "org-a-client"
+        existing.secret = "org-a-secret"
+
+        # Org A already has a SocialApp; Org B looks up by a different
+        # client_id and misses.
+        def filter_side_effect(**kwargs):
+            qs = MagicMock()
+            if kwargs.get("client_id") == "org-a-client":
+                qs.first.return_value = existing
+            else:
+                qs.first.return_value = None
+            return qs
+
+        mock_social_app.objects.filter.side_effect = filter_side_effect
+        mock_social_app.objects.create.return_value = MagicMock(
+            client_id="org-b-client"
+        )
+
+        # Org A lookup — returns existing, no create
+        config_a = {
+            "provider_id": "okta-oidc",
+            "client_id": "org-a-client",
+            "client_secret": "org-a-secret",
+        }
+        _get_or_create_social_app(config_a, org_config_id="org-a-config")
+        mock_social_app.objects.create.assert_not_called()
+
+        # Org B lookup — misses, creates a NEW row (doesn't touch Org A)
+        config_b = {
+            "provider_id": "okta-oidc",
+            "client_id": "org-b-client",
+            "client_secret": "org-b-secret",
+        }
+        _get_or_create_social_app(config_b, org_config_id="org-b-config")
+        mock_social_app.objects.create.assert_called_once()
+        create_kwargs = mock_social_app.objects.create.call_args.kwargs
+        self.assertEqual(create_kwargs["client_id"], "org-b-client")
+        self.assertEqual(create_kwargs["secret"], "org-b-secret")
+        # Org A's existing row must not have been mutated
+        self.assertEqual(existing.secret, "org-a-secret")
+
+    @patch("api.views.sso.SocialApp")
+    def test_instance_level_socialapp_single_row_per_provider(
+        self, mock_social_app
+    ):
+        """Instance-level flow keeps the single-row behaviour: credential
+        rotation in env vars updates the same SocialApp row."""
+        app = MagicMock(client_id="old-id", secret="old-secret")
+        mock_social_app.objects.get_or_create.return_value = (app, False)
+
+        config = {
+            "provider_id": "google",
+            "client_id": "new-id",
+            "client_secret": "new-secret",
+        }
+        _get_or_create_social_app(config)  # no org_config_id
+        mock_social_app.objects.get_or_create.assert_called_once()
+        # Keys rotated → existing row gets updated
+        self.assertEqual(app.client_id, "new-id")
+        self.assertEqual(app.secret, "new-secret")
+        app.save.assert_called_once()
 
     @patch("api.views.sso.settings")
     @patch("api.views.sso.http_requests.request")
