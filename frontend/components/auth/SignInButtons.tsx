@@ -329,6 +329,7 @@ export default function SignInButtons({
                           <Button
                             key={provider.id}
                             variant="outline"
+                            size="lg"
                             onClick={() => handleProviderButtonClick(provider.id)}
                             icon={provider.icon}
                           >
@@ -522,6 +523,7 @@ export default function SignInButtons({
                       <Button
                         key={method.id}
                         variant="primary"
+                        size="lg"
                         onClick={handleClick}
                         icon={icon}
                       >
@@ -532,6 +534,7 @@ export default function SignInButtons({
                 ) : (
                   <Button
                     variant="primary"
+                    size="lg"
                     onClick={() => handleProviderButtonClick(ssoProvider)}
                     icon={providerButtons.find((p) => p.id === ssoProvider)?.icon}
                   >
