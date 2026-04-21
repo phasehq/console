@@ -74,9 +74,9 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
         for key, value in self.default_config.items():
             setattr(self, key, value)
 
-    def _get_user_data(self, token, id_token, app):
+    def _get_user_data(self, token, id_token, app, expected_nonce=None):
         if id_token:
-            return self._process_id_token(id_token, app)
+            return self._process_id_token(id_token, app, expected_nonce=expected_nonce)
         return self._fetch_user_info(token)
 
     def _fetch_user_info(self, token):
@@ -85,11 +85,11 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
         resp.raise_for_status()
         return resp.json()
 
-    def _process_id_token(self, id_token, app):
+    def _process_id_token(self, id_token, app, expected_nonce=None):
         try:
             jwk_client = jwt.PyJWKClient(self.jwks_url)
             signing_key = jwk_client.get_signing_key_from_jwt(id_token)
-            return jwt.decode(
+            claims = jwt.decode(
                 id_token,
                 key=signing_key.key,
                 algorithms=["RS256"],
@@ -99,6 +99,19 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
         except jwt.InvalidTokenError as e:
             logger.error(f"ID token validation failed: {e}")
             raise OAuth2Error(f"Invalid ID token: {e}")
+
+        # OIDC nonce: anchors the ID token to the specific authorize
+        # request initiated by this session. Without it, a stolen token
+        # could be replayed. When a nonce was sent, it MUST match.
+        if expected_nonce is not None:
+            if claims.get("nonce") != expected_nonce:
+                logger.error(
+                    "ID token nonce mismatch — possible replay or "
+                    "cross-session attack"
+                )
+                raise OAuth2Error("Invalid ID token: nonce mismatch")
+
+        return claims
 
     def pre_social_login(self, request, sociallogin):
         User = get_user_model()
@@ -139,7 +152,14 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
             if not id_token and isinstance(kwargs.get("response"), dict):
                 id_token = kwargs["response"].get("id_token")
 
-            extra_data = self._get_user_data(token, id_token, app)
+            expected_nonce = (
+                request.session.get("sso_nonce")
+                if hasattr(request, "session")
+                else None
+            )
+            extra_data = self._get_user_data(
+                token, id_token, app, expected_nonce=expected_nonce
+            )
             logger.debug(
                 f"User authentication data received for email: {extra_data.get('email')}"
             )
@@ -149,6 +169,8 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
 
             return login
 
+        except OAuth2Error:
+            raise
         except Exception as e:
             logger.error(f"OIDC login failed: {str(e)}")
             raise OAuth2Error(str(e))

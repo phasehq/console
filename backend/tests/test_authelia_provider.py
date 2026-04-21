@@ -43,8 +43,21 @@ ID_TOKEN_CLAIMS = {
 }
 
 
-def _make_mock_request():
-    return MagicMock()
+def _make_mock_request(sso_nonce=None):
+    """Build a minimal request mock with a realistic session.get.
+
+    The generic adapter reads `request.session.get("sso_nonce")` to
+    enforce OIDC nonce validation; without a real dict behind it,
+    MagicMock's auto-spec returns a MagicMock (truthy) and causes the
+    adapter to reject the login. Back it with a dict so callers can
+    explicitly set a nonce when they want the check to run.
+    """
+    req = MagicMock()
+    session = {}
+    if sso_nonce is not None:
+        session["sso_nonce"] = sso_nonce
+    req.session.get.side_effect = session.get
+    return req
 
 
 def _make_mock_app(client_id="phase-console"):

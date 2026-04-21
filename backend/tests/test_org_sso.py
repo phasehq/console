@@ -721,16 +721,24 @@ class SSOReturnToSafetyTest(unittest.TestCase):
 class CloudModeGuardRemovalTest(unittest.TestCase):
     """Verify EE adapters no longer block on APP_HOST=cloud."""
 
+    @patch("ee.authentication.sso.oidc.entraid.views._validate_ms_id_token")
     @patch("ee.authentication.sso.oidc.entraid.views.settings")
     @patch("ee.authentication.sso.oidc.entraid.views.ActivatedPhaseLicense")
     @patch("ee.authentication.sso.oidc.entraid.views.send_login_email")
     @patch("ee.authentication.sso.oidc.entraid.views.get_adapter")
     def test_entra_adapter_works_on_cloud(
-        self, mock_get_adapter, mock_send_email, mock_license, mock_settings
+        self, mock_get_adapter, mock_send_email, mock_license, mock_settings,
+        mock_validate_token,
     ):
         from ee.authentication.sso.oidc.entraid.views import CustomMicrosoftGraphOAuth2Adapter
 
         mock_settings.APP_HOST = "cloud"
+
+        # Mock a successful ID-token validation so the adapter proceeds.
+        mock_validate_token.return_value = {
+            "email": "test@example.com",
+            "nonce": "n",
+        }
 
         # Mock the response from Microsoft Graph
         mock_response = MagicMock()
@@ -759,11 +767,22 @@ class CloudModeGuardRemovalTest(unittest.TestCase):
             adapter.get_provider.return_value.sociallogin_from_response.return_value = mock_social_login
 
             mock_token = MagicMock()
-            mock_token.token = "fake-token"
+            mock_token.token = "fake-access-token"
+            mock_token.id_token = "fake.id.token"
+
+            mock_request = MagicMock()
+            mock_request.session.get.return_value = "n"
+
+            mock_app = MagicMock()
+            mock_app.client_id = "phase-console"
 
             # Should NOT raise OAuth2Error — cloud mode is no longer blocked
-            result = adapter.complete_login(MagicMock(), MagicMock(), mock_token)
+            result = adapter.complete_login(mock_request, mock_app, mock_token)
             self.assertIsNotNone(result)
+            # Validation must have been called with client_id + nonce
+            mock_validate_token.assert_called_once_with(
+                "fake.id.token", audience="phase-console", expected_nonce="n"
+            )
 
 
 # ---------------------------------------------------------------------------
