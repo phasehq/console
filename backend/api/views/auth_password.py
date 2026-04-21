@@ -35,10 +35,13 @@ class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
         return  # Skip CSRF check
 
+from django.db.models import Q
+
 from api.models import (
     EmailVerification,
     Organisation,
     OrganisationMember,
+    OrganisationMemberInvite,
     OrganisationSSOProvider,
 )
 
@@ -444,6 +447,36 @@ def password_reset_via_recovery(request):
 
 
 @csrf_exempt
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([EmailCheckThrottle])
+def invite_lookup(request, invite_id):
+    """Return the invitee email + org name for a valid pending invite.
+
+    Used by the login page to prefill the email field when a user is
+    redirected there from an invite link. Invite IDs are UUID4 (122 bits
+    of entropy) so enumeration is infeasible; the EmailCheck throttle
+    adds an extra layer.
+    """
+    try:
+        invite = OrganisationMemberInvite.objects.select_related(
+            "organisation"
+        ).get(
+            id=invite_id,
+            valid=True,
+            expires_at__gt=timezone.now(),
+        )
+    except OrganisationMemberInvite.DoesNotExist:
+        return JsonResponse({"error": "Invite not found or expired."}, status=404)
+
+    return JsonResponse({
+        "inviteeEmail": invite.invitee_email,
+        "organisationName": invite.organisation.name,
+    })
+
+
+@csrf_exempt
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -465,41 +498,62 @@ def email_check(request):
     User = get_user_model()
 
     email = (request.data.get("email") or "").lower().strip()
+    invite_id = request.data.get("inviteId") or request.data.get("invite_id")
     if not email:
         return JsonResponse({"error": "Email is required."}, status=400)
 
-    # Default: password user (minimal enumeration)
-    default_response = {
-        "authMethods": {
-            "password": True,
-            "sso": [],
-        }
-    }
-
+    # Unknown users default to password=True to minimise enumeration.
     try:
         user = User.objects.get(email=email)
+        has_password = user.has_usable_password()
     except User.DoesNotExist:
-        return JsonResponse(default_response)
+        user = None
+        has_password = True
 
-    has_password = user.has_usable_password()
+    # Build the provider query from (a) the user's existing org memberships
+    # and (b) any pending invite they're resolving. Either, neither, or both
+    # may apply.
+    provider_filters = []
+    if user is not None:
+        provider_filters.append(
+            Q(
+                organisation__users__user=user,
+                organisation__users__deleted_at=None,
+            )
+        )
 
-    # SSO user — find which provider they used
-    org_providers = OrganisationSSOProvider.objects.filter(
-        organisation__organisationmember__user=user,
-        organisation__organisationmember__deleted_at=None,
-        enabled=True,
-    ).select_related("organisation").distinct()
+    if invite_id:
+        try:
+            invite = OrganisationMemberInvite.objects.get(
+                id=invite_id,
+                valid=True,
+                expires_at__gt=timezone.now(),
+                invitee_email__iexact=email,
+            )
+            provider_filters.append(Q(organisation=invite.organisation))
+        except OrganisationMemberInvite.DoesNotExist:
+            pass
 
-    sso_methods = [
-        {
-            "id": str(provider.id),
-            "providerType": "oidc",
-            "provider": provider.provider_type,
-            "providerName": provider.name,
-            "enforced": provider.organisation.require_sso,
-        }
-        for provider in org_providers
-    ]
+    sso_methods = []
+    if provider_filters:
+        combined = provider_filters[0]
+        for q in provider_filters[1:]:
+            combined = combined | q
+        org_providers = (
+            OrganisationSSOProvider.objects.filter(combined, enabled=True)
+            .select_related("organisation")
+            .distinct()
+        )
+        sso_methods = [
+            {
+                "id": str(provider.id),
+                "providerType": "oidc",
+                "provider": provider.provider_type,
+                "providerName": provider.name,
+                "enforced": provider.organisation.require_sso,
+            }
+            for provider in org_providers
+        ]
 
     return JsonResponse({
         "authMethods": {

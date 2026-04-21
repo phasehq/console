@@ -24,9 +24,24 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
 import { FaArrowLeft } from 'react-icons/fa'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
-import { deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
+import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
+
+const INVITE_PATH_RE = /^\/invite\/([^/?#]+)/
+
+const extractInviteIdFromCallback = async (
+  callbackUrl: string | null | undefined
+): Promise<string | null> => {
+  if (!callbackUrl) return null
+  const match = callbackUrl.match(INVITE_PATH_RE)
+  if (!match) return null
+  try {
+    return await decodeb64string(decodeURIComponent(match[1]))
+  } catch {
+    return null
+  }
+}
 
 type ProviderButton = {
   id: string
@@ -80,6 +95,7 @@ export default function SignInButtons({
   const searchParams = useSearchParams()
 
   const [email, setEmail] = useState('')
+  const [emailLocked, setEmailLocked] = useState(false)
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [step, setStep] = useState<LoginStep>('email')
@@ -90,6 +106,35 @@ export default function SignInButtons({
   const passwordRef = useRef<HTMLInputElement>(null)
 
   const hasSSOProviders = providers.length > 0
+
+  useEffect(() => {
+    let cancelled = false
+    const prefillFromInvite = async () => {
+      const inviteId = await extractInviteIdFromCallback(searchParams?.get('callbackUrl'))
+      if (!inviteId) return
+      try {
+        const { data } = await axios.get(
+          UrlUtils.makeUrl(
+            process.env.NEXT_PUBLIC_BACKEND_API_BASE!,
+            'auth',
+            'invite',
+            inviteId
+          ),
+          { withCredentials: true }
+        )
+        if (!cancelled && data?.inviteeEmail) {
+          setEmail(data.inviteeEmail)
+          setEmailLocked(true)
+        }
+      } catch {
+        // Invalid/expired invite — leave the email blank, user can enter manually
+      }
+    }
+    prefillFromInvite()
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams])
 
   const handleProviderButtonClick = useCallback(
     (providerId: string) => {
@@ -107,9 +152,13 @@ export default function SignInButtons({
 
     setChecking(true)
     try {
+      const inviteId = await extractInviteIdFromCallback(searchParams?.get('callbackUrl'))
       const response = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'email', 'check'),
-        { email: email.toLowerCase().trim() },
+        {
+          email: email.toLowerCase().trim(),
+          ...(inviteId ? { inviteId } : {}),
+        },
         { withCredentials: true }
       )
 
@@ -302,8 +351,13 @@ export default function SignInButtons({
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      autoFocus
-                      className="w-full"
+                      autoFocus={!emailLocked}
+                      readOnly={emailLocked}
+                      aria-readonly={emailLocked}
+                      className={clsx(
+                        'w-full',
+                        emailLocked && 'cursor-not-allowed opacity-75'
+                      )}
                     />
                   </div>
                   <Button

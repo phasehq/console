@@ -26,6 +26,7 @@ from api.views.auth_password import (
     verify_email,
     resend_verification,
     email_check,
+    invite_lookup,
 )
 from api.views.identities.aws.iam import aws_iam_auth
 from api.views.identities.azure.entra import azure_entra_auth
@@ -55,6 +56,7 @@ urlpatterns = [
     path("auth/verify-email/resend/", resend_verification),
     path("auth/verify-email/<str:token>/", verify_email),
     path("auth/email/check/", email_check),
+    path("auth/invite/<str:invite_id>/", invite_lookup),
     # GraphQL API
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     # OAuth integrations
