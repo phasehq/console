@@ -365,7 +365,7 @@ def _get_or_create_social_app(config, *, org_config_id=None):
     return app
 
 
-def _complete_login_bypassing_allauth(request, social_login, token):
+def _complete_login_bypassing_allauth(request, social_login, token, *, org_config_id=None):
     """Handle user creation/linking and login directly, bypassing
     allauth's complete_social_login which has complex redirect-based
     flows (signup forms, account-connect pages) that don't work in
@@ -374,7 +374,20 @@ def _complete_login_bypassing_allauth(request, social_login, token):
     This replicates the net effect of what dj_rest_auth + allauth do
     together: find/create user by email, link the social account,
     save the token, and log in.
+
+    Security:
+      - Org-level SSO (org_config_id set): the IdP is controlled by
+        the org's admin, NOT a universally trusted provider. We pin
+        trust to org membership — the claimed email must match an
+        existing OrganisationMember of this org, or a pending invite.
+        Otherwise a malicious admin could issue tokens claiming any
+        email and hijack existing Phase accounts.
+      - Instance-level SSO: trust the email_verified claim when the
+        IdP exposes it. An explicit False is grounds for rejection.
     """
+    from django.utils import timezone
+    from api.models import OrganisationMember, OrganisationMemberInvite
+
     User = get_user_model()
 
     extra_data = social_login.account.extra_data or {}
@@ -387,6 +400,47 @@ def _complete_login_bypassing_allauth(request, social_login, token):
         raise ValueError("No email address from SSO provider")
 
     email = email.lower().strip()
+
+    if org_config_id:
+        # Anchor trust to org state — the only emails we allow through
+        # an org-configured IdP are those the org itself has already
+        # authorised (members or pending invites).
+        try:
+            org_provider = OrganisationSSOProvider.objects.select_related(
+                "organisation"
+            ).get(id=org_config_id)
+        except OrganisationSSOProvider.DoesNotExist:
+            raise ValueError("SSO provider no longer exists")
+
+        org = org_provider.organisation
+        has_membership = OrganisationMember.objects.filter(
+            user__email=email,
+            organisation=org,
+            deleted_at__isnull=True,
+        ).exists()
+        has_invite = OrganisationMemberInvite.objects.filter(
+            invitee_email__iexact=email,
+            organisation=org,
+            valid=True,
+            expires_at__gt=timezone.now(),
+        ).exists()
+        if not has_membership and not has_invite:
+            logger.warning(
+                f"Blocked org SSO login: {email} not a member of or "
+                f"invited to {org.name}"
+            )
+            raise ValueError(
+                "This email is not authorised for this organisation."
+            )
+    else:
+        # Instance-level: only reject on explicit False. Providers that
+        # don't emit the claim (Microsoft work accounts, older OIDC) are
+        # handled by the adapter-level trust of the IdP itself.
+        if extra_data.get("email_verified") is False:
+            logger.warning(
+                f"Blocked instance SSO login: {email} not verified by IdP"
+            )
+            raise ValueError("Email not verified by identity provider.")
 
     # Find or create the Django user
     try:
@@ -759,7 +813,15 @@ class SSOCallbackView(View):
             # redirect-based signup/connect flow doesn't work in a
             # backend-driven OAuth callback (causes assertion errors
             # and 302 redirects to non-existent signup pages).
-            _complete_login_bypassing_allauth(request, social_login, token)
+            try:
+                _complete_login_bypassing_allauth(
+                    request, social_login, token, org_config_id=org_config_id
+                )
+            except ValueError as e:
+                logger.warning(f"SSO login rejected: {e}")
+                return redirect(
+                    f"{FRONTEND_URL}/login?error={quote(str(e), safe='')}"
+                )
 
             if not request.user.is_authenticated:
                 logger.warning(f"SSO login failed to authenticate user for {provider}")
