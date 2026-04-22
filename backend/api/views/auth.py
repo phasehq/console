@@ -7,6 +7,7 @@ from django.views.decorators.http import require_POST
 from api.utils.syncing.auth import store_oauth_token
 
 from api.authentication.providers.authentik.views import AuthentikOpenIDConnectAdapter
+from api.authentication.providers.authelia.views import AutheliaOpenIDConnectAdapter
 from backend.utils.secrets import get_secret
 from api.serializers import (
     ServiceAccountTokenSerializer,
@@ -25,7 +26,8 @@ from django.http import JsonResponse
 from api.authentication.adapters.gitlab import CustomGitLabOAuth2Adapter
 from api.authentication.adapters.google import CustomGoogleOAuth2Adapter
 from api.authentication.adapters.github import CustomGitHubOAuth2Adapter
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from api.throttling import PlanBasedRateThrottle
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
@@ -115,6 +117,13 @@ class AuthentikLoginView(SocialLoginView):
     client_class = OAuth2Client
 
 
+class AutheliaLoginView(SocialLoginView):
+    authentication_classes = []
+    adapter_class = AutheliaOpenIDConnectAdapter
+    callback_url = settings.OAUTH_REDIRECT_URI
+    client_class = OAuth2Client
+
+
 class OktaLoginView(SocialLoginView):
     authentication_classes = []
     adapter_class = OktaOpenIDConnectAdapter
@@ -180,6 +189,7 @@ def service_token_kms(request):
         AllowAny,
     ]
 )
+@throttle_classes([PlanBasedRateThrottle])
 def secrets_tokens(request):
     auth_token = request.headers["authorization"]
 

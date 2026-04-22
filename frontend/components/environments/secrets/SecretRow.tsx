@@ -1,5 +1,5 @@
 import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useContext, useEffect, useRef, useState, memo } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, memo } from 'react'
 import {
   FaEyeSlash,
   FaEye,
@@ -25,6 +25,9 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 import { TypeSelector } from './TypeSelector'
+import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
+import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
+import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
 
 function SecretRow(props: {
@@ -80,6 +83,27 @@ function SecretRow(props: {
   const [expanded, setExpanded] = useState(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const stableValueChange = useCallback(
+    (value: string) => {
+      handlePropertyChange(secret.id, 'value', value)
+    },
+    [handlePropertyChange, secret.id]
+  )
+
+  const autocomplete = useSecretReferenceAutocomplete({
+    value: secret.value,
+    isRevealed,
+    textareaRef,
+    onChange: stableValueChange,
+    currentSecretKey: secret.key,
+  })
+
+  const highlightContent =
+    isRevealed && secret.value.includes('${') ? (
+      <SecretReferenceHighlight value={secret.value} />
+    ) : undefined
 
   const [readSecret] = useMutation(LogSecretReads)
 
@@ -321,7 +345,7 @@ function SecretRow(props: {
   )
 
   return (
-    <div data-secret-row className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10 focus-within:z-10', rowBgColor())}>
+    <div data-secret-row className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10 focus-within:z-20', rowBgColor())}>
       <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}
@@ -365,7 +389,7 @@ function SecretRow(props: {
         />
         {keyActionMenu}
       </div>
-      <div className="w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease">
+      <div className={clsx("w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
         {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
@@ -389,22 +413,53 @@ function SecretRow(props: {
           </div>
         )}
 
-        <MaskedTextarea
-          className={clsx(INPUT_BASE_STYLE, inputTextColor(), 'w-full group-hover:rounded-tr-none')}
-          value={isSealedAndSaved ? '' : secret.value}
-          onChange={(v) => handleValueChange(v)}
-          isRevealed={isRevealed}
-          expanded={expanded}
-          onFocus={() => setExpanded(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'Tab' && !e.shiftKey) {
-              e.preventDefault()
-              focusNextRowKey(e.currentTarget)
-            }
-          }}
-          disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
-          placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
-        />
+        <div className="relative flex-1 z-20">
+          <MaskedTextarea
+            ref={textareaRef}
+            className={clsx(
+              INPUT_BASE_STYLE,
+              inputTextColor(),
+              'w-full group-hover:rounded-tr-none',
+              autocomplete.isOpen && 'rounded-bl-none'
+            )}
+            value={isSealedAndSaved ? '' : secret.value}
+            onChange={(v) => {
+              handleValueChange(v)
+              autocomplete.handleChange()
+            }}
+            onKeyDown={(e) => {
+              autocomplete.handleKeyDown(e)
+              if (e.key === 'Tab' && !e.shiftKey) {
+                e.preventDefault()
+                focusNextRowKey(e.currentTarget)
+              }
+            }}
+            onSelect={autocomplete.handleSelect}
+            onBlur={autocomplete.handleBlur}
+            isRevealed={isRevealed}
+            expanded={expanded}
+            onFocus={() => {
+              setExpanded(true)
+              // Move cursor to end for new secrets with prefilled values (e.g. reference shortcut)
+              if (isNewSecret && secret.value && textareaRef.current) {
+                const len = secret.value.length
+                textareaRef.current.selectionStart = len
+                textareaRef.current.selectionEnd = len
+              }
+              autocomplete.handleFocus()
+            }}
+            disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
+            placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
+            highlightContent={highlightContent}
+          />
+          <ReferenceAutocompleteDropdown
+            suggestions={autocomplete.suggestions}
+            activeIndex={autocomplete.activeIndex}
+            onSelect={autocomplete.acceptSuggestion}
+            onNavigate={autocomplete.navigateToSuggestion}
+            visible={autocomplete.isOpen}
+          />
+        </div>
         {valueActionMenu}
       </div>
     </div>

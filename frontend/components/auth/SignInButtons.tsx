@@ -14,6 +14,7 @@ import {
   AuthentikLogo,
   OktaLogo,
 } from '../common/logos'
+import { SiAuthelia } from 'react-icons/si'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { LogoProps } from '../common/logos/types'
@@ -26,7 +27,7 @@ import { FaExternalLinkAlt } from 'react-icons/fa'
 type ProviderButton = {
   id: string
   name: string
-  icon: ({ className }: LogoProps) => JSX.Element
+  icon: ({ className }: LogoProps) => React.ReactNode
 }
 
 const providerButtons: ProviderButton[] = [
@@ -69,6 +70,11 @@ const providerButtons: ProviderButton[] = [
     id: 'authentik',
     name: 'Authentik',
     icon: AuthentikLogo,
+  },
+  {
+    id: 'authelia',
+    name: 'Authelia',
+    icon: SiAuthelia,
   },
   {
     id: 'okta-oidc',
