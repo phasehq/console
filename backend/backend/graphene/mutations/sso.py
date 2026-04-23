@@ -161,6 +161,12 @@ class UpdateOrganisationSSOProviderMutation(graphene.Mutation):
                 if not still_has_active:
                     provider.organisation.require_sso = False
                     provider.organisation.save()
+                    from backend.graphene.middleware import (
+                        OrgSSOEnforcementMiddleware,
+                    )
+                    OrgSSOEnforcementMiddleware.invalidate_decision(
+                        provider.organisation_id
+                    )
             provider.enabled = enabled
 
         provider.updated_by = member
@@ -189,6 +195,10 @@ class DeleteOrganisationSSOProviderMutation(graphene.Mutation):
         if provider.enabled and provider.organisation.require_sso:
             provider.organisation.require_sso = False
             provider.organisation.save()
+            from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+            OrgSSOEnforcementMiddleware.invalidate_decision(
+                provider.organisation_id
+            )
 
         provider.delete()
 
@@ -284,6 +294,9 @@ class UpdateOrganisationSecurityMutation(graphene.Mutation):
 
         org.require_sso = require_sso
         org.save()
+
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+        OrgSSOEnforcementMiddleware.invalidate_decision(org.id)
 
         # When enabling enforcement, immediately invalidate the admin's own
         # session so they are forced to re-authenticate via SSO. This is a

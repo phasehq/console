@@ -961,98 +961,19 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
         result = mw.resolve(self._next, None, info)
         self.assertEqual(result, "resolver_ran")
 
-    @patch("backend.graphene.middleware.App")
+    # The kwarg→org resolution is delegated to
+    # api.utils.access.org_resolution.resolve_org_id (tested independently
+    # with its own cache layers). Here we only verify that the middleware
+    # is plumbing kwargs through for each resource-ID shape that used to
+    # have a bespoke dispatch entry — anything that resolves to an org
+    # with require_sso=True must raise.
+
+    @patch("backend.graphene.middleware.resolve_org_id", return_value="org-1")
     @patch("backend.graphene.middleware.Organisation")
-    def test_resolves_org_via_app_id(self, mock_org_cls, mock_app_cls):
+    def _assert_kwarg_blocks(self, kwarg_name, kwarg_value, mock_org_cls, _resolver):
         from backend.graphene.middleware import (
             OrgSSOEnforcementMiddleware,
             SSORequiredError,
-        )
-
-        app = MagicMock(organisation_id="org-1")
-        mock_app_cls.objects.only.return_value.get.return_value = app
-
-        org = MagicMock(require_sso=True, name="acme")
-        org.id = "org-1"
-        mock_org_cls.objects.only.return_value.get.return_value = org
-
-        mw = OrgSSOEnforcementMiddleware()
-        info = self._make_info(session_auth_method="password")
-
-        with self.assertRaises(SSORequiredError):
-            mw.resolve(self._next, None, info, app_id="app-1")
-
-    @patch("backend.graphene.middleware.App")
-    @patch("backend.graphene.middleware.Environment")
-    @patch("backend.graphene.middleware.Organisation")
-    def test_resolves_org_via_env_id(
-        self, mock_org_cls, mock_env_cls, mock_app_cls
-    ):
-        from backend.graphene.middleware import (
-            OrgSSOEnforcementMiddleware,
-            SSORequiredError,
-        )
-
-        env = MagicMock(app_id="app-1")
-        mock_env_cls.objects.only.return_value.get.return_value = env
-
-        app = MagicMock(organisation_id="org-1")
-        mock_app_cls.objects.only.return_value.get.return_value = app
-
-        org = MagicMock(require_sso=True, name="acme")
-        org.id = "org-1"
-        mock_org_cls.objects.only.return_value.get.return_value = org
-
-        mw = OrgSSOEnforcementMiddleware()
-        info = self._make_info(session_auth_method="password")
-
-        with self.assertRaises(SSORequiredError):
-            mw.resolve(self._next, None, info, env_id="env-1")
-
-    @patch("backend.graphene.middleware.Environment")
-    @patch("backend.graphene.middleware.App")
-    @patch("backend.graphene.middleware.Organisation")
-    def test_resolves_org_via_secret_id(
-        self, mock_org_cls, mock_app_cls, mock_env_cls
-    ):
-        """A non-SSO session must not be able to read/mutate a secret
-        inside an SSO-enforced org via the secret's id alone. This
-        was the core middleware bypass bug."""
-        from backend.graphene.middleware import (
-            OrgSSOEnforcementMiddleware,
-            SSORequiredError,
-        )
-
-        with patch("api.models.Secret") as mock_secret_cls:
-            mock_secret_cls.objects.only.return_value.get.return_value = MagicMock(
-                environment_id="env-1"
-            )
-            mock_env_cls.objects.only.return_value.get.return_value = MagicMock(
-                app_id="app-1"
-            )
-            mock_app_cls.objects.only.return_value.get.return_value = MagicMock(
-                organisation_id="org-1"
-            )
-
-            org = MagicMock(require_sso=True, name="acme")
-            org.id = "org-1"
-            mock_org_cls.objects.only.return_value.get.return_value = org
-
-            mw = OrgSSOEnforcementMiddleware()
-            info = self._make_info(session_auth_method="password")
-            with self.assertRaises(SSORequiredError):
-                mw.resolve(self._next, None, info, secret_id="sec-1")
-
-    @patch("backend.graphene.middleware.OrganisationMember")
-    @patch("backend.graphene.middleware.Organisation")
-    def test_resolves_org_via_member_id(self, mock_org_cls, mock_member_cls):
-        from backend.graphene.middleware import (
-            OrgSSOEnforcementMiddleware,
-            SSORequiredError,
-        )
-
-        mock_member_cls.objects.only.return_value.get.return_value = MagicMock(
-            organisation_id="org-1"
         )
         org = MagicMock(require_sso=True, name="acme")
         org.id = "org-1"
@@ -1061,47 +982,35 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
         mw = OrgSSOEnforcementMiddleware()
         info = self._make_info(session_auth_method="password")
         with self.assertRaises(SSORequiredError):
-            mw.resolve(self._next, None, info, member_id="mem-1")
+            mw.resolve(self._next, None, info, **{kwarg_name: kwarg_value})
 
-    @patch("backend.graphene.middleware.Organisation")
-    def test_resolves_org_via_service_account_id(self, mock_org_cls):
-        from backend.graphene.middleware import (
-            OrgSSOEnforcementMiddleware,
-            SSORequiredError,
-        )
+    def test_resolves_org_via_app_id(self):
+        self._assert_kwarg_blocks("app_id", "app-1")
 
-        with patch("api.models.ServiceAccount") as mock_sa_cls:
-            mock_sa_cls.objects.only.return_value.get.return_value = MagicMock(
-                organisation_id="org-1"
-            )
-            org = MagicMock(require_sso=True, name="acme")
-            org.id = "org-1"
-            mock_org_cls.objects.only.return_value.get.return_value = org
+    def test_resolves_org_via_env_id(self):
+        self._assert_kwarg_blocks("env_id", "env-1")
 
-            mw = OrgSSOEnforcementMiddleware()
-            info = self._make_info(session_auth_method="password")
-            with self.assertRaises(SSORequiredError):
-                mw.resolve(self._next, None, info, service_account_id="sa-1")
+    def test_resolves_org_via_secret_id(self):
+        """Regression: secret_id was a middleware-bypass path before the
+        dispatch-table expansion. It must still block for SSO-enforced orgs
+        under the new auto-discovery resolver."""
+        self._assert_kwarg_blocks("secret_id", "sec-1")
 
-    @patch("backend.graphene.middleware.Organisation")
-    def test_resolves_org_via_invite_id(self, mock_org_cls):
-        from backend.graphene.middleware import (
-            OrgSSOEnforcementMiddleware,
-            SSORequiredError,
-        )
+    def test_resolves_org_via_member_id(self):
+        self._assert_kwarg_blocks("member_id", "mem-1")
 
-        with patch("api.models.OrganisationMemberInvite") as mock_invite_cls:
-            mock_invite_cls.objects.only.return_value.get.return_value = MagicMock(
-                organisation_id="org-1"
-            )
-            org = MagicMock(require_sso=True, name="acme")
-            org.id = "org-1"
-            mock_org_cls.objects.only.return_value.get.return_value = org
+    def test_resolves_org_via_service_account_id(self):
+        self._assert_kwarg_blocks("service_account_id", "sa-1")
 
-            mw = OrgSSOEnforcementMiddleware()
-            info = self._make_info(session_auth_method="password")
-            with self.assertRaises(SSORequiredError):
-                mw.resolve(self._next, None, info, invite_id="inv-1")
+    def test_resolves_org_via_invite_id(self):
+        self._assert_kwarg_blocks("invite_id", "inv-1")
+
+    def test_resolves_org_via_provider_id(self):
+        """Regression: provider_id was NOT in the old dispatch table and
+        was a silent bypass for the SSO-downgrading mutations
+        (deleteOrganisationSsoProvider, updateOrganisationSsoProvider,
+        updateOrganisationSecurity). Auto-discovery covers it now."""
+        self._assert_kwarg_blocks("provider_id", "prov-1")
 
     def test_nonexistent_org_passes_through(self):
         """If the org can't be loaded, don't block — let the resolver decide."""
@@ -1132,11 +1041,16 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
 
     class _StubRequest:
         """Plain object so attribute gets return the default (MagicMock would
-        auto-create a new Mock for missing attrs, defeating the cache check)."""
+        auto-create a new Mock for missing attrs, defeating the cache check).
+
+        Uses a password session so the middleware's SSO-session fast-path
+        doesn't short-circuit before the decision cache is consulted —
+        the whole point of these tests is to verify the cache layer, not
+        the fast-path."""
 
         def __init__(self):
             self.user = type("U", (), {"is_authenticated": True})()
-            self.session = {"auth_method": "sso", "auth_sso_org_id": "org-1"}
+            self.session = {"auth_method": "password"}
 
     def _make_info_with_real_request(self):
         info = MagicMock()
@@ -1146,75 +1060,81 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
     def _next(self, root, info, **kwargs):
         return "ran"
 
+    def setUp(self):
+        # The decision cache now has both a per-request L1 and a
+        # Redis-backed L2. Clear Redis (locmem in tests) between tests
+        # to prevent bleed.
+        from django.core.cache import cache
+        cache.clear()
+
+    # Use require_sso=False so the password session passes through — the
+    # caching behaviour is independent of the enforcement decision, and
+    # these tests aren't exercising the enforcement branch.
+
     @patch("backend.graphene.middleware.Organisation")
     def test_org_lookup_cached_across_calls(self, mock_org_cls):
+        """A single GraphQL document often pulls many org-scoped fields —
+        they must all share one Organisation lookup, not re-query each time."""
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
 
-        org = MagicMock(require_sso=True, name="acme")
+        org = MagicMock(require_sso=False)
+        org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
 
         mw = OrgSSOEnforcementMiddleware()
         info = self._make_info_with_real_request()
 
-        # Simulate multiple resolvers in the same request all touching org-1
         mw.resolve(self._next, None, info, organisation_id="org-1")
         mw.resolve(self._next, None, info, organisation_id="org-1")
         mw.resolve(self._next, None, info, organisation_id="org-1")
 
-        # Org should only be fetched once — subsequent hits come from the
-        # per-request cache attached to info.context.
         self.assertEqual(
             mock_org_cls.objects.only.return_value.get.call_count, 1
         )
 
-    @patch("backend.graphene.middleware.App")
     @patch("backend.graphene.middleware.Organisation")
-    def test_app_to_org_lookup_cached(self, mock_org_cls, mock_app_cls):
+    def test_decision_cached_in_redis_across_requests(self, mock_org_cls):
+        """Second request against the same org must hit the Redis decision
+        cache, not re-query Postgres — that's the whole point of Level 1
+        Redis caching."""
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
 
-        app = MagicMock(organisation_id="org-1")
-        mock_app_cls.objects.only.return_value.get.return_value = app
-        org = MagicMock(require_sso=False, name="acme")
+        org = MagicMock(require_sso=False)
+        org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
 
         mw = OrgSSOEnforcementMiddleware()
-        info = self._make_info_with_real_request()
 
-        mw.resolve(self._next, None, info, app_id="app-1")
-        mw.resolve(self._next, None, info, app_id="app-1")
+        mw.resolve(self._next, None, self._make_info_with_real_request(),
+                   organisation_id="org-1")
+        mw.resolve(self._next, None, self._make_info_with_real_request(),
+                   organisation_id="org-1")
 
-        # App should resolve its org only once
         self.assertEqual(
-            mock_app_cls.objects.only.return_value.get.call_count, 1
+            mock_org_cls.objects.only.return_value.get.call_count, 1
         )
 
-    @patch("backend.graphene.middleware.App")
-    @patch("backend.graphene.middleware.Environment")
     @patch("backend.graphene.middleware.Organisation")
-    def test_env_to_org_lookup_cached(
-        self, mock_org_cls, mock_env_cls, mock_app_cls
-    ):
+    def test_decision_invalidate_clears_redis(self, mock_org_cls):
+        """invalidate_decision must drop the cache so the next request
+        re-reads require_sso from the DB (so e.g. toggling enforcement
+        takes effect immediately for other users, not after the 60s TTL)."""
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
 
-        env = MagicMock(app_id="app-1")
-        mock_env_cls.objects.only.return_value.get.return_value = env
-        app = MagicMock(organisation_id="org-1")
-        mock_app_cls.objects.only.return_value.get.return_value = app
-        org = MagicMock(require_sso=False, name="acme")
+        org = MagicMock(require_sso=False)
+        org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
 
         mw = OrgSSOEnforcementMiddleware()
-        info = self._make_info_with_real_request()
 
-        mw.resolve(self._next, None, info, env_id="env-1")
-        mw.resolve(self._next, None, info, env_id="env-1")
+        mw.resolve(self._next, None, self._make_info_with_real_request(),
+                   organisation_id="org-1")
+        OrgSSOEnforcementMiddleware.invalidate_decision("org-1")
+        mw.resolve(self._next, None, self._make_info_with_real_request(),
+                   organisation_id="org-1")
 
         self.assertEqual(
-            mock_env_cls.objects.only.return_value.get.call_count, 1
-        )
-        # App lookup was also cached so Env→App→Org isn't re-queried.
-        self.assertEqual(
-            mock_app_cls.objects.only.return_value.get.call_count, 1
+            mock_org_cls.objects.only.return_value.get.call_count, 2
         )
 
 
