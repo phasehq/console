@@ -267,6 +267,16 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             if invite.invitee_email.lower() != info.context.user.email.lower():
                 raise GraphQLError("This invite is for another user")
 
+            # An invite is bound to a specific organisation. The client-
+            # supplied org_id must match — otherwise a legitimate invite
+            # to org A can be redeemed to join org B (seat bumps, role
+            # assignment, membership creation) by anyone who knows B's
+            # UUID. UUIDs leak via URLs, logs, screenshots.
+            if str(invite.organisation_id) != str(org_id):
+                raise GraphQLError(
+                    "Invite does not match the specified organisation"
+                )
+
             org = Organisation.objects.get(id=org_id)
 
             role = (

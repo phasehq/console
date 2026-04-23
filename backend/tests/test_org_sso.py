@@ -1541,6 +1541,40 @@ class InviteAcceptanceEmailMatchTest(unittest.TestCase):
 
     @patch("backend.graphene.mutations.organisation.user_is_org_member")
     @patch("backend.graphene.mutations.organisation.OrganisationMemberInvite")
+    def test_cross_org_redemption_raises(
+        self, mock_invite_cls, mock_is_member
+    ):
+        """Regression: an invite to org A must not be redeemable to join
+        org B. Only the email check + org_id check together bind the
+        invite to a specific (user, org) pair."""
+        from backend.graphene.mutations.organisation import (
+            CreateOrganisationMemberMutation,
+        )
+        from graphql import GraphQLError
+
+        mock_is_member.return_value = False
+        mock_invite_cls.objects.filter.return_value.exists.return_value = True
+        invite = MagicMock()
+        invite.invitee_email = "alice@example.com"
+        invite.organisation_id = "org-A"
+        mock_invite_cls.objects.get.return_value = invite
+
+        info = self._make_info(user_email="alice@example.com")
+
+        with self.assertRaises(GraphQLError) as cm:
+            CreateOrganisationMemberMutation.mutate(
+                None,
+                info,
+                org_id="org-B",
+                identity_key="k",
+                wrapped_keyring="wk",
+                wrapped_recovery="wr",
+                invite_id="inv-1",
+            )
+        self.assertIn("does not match", str(cm.exception))
+
+    @patch("backend.graphene.mutations.organisation.user_is_org_member")
+    @patch("backend.graphene.mutations.organisation.OrganisationMemberInvite")
     def test_email_match_is_case_insensitive(
         self, mock_invite_cls, mock_is_member
     ):
