@@ -87,25 +87,32 @@ export const deviceVaultKey = async (password: string, email: string): Promise<s
 }
 
 /**
- * Derives an authentication hash from the masterKey (output of deviceVaultKey).
- * This hash is sent to the server for password verification — the server never
- * sees the masterKey itself (which encrypts the keyring).
+ * Derives an authentication hash from the password directly. Sent to the
+ * server; the server never sees the raw password.
  *
- * BLAKE2b-256 with key="phaseAuth" is essentially free (~microseconds) on top
- * of the Argon2id derivation that produces masterKey.
- *
- * @param {string} masterKey - hex-encoded masterKey from deviceVaultKey()
- * @returns {Promise<string>} - hex-encoded auth hash to send to server
+ * Parallel to deviceVaultKey rather than chained, so a cached deviceKey
+ * in localStorage cannot be used to compute authHash. The two outputs
+ * are independent because they use different Argon2id parameter tiers
+ * (INTERACTIVE vs MODERATE) — same password and salt, different KDF
+ * settings produce independent keys.
  */
-export const passwordAuthHash = async (masterKey: string): Promise<string> => {
+export const passwordAuthHash = async (
+  password: string,
+  email: string
+): Promise<string> => {
   await _sodium.ready
   const sodium = _sodium
 
-  const hash = sodium.crypto_generichash(
-    32,
-    sodium.from_hex(masterKey),
-    sodium.from_string('phaseAuth')
-  )
+  // INTERACTIVE: ~64MiB / ~100ms — much lighter than deviceVaultKey's
+  // MODERATE tier, but still memory-hard so a wire intercept of authHash
+  // can't be trivially ground back to the password.
+  const OPSLIMIT = sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE
+  const MEMLIMIT = sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE
+  const ALG = sodium.crypto_pwhash_ALG_ARGON2ID13
+
+  const salt = await saltFromString(email)
+
+  const hash = sodium.crypto_pwhash(32, password, salt, OPSLIMIT, MEMLIMIT, ALG)
   return sodium.to_hex(hash)
 }
 

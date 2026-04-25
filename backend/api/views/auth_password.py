@@ -84,6 +84,19 @@ def _smtp_configured():
     return bool(getattr(settings, "EMAIL_HOST", ""))
 
 
+def _safe_internal_path(value):
+    """Return value if it's a safe same-origin path (e.g. '/invite/abc'),
+    else None. Rejects schemes, protocol-relative URLs, and absolute URLs
+    so a verification link can't be tricked into redirecting off-site."""
+    if not isinstance(value, str) or not value:
+        return None
+    if not value.startswith("/") or value.startswith("//"):
+        return None
+    if "://" in value:
+        return None
+    return value
+
+
 def _send_verification_email(email, verify_url):
     """Send verification email if SMTP is configured. Always log."""
     logger.info(
@@ -171,6 +184,13 @@ def password_register(request):
     # If the send fails, the user can still use the resend endpoint.
     backend_url = os.getenv("NEXT_PUBLIC_BACKEND_API_BASE", "").rstrip("/")
     verify_url = f"{backend_url}/auth/verify-email/{token}/"
+    # Forward the post-login destination (e.g. /invite/<id>) through the
+    # verification link so invite-flow signups land back at acceptance after
+    # verifying their email.
+    next_url = _safe_internal_path(data.get("callbackUrl"))
+    if next_url:
+        from urllib.parse import urlencode
+        verify_url = f"{verify_url}?{urlencode({'next': next_url})}"
     try:
         _send_verification_email(email, verify_url)
     except Exception:
@@ -184,16 +204,26 @@ def password_register(request):
 @permission_classes([AllowAny])
 def verify_email(request, token):
     """Verify email address and activate user account."""
+    from urllib.parse import urlencode
+
+    next_url = _safe_internal_path(request.GET.get("next"))
+
+    def _login_redirect(**params):
+        if next_url:
+            params["callbackUrl"] = next_url
+        qs = urlencode(params)
+        return redirect(f"{FRONTEND_URL}/login?{qs}")
+
     try:
         ev = EmailVerification.objects.select_related("user").get(token=token)
     except EmailVerification.DoesNotExist:
-        return redirect(f"{FRONTEND_URL}/login?error=invalid_verification_token")
+        return _login_redirect(error="invalid_verification_token")
 
     if ev.verified:
-        return redirect(f"{FRONTEND_URL}/login?verified=true")
+        return _login_redirect(verified="true")
 
     if ev.expires_at < timezone.now():
-        return redirect(f"{FRONTEND_URL}/login?error=verification_expired")
+        return _login_redirect(error="verification_expired")
 
     ev.verified = True
     ev.save()
@@ -202,7 +232,7 @@ def verify_email(request, token):
     user.active = True
     user.save()
 
-    return redirect(f"{FRONTEND_URL}/login?verified=true")
+    return _login_redirect(verified="true")
 
 
 @csrf_exempt
@@ -316,14 +346,19 @@ def password_login(request):
 @permission_classes([IsAuthenticated])
 @throttle_classes([PasswordChangeThrottle])
 def password_change(request):
-    """Change password: verify old, set new, re-encrypt all org keyrings.
+    """Change the account login password and re-wrap the current org's
+    keyring with the new device key.
 
-    Accepts per-organisation wrapped keys because each org has a
-    different keyring that must be re-encrypted with the new masterKey.
+    Scoped to the org the user is currently in. The user supplies the
+    org's recovery mnemonic (proven server-side via the identity_key
+    match) so we know they have the keyring material in hand before
+    rotating. Other orgs the user belongs to remain encrypted with the
+    old device key; they'll surface a decrypt failure on next access
+    and route the user into per-org recovery for those orgs.
 
     Input: {
-        currentAuthHash, newAuthHash,
-        orgKeys: [{ orgId, wrappedKeyring, wrappedRecovery }, ...]
+        currentAuthHash, newAuthHash, orgId, identityKey,
+        wrappedKeyring, wrappedRecovery
     }
     """
     user = request.user
@@ -337,30 +372,46 @@ def password_change(request):
     data = request.data
     current_auth_hash = data.get("currentAuthHash", "")
     new_auth_hash = data.get("newAuthHash", "")
-    org_keys = data.get("orgKeys", [])
+    org_id = data.get("orgId", "")
+    identity_key = data.get("identityKey", "")
+    wrapped_keyring = data.get("wrappedKeyring", "")
+    wrapped_recovery = data.get("wrappedRecovery", "")
 
-    if not current_auth_hash or not new_auth_hash or not org_keys:
-        return JsonResponse({"error": "All fields are required."}, status=400)
+    if not all([current_auth_hash, new_auth_hash, org_id, identity_key, wrapped_keyring]):
+        return JsonResponse(
+            {
+                "error": "currentAuthHash, newAuthHash, orgId, identityKey, and "
+                         "wrappedKeyring are required."
+            },
+            status=400,
+        )
 
     if not user.check_password(current_auth_hash):
         return JsonResponse({"error": "Current password is incorrect."}, status=401)
+
+    try:
+        org = Organisation.objects.get(id=org_id)
+    except Organisation.DoesNotExist:
+        return JsonResponse({"error": "Organisation not found."}, status=404)
+
+    if org.identity_key != identity_key:
+        return JsonResponse({"error": "Invalid recovery proof."}, status=403)
+
+    if not OrganisationMember.objects.filter(
+        user=user, organisation=org, deleted_at=None
+    ).exists():
+        return JsonResponse({"error": "Not a member of this organisation."}, status=403)
 
     with transaction.atomic():
         user.set_password(new_auth_hash)
         user.save()
 
-        # Update wrapped keys per organisation
-        for entry in org_keys:
-            org_id = entry.get("orgId")
-            wrapped_keyring = entry.get("wrappedKeyring")
-            wrapped_recovery = entry.get("wrappedRecovery")
-            if org_id and wrapped_keyring:
-                OrganisationMember.objects.filter(
-                    user=user, organisation_id=org_id, deleted_at=None
-                ).update(
-                    wrapped_keyring=wrapped_keyring,
-                    wrapped_recovery=wrapped_recovery or "",
-                )
+        OrganisationMember.objects.filter(
+            user=user, organisation=org, deleted_at=None
+        ).update(
+            wrapped_keyring=wrapped_keyring,
+            wrapped_recovery=wrapped_recovery or "",
+        )
 
     # Re-login so the session hash stays valid after password change.
     prev_auth_method = request.session.get("auth_method", "password")
@@ -374,76 +425,6 @@ def password_change(request):
         request.session["auth_sso_provider_id"] = prev_sso_provider_id
 
     return JsonResponse({"message": "Password changed successfully."})
-
-
-@csrf_exempt
-@api_view(["POST"])
-@authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([IsAuthenticated])
-@throttle_classes([PasswordChangeThrottle])
-def password_reset_via_recovery(request):
-    """Reset password after verifying identity via recovery kit.
-
-    Requires server-side proof: the caller must supply the identityKey
-    (public key derived from the mnemonic + orgId) and the orgId.
-    The server verifies it matches the organisation's stored identity_key,
-    proving the caller actually possesses the recovery mnemonic.
-    """
-    user = request.user
-
-    if not user.has_usable_password():
-        return JsonResponse({"message": "No password to reset for SSO users."})
-
-    data = request.data
-    new_auth_hash = data.get("newAuthHash", "")
-    identity_key = data.get("identityKey", "")
-    org_id = data.get("orgId", "")
-    wrapped_keyring = data.get("wrappedKeyring", "")
-    wrapped_recovery = data.get("wrappedRecovery", "")
-
-    if not new_auth_hash or not identity_key or not org_id:
-        return JsonResponse({"error": "newAuthHash, identityKey, and orgId are required."}, status=400)
-
-    # Verify the identity key matches the org — proves mnemonic possession
-    try:
-        org = Organisation.objects.get(id=org_id)
-    except Organisation.DoesNotExist:
-        return JsonResponse({"error": "Organisation not found."}, status=404)
-
-    if org.identity_key != identity_key:
-        return JsonResponse({"error": "Invalid recovery proof."}, status=403)
-
-    # Verify the user is actually a member of this org
-    if not OrganisationMember.objects.filter(
-        user=user, organisation=org, deleted_at=None
-    ).exists():
-        return JsonResponse({"error": "Not a member of this organisation."}, status=403)
-
-    # Update auth hash + wrapped keys atomically to prevent inconsistent state
-    with transaction.atomic():
-        user.set_password(new_auth_hash)
-        user.save()
-
-        if wrapped_keyring:
-            OrganisationMember.objects.filter(
-                user=user, organisation=org, deleted_at=None
-            ).update(
-                wrapped_keyring=wrapped_keyring,
-                wrapped_recovery=wrapped_recovery or "",
-            )
-
-    # Re-login so the session hash stays valid
-    prev_auth_method = request.session.get("auth_method", "password")
-    prev_sso_org_id = request.session.get("auth_sso_org_id")
-    prev_sso_provider_id = request.session.get("auth_sso_provider_id")
-    login(request, user)
-    request.session["auth_method"] = prev_auth_method
-    if prev_sso_org_id:
-        request.session["auth_sso_org_id"] = prev_sso_org_id
-    if prev_sso_provider_id:
-        request.session["auth_sso_provider_id"] = prev_sso_provider_id
-
-    return JsonResponse({"message": "Password reset successfully."})
 
 
 @csrf_exempt

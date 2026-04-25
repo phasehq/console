@@ -187,68 +187,65 @@ describe('Password Auth Hash Tests', () => {
   const password = 'correct-horse-staple-battery'
   const email = 'satoshi@gmx.com'
 
-  test('passwordAuthHash produces consistent output for same masterKey', async () => {
-    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
-    const masterKey = await deviceVaultKey(password, email)
-    const hash1 = await passwordAuthHash(masterKey)
-    const hash2 = await passwordAuthHash(masterKey)
+  test('passwordAuthHash is deterministic for the same (password, email)', async () => {
+    const { passwordAuthHash } = await import('@/utils/crypto')
+    const hash1 = await passwordAuthHash(password, email)
+    const hash2 = await passwordAuthHash(password, email)
     expect(hash1).toBe(hash2)
   })
 
   test('passwordAuthHash output is 64-char hex string (32 bytes)', async () => {
-    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
-    const masterKey = await deviceVaultKey(password, email)
-    const hash = await passwordAuthHash(masterKey)
+    const { passwordAuthHash } = await import('@/utils/crypto')
+    const hash = await passwordAuthHash(password, email)
     expect(hash).toMatch(/^[a-f0-9]{64}$/)
   })
 
-  test('passwordAuthHash differs from masterKey', async () => {
-    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
-    const masterKey = await deviceVaultKey(password, email)
-    const hash = await passwordAuthHash(masterKey)
-    expect(hash).not.toBe(masterKey)
-  })
-
-  test('different masterKeys produce different authHashes', async () => {
-    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
-    const masterKey1 = await deviceVaultKey(password, email)
-    const masterKey2 = await deviceVaultKey('different-password-here!!', email)
-    const hash1 = await passwordAuthHash(masterKey1)
-    const hash2 = await passwordAuthHash(masterKey2)
+  test('different passwords produce different authHashes', async () => {
+    const { passwordAuthHash } = await import('@/utils/crypto')
+    const hash1 = await passwordAuthHash(password, email)
+    const hash2 = await passwordAuthHash('different-password-here!!', email)
     expect(hash1).not.toBe(hash2)
   })
 
-  test('authHash cannot reverse to masterKey (one-way)', async () => {
-    // This is a property test: authHash is a BLAKE2b hash of masterKey,
-    // so the authHash should not contain the masterKey as a substring
-    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
-    const masterKey = await deviceVaultKey(password, email)
-    const hash = await passwordAuthHash(masterKey)
-    expect(hash).not.toBe(masterKey)
-    expect(masterKey).not.toContain(hash)
-    expect(hash).not.toContain(masterKey)
+  test('different emails produce different authHashes for the same password', async () => {
+    // Salt domain-separation by email; two users with the same password
+    // must not produce identical authHashes.
+    const { passwordAuthHash } = await import('@/utils/crypto')
+    const hash1 = await passwordAuthHash(password, email)
+    const hash2 = await passwordAuthHash(password, 'someone-else@example.com')
+    expect(hash1).not.toBe(hash2)
   })
 
-  test('full double-derivation: password → masterKey → authHash', async () => {
-    // Verifies the complete protocol works end-to-end
+  test('authHash is independent of deviceKey (parallel, not chained)', async () => {
+    // Both come from the same (password, email) input but use different
+    // Argon2id parameter tiers (INTERACTIVE vs MODERATE). Different
+    // memory/iteration parameters produce independent KDF outputs, so
+    // knowing one cannot let you derive the other without the password.
+    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
+    const deviceKey = await deviceVaultKey(password, email)
+    const authHash = await passwordAuthHash(password, email)
+    expect(authHash).not.toBe(deviceKey)
+    expect(authHash).not.toContain(deviceKey)
+    expect(deviceKey).not.toContain(authHash)
+  })
+
+  test('end-to-end: deviceKey wraps keyring, authHash is sent to server', async () => {
     const { deviceVaultKey, passwordAuthHash, encryptAccountKeyring, decryptAccountKeyring } =
       await import('@/utils/crypto')
 
-    const masterKey = await deviceVaultKey(password, email)
-    const authHash = await passwordAuthHash(masterKey)
+    const deviceKey = await deviceVaultKey(password, email)
+    const authHash = await passwordAuthHash(password, email)
 
-    // masterKey encrypts keyring (client-side)
     const keyring = {
       symmetricKey: 'a'.repeat(64),
       privateKey: 'b'.repeat(128),
       publicKey: 'c'.repeat(64),
     }
-    const encrypted = await encryptAccountKeyring(keyring, masterKey)
-    const decrypted = await decryptAccountKeyring(encrypted, masterKey)
+    const encrypted = await encryptAccountKeyring(keyring, deviceKey)
+    const decrypted = await decryptAccountKeyring(encrypted, deviceKey)
     expect(decrypted).toEqual(keyring)
 
-    // authHash is what goes to the server (different from masterKey)
-    expect(authHash).not.toBe(masterKey)
+    expect(authHash).not.toBe(deviceKey)
     expect(authHash).toMatch(/^[a-f0-9]{64}$/)
   })
 })

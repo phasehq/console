@@ -145,3 +145,89 @@ export const deleteDevicePassword = (memberId: string): boolean => {
 
   return false // Return false if the memberId was not found
 }
+
+// Two storage shapes for the derived deviceKey, both hex-encoded 32 bytes:
+//
+//   phaseDeviceKeys       — keyed by userId. Used by password users.
+//                           One key unlocks every org because the auth and
+//                           sudo passwords are kept identical (enforced by
+//                           password_reset_via_recovery).
+//
+//   phaseMemberDeviceKeys — keyed by memberId. Used by SSO users.
+//                           Each org membership can have a distinct sudo
+//                           password set during onboard/invite, so storage
+//                           is per-membership.
+//
+// Both store one-way Argon2id derivations, never the raw password.
+
+interface DeviceKeyEntry {
+  userId: string
+  deviceKey: string
+}
+
+interface MemberDeviceKeyEntry {
+  memberId: string
+  deviceKey: string
+}
+
+export const setDeviceKey = (userId: string, deviceKey: string): void => {
+  const existing = localStorage.getItem('phaseDeviceKeys')
+  const entries: DeviceKeyEntry[] = existing ? JSON.parse(existing) : []
+  const idx = entries.findIndex((e) => e.userId === userId)
+  if (idx !== -1) {
+    entries[idx].deviceKey = deviceKey
+  } else {
+    entries.push({ userId, deviceKey })
+  }
+  localStorage.setItem('phaseDeviceKeys', JSON.stringify(entries))
+}
+
+export const getDeviceKey = (userId: string): string | null => {
+  const stored = localStorage.getItem('phaseDeviceKeys')
+  if (!stored) return null
+  const entries: DeviceKeyEntry[] = JSON.parse(stored)
+  const entry = entries.find((e) => e.userId === userId)
+  return entry?.deviceKey ?? null
+}
+
+export const deleteDeviceKey = (userId: string): boolean => {
+  const stored = localStorage.getItem('phaseDeviceKeys')
+  if (!stored) return false
+  const entries: DeviceKeyEntry[] = JSON.parse(stored)
+  const idx = entries.findIndex((e) => e.userId === userId)
+  if (idx === -1) return false
+  entries.splice(idx, 1)
+  localStorage.setItem('phaseDeviceKeys', JSON.stringify(entries))
+  return true
+}
+
+export const setMemberDeviceKey = (memberId: string, deviceKey: string): void => {
+  const existing = localStorage.getItem('phaseMemberDeviceKeys')
+  const entries: MemberDeviceKeyEntry[] = existing ? JSON.parse(existing) : []
+  const idx = entries.findIndex((e) => e.memberId === memberId)
+  if (idx !== -1) {
+    entries[idx].deviceKey = deviceKey
+  } else {
+    entries.push({ memberId, deviceKey })
+  }
+  localStorage.setItem('phaseMemberDeviceKeys', JSON.stringify(entries))
+}
+
+export const getMemberDeviceKey = (memberId: string): string | null => {
+  const stored = localStorage.getItem('phaseMemberDeviceKeys')
+  if (!stored) return null
+  const entries: MemberDeviceKeyEntry[] = JSON.parse(stored)
+  const entry = entries.find((e) => e.memberId === memberId)
+  return entry?.deviceKey ?? null
+}
+
+export const deleteMemberDeviceKey = (memberId: string): boolean => {
+  const stored = localStorage.getItem('phaseMemberDeviceKeys')
+  if (!stored) return false
+  const entries: MemberDeviceKeyEntry[] = JSON.parse(stored)
+  const idx = entries.findIndex((e) => e.memberId === memberId)
+  if (idx === -1) return false
+  entries.splice(idx, 1)
+  localStorage.setItem('phaseMemberDeviceKeys', JSON.stringify(entries))
+  return true
+}

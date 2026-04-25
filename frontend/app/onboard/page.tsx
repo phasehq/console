@@ -18,7 +18,7 @@ import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import CheckOrganisationNameAvailability from '@/graphql/queries/organisation/checkOrgNameAvailable.gql'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
-import { setDevicePassword } from '@/utils/localStorage'
+import { setDeviceKey, getDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
 import { LogoMark } from '@/components/common/LogoMark'
 import {
   organisationSeed,
@@ -72,42 +72,47 @@ const Onboard = () => {
 
   const licenseActivated = () => licenseData?.license?.isActivated
 
-  const ssoSteps: Step[] = [
-    {
-      index: 0,
-      name: teamNameLock ? 'Organisation setup' : 'Organisation Name',
-      icon: <MdGroups />,
-      title: teamNameLock ? 'Set up your organisation' : 'Choose a name for your organisation',
-      description: teamNameLock ? (
-        <></>
-      ) : (
-        <div className="space-y-1">
-          Your organisation name can be alphanumeric.
-          <code>
-            <pre>[a-zA-Z0-9]</pre>
-          </code>
-        </div>
-      ),
-    },
-    {
-      index: 1,
-      name: 'Sudo Password',
-      icon: <MdOutlinePassword />,
-      title: 'Set a sudo password',
-      description:
-        'This will be used to encrypt your account keys. You may need to enter this password to unlock your workspace when logging in.',
-    },
-    {
-      index: 2,
-      name: 'Account recovery',
-      icon: <MdKey />,
-      title: 'Account Recovery',
-      description:
-        'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
-    },
-  ]
+  // If the user logged in with "remember on this device", we already have
+  // a deviceKey cached and can wrap this new org's keyring with it directly
+  // — no need to re-prompt for a sudo password. Falls back to the prompt
+  // when the cache is empty.
+  const cachedDeviceKey = user?.userId ? getDeviceKey(user.userId) : null
+  const skipSudoStep = !!cachedDeviceKey
 
-  const steps = ssoSteps
+  const orgStep: Step = {
+    index: 0,
+    name: teamNameLock ? 'Organisation setup' : 'Organisation Name',
+    icon: <MdGroups />,
+    title: teamNameLock ? 'Set up your organisation' : 'Choose a name for your organisation',
+    description: teamNameLock ? (
+      <></>
+    ) : (
+      <div className="space-y-1">
+        Your organisation name can be alphanumeric.
+        <code>
+          <pre>[a-zA-Z0-9]</pre>
+        </code>
+      </div>
+    ),
+  }
+  const sudoStep: Step = {
+    index: 1,
+    name: 'Sudo Password',
+    icon: <MdOutlinePassword />,
+    title: 'Set a sudo password',
+    description:
+      'This will be used to encrypt your account keys. You may need to enter this password to unlock your workspace when logging in.',
+  }
+  const recoveryStep: Step = {
+    index: skipSudoStep ? 1 : 2,
+    name: 'Account recovery',
+    icon: <MdKey />,
+    title: 'Account Recovery',
+    description:
+      'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
+  }
+
+  const steps: Step[] = skipSudoStep ? [orgStep, recoveryStep] : [orgStep, sudoStep, recoveryStep]
 
   const validateCurrentStep = async () => {
     if (step === 0) {
@@ -124,15 +129,14 @@ const Onboard = () => {
       return true
     }
 
-    // Sudo password step (step 1)
-    if (step === 1) {
+    // Sudo password step is at index 1 only when not skipped.
+    if (!skipSudoStep && step === 1) {
       if (pw !== pw2) {
         errorToast("Passwords don't match")
         return false
       }
     }
 
-    // Recovery step (last step for both flows)
     if (step === steps.length - 1) {
       if (!recoveryDownloaded) {
         errorToast('Please download the your account recovery kit!')
@@ -148,13 +152,14 @@ const Onboard = () => {
       (resolve) => {
         setTimeout(async () => {
           const accountSeed = await organisationSeed(mnemonic, orgId)
-
           const accountKeyRing = await organisationKeyring(accountSeed)
 
-          const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
+          // Use the cached deviceKey when we have one (no sudo prompt was
+          // shown); otherwise derive from the password the user just set.
+          const deviceKey =
+            cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
 
           const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
-
           const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
           resolve({
@@ -213,9 +218,17 @@ const Onboard = () => {
 
         const newOrg = result.data.createOrganisation.organisation
 
-        // Save password if option selected
-        if (savePassword && newOrg.memberId) {
-          setDevicePassword(newOrg.memberId, pw)
+        // Cache the deviceKey for subsequent unlocks. Only meaningful when
+        // the sudo step ran (otherwise the deviceKey was cached at login).
+        // Password users key by userId (auth and sudo unified across all
+        // orgs); SSO users key by memberId (per-org sudo passwords valid).
+        if (!skipSudoStep && savePassword && session?.user?.email) {
+          const deviceKey = await deviceVaultKey(pw, session.user.email)
+          if (user?.authMethod === 'password' && user?.userId) {
+            setDeviceKey(user.userId, deviceKey)
+          } else if (newOrg.memberId) {
+            setMemberDeviceKey(newOrg.memberId, deviceKey)
+          }
         }
 
         // Create example app with environments
@@ -315,7 +328,8 @@ const Onboard = () => {
 
   // Determine which content to show for the current step
   const isRecoveryStep = step === steps.length - 1
-  const isSudoPasswordStep = step === 1
+  // Sudo password step only renders when not skipped, and is at index 1.
+  const isSudoPasswordStep = !skipSudoStep && step === 1
 
   return (
     <main className="w-full flex flex-col justify-between h-screen">

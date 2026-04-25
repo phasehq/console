@@ -12,7 +12,8 @@ import { FaCheckCircle } from 'react-icons/fa'
 import Link from 'next/link'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
-import { deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
+import { passwordAuthHash } from '@/utils/crypto'
+import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter'
 import { ModeToggle } from '@/components/common/ModeToggle'
 import { FaSun, FaMoon } from 'react-icons/fa6'
 import { InstanceInfo } from '@/components/InstanceInfo'
@@ -28,12 +29,21 @@ const Signup = () => {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [pendingVerification, setPendingVerification] = useState(false)
+  const [emailLocked, setEmailLocked] = useState(false)
+
+  // When the user arrives from an invite, login forwards both `email` and
+  // `callbackUrl` (e.g. /invite/<token>). Lock the email field — it must
+  // match the invitee — and forward callbackUrl through to login on success
+  // so the invite acceptance flow resumes after authentication.
+  const callbackUrl = searchParams?.get('callbackUrl') ?? ''
 
   useEffect(() => {
-    // Pre-fill email from query param (from login "Create an account" link)
     const emailParam = searchParams?.get('email')
-    if (emailParam) setEmail(emailParam)
-  }, [searchParams])
+    if (emailParam) {
+      setEmail(emailParam)
+      if (callbackUrl) setEmailLocked(true)
+    }
+  }, [searchParams, callbackUrl])
 
   useEffect(() => {
     // Authenticated users with orgs should go home, not signup
@@ -56,8 +66,7 @@ const Signup = () => {
     setLoading(true)
     try {
       const trimmedEmail = email.toLowerCase().trim()
-      const masterKey = await deviceVaultKey(password, trimmedEmail)
-      const authHash = await passwordAuthHash(masterKey)
+      const authHash = await passwordAuthHash(password, trimmedEmail)
 
       const response = await axios.post(
         UrlUtils.makeUrl(
@@ -70,13 +79,17 @@ const Signup = () => {
           email: trimmedEmail,
           fullName: fullName.trim(),
           authHash,
+          ...(callbackUrl ? { callbackUrl } : {}),
         },
         { withCredentials: true }
       )
 
       if (response.data.verificationSkipped) {
         toast.success('Account created! You can now log in.')
-        router.push('/login')
+        const loginQs = callbackUrl
+          ? `?callbackUrl=${encodeURIComponent(callbackUrl)}`
+          : ''
+        router.push(`/login${loginQs}`)
       } else {
         setPendingVerification(true)
       }
@@ -163,13 +176,13 @@ const Signup = () => {
           </div>
         </div>
 
-        <div className="gap-y-4 flex flex-col items-center justify-center">
+        <div className="gap-y-4 flex flex-col items-center justify-center w-full max-w-md">
           <div className="flex flex-col items-center justify-center mb-4">
             <LogoWordMark className="w-32 fill-neutral-500" />
           </div>
           <div className="text-lg font-medium pb-4 text-center">Create your account</div>
 
-          <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg min-w-[320px]">
+          <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg w-full">
             <form onSubmit={handleSignup} className="flex flex-col gap-4">
               <Input
                 id="full-name"
@@ -187,6 +200,8 @@ const Signup = () => {
                 setValue={setEmail}
                 placeholder="satoshin@gmx.com"
                 required
+                readOnly={emailLocked}
+                aria-readonly={emailLocked}
               />
               <Input
                 id="password"
@@ -197,6 +212,7 @@ const Signup = () => {
                 required
                 minLength={16}
               />
+              <PasswordStrengthMeter password={password} />
               <Input
                 id="confirm-password"
                 label="Confirm password"

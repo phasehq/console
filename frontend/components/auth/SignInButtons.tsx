@@ -25,6 +25,7 @@ import { Alert } from '../common/Alert'
 import { FaArrowLeft } from 'react-icons/fa'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
+import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
 
@@ -98,6 +99,7 @@ export default function SignInButtons({
   const [emailLocked, setEmailLocked] = useState(false)
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
+  const [rememberDevice, setRememberDevice] = useState(true)
   const [step, setStep] = useState<LoginStep>('email')
   const [ssoProvider, setSsoProvider] = useState<string | null>(null)
   const [ssoMethods, setSsoMethods] = useState<SSOMethod[]>([])
@@ -202,16 +204,24 @@ export default function SignInButtons({
 
     setDerivingKey(true)
     try {
-      const masterKey = await deviceVaultKey(password, email.toLowerCase().trim())
-      const authHash = await passwordAuthHash(masterKey)
+      const trimmedEmail = email.toLowerCase().trim()
+      // Derive authHash and deviceKey in parallel — both are independent
+      // Argon2id derivations from the password.
+      const [authHash, deviceKey] = await Promise.all([
+        passwordAuthHash(password, trimmedEmail),
+        rememberDevice ? deviceVaultKey(password, trimmedEmail) : Promise.resolve(null),
+      ])
 
       const response = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'password', 'login'),
-        { email: email.toLowerCase().trim(), authHash },
+        { email: trimmedEmail, authHash },
         { withCredentials: true }
       )
 
       if (response.status === 200) {
+        if (deviceKey && response.data?.userId) {
+          setDeviceKey(response.data.userId, deviceKey)
+        }
         const callbackUrl = searchParams?.get('callbackUrl')
         window.location.href = callbackUrl?.startsWith('/') ? callbackUrl : '/'
       }
@@ -291,6 +301,17 @@ export default function SignInButtons({
   // Find the friendly name for a provider ID
   const getProviderName = (id: string) =>
     providerButtons.find((p) => p.id === id)?.name || id
+
+  // Build /signup URL forwarding email and callbackUrl when present so the
+  // invite flow can resume after registration → verification → login.
+  const signupHref = (() => {
+    const params = new URLSearchParams()
+    if (email) params.set('email', email)
+    const callbackUrl = searchParams?.get('callbackUrl')
+    if (callbackUrl) params.set('callbackUrl', callbackUrl)
+    const qs = params.toString()
+    return qs ? `/signup?${qs}` : '/signup'
+  })()
 
   return (
     <div className="gap-y-4 flex flex-col items-center justify-center text-zinc-900 dark:text-zinc-100">
@@ -372,7 +393,7 @@ export default function SignInButtons({
                 </form>
                 <div className="text-center">
                   <Link
-                    href="/signup"
+                    href={signupHref}
                     className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
                   >
                     Create an account
@@ -414,6 +435,16 @@ export default function SignInButtons({
                     {showPw ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
+
+                <label className="flex items-center gap-2 text-sm text-neutral-500 select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberDevice}
+                    onChange={(e) => setRememberDevice(e.target.checked)}
+                    className="rounded accent-emerald-500"
+                  />
+                  Remember me on this device
+                </label>
 
                 <Button
                   type="submit"
@@ -471,7 +502,7 @@ export default function SignInButtons({
 
                 <div className="text-center">
                   <Link
-                    href={`/signup?email=${encodeURIComponent(email)}`}
+                    href={signupHref}
                     className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
                   >
                     Create an account

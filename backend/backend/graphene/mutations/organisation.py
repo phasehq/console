@@ -25,6 +25,7 @@ from backend.graphene.types import (
     OrganisationType,
 )
 from datetime import timedelta
+from django.contrib.auth import login
 from django.utils import timezone
 from django.conf import settings
 
@@ -109,6 +110,88 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         org_member.save()
 
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
+
+
+class ResetAccountPasswordViaRecoveryMutation(graphene.Mutation):
+    """Re-wrap THIS org's keyring after verifying identity via the
+    recovery mnemonic. The supplied password MUST match the user's
+    current login auth — auth and sudo passwords stay unified, period.
+
+    Two server-side proofs are required:
+      1. identity_key matches the org's stored identity_key — proves the
+         caller derived the keyring from the right mnemonic.
+      2. new_auth_hash matches user.password — proves the password the
+         user is wrapping the keyring with is also their account login
+         auth.
+
+    A failed (2) means the user is trying to set a different password
+    for this org's keyring than what authenticates them. We never
+    persist that — it would split auth and sudo apart.
+    """
+
+    class Arguments:
+        org_id = graphene.ID(required=True)
+        new_auth_hash = graphene.String(required=True)
+        identity_key = graphene.String(required=True)
+        wrapped_keyring = graphene.String(required=True)
+        wrapped_recovery = graphene.String(required=True)
+
+    org_member = graphene.Field(OrganisationMemberType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        org_id,
+        new_auth_hash,
+        identity_key,
+        wrapped_keyring,
+        wrapped_recovery,
+    ):
+        request = info.context
+        user = request.user
+
+        if not user.has_usable_password():
+            raise GraphQLError("No password to reset for SSO users.")
+
+        try:
+            org = Organisation.objects.get(id=org_id)
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+
+        if org.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
+
+        try:
+            org_member = OrganisationMember.objects.get(
+                user=user, organisation=org, deleted_at=None
+            )
+        except OrganisationMember.DoesNotExist:
+            raise GraphQLError("Not a member of this organisation.")
+
+        if not user.check_password(new_auth_hash):
+            raise GraphQLError(
+                "Password does not match your account. Use your "
+                "current login password to recover this organisation."
+            )
+
+        with transaction.atomic():
+            org_member.wrapped_keyring = wrapped_keyring
+            org_member.wrapped_recovery = wrapped_recovery or ""
+            org_member.save()
+
+        prev_auth_method = request.session.get("auth_method", "password")
+        prev_sso_org_id = request.session.get("auth_sso_org_id")
+        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
+        login(request, user)
+        request.session["auth_method"] = prev_auth_method
+        if prev_sso_org_id:
+            request.session["auth_sso_org_id"] = prev_sso_org_id
+        if prev_sso_provider_id:
+            request.session["auth_sso_provider_id"] = prev_sso_provider_id
+
+        return ResetAccountPasswordViaRecoveryMutation(org_member=org_member)
 
 
 class InviteInput(graphene.InputObjectType):

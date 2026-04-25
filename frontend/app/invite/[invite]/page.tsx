@@ -15,10 +15,10 @@ import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { MdKey, MdOutlinePassword } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import { OrganisationMemberInviteType } from '@/apollo/graphql'
-import { useSession } from '@/contexts/userContext'
+import { useSession, useUser } from '@/contexts/userContext'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { LogoMark } from '@/components/common/LogoMark'
-import { setDevicePassword } from '@/utils/localStorage'
+import { setDeviceKey, getDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
 import { useRouter } from 'next/navigation'
 import {
   decodeb64string,
@@ -53,6 +53,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const [acceptInvite] = useMutation(AcceptOrganisationInvite)
 
   const { data: session } = useSession()
+  const { user } = useUser()
 
   const router = useRouter()
 
@@ -82,37 +83,41 @@ export default function Invite({ params }: { params: { invite: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.invite])
 
-  const steps: Step[] = [
-    {
-      index: 0,
-      name: 'Sudo Password',
-      icon: <MdOutlinePassword />,
-      title: 'Set a sudo password',
-      description:
-        'This will be used to encrypt your account keys. You may need to enter this password to perform administrative tasks.',
-    },
-    {
-      index: 1,
-      name: 'Account recovery',
-      icon: <MdKey />,
-      title: 'Account Recovery',
-      description:
-        'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
-    },
-  ]
+  // If a deviceKey is cached on this device, skip the sudo-password step —
+  // the new org's keyring will be wrapped with the cached key directly.
+  const cachedDeviceKey = user?.userId ? getDeviceKey(user.userId) : null
+  const skipSudoStep = !!cachedDeviceKey
+
+  const sudoStep: Step = {
+    index: 0,
+    name: 'Sudo Password',
+    icon: <MdOutlinePassword />,
+    title: 'Set a sudo password',
+    description:
+      'This will be used to encrypt your account keys. You may need to enter this password to perform administrative tasks.',
+  }
+  const recoveryStep: Step = {
+    index: skipSudoStep ? 0 : 1,
+    name: 'Account recovery',
+    icon: <MdKey />,
+    title: 'Account Recovery',
+    description:
+      'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
+  }
+
+  const steps: Step[] = skipSudoStep ? [recoveryStep] : [sudoStep, recoveryStep]
 
   const computeAccountKeys = () => {
     return new Promise<{ publicKey: string; encryptedKeyring: string; encryptedMnemonic: string }>(
       (resolve) => {
         setTimeout(async () => {
           const accountSeed = await organisationSeed(mnemonic, invite.organisation.id)
-
           const accountKeyRing = await organisationKeyring(accountSeed)
 
-          const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
+          const deviceKey =
+            cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
 
           const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
-
           const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
           resolve({
@@ -146,8 +151,15 @@ export default function Invite({ params }: { params: { invite: string } }) {
       setIsLoading(false)
       if (memberId) {
         setSuccess(true)
-        if (savePassword) {
-          setDevicePassword(memberId, pw)
+        // Cache the deviceKey. Only applies when the sudo step ran;
+        // otherwise it was already cached at login time.
+        if (!skipSudoStep && savePassword && session?.user?.email) {
+          const deviceKey = await deviceVaultKey(pw, session.user.email)
+          if (user?.authMethod === 'password' && user?.userId) {
+            setDeviceKey(user.userId, deviceKey)
+          } else {
+            setMemberDeviceKey(memberId, deviceKey)
+          }
         }
         resolve(true)
       } else {
@@ -157,12 +169,13 @@ export default function Invite({ params }: { params: { invite: string } }) {
   }
 
   const validateCurrentStep = () => {
-    if (step === 0) {
+    // Sudo password step only exists when not skipped, at index 0.
+    if (!skipSudoStep && step === 0) {
       if (pw !== pw2) {
         errorToast("Passwords don't match")
         return false
       }
-    } else if (step === 1 && !recoveryDownloaded) {
+    } else if (step === steps.length - 1 && !recoveryDownloaded) {
       errorToast('Please download the your account recovery kit!')
       return false
     }
@@ -295,7 +308,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
                   <Stepper steps={steps} activeStep={step} />
                 </div>
 
-                {step === 0 && (
+                {!skipSudoStep && step === 0 && (
                   <AccountPassword
                     pw={pw}
                     setPw={setPw}
@@ -306,7 +319,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
                   />
                 )}
 
-                {step === 1 && (
+                {step === steps.length - 1 && (
                   <AccountRecovery
                     mnemonic={mnemonic}
                     onDownload={handleDownloadRecoveryKit}

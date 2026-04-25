@@ -19,7 +19,6 @@ from api.views.auth_password import (
     password_register,
     password_login,
     password_change,
-    password_reset_via_recovery,
     verify_email,
     resend_verification,
     email_check,
@@ -331,22 +330,29 @@ class PasswordChangeTest(_ThrottleClearMixin, unittest.TestCase):
     @patch("api.views.auth_password.transaction")
     @patch("api.views.auth_password.login")
     @patch("api.views.auth_password.OrganisationMember")
-    def test_change_password_succeeds(self, mock_om, mock_login, mock_tx):
-        """Valid current hash updates password and re-encrypts per-org keyring."""
+    @patch("api.views.auth_password.Organisation")
+    def test_change_password_succeeds(self, mock_org, mock_om, mock_login, mock_tx):
+        """Valid current password + matching identityKey updates login
+        password and re-wraps THIS org's keyring atomically."""
         user = MagicMock()
         user.is_authenticated = True
         user.has_usable_password.return_value = True
         user.check_password.return_value = True
+
+        org = MagicMock()
+        org.identity_key = "matching_key"
+        mock_org.objects.get.return_value = org
+        mock_om.objects.filter.return_value.exists.return_value = True
 
         request = _make_post(
             "/auth/password/change/",
             {
                 "currentAuthHash": "old" * 20,
                 "newAuthHash": "new" * 20,
-                "orgKeys": [
-                    {"orgId": "org-1", "wrappedKeyring": "wk_1", "wrappedRecovery": "wr_1"},
-                    {"orgId": "org-2", "wrappedKeyring": "wk_2", "wrappedRecovery": "wr_2"},
-                ],
+                "orgId": "org-1",
+                "identityKey": "matching_key",
+                "wrappedKeyring": "new-wrapped-keyring",
+                "wrappedRecovery": "new-wrapped-recovery",
             },
             user=user,
         )
@@ -355,12 +361,13 @@ class PasswordChangeTest(_ThrottleClearMixin, unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         user.set_password.assert_called_once_with("new" * 20)
         user.save.assert_called()
-        # Should update each org separately, not bulk
+        # The single org's keyring update should fire — exactly one filter call.
         self.assertEqual(mock_om.objects.filter.call_count, 2)
         mock_login.assert_called_once()
 
-    def test_change_rejects_wrong_current_password(self):
-        """Wrong current password returns 401."""
+    @patch("api.views.auth_password.Organisation")
+    def test_change_rejects_wrong_current_password(self, mock_org):
+        """Wrong current password returns 401 before we even check the org."""
         user = MagicMock()
         user.is_authenticated = True
         user.has_usable_password.return_value = True
@@ -371,7 +378,10 @@ class PasswordChangeTest(_ThrottleClearMixin, unittest.TestCase):
             {
                 "currentAuthHash": "wrong",
                 "newAuthHash": "new" * 20,
-                "orgKeys": [{"orgId": "org-1", "wrappedKeyring": "wk", "wrappedRecovery": "wr"}],
+                "orgId": "org-1",
+                "identityKey": "k",
+                "wrappedKeyring": "wk",
+                "wrappedRecovery": "wr",
             },
             user=user,
         )
@@ -447,93 +457,6 @@ class VerificationEmailLoggingTest(_ThrottleClearMixin, unittest.TestCase):
         call_args = mock_send_email.call_args
         self.assertEqual(call_args[0][0], "bob@example.com")
         self.assertIn("/auth/verify-email/", call_args[0][1])
-
-
-# ---------------------------------------------------------------------------
-# password_reset_via_recovery
-# ---------------------------------------------------------------------------
-
-class PasswordResetViaRecoveryTest(_ThrottleClearMixin, unittest.TestCase):
-    """Tests for POST /auth/password/reset-via-recovery/."""
-
-    @patch("api.views.auth_password.transaction")
-    @patch("api.views.auth_password.login")
-    @patch("api.views.auth_password.OrganisationMember")
-    @patch("api.views.auth_password.Organisation")
-    def test_resets_password_with_valid_proof(self, mock_org, mock_om, mock_login, mock_tx):
-        """Password user can reset auth hash with correct identity key."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = True
-
-        org = MagicMock()
-        org.identity_key = "valid_key"
-        mock_org.objects.get.return_value = org
-        mock_om.objects.filter.return_value.exists.return_value = True
-
-        request = _make_post(
-            "/auth/password/reset-via-recovery/",
-            {"newAuthHash": "new" * 20, "identityKey": "valid_key", "orgId": "org-1"},
-            user=user,
-        )
-        response = password_reset_via_recovery(request)
-
-        self.assertEqual(response.status_code, 200)
-        user.set_password.assert_called_once_with("new" * 20)
-        user.save.assert_called()
-        mock_login.assert_called_once()
-
-    @patch("api.views.auth_password.Organisation")
-    def test_rejects_invalid_identity_key(self, mock_org):
-        """Wrong identity key returns 403."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = True
-
-        org = MagicMock()
-        org.identity_key = "real_key"
-        mock_org.objects.get.return_value = org
-
-        request = _make_post(
-            "/auth/password/reset-via-recovery/",
-            {"newAuthHash": "x", "identityKey": "wrong_key", "orgId": "org-1"},
-            user=user,
-        )
-        response = password_reset_via_recovery(request)
-
-        self.assertEqual(response.status_code, 403)
-        user.set_password.assert_not_called()
-
-    def test_noop_for_sso_user(self):
-        """SSO user gets a no-op success (no password to reset)."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = False
-
-        request = _make_post(
-            "/auth/password/reset-via-recovery/",
-            {"newAuthHash": "x", "identityKey": "k", "orgId": "org-1"},
-            user=user,
-        )
-        response = password_reset_via_recovery(request)
-
-        self.assertEqual(response.status_code, 200)
-        user.set_password.assert_not_called()
-
-    def test_rejects_missing_fields(self):
-        """Missing required fields returns 400."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = True
-
-        request = _make_post(
-            "/auth/password/reset-via-recovery/",
-            {"newAuthHash": "x"},
-            user=user,
-        )
-        response = password_reset_via_recovery(request)
-
-        self.assertEqual(response.status_code, 400)
 
 
 # ---------------------------------------------------------------------------
@@ -922,51 +845,22 @@ class EmailCheckNoEnumerationTest(_ThrottleClearMixin, unittest.TestCase):
 
 
 class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
-    """Password change: updates auth hash + re-encrypts per-org keyrings."""
-
-    @patch("api.views.auth_password.transaction")
-    @patch("api.views.auth_password.login")
-    @patch("api.views.auth_password.OrganisationMember")
-    def test_password_change_updates_per_org_keyrings(self, mock_om, mock_login, mock_tx):
-        """Changing password updates auth hash and wrapped keys for each org."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = True
-        user.check_password.return_value = True
-
-        request = _make_post(
-            "/auth/password/change/",
-            {
-                "currentAuthHash": "old_hash",
-                "newAuthHash": "new_hash",
-                "orgKeys": [
-                    {"orgId": "org-a", "wrappedKeyring": "wk_a", "wrappedRecovery": "wr_a"},
-                    {"orgId": "org-b", "wrappedKeyring": "wk_b", "wrappedRecovery": "wr_b"},
-                ],
-            },
-            user=user,
-        )
-        response = password_change(request)
-
-        self.assertEqual(response.status_code, 200)
-        user.set_password.assert_called_once_with("new_hash")
-        # Each org updated separately — not one bulk update
-        self.assertEqual(mock_om.objects.filter.call_count, 2)
-        mock_login.assert_called_once()
-
-
-class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
-    """Recovery via mnemonic: password user resets auth hash without old password."""
+    """Password change is scoped to the current org: it updates the auth
+    hash AND re-wraps THIS org's keyring atomically. Other orgs are left
+    encrypted with the old key and surface a recovery prompt on next
+    access."""
 
     @patch("api.views.auth_password.transaction")
     @patch("api.views.auth_password.login")
     @patch("api.views.auth_password.OrganisationMember")
     @patch("api.views.auth_password.Organisation")
-    def test_password_user_recovery_resets_auth(self, mock_org, mock_om, mock_login, mock_tx):
-        """Password user can reset auth hash with valid identity key proof."""
+    def test_password_change_rewraps_current_org_keyring(
+        self, mock_org, mock_om, mock_login, mock_tx
+    ):
         user = MagicMock()
         user.is_authenticated = True
         user.has_usable_password.return_value = True
+        user.check_password.return_value = True
 
         org = MagicMock()
         org.identity_key = "matching_key"
@@ -974,51 +868,189 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         mock_om.objects.filter.return_value.exists.return_value = True
 
         request = _make_post(
-            "/auth/password/reset-via-recovery/",
-            {"newAuthHash": "recovered_hash", "identityKey": "matching_key", "orgId": "org-1"},
+            "/auth/password/change/",
+            {
+                "currentAuthHash": "old_hash",
+                "newAuthHash": "new_hash",
+                "orgId": "org-a",
+                "identityKey": "matching_key",
+                "wrappedKeyring": "wk_a",
+                "wrappedRecovery": "wr_a",
+            },
             user=user,
         )
-        response = password_reset_via_recovery(request)
+        response = password_change(request)
 
         self.assertEqual(response.status_code, 200)
-        user.set_password.assert_called_once_with("recovered_hash")
+        user.set_password.assert_called_once_with("new_hash")
+        mock_om.objects.filter.return_value.update.assert_called_once_with(
+            wrapped_keyring="wk_a", wrapped_recovery="wr_a"
+        )
         mock_login.assert_called_once()
 
     @patch("api.views.auth_password.Organisation")
-    def test_recovery_rejects_wrong_identity_key(self, mock_org):
-        """Wrong identity key is rejected."""
+    def test_password_change_rejects_wrong_identity_key(self, mock_org):
+        """Mnemonic must match the org's stored identity_key — proves the
+        user has the keyring material and isn't just guessing UUIDs."""
         user = MagicMock()
         user.is_authenticated = True
         user.has_usable_password.return_value = True
+        user.check_password.return_value = True
 
         org = MagicMock()
         org.identity_key = "real_key"
         mock_org.objects.get.return_value = org
 
         request = _make_post(
-            "/auth/password/reset-via-recovery/",
-            {"newAuthHash": "hash", "identityKey": "wrong_key", "orgId": "org-1"},
+            "/auth/password/change/",
+            {
+                "currentAuthHash": "old_hash",
+                "newAuthHash": "new_hash",
+                "orgId": "org-a",
+                "identityKey": "wrong_key",
+                "wrappedKeyring": "wk_a",
+                "wrappedRecovery": "wr_a",
+            },
             user=user,
         )
-        response = password_reset_via_recovery(request)
-
+        response = password_change(request)
         self.assertEqual(response.status_code, 403)
         user.set_password.assert_not_called()
 
-    def test_sso_user_recovery_skips_auth_reset(self):
-        """SSO user recovery doesn't touch password (no-op)."""
+
+class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
+    """Recovery via mnemonic, exposed as the GraphQL mutation
+    ResetAccountPasswordViaRecoveryMutation. Password must match user's
+    current login auth (auth and sudo stay unified). Only the org's
+    keyring is rewrapped; user.password is never reset because if the
+    hashes match, it's already correct."""
+
+    def _info(self, user):
+        from django.contrib.sessions.middleware import SessionMiddleware
+        info = MagicMock()
+        request = APIRequestFactory().post("/graphql/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        request.user = user
+        info.context = request
+        return info
+
+    @patch("backend.graphene.mutations.organisation.login")
+    @patch("backend.graphene.mutations.organisation.transaction")
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_password_user_recovery_rewraps_keyring_when_auth_matches(
+        self, mock_org, mock_om, mock_tx, mock_login
+    ):
+        from backend.graphene.mutations.organisation import (
+            ResetAccountPasswordViaRecoveryMutation,
+        )
         user = MagicMock()
-        user.is_authenticated = True
+        user.has_usable_password.return_value = True
+        user.check_password.return_value = True  # supplied authHash matches
+
+        org = MagicMock()
+        org.identity_key = "matching_key"
+        mock_org.objects.get.return_value = org
+
+        org_member = MagicMock()
+        mock_om.objects.get.return_value = org_member
+
+        result = ResetAccountPasswordViaRecoveryMutation.mutate(
+            None,
+            self._info(user),
+            org_id="org-1",
+            new_auth_hash="current_hash",
+            identity_key="matching_key",
+            wrapped_keyring="new_wk",
+            wrapped_recovery="new_wr",
+        )
+
+        # Auth password is already correct — set_password should NOT be called.
+        user.set_password.assert_not_called()
+        self.assertEqual(org_member.wrapped_keyring, "new_wk")
+        self.assertEqual(org_member.wrapped_recovery, "new_wr")
+        org_member.save.assert_called_once()
+        mock_login.assert_called_once()
+        self.assertIs(result.org_member, org_member)
+
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_recovery_rejects_password_mismatch(self, mock_org, mock_om):
+        """Regression: a user who recovers an org's keyring with a
+        password DIFFERENT from their current login auth would otherwise
+        end up with split auth/sudo passwords. The mutation must refuse."""
+        from graphql import GraphQLError
+        from backend.graphene.mutations.organisation import (
+            ResetAccountPasswordViaRecoveryMutation,
+        )
+        user = MagicMock()
+        user.has_usable_password.return_value = True
+        user.check_password.return_value = False  # supplied hash != stored
+
+        org = MagicMock()
+        org.identity_key = "matching_key"
+        mock_org.objects.get.return_value = org
+        mock_om.objects.get.return_value = MagicMock()
+
+        with self.assertRaises(GraphQLError):
+            ResetAccountPasswordViaRecoveryMutation.mutate(
+                None,
+                self._info(user),
+                org_id="org-1",
+                new_auth_hash="wrong_pw_hash",
+                identity_key="matching_key",
+                wrapped_keyring="new_wk",
+                wrapped_recovery="new_wr",
+            )
+        user.set_password.assert_not_called()
+
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_recovery_rejects_wrong_identity_key(self, mock_org):
+        """Wrong identity key is rejected before any keyring write."""
+        from graphql import GraphQLError
+        from backend.graphene.mutations.organisation import (
+            ResetAccountPasswordViaRecoveryMutation,
+        )
+        user = MagicMock()
+        user.has_usable_password.return_value = True
+
+        org = MagicMock()
+        org.identity_key = "real_key"
+        mock_org.objects.get.return_value = org
+
+        with self.assertRaises(GraphQLError):
+            ResetAccountPasswordViaRecoveryMutation.mutate(
+                None,
+                self._info(user),
+                org_id="org-1",
+                new_auth_hash="hash",
+                identity_key="wrong_key",
+                wrapped_keyring="x",
+                wrapped_recovery="y",
+            )
+        user.set_password.assert_not_called()
+        user.check_password.assert_not_called()
+
+    def test_sso_user_recovery_rejected(self):
+        """SSO users have no password to reset — mutation refuses."""
+        from graphql import GraphQLError
+        from backend.graphene.mutations.organisation import (
+            ResetAccountPasswordViaRecoveryMutation,
+        )
+        user = MagicMock()
         user.has_usable_password.return_value = False
 
-        request = _make_post(
-            "/auth/password/reset-via-recovery/",
-            {"newAuthHash": "anything", "identityKey": "k", "orgId": "org-1"},
-            user=user,
-        )
-        response = password_reset_via_recovery(request)
-
-        self.assertEqual(response.status_code, 200)
+        with self.assertRaises(GraphQLError):
+            ResetAccountPasswordViaRecoveryMutation.mutate(
+                None,
+                self._info(user),
+                org_id="org-1",
+                new_auth_hash="anything",
+                identity_key="k",
+                wrapped_keyring="x",
+                wrapped_recovery="y",
+            )
         user.set_password.assert_not_called()
 
 
