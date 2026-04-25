@@ -54,6 +54,7 @@ public_urls = [
 ]
 
 urlpatterns.append(path("public/", include(public_urls)))
+urlpatterns.append(path("", include(public_urls))) #  for	/v1/secrets/ ✅
 
 # Cloud-hosted specific URLs
 if CLOUD_HOSTED:
