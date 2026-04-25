@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import path, include
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
@@ -41,20 +41,19 @@ urlpatterns = [
     path("lockbox/<box_id>", LockboxView.as_view()),
 ]
 
-# Public API URLs
+# Public API URLs (defined without prefix, mounted at /public/)
 public_urls = [
-    path("public/", root_endpoint),
-    path("public/v1/secrets/", PublicSecretsView.as_view()),
+    path("", root_endpoint),
+    path("v1/secrets/", PublicSecretsView.as_view()),
     path(
-        "public/v1/secrets/dynamic/",
+        "v1/secrets/dynamic/",
         include("ee.integrations.secrets.dynamic.rest.urls"),
     ),
-    path("public/identities/external/v1/aws/iam/auth/", aws_iam_auth),
-    path("public/identities/external/v1/azure/entra/auth/", azure_entra_auth),
+    path("identities/external/v1/aws/iam/auth/", aws_iam_auth),
+    path("identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]
 
-# Add public URLs to main urlpatterns
-urlpatterns.extend(public_urls)
+urlpatterns.append(path("public/", include(public_urls)))
 
 # Cloud-hosted specific URLs
 if CLOUD_HOSTED:
@@ -72,3 +71,6 @@ try:
         urlpatterns.append(path("admin/", admin.site.urls))
 except Exception as e:
     pass
+
+# Serve all URLs under /service/ prefix for direct ALB/Ingress routing
+urlpatterns.append(path("service/", include(urlpatterns[:])))
