@@ -92,18 +92,42 @@ class CreateOrganisationMutation(graphene.Mutation):
 
 
 class UpdateUserWrappedSecretsMutation(graphene.Mutation):
+    """Re-wrap THIS org's keyring after the caller proves they hold the
+    recovery mnemonic. Used by SSO recovery (where there's no login
+    password to verify against, so identity is proven via the mnemonic
+    alone).
+
+    Requires identity_key matching the org's stored identity_key — proves
+    the caller derived the keyring from the right mnemonic. Without this
+    proof, an authenticated user (or session-cookie holder) could
+    overwrite their own wrapped_keyring with arbitrary garbage and lock
+    themselves out of the org permanently.
+    """
+
     class Arguments:
         org_id = graphene.ID(required=True)
+        identity_key = graphene.String(required=True)
         wrapped_keyring = graphene.String(required=True)
         wrapped_recovery = graphene.String(required=True)
 
     org_member = graphene.Field(OrganisationMemberType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, wrapped_keyring, wrapped_recovery):
-        org_member = OrganisationMember.objects.get(
-            organisation_id=org_id, user=info.context.user, deleted_at=None
-        )
+    def mutate(cls, root, info, org_id, identity_key, wrapped_keyring, wrapped_recovery):
+        try:
+            org = Organisation.objects.get(id=org_id)
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+
+        if org.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
+
+        try:
+            org_member = OrganisationMember.objects.get(
+                organisation=org, user=info.context.user, deleted_at=None
+            )
+        except OrganisationMember.DoesNotExist:
+            raise GraphQLError("Not a member of this organisation.")
 
         org_member.wrapped_keyring = wrapped_keyring
         org_member.wrapped_recovery = wrapped_recovery

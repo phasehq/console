@@ -129,6 +129,37 @@ class PasswordRegisterTest(_ThrottleClearMixin, unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    @patch("api.views.auth_password.OrganisationMemberInvite")
+    @patch("api.views.auth_password.get_user_model")
+    def test_register_rejects_invite_email_mismatch(
+        self, mock_get_user, mock_invite_cls
+    ):
+        """Invite-driven signup must use the invitee's email. The frontend
+        locks the field but a tampered request with a different email
+        must still be rejected server-side."""
+        from base64 import b64encode
+
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = False
+        mock_get_user.return_value = User
+
+        invite = MagicMock()
+        invite.invitee_email = "invitee@example.com"
+        mock_invite_cls.objects.get.return_value = invite
+
+        invite_id = "abc-invite-id"
+        encoded = b64encode(invite_id.encode()).decode()
+        payload = dict(
+            self.VALID_PAYLOAD,
+            email="attacker@example.com",
+            callbackUrl=f"/invite/{encoded}",
+        )
+        request = _make_post("/auth/password/register/", payload)
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 403)
+        User.objects.create_user.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # verify_email
@@ -1052,6 +1083,66 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
                 wrapped_recovery="y",
             )
         user.set_password.assert_not_called()
+
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_sso_recovery_rewrap_requires_identity_proof(self, mock_org, mock_om):
+        """SSO recovery via UpdateUserWrappedSecretsMutation must reject
+        when supplied identity_key doesn't match — without this proof an
+        authenticated user (or session-cookie holder) could overwrite
+        their wrapped_keyring with arbitrary garbage."""
+        from graphql import GraphQLError
+        from backend.graphene.mutations.organisation import (
+            UpdateUserWrappedSecretsMutation,
+        )
+        user = MagicMock()
+
+        org = MagicMock()
+        org.identity_key = "real_key"
+        mock_org.objects.get.return_value = org
+
+        with self.assertRaises(GraphQLError):
+            UpdateUserWrappedSecretsMutation.mutate(
+                None,
+                self._info(user),
+                org_id="org-1",
+                identity_key="wrong_key",
+                wrapped_keyring="garbage",
+                wrapped_recovery="garbage",
+            )
+        mock_om.objects.get.assert_not_called()
+
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_sso_recovery_rewrap_succeeds_with_valid_identity(
+        self, mock_org, mock_om
+    ):
+        """Matching identity_key allows the keyring rewrap."""
+        from backend.graphene.mutations.organisation import (
+            UpdateUserWrappedSecretsMutation,
+        )
+        user = MagicMock()
+
+        org = MagicMock()
+        org.identity_key = "matching_key"
+        mock_org.objects.get.return_value = org
+
+        org_member = MagicMock()
+        mock_om.objects.get.return_value = org_member
+
+        result = UpdateUserWrappedSecretsMutation.mutate(
+            None,
+            self._info(user),
+            org_id="org-1",
+            identity_key="matching_key",
+            wrapped_keyring="new_wk",
+            wrapped_recovery="new_wr",
+        )
+
+        self.assertEqual(org_member.wrapped_keyring, "new_wk")
+        self.assertEqual(org_member.wrapped_recovery, "new_wr")
+        org_member.save.assert_called_once()
+        self.assertIs(result.org_member, org_member)
 
 
 class CrossAuthMethodTest(_ThrottleClearMixin, unittest.TestCase):

@@ -1048,7 +1048,38 @@ type Mutation {
   The new owner must have global access (Admin role) to ensure they have all necessary keys.
   """
   transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
-  updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+
+  """
+  Re-wrap THIS org's keyring after the caller proves they hold the
+  recovery mnemonic. Used by SSO recovery (where there's no login
+  password to verify against, so identity is proven via the mnemonic
+  alone).
+  
+  Requires identity_key matching the org's stored identity_key — proves
+  the caller derived the keyring from the right mnemonic. Without this
+  proof, an authenticated user (or session-cookie holder) could
+  overwrite their own wrapped_keyring with arbitrary garbage and lock
+  themselves out of the org permanently.
+  """
+  updateMemberWrappedSecrets(identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+
+  """
+  Re-wrap THIS org's keyring after verifying identity via the
+  recovery mnemonic. The supplied password MUST match the user's
+  current login auth — auth and sudo passwords stay unified, period.
+  
+  Two server-side proofs are required:
+    1. identity_key matches the org's stored identity_key — proves the
+       caller derived the keyring from the right mnemonic.
+    2. new_auth_hash matches user.password — proves the password the
+       user is wrapping the keyring with is also their account login
+       auth.
+  
+  A failed (2) means the user is trying to set a different password
+  for this org's keyring than what authenticates them. We never
+  persist that — it would split auth and sudo apart.
+  """
+  resetAccountPasswordViaRecovery(identityKey: String!, newAuthHash: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ResetAccountPasswordViaRecoveryMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1179,7 +1210,39 @@ type TransferOrganisationOwnershipMutation {
   ok: Boolean
 }
 
+"""
+Re-wrap THIS org's keyring after the caller proves they hold the
+recovery mnemonic. Used by SSO recovery (where there's no login
+password to verify against, so identity is proven via the mnemonic
+alone).
+
+Requires identity_key matching the org's stored identity_key — proves
+the caller derived the keyring from the right mnemonic. Without this
+proof, an authenticated user (or session-cookie holder) could
+overwrite their own wrapped_keyring with arbitrary garbage and lock
+themselves out of the org permanently.
+"""
 type UpdateUserWrappedSecretsMutation {
+  orgMember: OrganisationMemberType
+}
+
+"""
+Re-wrap THIS org's keyring after verifying identity via the
+recovery mnemonic. The supplied password MUST match the user's
+current login auth — auth and sudo passwords stay unified, period.
+
+Two server-side proofs are required:
+  1. identity_key matches the org's stored identity_key — proves the
+     caller derived the keyring from the right mnemonic.
+  2. new_auth_hash matches user.password — proves the password the
+     user is wrapping the keyring with is also their account login
+     auth.
+
+A failed (2) means the user is trying to set a different password
+for this org's keyring than what authenticates them. We never
+persist that — it would split auth and sudo apart.
+"""
+type ResetAccountPasswordViaRecoveryMutation {
   orgMember: OrganisationMemberType
 }
 

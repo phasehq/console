@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import secrets
 from datetime import timedelta
 
@@ -84,15 +85,21 @@ def _smtp_configured():
     return bool(getattr(settings, "EMAIL_HOST", ""))
 
 
+_INVITE_PATH_RE = re.compile(r"^/invite/[A-Za-z0-9+/=_-]+/?$")
+
+
 def _safe_internal_path(value):
-    """Return value if it's a safe same-origin path (e.g. '/invite/abc'),
-    else None. Rejects schemes, protocol-relative URLs, and absolute URLs
-    so a verification link can't be tricked into redirecting off-site."""
+    """Return value if it's a safe same-origin invite path (e.g.
+    '/invite/<base64-token>'), else None.
+
+    Strictly allowlisted to the invite acceptance flow — that's the only
+    legitimate destination we forward through email verification today.
+    Allowing arbitrary internal paths would let a crafted verification
+    URL redirect through any internal route (e.g. '/login?error=...'
+    with injected query params)."""
     if not isinstance(value, str) or not value:
         return None
-    if not value.startswith("/") or value.startswith("//"):
-        return None
-    if "://" in value:
+    if not _INVITE_PATH_RE.match(value):
         return None
     return value
 
@@ -153,6 +160,33 @@ def password_register(request):
 
     if User.objects.filter(email=email).exists():
         return JsonResponse({"error": "An account with this email already exists."}, status=409)
+
+    # If signup was triggered from an invite link, the registered email must
+    # match the invitee email. The frontend forwards callbackUrl=/invite/<id>
+    # for invite-driven signups and locks the email field; this enforces the
+    # same constraint server-side so a tampered request can't register an
+    # arbitrary email and then fail downstream at invite acceptance.
+    callback_url = data.get("callbackUrl") or ""
+    if callback_url.startswith("/invite/"):
+        from base64 import b64decode
+        try:
+            encoded_invite = callback_url[len("/invite/"):].split("/")[0].split("?")[0]
+            invite_id = b64decode(encoded_invite).decode("utf-8")
+            invite = OrganisationMemberInvite.objects.get(
+                id=invite_id,
+                valid=True,
+                expires_at__gt=timezone.now(),
+            )
+            if invite.invitee_email.lower().strip() != email:
+                return JsonResponse(
+                    {"error": "This invite is for a different email address."},
+                    status=403,
+                )
+        except (OrganisationMemberInvite.DoesNotExist, ValueError, Exception):
+            # Invalid invite reference — ignore and let registration proceed
+            # under the user's submitted email. Acceptance will fail later
+            # with a clearer error if the invite truly is bad.
+            pass
 
     # Skip verification if explicitly configured OR if SMTP isn't set up
     # (no point creating inactive accounts when emails can't be delivered)

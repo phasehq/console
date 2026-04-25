@@ -114,6 +114,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
       await updateWrappedSecrets({
         variables: {
           orgId: org!.id,
+          identityKey: accountKeyRing.publicKey,
           wrappedKeyring: encryptedKeyring,
           wrappedRecovery: encryptedMnemonic,
         },

@@ -91,10 +91,17 @@ export const deviceVaultKey = async (password: string, email: string): Promise<s
  * server; the server never sees the raw password.
  *
  * Parallel to deviceVaultKey rather than chained, so a cached deviceKey
- * in localStorage cannot be used to compute authHash. The two outputs
- * are independent because they use different Argon2id parameter tiers
- * (INTERACTIVE vs MODERATE) — same password and salt, different KDF
- * settings produce independent keys.
+ * in localStorage cannot be used to compute authHash. Both derivations
+ * use the same Argon2id salt (saltFromString(email)), but different
+ * parameter tiers — INTERACTIVE (~64MiB / ~100ms) for authHash vs
+ * MODERATE (~256MiB / ~1s) for deviceKey. With Argon2id, varying
+ * memory/iteration parameters produces uncorrelated outputs: knowing
+ * one does not let you derive the other without re-running the KDF
+ * from the password. Recovering the password from either still
+ * requires forward Argon2id work at the corresponding cost tier.
+ *
+ * Note: distinct salts (e.g. an "auth:" prefix) would add explicit
+ * domain separation; we rely on the parameter-tier divergence instead.
  */
 export const passwordAuthHash = async (
   password: string,
