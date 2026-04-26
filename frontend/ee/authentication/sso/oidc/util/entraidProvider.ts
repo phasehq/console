@@ -3,7 +3,8 @@ import type { OAuthConfig, OAuthUserConfig } from 'next-auth/providers'
 export interface EntraIDProfile extends Record<string, any> {
   sub: string
   name: string
-  email: string
+  email?: string
+  preferred_username?: string
   picture?: string
 }
 
@@ -31,12 +32,13 @@ export function EntraIDProvider(options: EntraIDProviderConfig): OAuthConfig<Ent
     idToken: true,
     checks: ['pkce', 'state', 'nonce'],
     profile: async (profile, tokens) => {
-      if (!profile.email) throw new Error('User does not have a valid email')
+      const email = profile.email || profile.preferred_username
+      if (!email) throw new Error('User does not have a valid email')
 
       return {
         id: profile.sub,
         name: profile.name || '',
-        email: profile.email,
+        email,
         image: '',
       }
     },

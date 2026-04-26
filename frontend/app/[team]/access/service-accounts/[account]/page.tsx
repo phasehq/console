@@ -4,18 +4,29 @@ import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
 import { UpdateServiceAccountOp } from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
-import { userHasPermission } from '@/utils/access/permissions'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
+import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useEffect, useState } from 'react'
-import { FaBan, FaBoxOpen, FaChevronLeft, FaCog, FaEdit, FaNetworkWired } from 'react-icons/fa'
+import { useContext, useEffect, useMemo, useState } from 'react'
+import {
+  FaBan,
+  FaBoxOpen,
+  FaBuilding,
+  FaChevronLeft,
+  FaCog,
+  FaEdit,
+  FaNetworkWired,
+  FaUsersCog,
+} from 'react-icons/fa'
 import { FaServer, FaArrowDownUpLock } from 'react-icons/fa6'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
-import { ServiceAccountType } from '@/apollo/graphql'
+import { ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ServiceAccountRoleSelector } from '../_components/RoleSelector'
+import { RoleLabel } from '@/components/users/RoleLabel'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import CopyButton from '@/components/common/CopyButton'
@@ -31,41 +42,79 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
   const [name, setName] = useState('')
 
-  const userCanReadSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
+  // Org-level permissions (always use org role, not overridden by team)
+  const userCanReadTeams = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
     : false
 
-  const userCanReadAppMemberships = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read', true)
+  const userIsGlobalAccess = organisation
+    ? userHasGlobalAccess(organisation.role!.permissions)
     : false
 
   const userCanViewNetworkAccess = organisation
     ? userHasPermission(organisation?.role?.permissions, 'NetworkAccessPolicies', 'read')
     : false
 
-  const userCanUpdateSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update')
-    : false
-
-  const userCanDeleteSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'delete')
-    : false
-
+  // Always attempt the query — backend will return data if user has team-based access
   const { data, loading } = useQuery(GetServiceAccountDetail, {
     variables: { orgId: organisation?.id, id: params.account },
-    skip: !organisation || !userCanReadSA,
+    skip: !organisation,
     fetchPolicy: 'cache-and-network',
+  })
+
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadTeams,
   })
 
   const [updateAccount] = useMutation(UpdateServiceAccountOp)
 
   const account: ServiceAccountType = data?.serviceAccounts[0]
+  const isTeamOwned = !!account?.team
+
+  // Team membership and ownership (from SA query's team data — no GetTeams dependency)
+  const isTeamOwner = isTeamOwned && account?.team?.owner?.id === organisation?.memberId
+  const isTeamMember =
+    isTeamOwned &&
+    (account?.team?.members?.some((m) => m.orgMember?.id === organisation?.memberId) ?? false)
+
+  // Effective permissions for SA-related checks.
+  // For team-owned SAs: team memberRole if set, else org role.
+  // For org-level SAs: org role.
+  // Team owner bypasses all permission checks via isTeamOwner.
+  const effectivePermissions = useMemo(() => {
+    if (!organisation?.role?.permissions) return null
+    if (!isTeamOwned || !account?.team) return organisation.role!.permissions
+    if (isTeamMember && account.team.memberRole?.permissions) {
+      return account.team.memberRole.permissions
+    }
+    return organisation.role!.permissions
+  }, [organisation, isTeamOwned, isTeamMember, account])
+
+  // Whether user has basic access to this team-owned SA
+  const hasTeamAccess = !isTeamOwned || isTeamOwner || isTeamMember || userIsGlobalAccess
+
+  // SA-related permissions (team role override applies, team owner gets full access)
+  const effectiveCanUpdateSA =
+    isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'update')
+  const effectiveCanDeleteSA =
+    isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'delete')
+  const effectiveCanReadAppMemberships =
+    isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'read', true)
+
+  // Teams this SA belongs to (for the teams section list)
+  const accountTeams = useMemo(() => {
+    if (!teamsData?.teams || !account) return []
+    return (teamsData.teams as TeamType[]).filter((team) =>
+      team.members?.some((m) => m.serviceAccount?.id === account.id)
+    )
+  }, [teamsData, account])
 
   const nameUpdated = account ? account.name !== name : false
 
   const updateName = async () => {
-    if (!userCanUpdateSA) {
-      toast.error("You don't have the permissions requried to update Service Accounts")
+    if (!effectiveCanUpdateSA) {
+      toast.error("You don't have the permissions required to update Service Accounts")
     }
     await updateAccount({
       variables: {
@@ -89,23 +138,6 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   useEffect(() => {
     if (account) setName(account.name)
   }, [account])
-
-  if (!userCanReadSA)
-    return (
-      <section>
-        <EmptyState
-          title="Access restricted"
-          subtitle="You don't have the permissions required to view service accounts in this organisation."
-          graphic={
-            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-              <FaBan />
-            </div>
-          }
-        >
-          <></>
-        </EmptyState>
-      </section>
-    )
 
   if (loading)
     return (
@@ -151,7 +183,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-base font-medium"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  readOnly={!userCanUpdateSA}
+                  readOnly={!effectiveCanUpdateSA}
                   maxLength={64}
                 />
                 {nameUpdated ? (
@@ -169,13 +201,33 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   </div>
                 )}
               </h3>
-              <CopyButton
-                value={account.id}
-                buttonVariant="ghost"
-                title="Copy Service Account ID to clipboard"
-              >
-                <span className="text-neutral-500 text-xs font-mono">{account.id}</span>
-              </CopyButton>
+              <div className="flex items-center gap-2">
+                <CopyButton
+                  value={account.id}
+                  buttonVariant="ghost"
+                  title="Copy Service Account ID to clipboard"
+                >
+                  <span className="text-neutral-500 text-xs font-mono">{account.id}</span>
+                </CopyButton>
+                {account.team ? (
+                  <Link
+                    href={`/${params.team}/access/teams/${account.team.id}`}
+                    className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 hover:bg-blue-500/25 transition ease"
+                    title={`Owned by team "${account.team.name}" — bound to the team lifecycle`}
+                  >
+                    <FaUsersCog className="text-[0.55rem]" />
+                    {account.team.name}
+                  </Link>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400"
+                    title="Organisation-level account — visible org-wide"
+                  >
+                    <FaBuilding className="text-[0.55rem]" />
+                    Organisation
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm text-neutral-500 mt-1">
@@ -188,8 +240,12 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
               {account.serverSideKeyManagementEnabled ? 'Server-side' : 'Client-side'} KMS
             </span>
-            {userCanUpdateSA && (
-              <KeyManagementDialog serviceAccount={account} buttonVariant={'secondary'} />
+            {effectiveCanUpdateSA && hasTeamAccess && !account.team?.id && (
+              <KeyManagementDialog
+                serviceAccount={account}
+                buttonVariant={'secondary'}
+                effectivePermissions={effectivePermissions}
+              />
             )}
           </div>
         </div>
@@ -203,8 +259,12 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
           {/* Role Selector and Description */}
           <div className="space-y-2">
-            <div className="text-sm w-max">
-              <ServiceAccountRoleSelector account={account} displayOnly={!userCanUpdateSA} />
+            <div className="text-sm w-max flex items-center gap-2">
+              <ServiceAccountRoleSelector
+                account={account}
+                displayOnly={!effectiveCanUpdateSA || isTeamOwned}
+              />
+              {isTeamOwned && <span className="text-2xs text-neutral-500">(managed by team)</span>}
             </div>
 
             <div className="flex flex-col gap-1">
@@ -215,15 +275,85 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           </div>
         </div>
 
+        {userCanReadTeams && (
+          <div className="py-4 space-y-3">
+            <div>
+              <div className="text-base font-medium">Teams</div>
+              <div className="text-neutral-500 text-sm">Teams this account belongs to</div>
+            </div>
+
+            <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+              {accountTeams.length > 0 ? (
+                accountTeams.map((team) => (
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between py-1.5 px-2 group"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/${params.team}/access/teams/${team.id}`}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:underline"
+                        >
+                          {team.name}
+                        </Link>
+                        {team.serviceAccountRole && (
+                          <RoleLabel role={team.serviceAccountRole} size="xs" />
+                        )}
+                      </div>
+                      {team.description && (
+                        <div className="text-2xs text-neutral-500 truncate max-w-md">
+                          {team.description}
+                        </div>
+                      )}
+                      <div className="text-2xs text-neutral-500">
+                        {team.apps?.length || 0} app{team.apps?.length !== 1 ? 's' : ''}
+                        {team.apps && team.apps.length > 0 && (
+                          <> ({team.apps.map((a) => a!.name).join(', ')})</>
+                        )}
+                      </div>
+                    </div>
+                    <Link
+                      className="opacity-0 group-hover:opacity-100 transition ease"
+                      href={`/${params.team}/access/teams/${team.id}`}
+                    >
+                      <Button variant="secondary" icon={FaCog}>
+                        Manage
+                      </Button>
+                    </Link>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-neutral-500">
+                  This account is not part of any teams.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="py-4">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-base font-medium">App Access</div>
               <div className="text-neutral-500 text-sm">
-                Manage the Apps and Environments that this account has access to
+                {isTeamOwned ? (
+                  <>
+                    App access for this account is managed through the{' '}
+                    <Link
+                      href={`/${params.team}/access/teams/${account.team!.id}`}
+                      className="text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {account.team!.name}
+                    </Link>{' '}
+                    team.
+                  </>
+                ) : (
+                  'Manage the Apps and Environments that this account has direct access to'
+                )}
               </div>
             </div>
-            {userCanReadAppMemberships && account.appMemberships?.length! > 0 && (
+            {!isTeamOwned && effectiveCanReadAppMemberships && account.appMemberships?.length! > 0 && (
               <AddAppButton
                 serviceAccountId={params.account}
                 appMemberships={account.appMemberships ?? []}
@@ -231,7 +361,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             )}
           </div>
 
-          {userCanReadAppMemberships ? (
+          {effectiveCanReadAppMemberships ? (
             <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
               {account.appMemberships && account.appMemberships.length > 0 ? (
                 account.appMemberships.map((appMembership) => (
@@ -268,30 +398,36 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                     </div>
 
                     {/* Manage Button */}
-                    <div className="flex justify-end">
-                      <Link
-                        className="opacity-0 group-hover:opacity-100 transition ease"
-                        href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
-                      >
-                        <Button variant="secondary" icon={FaCog}>
-                          Manage
-                        </Button>
-                      </Link>
-                    </div>
+                    {!isTeamOwned && (
+                      <div className="flex justify-end">
+                        <Link
+                          className="opacity-0 group-hover:opacity-100 transition ease"
+                          href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
+                        >
+                          <Button variant="secondary" icon={FaCog}>
+                            Manage
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
                 <div className="py-8">
                   <EmptyState
                     title="No Apps"
-                    subtitle="This Service Account does not have access to any Apps. Grant this account access from the Access tab of an App."
+                    subtitle={
+                      isTeamOwned
+                        ? `This account will gain app access through the ${account.team!.name} team.`
+                        : 'This Service Account does not have access to any Apps. Grant this account access from the Access tab of an App.'
+                    }
                     graphic={
                       <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                         <FaBoxOpen />
                       </div>
                     }
                   >
-                    {userCanReadAppMemberships && (
+                    {!isTeamOwned && effectiveCanReadAppMemberships && (
                       <AddAppButton
                         serviceAccountId={params.account}
                         appMemberships={account.appMemberships ?? []}
@@ -330,12 +466,23 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                   Manage the network access policy for this Account
                 </div>
               </div>
-              {account.networkPolicies?.length! > 0 && (
+              {hasTeamAccess && account.networkPolicies?.length! > 0 && (
                 <UpdateAccountNetworkPolicies account={account} />
               )}
             </div>
 
-            {account.networkPolicies?.length! > 0 ? (
+            {!hasTeamAccess ? (
+              <div className="py-6 text-center text-neutral-500 text-sm">
+                You must be a member of the{' '}
+                <Link
+                  href={`/${params.team}/access/teams/${account.team!.id}`}
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  {account.team!.name}
+                </Link>{' '}
+                team to manage network policies for this account.
+              </div>
+            ) : account.networkPolicies?.length! > 0 ? (
               <div className="divide-y divide-neutral-500/20 py-4">
                 {account.networkPolicies?.map((policy) => (
                   <div key={policy.id} className="flex items-center justify-between gap-2 py-2">
@@ -376,9 +523,28 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           </div>
         )}
 
-        <ServiceAccountTokens account={account} />
+        {hasTeamAccess ? (
+          <ServiceAccountTokens account={account} effectivePermissions={effectivePermissions} />
+        ) : (
+          <div className="py-4 space-y-3">
+            <div>
+              <div className="text-base font-medium">Tokens</div>
+              <div className="text-neutral-500 text-sm">Service account access tokens</div>
+            </div>
+            <div className="py-6 text-center text-neutral-500 text-sm">
+              You must be a member of the{' '}
+              <Link
+                href={`/${params.team}/access/teams/${account.team!.id}`}
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {account.team!.name}
+              </Link>{' '}
+              team to manage tokens for this account.
+            </div>
+          </div>
+        )}
 
-        {userCanDeleteSA && (
+        {effectiveCanDeleteSA && hasTeamAccess && (
           <div className="space-y-2 py-4">
             <div>
               <div className="text-base font-medium">Danger Zone</div>

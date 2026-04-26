@@ -23,12 +23,23 @@ def user_is_org_member(user_id, org_id):
 def user_can_access_app(user_id, app_id):
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     App = apps.get_model("api", "App")
+    TeamMembership = apps.get_model("api", "TeamMembership")
 
     app = App.objects.get(id=app_id)
     org_member = OrganisationMember.objects.get(
         user_id=user_id, organisation=app.organisation, deleted_at=None
     )
-    return org_member in app.members.all()
+
+    # Individual access
+    if org_member in app.members.all():
+        return True
+
+    # Team access
+    return TeamMembership.objects.filter(
+        org_member=org_member,
+        team__app_environments__app=app,
+        team__deleted_at__isnull=True,
+    ).exists()
 
 
 def user_can_access_environment(user_id, env_id):
@@ -41,7 +52,7 @@ def user_can_access_environment(user_id, env_id):
         organisation=env.app.organisation, user_id=user_id, deleted_at=None
     )
     return EnvironmentKey.objects.filter(
-        user_id=org_member, environment_id=env_id
+        user_id=org_member, environment_id=env_id, deleted_at__isnull=True
     ).exists()
 
 
@@ -55,7 +66,29 @@ def service_account_can_access_environment(account_id, env_id):
         organisation=env.app.organisation, id=account_id, deleted_at=None
     )
     return EnvironmentKey.objects.filter(
-        service_account=service_account, environment_id=env_id
+        service_account=service_account,
+        environment_id=env_id,
+        deleted_at__isnull=True,
+    ).exists()
+
+
+def user_is_team_member(user_id, team_id):
+    """Check if a user is a member of a team, or has global access (Owner/Admin)."""
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    Team = apps.get_model("api", "Team")
+    TeamMembership = apps.get_model("api", "TeamMembership")
+
+    team = Team.objects.get(id=team_id, deleted_at__isnull=True)
+    org_member = OrganisationMember.objects.get(
+        user_id=user_id, organisation=team.organisation, deleted_at=None
+    )
+
+    if role_has_global_access(org_member.role):
+        return True
+
+    return TeamMembership.objects.filter(
+        team=team,
+        org_member=org_member,
     ).exists()
 
 
@@ -88,6 +121,64 @@ def role_has_permission(role, action, resource, is_app_resource=False):
     return action in resource_permissions
 
 
+def _check_app_permission(account, action, resource, app, is_service_account=False):
+    """
+    Check app-level permission considering both individual and team access.
+
+    Union semantics: if ANY access grant (individual or team) permits the
+    action, the user is allowed.  Individual access uses the org role;
+    each team uses its role override (or falls back to the org role when
+    no override is set).
+    """
+    Team = apps.get_model("api", "Team")
+
+    if is_service_account:
+        has_individual = app.service_accounts.filter(id=account.id).exists()
+        org_role = account.role
+        role_field = "service_account_role"
+        membership_filter = {"memberships__service_account": account}
+    else:
+        has_individual = account in app.members.all()
+        org_role = account.role
+        role_field = "member_role"
+        membership_filter = {"memberships__org_member": account}
+
+    # Individual access → check org role (one grant in the union)
+    if has_individual:
+        if role_has_permission(org_role, action, resource, is_app_resource=True):
+            return True
+
+    # Team access — find all teams granting access to this app
+    teams = Team.objects.filter(
+        app_environments__app=app,
+        deleted_at__isnull=True,
+        **membership_filter,
+    ).distinct()
+
+    for team in teams:
+        team_role = getattr(team, role_field)
+        # Team owners retain their full org role for team-accessed apps —
+        # they manage the team and its access grants, so overrides don't apply to them.
+        is_team_owner = (
+            not is_service_account
+            and team.owner_id is not None
+            and team.owner_id == account.id
+        )
+        if team_role is None or is_team_owner:
+            # No team role, or user is team owner → use org role
+            if role_has_permission(org_role, action, resource, is_app_resource=True):
+                return True
+        else:
+            if role_has_permission(team_role, action, resource, is_app_resource=True):
+                return True
+
+    # Must have at least one access grant to reach here with a chance of True
+    if not has_individual and not teams.exists():
+        return False
+
+    return False
+
+
 def user_has_permission(
     account,
     action,
@@ -95,6 +186,7 @@ def user_has_permission(
     organisation,
     is_app_resource=False,
     is_service_account=False,
+    app=None,
 ):
     OrganisationMember = apps.get_model("api", "OrganisationMember")
 
@@ -108,7 +200,16 @@ def user_has_permission(
                 user=account, organisation=organisation, deleted_at=None
             )
 
-        return role_has_permission(org_member.role, action, resource, is_app_resource)
+        # Org-level permissions — always use org role
+        if not is_app_resource or app is None:
+            return role_has_permission(
+                org_member.role, action, resource, is_app_resource
+            )
+
+        # App-level permissions — resolve effective role via team access
+        return _check_app_permission(
+            org_member, action, resource, app, is_service_account
+        )
 
     except OrganisationMember.DoesNotExist:
         return False  # User is not a member of the organization

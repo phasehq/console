@@ -79,6 +79,7 @@ import SortMenu from '@/components/environments/secrets/SortMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { EnvironmentPageSkeleton } from './_components/EnvironmentPageSkeleton'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
@@ -140,30 +141,12 @@ export default function EnvironmentPath({
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanReadEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'read',
-    true
-  )
-  const userCanReadSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'read',
-    true
-  )
-  const userCanCreateSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'create',
-    true
-  )
-  const userCanReadSyncs = userHasPermission(
-    organisation?.role?.permissions,
-    'Integrations',
-    'read',
-    true
-  )
+  const { hasPermission } = useAppPermissions(params.app)
+
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
+  const userCanReadSecrets = hasPermission('Secrets', 'read', true)
+  const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
+  const userCanReadSyncs = hasPermission('Integrations', 'read', true)
 
   const [readSecrets] = useMutation(LogSecretReads)
 
@@ -982,12 +965,7 @@ export default function EnvironmentPath({
   }
 
   const NewSecretMenu = () => {
-    const userCanCreateSecrets = userHasPermission(
-      organisation?.role?.permissions,
-      'Secrets',
-      'create',
-      true
-    )
+    const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
 
     const allowDynamicSecrets = organisation?.plan === ApiOrganisationPlanChoices.En
 

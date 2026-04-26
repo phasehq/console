@@ -12,7 +12,8 @@ import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { useSession } from 'next-auth/react'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import { userHasGlobalAccess } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
@@ -23,9 +24,11 @@ import { useSearchParams } from 'next/navigation'
 export const ManageUserAccessDialog = ({
   member,
   appId,
+  teams,
 }: {
   member: OrganisationMemberType
   appId: string
+  teams?: { id: string; name: string }[]
 }) => {
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -36,11 +39,11 @@ export const ManageUserAccessDialog = ({
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
+  const { hasPermission } = useAppPermissions(appId)
+
   // AppMembers:update + Environments:read
-  const userCanUpdateMemberAccess = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'update', true) &&
-      userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
-    : false
+  const userCanUpdateMemberAccess =
+    hasPermission('Members', 'update', true) && hasPermission('Environments', 'read', true)
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
   const [updateScope] = useMutation(UpdateEnvScope)
@@ -204,6 +207,21 @@ export const ManageUserAccessDialog = ({
                     organisation members
                   </Link>{' '}
                   page.
+                </p>
+              </Alert>
+            )}
+            {teams && teams.length > 0 && (
+              <Alert variant="info" icon={true} size="sm">
+                <p>
+                  This user also has access to this app via the{' '}
+                  {teams.map((t) => (
+                    <strong key={t.id}>{t.name}</strong>
+                  )).reduce<React.ReactNode[]>((acc, el, i) => {
+                    if (i === 0) return [el]
+                    if (i === teams.length - 1) return [...acc, ' and ', el]
+                    return [...acc, ', ', el]
+                  }, [])}{' '}
+                  {teams.length === 1 ? 'team' : 'teams'}.
                 </p>
               </Alert>
             )}

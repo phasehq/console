@@ -35,6 +35,7 @@ def resolve_dynamic_secrets(
     elif path is not None:
         filters["path"] = path
     org = None
+    app = None
 
     # Figure out which org to use
     if app_id:
@@ -42,7 +43,8 @@ def resolve_dynamic_secrets(
         org = app.organisation
     elif env_id:
         env = Environment.objects.get(id=env_id)
-        org = env.app.organisation
+        app = env.app
+        org = app.organisation
     elif org_id:
         org = Organisation.objects.get(id=org_id)
     else:
@@ -51,7 +53,7 @@ def resolve_dynamic_secrets(
         )
 
     # Permission check (common to all cases)
-    if not user_has_permission(user, "read", "Secrets", org, True):
+    if not user_has_permission(user, "read", "Secrets", org, True, app=app):
         return []
 
     # Build filters + access checks

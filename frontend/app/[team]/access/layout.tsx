@@ -28,6 +28,10 @@ export default function AccessLayout({
         link: 'service-accounts',
       },
       {
+        name: 'Teams',
+        link: 'teams',
+      },
+      {
         name: 'Roles',
         link: 'roles',
       },
@@ -38,6 +42,10 @@ export default function AccessLayout({
       {
         name: 'Authentication',
         link: 'authentication',
+      },
+      {
+        name: 'SCIM',
+        link: 'scim',
       },
       {
         name: 'Network',

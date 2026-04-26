@@ -363,9 +363,10 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
 
     # If both app_id and env_id are provided
     if app_id and env_id:
-        org = App.objects.get(id=app_id).organisation
+        app = App.objects.get(id=app_id)
+        org = app.organisation
         if not user_has_permission(
-            info.context.user, "read", "Integrations", org, True
+            info.context.user, "read", "Integrations", org, True, app=app
         ):
             return []
 
@@ -380,9 +381,10 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
     # If only app_id is provided
     elif app_id:
 
-        org = App.objects.get(id=app_id).organisation
+        app = App.objects.get(id=app_id)
+        org = app.organisation
         if not user_has_permission(
-            info.context.user, "read", "Integrations", org, True
+            info.context.user, "read", "Integrations", org, True, app=app
         ):
             return []
 
@@ -395,9 +397,10 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
     # If only env_id is provided
     elif env_id:
 
-        org = Environment.objects.get(id=env_id).app.organisation
+        env = Environment.objects.get(id=env_id)
+        org = env.app.organisation
         if not user_has_permission(
-            info.context.user, "read", "Integrations", org, True
+            info.context.user, "read", "Integrations", org, True, app=env.app
         ):
             return []
 

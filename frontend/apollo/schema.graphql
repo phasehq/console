@@ -4,6 +4,9 @@ type Query {
   roles(orgId: ID): [RoleType]
   networkAccessPolicies(organisationId: ID): [NetworkAccessPolicyType]
   identities(organisationId: ID): [IdentityType]
+  teams(organisationId: ID, teamId: ID): [TeamType]
+  scimTokens(organisationId: ID): [SCIMTokenType]
+  scimEvents(organisationId: ID, start: BigInt, end: BigInt, eventTypes: [String], tokenId: ID, status: String): SCIMEventsResponseType
   organisationNameAvailable(name: String): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -71,6 +74,7 @@ type OrganisationType {
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
   pricingVersion: Int!
+  scimEnabled: Boolean!
   role: RoleType
   memberId: ID
   keyring: String
@@ -162,6 +166,7 @@ type OrganisationMemberType {
   avatarUrl: String
   self: Boolean
   lastLogin: DateTime
+  scimManaged: Boolean
   appMemberships: [AppMembershipType!]
   tokens: [UserTokenType!]
   networkPolicies: [NetworkAccessPolicyType!]
@@ -303,6 +308,7 @@ type ServiceAccountType {
   id: String!
   name: String!
   role: RoleType
+  team: TeamType
   identityKey: String
   createdAt: DateTime
   updatedAt: DateTime!
@@ -313,6 +319,57 @@ type ServiceAccountType {
   appMemberships: [AppMembershipType!]
   networkPolicies: [NetworkAccessPolicyType!]
   identities: [IdentityType!]
+}
+
+type TeamType {
+  id: String!
+  name: String!
+  description: String
+  memberRole: RoleType
+  serviceAccountRole: RoleType
+  isScimManaged: Boolean!
+  owner: OrganisationMemberType
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  members: [TeamMembershipType!]
+  apps: [AppType!]
+  appEnvironments: [TeamAppEnvironmentType!]
+  memberCount: Int
+}
+
+type TeamMembershipType {
+  id: String!
+  orgMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  createdAt: DateTime
+  email: String
+  fullName: String
+  avatarUrl: String
+}
+
+type AppType {
+  id: String!
+  name: String!
+  description: String
+  identityKey: String!
+  appVersion: Int!
+  appToken: String!
+  appSeed: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  sseEnabled: Boolean!
+  serviceAccounts: [ServiceAccountType]!
+  environments: [EnvironmentType]!
+  members: [OrganisationMemberType]!
+}
+
+type TeamAppEnvironmentType {
+  id: String!
+  app: AppMembershipType!
+  environment: EnvironmentType!
+  createdAt: DateTime
 }
 
 type ServiceAccountHandlerType {
@@ -370,18 +427,6 @@ type AzureEntraConfigType {
   tenantId: String
   resource: String
   allowedServicePrincipalIds: [String]
-}
-
-"""An enumeration."""
-enum ApiSecretEventTypeChoices {
-  """Secret"""
-  SECRET
-
-  """Sealed"""
-  SEALED
-
-  """Config"""
-  CONFIG
 }
 
 """An enumeration."""
@@ -642,6 +687,96 @@ type UserTokenType {
   createdBy: OrganisationMemberType
 }
 
+type SCIMTokenType {
+  id: String!
+  name: String!
+  tokenPrefix: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  expiresAt: DateTime
+  lastUsedAt: DateTime
+  isActive: Boolean!
+}
+
+type SCIMEventsResponseType {
+  events: [SCIMEventType]
+  count: Int
+}
+
+type SCIMEventType {
+  id: String!
+  scimToken: SCIMTokenType
+  eventType: ApiSCIMEventEventTypeChoices!
+  status: ApiSCIMEventStatusChoices!
+  resourceType: ApiSCIMEventResourceTypeChoices!
+  resourceId: String!
+  resourceName: String!
+  detail: JSONString!
+  requestMethod: String!
+  requestPath: String!
+  requestBody: JSONString
+  responseStatus: Int
+  responseBody: JSONString
+  ipAddress: String
+  userAgent: String
+  timestamp: DateTime!
+}
+
+"""An enumeration."""
+enum ApiSCIMEventEventTypeChoices {
+  """User Created"""
+  USER_CREATED
+
+  """User Updated"""
+  USER_UPDATED
+
+  """User Deactivated"""
+  USER_DEACTIVATED
+
+  """User Reactivated"""
+  USER_REACTIVATED
+
+  """Group Created"""
+  GROUP_CREATED
+
+  """Group Updated"""
+  GROUP_UPDATED
+
+  """Group Deleted"""
+  GROUP_DELETED
+
+  """Member Added to Group"""
+  MEMBER_ADDED
+
+  """Member Removed from Group"""
+  MEMBER_REMOVED
+}
+
+"""An enumeration."""
+enum ApiSCIMEventStatusChoices {
+  """Success"""
+  SUCCESS
+
+  """Error"""
+  ERROR
+}
+
+"""An enumeration."""
+enum ApiSCIMEventResourceTypeChoices {
+  """User"""
+  USER
+
+  """Group"""
+  GROUP
+}
+
+"""
+The `BigInt` scalar type represents non-fractional whole numeric values.
+`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
+compatible type.
+"""
+scalar BigInt
+
 type PhaseLicenseType {
   id: String
   customerName: String
@@ -713,23 +848,6 @@ type OrganisationMemberInviteType {
   expiresAt: DateTime!
 }
 
-type AppType {
-  id: String!
-  name: String!
-  description: String
-  identityKey: String!
-  appVersion: Int!
-  appToken: String!
-  appSeed: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  sseEnabled: Boolean!
-  serviceAccounts: [ServiceAccountType]!
-  environments: [EnvironmentType]!
-  members: [OrganisationMemberType]!
-}
-
 type KMSLogsResponseType {
   logs: [KMSLogType]
   count: Int
@@ -757,13 +875,6 @@ interface Node {
   """The ID of the object"""
   id: ID!
 }
-
-"""
-The `BigInt` scalar type represents non-fractional whole numeric values.
-`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
-compatible type.
-"""
-scalar BigInt
 
 type SecretLogsResponseType {
   logs: [SecretEventType]
@@ -1037,7 +1148,7 @@ type Mutation {
   The new owner must have global access (Admin role) to ensure they have all necessary keys.
   """
   transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
-  updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+  updateMemberWrappedSecrets(identityKey: String, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1063,13 +1174,39 @@ type Mutation {
   createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
   updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
   deleteIdentity(id: ID!): DeleteIdentityMutation
-  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
+  createTeam(description: String, memberRoleId: ID, name: String!, organisationId: ID!, serviceAccountRoleId: ID): CreateTeamMutation
+  updateTeam(description: String, memberRoleId: ID, name: String, serviceAccountRoleId: ID, teamId: ID!): UpdateTeamMutation
+  transferTeamOwnership(newOwnerId: ID!, teamId: ID!): TransferTeamOwnershipMutation
+  deleteTeam(teamId: ID!): DeleteTeamMutation
+  addTeamMembers(memberIds: [ID!]!, memberType: MemberType = USER, teamId: ID!): AddTeamMembersMutation
+  removeTeamMember(memberId: ID!, memberType: MemberType = USER, teamId: ID!): RemoveTeamMemberMutation
+  addTeamApps(appEnvs: [AppEnvironmentInput!]!, teamId: ID!): AddTeamAppsMutation
+  removeTeamApp(appId: ID!, teamId: ID!): RemoveTeamAppMutation
+  updateTeamAppEnvironments(appId: ID!, envIds: [ID!]!, teamId: ID!): UpdateTeamAppEnvironmentsMutation
+  createScimToken(expiryDays: Int, name: String!, organisationId: ID!): CreateSCIMTokenMutation
+  deleteScimToken(tokenId: ID!): DeleteSCIMTokenMutation
+
+  """Master switch: enable/disable SCIM for the organisation."""
+  toggleScim(enabled: Boolean!, organisationId: ID!): ToggleSCIMMutation
+
+  """Per-provider toggle: enable/disable a single SCIM token."""
+  toggleScimToken(isActive: Boolean!, tokenId: ID!): ToggleSCIMTokenMutation
+  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String, teamId: ID): CreateServiceAccountMutation
   enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
   enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
   createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+
+  """
+  Create a service account token using server-side key management.
+  
+  The server decrypts the SA keyring, generates a token with key splitting,
+  and returns the full token string. Requires SSK to be enabled on the SA.
+  This allows team members who are not SA handlers to create tokens.
+  """
+  createServerSideServiceAccountToken(expiry: BigInt, name: String!, serviceAccountId: ID!): CreateServerSideServiceAccountTokenMutation
   deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
@@ -1308,6 +1445,66 @@ type DeleteIdentityMutation {
   ok: Boolean
 }
 
+type CreateTeamMutation {
+  team: TeamType
+}
+
+type UpdateTeamMutation {
+  team: TeamType
+}
+
+type TransferTeamOwnershipMutation {
+  team: TeamType
+}
+
+type DeleteTeamMutation {
+  ok: Boolean
+}
+
+type AddTeamMembersMutation {
+  team: TeamType
+}
+
+type RemoveTeamMemberMutation {
+  team: TeamType
+}
+
+type AddTeamAppsMutation {
+  team: TeamType
+}
+
+input AppEnvironmentInput {
+  appId: ID!
+  envIds: [ID!]!
+}
+
+type RemoveTeamAppMutation {
+  team: TeamType
+}
+
+type UpdateTeamAppEnvironmentsMutation {
+  team: TeamType
+}
+
+type CreateSCIMTokenMutation {
+  token: String
+  scimToken: SCIMTokenType
+}
+
+type DeleteSCIMTokenMutation {
+  ok: Boolean
+}
+
+"""Master switch: enable/disable SCIM for the organisation."""
+type ToggleSCIMMutation {
+  ok: Boolean
+}
+
+"""Per-provider toggle: enable/disable a single SCIM token."""
+type ToggleSCIMTokenMutation {
+  ok: Boolean
+}
+
 type CreateServiceAccountMutation {
   serviceAccount: ServiceAccountType
 }
@@ -1340,6 +1537,18 @@ type DeleteServiceAccountMutation {
 }
 
 type CreateServiceAccountTokenMutation {
+  token: ServiceAccountTokenType
+}
+
+"""
+Create a service account token using server-side key management.
+
+The server decrypts the SA keyring, generates a token with key splitting,
+and returns the full token string. Requires SSK to be enabled on the SA.
+This allows team members who are not SA handlers to create tokens.
+"""
+type CreateServerSideServiceAccountTokenMutation {
+  tokenString: String
   token: ServiceAccountTokenType
 }
 

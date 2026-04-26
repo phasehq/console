@@ -15,5 +15,6 @@ query GetOrganisationMembers($organisationId: ID!, $role: [String]) {
     createdAt
     lastLogin
     self
+    scimManaged
   }
 }

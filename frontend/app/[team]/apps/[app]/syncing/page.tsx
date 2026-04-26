@@ -8,8 +8,10 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { SyncCard } from '@/components/syncing/SyncCard'
 import { SyncOptions } from '@/components/syncing/SyncOptions'
 import { useSearchParams } from 'next/navigation'
-import { userHasPermission, userIsAdmin } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
+import { EmptyState } from '@/components/common/EmptyState'
+import { FaBan } from 'react-icons/fa'
 
 export default function Syncing({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -18,14 +20,31 @@ export default function Syncing({ params }: { params: { team: string; app: strin
 
   const openCreateSyncPanel = searchParams?.get('newSync')
 
+  const { hasPermission } = useAppPermissions(params.app)
+
+  const userCanReadIntegrations = hasPermission('Integrations', 'read', true)
+  const userCanCreateSyncs = hasPermission('Integrations', 'create', true)
+
   const { data } = useQuery(GetAppSyncStatus, {
     variables: { appId: params.app },
     pollInterval: 10000,
+    skip: !userCanReadIntegrations,
   })
 
-  const userCanCreateSyncs = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Integrations', 'create', true)
-    : false
+  if (!userCanReadIntegrations)
+    return (
+      <EmptyState
+        title="Access restricted"
+        subtitle="You don't have the permissions required to view Integrations."
+        graphic={
+          <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+            <FaBan />
+          </div>
+        }
+      >
+        <></>
+      </EmptyState>
+    )
 
   return (
     <div className="w-full space-y-3 sm:space-y-4 lg:space-y-6 pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white px-3 sm:px-4 lg:px-6">

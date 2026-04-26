@@ -97,6 +97,7 @@ class Organisation(models.Model):
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True)
     pricing_version = models.IntegerField(default=1)
+    scim_enabled = models.BooleanField(default=False)
     list_display = ("name", "identity_key", "id")
 
     def save(self, *args, **kwargs):
@@ -281,6 +282,13 @@ class ServiceAccount(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+    )
+    team = models.ForeignKey(
+        "Team",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_service_accounts",
     )
     apps = models.ManyToManyField(App, related_name="service_accounts")
     identity_key = models.CharField(max_length=256, null=True, blank=True)
@@ -1008,6 +1016,273 @@ class PersonalSecret(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+
+class Team(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.CharField(max_length=64)
+    description = models.TextField(null=True, blank=True)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="teams"
+    )
+
+    # Optional roles — when set, override org role's app_permissions for team-accessed apps
+    member_role = models.ForeignKey(
+        Role,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="teams_as_member_role",
+    )
+    service_account_role = models.ForeignKey(
+        Role,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="teams_as_sa_role",
+    )
+
+    is_scim_managed = models.BooleanField(default=False)
+    owner = models.ForeignKey(
+        OrganisationMember,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="owned_teams",
+    )
+    created_by = models.ForeignKey(
+        OrganisationMember,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="created_teams",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.save()
+
+    def __str__(self):
+        return f"{self.name} ({self.organisation.name})"
+
+
+class TeamMembership(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    team = models.ForeignKey(
+        Team, on_delete=models.CASCADE, related_name="memberships"
+    )
+    org_member = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="team_memberships",
+    )
+    service_account = models.ForeignKey(
+        ServiceAccount,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="team_memberships",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "org_member"],
+                condition=models.Q(org_member__isnull=False),
+                name="unique_team_user",
+            ),
+            models.UniqueConstraint(
+                fields=["team", "service_account"],
+                condition=models.Q(service_account__isnull=False),
+                name="unique_team_sa",
+            ),
+        ]
+
+
+class TeamAppEnvironment(models.Model):
+    """Tracks which environments within an app a team has access to."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    team = models.ForeignKey(
+        Team, on_delete=models.CASCADE, related_name="app_environments"
+    )
+    app = models.ForeignKey(App, on_delete=models.CASCADE)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "environment"],
+                name="unique_team_env",
+            )
+        ]
+
+
+class EnvironmentKeyGrant(models.Model):
+    """Tracks why an EnvironmentKey exists — prevents accidental revocation
+    when removing team access."""
+
+    INDIVIDUAL = "individual"
+    TEAM = "team"
+
+    GRANT_TYPE_CHOICES = [
+        (INDIVIDUAL, "Individual"),
+        (TEAM, "Team"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    environment_key = models.ForeignKey(
+        EnvironmentKey, on_delete=models.CASCADE, related_name="grants"
+    )
+    grant_type = models.CharField(max_length=20, choices=GRANT_TYPE_CHOICES)
+    team = models.ForeignKey(
+        Team, on_delete=models.CASCADE, null=True, blank=True, related_name="key_grants"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+
+
+class SCIMToken(models.Model):
+    """Bearer token for SCIM v2 provisioning API."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="scim_tokens"
+    )
+    name = models.CharField(max_length=64)
+    token_hash = models.CharField(max_length=128, unique=True, db_index=True)
+    token_prefix = models.CharField(max_length=12)
+    created_by = models.ForeignKey(
+        OrganisationMember, on_delete=models.SET_NULL, null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+class SCIMUser(models.Model):
+    """Maps a SCIM external user ID to a Phase CustomUser + OrganisationMember."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    external_id = models.CharField(max_length=255)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="scim_users"
+    )
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, null=True, blank=True
+    )
+    org_member = models.ForeignKey(
+        OrganisationMember, on_delete=models.CASCADE, null=True, blank=True
+    )
+    email = models.EmailField()
+    display_name = models.CharField(max_length=255, blank=True)
+    active = models.BooleanField(default=True)
+    scim_data = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["external_id", "organisation"],
+                name="unique_scim_user_external_id",
+            ),
+            models.UniqueConstraint(
+                fields=["email", "organisation"],
+                name="unique_scim_user_email",
+            ),
+        ]
+
+
+class SCIMGroup(models.Model):
+    """Maps a SCIM external group ID to a Phase Team."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    external_id = models.CharField(max_length=255)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="scim_groups"
+    )
+    team = models.OneToOneField(
+        Team, on_delete=models.CASCADE, null=True, blank=True, related_name="scim_group"
+    )
+    display_name = models.CharField(max_length=255)
+    scim_data = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["external_id", "organisation"],
+                name="unique_scim_group_external_id",
+            ),
+        ]
+
+
+class SCIMEvent(models.Model):
+    """Audit log for SCIM provisioning operations."""
+
+    EVENT_TYPES = [
+        ("user_created", "User Created"),
+        ("user_updated", "User Updated"),
+        ("user_deactivated", "User Deactivated"),
+        ("user_reactivated", "User Reactivated"),
+        ("group_created", "Group Created"),
+        ("group_updated", "Group Updated"),
+        ("group_deleted", "Group Deleted"),
+        ("member_added", "Member Added to Group"),
+        ("member_removed", "Member Removed from Group"),
+    ]
+
+    RESOURCE_TYPES = [("user", "User"), ("group", "Group")]
+
+    STATUS_CHOICES = [("success", "Success"), ("error", "Error")]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="scim_events"
+    )
+    scim_token = models.ForeignKey(
+        SCIMToken, on_delete=models.SET_NULL, null=True, related_name="events"
+    )
+    event_type = models.CharField(max_length=32, choices=EVENT_TYPES)
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default="success")
+    resource_type = models.CharField(max_length=16, choices=RESOURCE_TYPES)
+    resource_id = models.TextField(blank=True)
+    resource_name = models.CharField(max_length=255, blank=True)
+    detail = models.JSONField(default=dict)
+    request_method = models.CharField(max_length=8, blank=True)
+    request_path = models.TextField(blank=True)
+    request_body = models.JSONField(null=True, blank=True)
+    response_status = models.IntegerField(null=True, blank=True)
+    response_body = models.JSONField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["organisation", "-timestamp"],
+                name="scim_event_org_ts_idx",
+            ),
+            models.Index(
+                fields=["scim_token", "-timestamp"],
+                name="scim_event_token_ts_idx",
+            ),
+        ]
+        ordering = ["-timestamp"]
 
 
 class Lockbox(models.Model):

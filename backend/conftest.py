@@ -16,6 +16,10 @@ os.environ.setdefault("DATABASE_NAME", "dummy_db")
 os.environ.setdefault("DATABASE_USER", "dummy_user")
 os.environ.setdefault("DATABASE_PASSWORD", "dummy_password")
 
+# Django requires SECRET_KEY for middleware (sessions, CSRF, etc.)
+os.environ.setdefault("SECRET_KEY", "dummy-secret-key-for-testing-only")
+os.environ.setdefault("SERVER_SECRET", "a" * 64)
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
 

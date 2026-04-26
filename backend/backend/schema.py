@@ -28,6 +28,7 @@ from ee.integrations.secrets.dynamic.graphene.queries import (
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
+    CreateServerSideServiceAccountTokenMutation,
     DeleteServiceAccountMutation,
     DeleteServiceAccountTokenMutation,
     EnableServiceAccountClientSideKeyManagementMutation,
@@ -39,7 +40,11 @@ from api.utils.syncing.vercel.main import VercelTeamProjectsType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
 )
-from .graphene.mutations.syncing import CreateAzureKeyVaultSync, CreateRenderSync, CreateVercelSync
+from .graphene.mutations.syncing import (
+    CreateAzureKeyVaultSync,
+    CreateRenderSync,
+    CreateVercelSync,
+)
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
     CreateNetworkAccessPolicyMutation,
@@ -116,6 +121,36 @@ from .graphene.queries.service_accounts import (
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
+from .graphene.queries.teams import resolve_teams
+
+
+_SCIM_AVAILABLE = False
+try:
+    from ee.authentication.scim.graphene.queries import (
+        resolve_scim_tokens,
+        resolve_scim_events,
+    )
+    from ee.authentication.scim.graphene.mutations import (
+        CreateSCIMTokenMutation,
+        DeleteSCIMTokenMutation,
+        ToggleSCIMMutation,
+        ToggleSCIMTokenMutation,
+    )
+
+    _SCIM_AVAILABLE = True
+except ImportError:
+    pass
+from .graphene.mutations.teams import (
+    AddTeamAppsMutation,
+    AddTeamMembersMutation,
+    CreateTeamMutation,
+    DeleteTeamMutation,
+    RemoveTeamAppMutation,
+    RemoveTeamMemberMutation,
+    TransferTeamOwnershipMutation,
+    UpdateTeamAppEnvironmentsMutation,
+    UpdateTeamMutation,
+)
 from .graphene.mutations.environment import (
     BulkCreateSecretMutation,
     BulkDeleteSecretMutation,
@@ -214,6 +249,9 @@ from .graphene.types import (
     ServiceAccountType,
     ServiceTokenType,
     ServiceType,
+    TeamType,
+    SCIMTokenType,
+    SCIMEventsResponseType,
     TimeRange,
     UserTokenType,
     AWSValidationResultType,
@@ -236,6 +274,7 @@ from api.models import (
     SecretTag,
     ServiceAccount,
     ServiceToken,
+    TeamAppEnvironment,
     UserToken,
 )
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
@@ -264,6 +303,29 @@ class Query(graphene.ObjectType):
         NetworkAccessPolicyType, organisation_id=graphene.ID()
     )
     identities = graphene.List(IdentityType, organisation_id=graphene.ID())
+
+    teams = graphene.List(
+        TeamType,
+        organisation_id=graphene.ID(),
+        team_id=graphene.ID(required=False),
+    )
+
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        scim_tokens = graphene.List(
+            SCIMTokenType,
+            organisation_id=graphene.ID(),
+        )
+
+        scim_events = graphene.Field(
+            SCIMEventsResponseType,
+            organisation_id=graphene.ID(),
+            start=graphene.BigInt(required=False),
+            end=graphene.BigInt(required=False),
+            event_types=graphene.List(graphene.String, required=False),
+            token_id=graphene.ID(required=False),
+            status=graphene.String(required=False),
+        )
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
@@ -545,6 +607,14 @@ class Query(graphene.ObjectType):
     resolve_aws_sts_endpoints = resolve_aws_sts_endpoints
     resolve_identity_providers = resolve_identity_providers
 
+    # Teams
+    resolve_teams = resolve_teams
+
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        resolve_scim_tokens = resolve_scim_tokens
+        resolve_scim_events = resolve_scim_events
+
     resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_name_available(root, info, name):
@@ -608,9 +678,22 @@ class Query(graphene.ObjectType):
         ):
             return []
 
+        # Individual app IDs
+        individual_ids = set(org_member.apps.values_list("id", flat=True))
+
+        # Team app IDs
+        team_ids = set(
+            TeamAppEnvironment.objects.filter(
+                team__memberships__org_member=org_member,
+                team__deleted_at__isnull=True,
+            ).values_list("app_id", flat=True)
+        )
+
+        all_app_ids = individual_ids | team_ids
+
         filter = {
             "organisation_id": organisation_id,
-            "id__in": org_member.apps.all(),
+            "id__in": all_app_ids,
             "is_deleted": False,
         }
 
@@ -625,7 +708,7 @@ class Query(graphene.ObjectType):
         app = App.objects.get(id=app_id)
 
         if not user_has_permission(
-            info.context.user, "read", "Environments", app.organisation, True
+            info.context.user, "read", "Environments", app.organisation, True, app=app
         ):
             return []
 
@@ -658,21 +741,19 @@ class Query(graphene.ObjectType):
 
         accessible_env_ids = set(
             EnvironmentKey.objects.filter(
-                environment__app_id=app_id, **key_filter
+                environment__app_id=app_id, deleted_at__isnull=True, **key_filter
             ).values_list("environment_id", flat=True)
         )
 
         return [
-            app_env
-            for app_env in app_environments
-            if app_env.id in accessible_env_ids
+            app_env for app_env in app_environments if app_env.id in accessible_env_ids
         ]
 
     def resolve_app_users(root, info, app_id):
         app = App.objects.get(id=app_id)
 
         if not user_has_permission(
-            info.context.user, "read", "Members", app.organisation, True
+            info.context.user, "read", "Members", app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to read members of this App")
 
@@ -685,11 +766,13 @@ class Query(graphene.ObjectType):
 
     def resolve_secrets(root, info, env_id, path=None, id=None):
 
-        org = Environment.objects.get(id=env_id).app.organisation
+        env = Environment.objects.get(id=env_id)
+        app = env.app
+        org = app.organisation
         if not user_has_permission(
-            info.context.user, "read", "Secrets", org, True
+            info.context.user, "read", "Secrets", org, True, app=app
         ) or not user_has_permission(
-            info.context.user, "read", "Environments", org, True
+            info.context.user, "read", "Environments", org, True, app=app
         ):
             raise GraphQLError("You don't have access to read secrets")
 
@@ -726,7 +809,12 @@ class Query(graphene.ObjectType):
 
         # compute permission once and store it on the request context
         can_view_members = user_has_permission(
-            user, "read", "Members", secret.environment.app.organisation, True
+            user,
+            "read",
+            "Members",
+            secret.environment.app.organisation,
+            True,
+            app=secret.environment.app,
         ) or user_has_permission(
             user, "read", "Members", secret.environment.app.organisation, False
         )
@@ -795,7 +883,7 @@ class Query(graphene.ObjectType):
     def resolve_service_tokens(root, info, app_id):
         app = App.objects.get(id=app_id)
         if not user_has_permission(
-            info.context.user, "read", "Tokens", app.organisation, True
+            info.context.user, "read", "Tokens", app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to view Tokens in this App")
 
@@ -896,11 +984,13 @@ class Query(graphene.ObjectType):
 
         # Permissions
         can_see_members = user_has_permission(
-            user, "read", "Members", app.organisation, True
+            user, "read", "Members", app.organisation, True, app=app
         ) or user_has_permission(user, "read", "Members", app.organisation, False)
         setattr(info.context, "can_view_members", can_see_members)
 
-        if not user_has_permission(user, "read", "Logs", app.organisation, True):
+        if not user_has_permission(
+            user, "read", "Logs", app.organisation, True, app=app
+        ):
             return SecretLogsResponseType(logs=[], count=0)
 
         # Base filter
@@ -1090,6 +1180,24 @@ class Mutation(graphene.ObjectType):
     update_identity = UpdateIdentityMutation.Field()
     delete_identity = DeleteIdentityMutation.Field()
 
+    # Teams
+    create_team = CreateTeamMutation.Field()
+    update_team = UpdateTeamMutation.Field()
+    transfer_team_ownership = TransferTeamOwnershipMutation.Field()
+    delete_team = DeleteTeamMutation.Field()
+    add_team_members = AddTeamMembersMutation.Field()
+    remove_team_member = RemoveTeamMemberMutation.Field()
+    add_team_apps = AddTeamAppsMutation.Field()
+    remove_team_app = RemoveTeamAppMutation.Field()
+    update_team_app_environments = UpdateTeamAppEnvironmentsMutation.Field()
+
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        create_scim_token = CreateSCIMTokenMutation.Field()
+        delete_scim_token = DeleteSCIMTokenMutation.Field()
+        toggle_scim = ToggleSCIMMutation.Field()
+        toggle_scim_token = ToggleSCIMTokenMutation.Field()
+
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
     enable_service_account_server_side_key_management = (
@@ -1102,6 +1210,7 @@ class Mutation(graphene.ObjectType):
     update_service_account = UpdateServiceAccountMutation.Field()
     delete_service_account = DeleteServiceAccountMutation.Field()
     create_service_account_token = CreateServiceAccountTokenMutation.Field()
+    create_server_side_service_account_token = CreateServerSideServiceAccountTokenMutation.Field()
     delete_service_account_token = DeleteServiceAccountTokenMutation.Field()
 
     init_env_sync = InitEnvSync.Field()

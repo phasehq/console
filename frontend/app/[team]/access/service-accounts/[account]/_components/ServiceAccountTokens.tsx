@@ -15,12 +15,18 @@ import { GetServiceAccountTokens } from '@/graphql/queries/service-accounts/getS
 import { useQuery } from '@apollo/client'
 import Spinner from '@/components/common/Spinner'
 
-export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType }) => {
+export const ServiceAccountTokens = ({
+  account,
+  effectivePermissions,
+}: {
+  account: ServiceAccountType
+  effectivePermissions: string | null
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanReadTokens = organisation
-    ? userHasPermission(organisation.role?.permissions, 'ServiceAccountTokens', 'read')
-    : false
+  // Use effective permissions (team role override) if provided, otherwise fall back to org role
+  const perms = effectivePermissions ?? organisation?.role?.permissions
+  const userCanReadTokens = userHasPermission(perms, 'ServiceAccountTokens', 'read')
 
   const tokenDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
@@ -41,7 +47,11 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
         <div className="text-neutral-500 text-sm">Manage access tokens for this Service Account</div>
       </div>
 
-      <CreateServiceAccountTokenDialog serviceAccount={account} ref={tokenDialogRef} />
+      <CreateServiceAccountTokenDialog
+        serviceAccount={account}
+        ref={tokenDialogRef}
+        effectivePermissions={effectivePermissions}
+      />
 
       {tokens?.length! > 0 && (
         <div className="flex items-center justify-end">
@@ -142,7 +152,11 @@ export const ServiceAccountTokens = ({ account }: { account: ServiceAccountType 
 
                   {/* Delete Button*/}
                   <div className="md:col-span-1 flex justify-end opacity-0 group-hover:opacity-100 transition ease">
-                    <DeleteServiceAccountTokenDialog token={token!} serviceAccountId={account.id} />
+                    <DeleteServiceAccountTokenDialog
+                      token={token!}
+                      serviceAccountId={account.id}
+                      effectivePermissions={effectivePermissions}
+                    />
                   </div>
                 </div>
               )

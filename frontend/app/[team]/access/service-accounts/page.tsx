@@ -7,7 +7,7 @@ import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServic
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import { useContext, useState } from 'react'
-import { FaBan, FaChevronRight, FaSearch, FaTimesCircle } from 'react-icons/fa'
+import { FaBan, FaBuilding, FaChevronRight, FaSearch, FaTimesCircle, FaUsersCog } from 'react-icons/fa'
 import { CreateServiceAccountDialog } from './_components/CreateServiceAccountDialog'
 import { FaRobot } from 'react-icons/fa6'
 import { relativeTimeFromDates } from '@/utils/time'
@@ -111,6 +111,10 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                     </th>
 
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Ownership
+                    </th>
+
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Created
                     </th>
                   </tr>
@@ -122,12 +126,30 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                         <Avatar serviceAccount={account} />
                         <div>
                           <div className="font-medium">{account.name}</div>
-                          <div className="text-sm text-neutral-500 font-mono">{account.id}</div>
+                          <div className="text-2xs text-neutral-500 font-mono">{account.id}</div>
                         </div>
                       </td>
 
                       <td className="px-6 py-2">
                         <ServiceAccountRoleSelector account={account} displayOnly={true} />
+                      </td>
+
+                      <td className="px-6 py-2">
+                        {account.team ? (
+                          <Link
+                            href={`/${params.team}/access/teams/${account.team.id}`}
+                            className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 hover:bg-blue-500/25 transition ease"
+                            title={`Owned by team "${account.team.name}" — bound to the team lifecycle`}
+                          >
+                            <FaUsersCog className="text-[0.55rem]" />
+                            {account.team.name}
+                          </Link>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" title="Organisation-level account — visible org-wide">
+                            <FaBuilding className="text-[0.55rem]" />
+                            Organisation
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-6 py-2 text-sm">

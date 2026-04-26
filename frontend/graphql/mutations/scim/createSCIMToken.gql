@@ -1,0 +1,19 @@
+mutation CreateSCIMTokenOp($organisationId: ID!, $name: String!, $expiryDays: Int) {
+  createScimToken(organisationId: $organisationId, name: $name, expiryDays: $expiryDays) {
+    token
+    scimToken {
+      id
+      name
+      tokenPrefix
+      createdBy {
+        id
+        fullName
+        email
+        avatarUrl
+      }
+      createdAt
+      expiresAt
+      lastUsedAt
+    }
+  }
+}

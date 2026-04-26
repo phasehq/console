@@ -1,0 +1,40 @@
+query GetSCIMEvents(
+  $organisationId: ID!
+  $start: BigInt
+  $end: BigInt
+  $eventTypes: [String]
+  $tokenId: ID
+  $status: String
+) {
+  scimEvents(
+    organisationId: $organisationId
+    start: $start
+    end: $end
+    eventTypes: $eventTypes
+    tokenId: $tokenId
+    status: $status
+  ) {
+    events {
+      id
+      scimToken {
+        id
+        name
+      }
+      eventType
+      status
+      resourceType
+      resourceId
+      resourceName
+      detail
+      requestMethod
+      requestPath
+      requestBody
+      responseStatus
+      responseBody
+      ipAddress
+      userAgent
+      timestamp
+    }
+    count
+  }
+}

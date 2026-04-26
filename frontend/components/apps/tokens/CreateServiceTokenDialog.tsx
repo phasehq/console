@@ -29,7 +29,7 @@ import {
   wrapEnvSecretsForServiceToken,
 } from '@/utils/crypto'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
@@ -41,9 +41,9 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
 
-  const userCanReadEnvironments = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Environments', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(appId)
+
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')

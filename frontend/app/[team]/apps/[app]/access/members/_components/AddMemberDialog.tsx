@@ -3,14 +3,16 @@ import { BulkAddMembersToApp } from '@/graphql/mutations/apps/bulkAddAppMembers.
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { OrganisationMemberType, EnvironmentType, MemberType } from '@/apollo/graphql'
+import { OrganisationMemberType, EnvironmentType, MemberType, TeamType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { Listbox, Menu, Transition } from '@headlessui/react'
 import {
   FaArrowRight,
   FaBan,
+  FaCheck,
   FaCheckCircle,
   FaChevronDown,
   FaCircle,
@@ -27,13 +29,14 @@ import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { MdSearchOff } from 'react-icons/md'
 import { RoleLabel } from '@/components/users/RoleLabel'
-import { useSearchParams } from 'next/navigation'
+import { TeamLabel } from '@/components/teams/TeamLabel'
+import { useSearchParams, useParams } from 'next/navigation'
 
 type MemberWithEnvScope = OrganisationMemberType & {
   scope: Partial<EnvironmentType>[]
@@ -41,6 +44,7 @@ type MemberWithEnvScope = OrganisationMemberType & {
 
 export const AddMemberDialog = ({ appId }: { appId: string }) => {
   const searchParams = useSearchParams()
+  const routeParams = useParams<{ team: string }>()
   const preselectedAccountId = searchParams?.get('new') ?? null
 
   const { keyring } = useContext(KeyringContext)
@@ -51,18 +55,15 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
-  const userCanReadAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'read', true)
-    : false
-  const userCanReadEnvironments = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(appId)
+
+  const userCanReadAppMembers = hasPermission('Members', 'read', true)
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
+  const userCanReadTeams = hasPermission('Teams', 'read')
 
   // AppMembers:create + OrgMembers: read
-  const userCanAddAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'create', true) &&
-      userHasPermission(organisation?.role?.permissions, 'Members', 'read')
-    : false
+  const userCanAddAppMembers =
+    hasPermission('Members', 'create', true) && hasPermission('Members', 'read')
 
   const { data: orgMembersData } = useQuery(GetOrganisationMembers, {
     variables: {
@@ -71,6 +72,28 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
     },
     skip: !organisation || !userCanAddAppMembers,
   })
+
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadTeams || !userCanAddAppMembers,
+  })
+
+  // Map member ID → teams that already grant access to this app
+  const memberTeamsMap = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }[]>()
+    if (!teamsData?.teams) return map
+    for (const team of teamsData.teams as TeamType[]) {
+      const hasApp = team.apps?.some((a) => a!.id === appId)
+      if (!hasApp) continue
+      for (const m of team.members || []) {
+        if (!m.orgMember) continue
+        const list = map.get(m.orgMember.id) || []
+        list.push({ id: team.id, name: team.name })
+        map.set(m.orgMember.id, list)
+      }
+    }
+    return map
+  }, [teamsData, appId])
 
   const { data, loading } = useQuery(GetAppMembers, {
     variables: { appId: appId },
@@ -317,13 +340,28 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                           >
                             <div className="flex items-center gap-2">
                               <Avatar member={member} size="md" />
-                              <div>
+                              <div className="flex flex-col gap-1">
                                 <div className="font-semibold text-zinc-900 dark:text-zinc-100">
                                   {member.fullName || member.email}
                                 </div>
                                 {member.fullName && (
                                   <div className="text-neutral-500 text-xs leading-4">
                                     {member.email}
+                                  </div>
+                                )}
+                                {memberTeamsMap.get(member.id) && (
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {memberTeamsMap.get(member.id)!.map((t) => (
+                                      <TeamLabel
+                                        key={t.id}
+                                        teamId={t.id}
+                                        teamName={t.name}
+                                        orgSlug={routeParams?.team ?? ''}
+                                        variant="info"
+                                        icon={FaCheck}
+                                        title={`Already has access to this app via ${t.name}`}
+                                      />
+                                    ))}
                                   </div>
                                 )}
                               </div>
@@ -528,6 +566,15 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                 </div>
               ))}
             </div>
+
+            {selectedMembers.some((m) => memberTeamsMap.has(m.id)) && (
+              <Alert variant="warning" icon={true} size="sm">
+                <div className="text-sm">
+                  One or more selected members already have access to this app via a team. Adding
+                  them directly will grant them individual access on top of their team-based access.
+                </div>
+              </Alert>
+            )}
 
             <div className="flex w-full">
               <SelectMemberMenu />

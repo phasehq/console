@@ -29,7 +29,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import {
   digest,
   encryptAsymmetric,
@@ -68,30 +68,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // Permissions
-  const userCanReadEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'read',
-    true
-  )
-  const userCanReadSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'read',
-    true
-  )
-  const userCanCreateSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'create',
-    true
-  )
-  const userCanReadSyncs = userHasPermission(
-    organisation?.role?.permissions,
-    'Integrations',
-    'read',
-    true
-  )
+  const { hasPermission } = useAppPermissions(app)
+
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
+  const userCanReadSecrets = hasPermission('Secrets', 'read', true)
+  const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
+  const userCanReadSyncs = hasPermission('Integrations', 'read', true)
 
   const { data } = useQuery(GetAppDetail, {
     variables: { organisationId: organisation?.id, appId: app },

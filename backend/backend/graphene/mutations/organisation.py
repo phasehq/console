@@ -6,7 +6,11 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
+from api.utils.keys import provision_pending_team_keys
 from api.tasks.emails import send_invite_email_job
+import logging
+
+logger = logging.getLogger(__name__)
 from backend.quotas import can_add_account
 import graphene
 from django.db import transaction
@@ -95,18 +99,38 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         org_id = graphene.ID(required=True)
         wrapped_keyring = graphene.String(required=True)
         wrapped_recovery = graphene.String(required=True)
+        identity_key = graphene.String(required=False)
 
     org_member = graphene.Field(OrganisationMemberType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, wrapped_keyring, wrapped_recovery):
+    def mutate(
+        cls, root, info, org_id, wrapped_keyring, wrapped_recovery, identity_key=None
+    ):
         org_member = OrganisationMember.objects.get(
             organisation_id=org_id, user=info.context.user, deleted_at=None
         )
 
+        first_key_ceremony = identity_key and not org_member.identity_key
+
+        if identity_key:
+            org_member.identity_key = identity_key
+
         org_member.wrapped_keyring = wrapped_keyring
         org_member.wrapped_recovery = wrapped_recovery
         org_member.save()
+
+        # Provision team environment keys for SCIM-preprovisioned users
+        # completing their key ceremony for the first time
+        if first_key_ceremony:
+            try:
+                provision_pending_team_keys(org_member)
+            except Exception as e:
+                # Log but don't fail the key ceremony — keys can be re-provisioned
+                logger.error(
+                    f"Failed to provision pending team keys for {org_member.id}: {e}",
+                    exc_info=True,
+                )
 
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
 
@@ -313,6 +337,12 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
 
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
+
+        if org_member.scimuser_set.exists():
+            raise GraphQLError(
+                "SCIM-managed members cannot be removed from the console. "
+                "Deprovision them from your identity provider."
+            )
 
         org_member.delete()
 
