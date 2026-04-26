@@ -331,11 +331,15 @@ def password_login(request):
     except User.DoesNotExist:
         return JsonResponse({"error": "Invalid email or password."}, status=401)
 
-    if not user.active:
-        return JsonResponse({"error": "Please verify your email address first."}, status=403)
-
+    # Verify password BEFORE leaking the active/inactive distinction.
+    # Returning a different status for unverified-but-existing accounts
+    # would let unauthenticated callers enumerate registered emails in
+    # the verification window.
     if not user.check_password(auth_hash):
         return JsonResponse({"error": "Invalid email or password."}, status=401)
+
+    if not user.active:
+        return JsonResponse({"error": "Please verify your email address first."}, status=403)
 
     login(request, user)
     request.session["auth_method"] = "password"
