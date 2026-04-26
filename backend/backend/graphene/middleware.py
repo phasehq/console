@@ -173,16 +173,18 @@ class OrgSSOEnforcementMiddleware:
 
         org_id = None
         try:
+            # UserToken.user is a FK to OrganisationMember (not CustomUser),
+            # so ut.user_id is an OrganisationMember PK. Look up the member
+            # by .id, not .user_id (which would compare against CustomUser
+            # PKs and never match).
             ut = UserToken.objects.only("user_id").get(id=token_id)
-            member = (
-                OrganisationMember.objects.filter(
-                    user_id=ut.user_id, deleted_at__isnull=True
+            try:
+                member = OrganisationMember.objects.only("organisation_id").get(
+                    id=ut.user_id, deleted_at__isnull=True
                 )
-                .only("organisation_id")
-                .first()
-            )
-            if member:
                 org_id = str(member.organisation_id)
+            except OrganisationMember.DoesNotExist:
+                pass
         except UserToken.DoesNotExist:
             pass
 
