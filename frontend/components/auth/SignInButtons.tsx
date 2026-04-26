@@ -223,7 +223,12 @@ export default function SignInButtons({
           setDeviceKey(response.data.userId, deviceKey)
         }
         const callbackUrl = searchParams?.get('callbackUrl')
-        window.location.href = callbackUrl?.startsWith('/') ? callbackUrl : '/'
+        // Same-origin relative paths only. Protocol-relative URLs like
+        // //evil.com/phish would be cross-origin and let an attacker
+        // hijack the post-login navigation.
+        const isSafeCallback =
+          !!callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
+        window.location.href = isSafeCallback ? (callbackUrl as string) : '/'
       }
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
