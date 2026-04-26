@@ -36,6 +36,7 @@ class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
         return  # Skip CSRF check
 
+
 from django.db.models import Q
 
 from api.models import (
@@ -53,12 +54,13 @@ FRONTEND_URL = os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
 
 # --- Rate Limiting ---
 
+
 class PasswordRegisterThrottle(AnonRateThrottle):
-    rate = "5/hour"
+    rate = "5/min"
 
 
 class PasswordChangeThrottle(AnonRateThrottle):
-    rate = "5/hour"
+    rate = "5/min"
 
 
 class AuthLoginThrottle(AnonRateThrottle):
@@ -70,10 +72,11 @@ class EmailCheckThrottle(AnonRateThrottle):
 
 
 class ResendVerificationThrottle(AnonRateThrottle):
-    rate = "3/hour"
+    rate = "3/min"
 
 
 # --- Helpers ---
+
 
 def _skip_email_verification():
     """Check if email verification is disabled (for quick self-hosted setup)."""
@@ -129,6 +132,7 @@ def _send_verification_email(email, verify_url):
 
 # --- Endpoints ---
 
+
 @csrf_exempt
 @api_view(["POST"])
 @authentication_classes([])
@@ -156,10 +160,15 @@ def password_register(request):
         return JsonResponse({"error": "Invalid email address."}, status=400)
 
     if not _check_email_domain_allowed(email):
-        return JsonResponse({"error": "Registration is not available for this email domain."}, status=403)
+        return JsonResponse(
+            {"error": "Registration is not available for this email domain."},
+            status=403,
+        )
 
     if User.objects.filter(email=email).exists():
-        return JsonResponse({"error": "An account with this email already exists."}, status=409)
+        return JsonResponse(
+            {"error": "An account with this email already exists."}, status=409
+        )
 
     # If signup was triggered from an invite link, the registered email must
     # match the invitee email. The frontend forwards callbackUrl=/invite/<id>
@@ -169,8 +178,9 @@ def password_register(request):
     callback_url = data.get("callbackUrl") or ""
     if callback_url.startswith("/invite/"):
         from base64 import b64decode
+
         try:
-            encoded_invite = callback_url[len("/invite/"):].split("/")[0].split("?")[0]
+            encoded_invite = callback_url[len("/invite/") :].split("/")[0].split("?")[0]
             invite_id = b64decode(encoded_invite).decode("utf-8")
             invite = OrganisationMemberInvite.objects.get(
                 id=invite_id,
@@ -212,7 +222,9 @@ def password_register(request):
             )
 
     if skip_verification:
-        return JsonResponse({"message": "Account created.", "verificationSkipped": True}, status=201)
+        return JsonResponse(
+            {"message": "Account created.", "verificationSkipped": True}, status=201
+        )
 
     # Send verification email (outside transaction so the user is persisted).
     # If the send fails, the user can still use the resend endpoint.
@@ -224,6 +236,7 @@ def password_register(request):
     next_url = _safe_internal_path(data.get("callbackUrl"))
     if next_url:
         from urllib.parse import urlencode
+
         verify_url = f"{verify_url}?{urlencode({'next': next_url})}"
     try:
         _send_verification_email(email, verify_url)
@@ -286,10 +299,18 @@ def resend_verification(request):
         user = User.objects.get(email=email)
     except User.DoesNotExist:
         # Don't reveal whether email exists
-        return JsonResponse({"message": "If that email is registered, a new verification link has been sent."})
+        return JsonResponse(
+            {
+                "message": "If that email is registered, a new verification link has been sent."
+            }
+        )
 
     if user.active:
-        return JsonResponse({"message": "If that email is registered, a new verification link has been sent."})
+        return JsonResponse(
+            {
+                "message": "If that email is registered, a new verification link has been sent."
+            }
+        )
 
     # Delete old token, create new one
     EmailVerification.objects.filter(user=user).delete()
@@ -304,7 +325,11 @@ def resend_verification(request):
     verify_url = f"{backend_url}/auth/verify-email/{token}/"
     _send_verification_email(email, verify_url)
 
-    return JsonResponse({"message": "If that email is registered, a new verification link has been sent."})
+    return JsonResponse(
+        {
+            "message": "If that email is registered, a new verification link has been sent."
+        }
+    )
 
 
 @csrf_exempt
@@ -339,7 +364,9 @@ def password_login(request):
         return JsonResponse({"error": "Invalid email or password."}, status=401)
 
     if not user.active:
-        return JsonResponse({"error": "Please verify your email address first."}, status=403)
+        return JsonResponse(
+            {"error": "Please verify your email address first."}, status=403
+        )
 
     login(request, user)
     request.session["auth_method"] = "password"
@@ -363,6 +390,7 @@ def password_login(request):
 
     try:
         from api.emails import send_login_email
+
         send_login_email(request, user.email, full_name or user.email, "Password")
     except Exception as email_err:
         logger.error(f"Failed to send password login email: {email_err}")
@@ -415,11 +443,13 @@ def password_change(request):
     wrapped_keyring = data.get("wrappedKeyring", "")
     wrapped_recovery = data.get("wrappedRecovery", "")
 
-    if not all([current_auth_hash, new_auth_hash, org_id, identity_key, wrapped_keyring]):
+    if not all(
+        [current_auth_hash, new_auth_hash, org_id, identity_key, wrapped_keyring]
+    ):
         return JsonResponse(
             {
                 "error": "currentAuthHash, newAuthHash, orgId, identityKey, and "
-                         "wrappedKeyring are required."
+                "wrappedKeyring are required."
             },
             status=400,
         )
@@ -479,9 +509,7 @@ def invite_lookup(request, invite_id):
     adds an extra layer.
     """
     try:
-        invite = OrganisationMemberInvite.objects.select_related(
-            "organisation"
-        ).get(
+        invite = OrganisationMemberInvite.objects.select_related("organisation").get(
             id=invite_id,
             valid=True,
             expires_at__gt=timezone.now(),
@@ -489,10 +517,12 @@ def invite_lookup(request, invite_id):
     except OrganisationMemberInvite.DoesNotExist:
         return JsonResponse({"error": "Invite not found or expired."}, status=404)
 
-    return JsonResponse({
-        "inviteeEmail": invite.invitee_email,
-        "organisationName": invite.organisation.name,
-    })
+    return JsonResponse(
+        {
+            "inviteeEmail": invite.invitee_email,
+            "organisationName": invite.organisation.name,
+        }
+    )
 
 
 @csrf_exempt
@@ -529,18 +559,16 @@ def email_check(request):
         user = None
         has_password = True
 
-    # Build the provider query from (a) the user's existing org memberships
-    # and (b) any pending invite they're resolving. Either, neither, or both
-    # may apply.
-    provider_filters = []
-    if user is not None:
-        provider_filters.append(
-            Q(
-                organisation__users__user=user,
-                organisation__users__deleted_at=None,
-            )
-        )
-
+    # In the invite-acceptance flow the only useful SSO is the invite's
+    # org's SSO — authenticating via another org's provider would land
+    # the user with an SSO session bound to the wrong org, locking them
+    # out of the org they're actually trying to join. Membership-derived
+    # SSO is only useful as a FALLBACK when the invite's org has no SSO
+    # configured (so existing users without a password can still sign in).
+    #
+    # Outside the invite flow we always offer membership-derived SSO so
+    # returning users can pick whichever org they want to land in.
+    invite_org_filter = None
     if invite_id:
         try:
             invite = OrganisationMemberInvite.objects.get(
@@ -549,34 +577,52 @@ def email_check(request):
                 expires_at__gt=timezone.now(),
                 invitee_email__iexact=email,
             )
-            provider_filters.append(Q(organisation=invite.organisation))
+            invite_org_filter = Q(organisation=invite.organisation)
         except OrganisationMemberInvite.DoesNotExist:
             pass
 
-    sso_methods = []
-    if provider_filters:
-        combined = provider_filters[0]
-        for q in provider_filters[1:]:
-            combined = combined | q
-        org_providers = (
-            OrganisationSSOProvider.objects.filter(combined, enabled=True)
+    membership_filter = None
+    if user is not None:
+        membership_filter = Q(
+            organisation__users__user=user,
+            organisation__users__deleted_at=None,
+        )
+
+    def _query(filter_q):
+        return list(
+            OrganisationSSOProvider.objects.filter(filter_q, enabled=True)
             .select_related("organisation")
             .distinct()
         )
-        sso_methods = [
-            {
-                "id": str(provider.id),
-                "providerType": "oidc",
-                "provider": provider.provider_type,
-                "providerName": provider.name,
-                "enforced": provider.organisation.require_sso,
-            }
-            for provider in org_providers
-        ]
 
-    return JsonResponse({
-        "authMethods": {
-            "password": has_password,
-            "sso": sso_methods,
+    org_providers = []
+    if invite_org_filter is not None:
+        org_providers = _query(invite_org_filter)
+        # Fallback: if the invite's org has no SSO, fall back to the user's
+        # account-level auth methods so an existing-user invitee with no
+        # password set isn't stranded.
+        if not org_providers and membership_filter is not None:
+            org_providers = _query(membership_filter)
+    elif membership_filter is not None:
+        org_providers = _query(membership_filter)
+
+    sso_methods = [
+        {
+            "id": str(provider.id),
+            "providerType": "oidc",
+            "provider": provider.provider_type,
+            "providerName": provider.name,
+            "organisationName": provider.organisation.name,
+            "enforced": provider.organisation.require_sso,
         }
-    })
+        for provider in org_providers
+    ]
+
+    return JsonResponse(
+        {
+            "authMethods": {
+                "password": has_password,
+                "sso": sso_methods,
+            }
+        }
+    )

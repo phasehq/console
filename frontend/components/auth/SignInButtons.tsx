@@ -76,6 +76,7 @@ type SSOMethod = {
   providerType: 'instance' | 'oidc'
   provider?: string
   providerName?: string
+  organisationName?: string
   enforced: boolean
 }
 
@@ -483,8 +484,15 @@ export default function SignInButtons({
                         }
                       }
 
+                      // Disambiguate when the user has multiple org-level
+                      // providers — same provider name across different
+                      // orgs would otherwise render as identical buttons.
+                      const needsOrgSuffix =
+                        isOrg &&
+                        method.organisationName &&
+                        ssoMethods.filter((m) => m.providerName === method.providerName).length > 1
                       const label = isOrg
-                        ? `Sign in with ${method.providerName || 'SSO'}`
+                        ? `Sign in with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
                         : `Sign in with ${getProviderName(method.id)}`
                       const icon = isOrg
                         ? (method.provider ? orgProviderIcons[method.provider] : undefined)
@@ -548,8 +556,12 @@ export default function SignInButtons({
                       }
                     }
 
+                    const needsOrgSuffix =
+                      isOrg &&
+                      method.organisationName &&
+                      ssoMethods.filter((m) => m.providerName === method.providerName).length > 1
                     const label = isOrg
-                      ? `Continue with ${method.providerName || 'SSO'}`
+                      ? `Continue with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
                       : `Continue with ${getProviderName(method.id)}`
                     const icon = isOrg
                       ? (method.provider ? orgProviderIcons[method.provider] : undefined)

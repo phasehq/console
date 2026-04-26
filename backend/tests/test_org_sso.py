@@ -119,6 +119,7 @@ class EmailCheckOrgSSOTest(_ThrottleClearMixin, unittest.TestCase):
 
         org = MagicMock()
         org.require_sso = False
+        org.name = "Acme Corp"
 
         provider = MagicMock()
         provider.id = "test-config-id"
@@ -163,6 +164,7 @@ class EmailCheckOrgSSOTest(_ThrottleClearMixin, unittest.TestCase):
 
         org = MagicMock()
         org.require_sso = True
+        org.name = "Acme Corp"
 
         provider = MagicMock()
         provider.id = "enforced-id"
