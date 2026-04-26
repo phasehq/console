@@ -1430,7 +1430,6 @@ class TestSSOSSRFGuardTest(unittest.TestCase):
     @patch("backend.graphene.mutations.sso.user_has_permission", return_value=True)
     def test_self_hosted_skips_ip_check(self, mock_perm, mock_provider_cls):
         """Self-hosted admin with an internal IdP should be allowed to test."""
-        import requests as http_requests
         from backend.graphene.mutations.sso import TestOrganisationSSOProviderMutation
 
         provider = MagicMock()
@@ -1451,7 +1450,8 @@ class TestSSOSSRFGuardTest(unittest.TestCase):
 
         info = MagicMock()
         info.context.user = MagicMock()
-        with patch.object(http_requests, "get", return_value=fake_resp):
+        # Patch the underlying HTTP layer used by _safe_oidc_request.
+        with patch("api.views.sso.http_requests.request", return_value=fake_resp):
             result = TestOrganisationSSOProviderMutation.mutate(
                 None, info, provider_id="p1"
             )
@@ -1481,9 +1481,8 @@ class TestSSOSSRFGuardTest(unittest.TestCase):
         with patch(
             "api.utils.network.socket.gethostbyname_ex",
             return_value=("okta.com", [], ["1.1.1.1"]),
-        ), patch.object(
-            http_requests,
-            "get",
+        ), patch(
+            "api.views.sso.http_requests.request",
             side_effect=Exception("<html>INTERNAL SECRET</html>"),
         ):
             info = MagicMock()

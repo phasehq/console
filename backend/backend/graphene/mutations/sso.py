@@ -214,7 +214,7 @@ class TestOrganisationSSOProviderMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, provider_id):
-        import requests as http_requests
+        from api.views.sso import _safe_oidc_request
 
         user = info.context.user
         provider = OrganisationSSOProvider.objects.get(id=provider_id)
@@ -241,8 +241,11 @@ class TestOrganisationSSOProviderMutation(graphene.Mutation):
                 )
 
         discovery_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
+        # Route through _safe_oidc_request so a 302 redirect from a public
+        # issuer can't pivot the fetch to an internal target (cloud) — the
+        # helper sets allow_redirects=False and re-validates URLs on cloud.
         try:
-            resp = http_requests.get(discovery_url, timeout=10)
+            resp = _safe_oidc_request("GET", discovery_url, timeout=10)
             resp.raise_for_status()
             data = resp.json()
             if "authorization_endpoint" not in data or "token_endpoint" not in data:
