@@ -47,7 +47,16 @@ class GoogleOpenIDConnectAdapter(GenericOpenIDConnectAdapter):
             if not id_token and isinstance(kwargs.get("response"), dict):
                 id_token = kwargs["response"].get("id_token")
 
-            extra_data = self._get_user_data(token, id_token, app)
+            # Forward the OIDC nonce so the parent's _process_id_token
+            # actually validates it.
+            expected_nonce = (
+                request.session.get("sso_nonce")
+                if hasattr(request, "session")
+                else None
+            )
+            extra_data = self._get_user_data(
+                token, id_token, app, expected_nonce=expected_nonce
+            )
             logger.debug(
                 f"User authentication data received for email: {extra_data.get('email')}"
             )
