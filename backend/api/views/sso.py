@@ -648,6 +648,10 @@ class SSOAuthorizeView(View):
                 status=404,
             )
 
+        # Clear any stale org-SSO marker from an abandoned org-level flow
+        # so the callback dispatches as instance-level.
+        request.session.pop("sso_org_config_id", None)
+
         config = SSO_PROVIDER_REGISTRY[provider]
         callback_url = _get_callback_url(provider)
 
